@@ -591,6 +591,24 @@ describe("Plugin Import Parser — Full Plugin", () => {
     expect(result.isLegacySkillFormat).toBe(false);
     expect(result.warnings.some((w) => w.includes("synthetic manifest"))).toBe(true);
   });
+
+  it("should parse folder-wrapped legacy SKILL.md packages from zip uploads", async () => {
+    const zip = new JSZip();
+    zip.file(
+      "swiftui-pro/SKILL.md",
+      "---\nname: swiftui-pro\ndescription: SwiftUI reviewer\nlicense: MIT\n---\n\nReview SwiftUI code."
+    );
+    zip.file("swiftui-pro/references/api.md", "API guidance");
+    const buf = await zip.generateAsync({ type: "nodebuffer" });
+
+    const result = await parsePluginPackage(buf, { sourceLabel: "swiftui-pro" });
+    expect(result.manifest.name).toBe("swiftui-pro");
+    expect(result.components.skills).toHaveLength(1);
+    expect(result.components.skills[0].name).toBe("swiftui-pro");
+    expect(result.files.some((file) => file.relativePath === "references/api.md")).toBe(true);
+    expect(result.isLegacySkillFormat).toBe(true);
+    expect(result.warnings.some((w) => w.includes("nested legacy skill root prefix"))).toBe(true);
+  });
 });
 
 // =============================================================================

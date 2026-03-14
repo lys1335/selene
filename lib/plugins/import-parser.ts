@@ -119,6 +119,16 @@ function pickFirstZipEntry(zip: JSZip, predicate: (name: string) => boolean): JS
   return candidates[0];
 }
 
+function isNestedLegacySkillPath(relativePath: string): boolean {
+  const normalized = normalizeRelativePath(relativePath);
+  if (normalized === "SKILL.md" || !normalized.endsWith("/SKILL.md")) {
+    return false;
+  }
+
+  const parentSegments = normalized.split("/").slice(0, -1).map((segment) => segment.toLowerCase());
+  return !parentSegments.includes("skills");
+}
+
 function normalizeManifest(
   manifestJson: unknown,
   warnings: string[],
@@ -377,7 +387,7 @@ async function extractAllFiles(
  *
  * Detection logic:
  * 1. Look for .claude-plugin/plugin.json → full plugin format
- * 2. Fall back to SKILL.md → legacy skill-only format (wrapped as plugin)
+ * 2. Fall back to SKILL.md → legacy skill-only format
  * 3. Infer manifest-less plugin from directory structure
  */
 async function parsePluginFromZip(
@@ -394,11 +404,18 @@ async function parsePluginFromZip(
     return parseFullPlugin(zip, pluginJsonEntry, warnings, options);
   }
 
-  // Legacy format is only the root-level SKILL.md package.
-  // Nested skills/*/SKILL.md should be treated as manifestless plugin-like content.
-  const skillMdEntry = pickFirstZipEntry(zip, (name) => name === "SKILL.md");
+  // Legacy format can be root-level SKILL.md or a folder-wrapped skill package.
+  // Nested skills/*/SKILL.md should still be treated as manifestless plugin content.
+  const skillMdEntry = pickFirstZipEntry(
+    zip,
+    (name) => name === "SKILL.md" || isNestedLegacySkillPath(name)
+  );
 
   if (skillMdEntry) {
+    if (skillMdEntry.name !== "SKILL.md") {
+      const nestedRoot = skillMdEntry.name.slice(0, skillMdEntry.name.lastIndexOf("/"));
+      warnings.push(`Detected nested legacy skill root prefix: ${nestedRoot}`);
+    }
     return parseLegacySkillPlugin(zip, skillMdEntry, warnings);
   }
 
