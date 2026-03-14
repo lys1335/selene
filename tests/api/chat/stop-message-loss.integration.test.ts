@@ -22,6 +22,8 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
+import { filterStreamingPartsForPersistence } from "@/app/api/chat/streaming-progress";
+import type { StreamingMessageState } from "@/app/api/chat/streaming-state";
 import {
   createSession,
   createMessage,
@@ -51,6 +53,20 @@ function extractTextFromContent(content: unknown): string {
 }
 
 // ─── Test Suite ───────────────────────────────────────────────────────────────
+
+function makeStreamingState(parts: any[]): StreamingMessageState {
+  return {
+    parts,
+    toolCallParts: new Map(
+      parts
+        .filter((part) => part?.type === "tool-call" && typeof part.toolCallId === "string")
+        .map((part) => [part.toolCallId, part])
+    ),
+    loggedIncompleteToolCalls: new Set(),
+    lastBroadcastAt: 0,
+    lastBroadcastSignature: "",
+  };
+}
 
 describe("Stop Message Loss Prevention", () => {
   const TEST_USER_ID = "test-stop-msg-loss";
@@ -320,6 +336,61 @@ describe("Stop Message Loss Prevention", () => {
    * Validates that a stopped assistant message containing partial tool calls
    * is preserved through the next turn's sync.
    */
+  it("filters unresolved tool calls from streaming persistence until a result exists", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const state = makeStreamingState([
+      { type: "text", text: "Working" },
+      {
+        type: "tool-call",
+        toolCallId: "tc-unsealed",
+        toolName: "localGrep",
+        state: "input-available",
+        args: { pattern: "todo" },
+      },
+    ]);
+
+    const filtered = filterStreamingPartsForPersistence(state);
+
+    expect(filtered).toEqual([{ type: "text", text: "Working" }]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      "[CHAT API] Dropped unresolved projected tool call",
+      expect.objectContaining({
+        toolCallId: "tc-unsealed",
+        toolName: "localGrep",
+        reason: "unresolved-no-result",
+        projection: "streaming-persistence",
+      })
+    );
+    warnSpy.mockRestore();
+  });
+
+  it("keeps sealed tool-call/result pairs in streaming persistence", async () => {
+    const state = makeStreamingState([
+      { type: "text", text: "Working" },
+      {
+        type: "tool-call",
+        toolCallId: "tc-sealed",
+        toolName: "localGrep",
+        state: "input-available",
+        args: { pattern: "todo" },
+      },
+      {
+        type: "tool-result",
+        toolCallId: "tc-sealed",
+        toolName: "localGrep",
+        state: "output-available",
+        status: "success",
+        result: { count: 1 },
+      },
+    ]);
+
+    const filtered = filterStreamingPartsForPersistence(state);
+
+    expect(filtered).toHaveLength(3);
+    expect(filtered[1]).toMatchObject({ type: "tool-call", toolCallId: "tc-sealed" });
+    expect(filtered[2]).toMatchObject({ type: "tool-result", toolCallId: "tc-sealed" });
+  });
+
   it("preserves stopped assistant with partial tool calls across turns", async () => {
     const session = await createSession({
       title: "Stop Loss - Tool Calls",

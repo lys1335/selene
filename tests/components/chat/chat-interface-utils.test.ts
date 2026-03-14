@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   getSessionActivityTimestamp,
+  shouldDeferLivePromptForegroundReconciliation,
   sortSessionsByUpdatedAt,
 } from "@/components/chat/chat-interface-utils";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
@@ -47,5 +48,25 @@ describe("chat session ordering helpers", () => {
     });
 
     expect(getSessionActivityTimestamp(session)).toBe("2026-03-07T09:30:00.000Z");
+  });
+
+  it("defers live-prompt reconciliation only while persisted history is not ahead", () => {
+    expect(shouldDeferLivePromptForegroundReconciliation({
+      hasInjectedMessages: true,
+      persistedConversationMessageCount: 3,
+      liveThreadMessageCount: 3,
+    })).toBe(true);
+
+    expect(shouldDeferLivePromptForegroundReconciliation({
+      hasInjectedMessages: true,
+      persistedConversationMessageCount: 4,
+      liveThreadMessageCount: 3,
+    })).toBe(false);
+
+    expect(shouldDeferLivePromptForegroundReconciliation({
+      hasInjectedMessages: false,
+      persistedConversationMessageCount: 3,
+      liveThreadMessageCount: 3,
+    })).toBe(false);
   });
 });

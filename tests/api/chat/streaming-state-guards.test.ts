@@ -4,10 +4,15 @@ import {
   recordToolResultChunk,
   recordToolInputDelta,
   recordToolInputStart,
+  recordStructuredToolCall,
   finalizeStreamingToolCalls,
   MAX_ARGS_TEXT_BYTES,
   type StreamingMessageState,
 } from "@/app/api/chat/streaming-state";
+
+function normalizeJson(value: unknown): string {
+  return JSON.stringify(value);
+}
 
 function makeState(): StreamingMessageState {
   return {
@@ -209,6 +214,57 @@ describe("finalizeStreamingToolCalls - log truncation", () => {
   });
 });
 
+
+describe("recordStructuredToolCall", () => {
+  it("preserves streamed args when structured input conflicts", () => {
+    const state = makeState();
+    recordToolInputStart(state, "tc-structured", "readFile");
+    recordToolInputDelta(state, "tc-structured", '{"filePath":"/tmp/a.ts"}');
+
+    const changed = recordStructuredToolCall(state, "tc-structured", "readFile", {
+      filePath: "/tmp/b.ts",
+    });
+
+    expect(changed).toBe(true);
+    const part = state.toolCallParts.get("tc-structured");
+    expect(normalizeJson(part?.args)).toBe(normalizeJson({ filePath: "/tmp/a.ts" }));
+    expect(part?.argsText).toBe('{"filePath":"/tmp/a.ts"}');
+    expect(part?.state).toBe("input-available");
+  });
+
+  it("accepts structured input when streamed args are still an unfinished prefix", () => {
+    const state = makeState();
+    recordToolInputStart(state, "tc-prefix", "readFile");
+    recordToolInputDelta(state, "tc-prefix", '{"filePath":"/tmp/a.ts"');
+
+    const changed = recordStructuredToolCall(state, "tc-prefix", "readFile", {
+      filePath: "/tmp/a.ts",
+    });
+
+    expect(changed).toBe(true);
+    const part = state.toolCallParts.get("tc-prefix");
+    expect(normalizeJson(part?.args)).toBe(normalizeJson({ filePath: "/tmp/a.ts" }));
+    expect(part?.argsText).toBe('{"filePath":"/tmp/a.ts"');
+    expect(part?.state).toBe("input-available");
+  });
+
+  it("refuses incompatible structured input while streamed args are still incomplete", () => {
+    const state = makeState();
+    recordToolInputStart(state, "tc-incomplete", "readFile");
+    recordToolInputDelta(state, "tc-incomplete", '{"startLine":');
+
+    const changed = recordStructuredToolCall(state, "tc-incomplete", "readFile", {
+      filePath: "/tmp/other.ts",
+      startLine: 10,
+    });
+
+    expect(changed).toBe(false);
+    const part = state.toolCallParts.get("tc-incomplete");
+    expect(part?.args).toBeUndefined();
+    expect(part?.argsText).toBe('{"startLine":');
+    expect(part?.state).toBe("input-streaming");
+  });
+});
 
 describe("streaming provenance", () => {
   it("attaches provenance to emitted text and tool-result parts", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useTheme, type ThemePreference } from "@/components/theme/theme-provider";
@@ -31,15 +31,20 @@ const WORKSPACE_STYLES: { id: ChatWorkspaceMode; icon: typeof PanelLeft }[] = [
 interface ThemeChooserModalProps {
   open: boolean;
   onClose: () => void;
+  onWorkspaceModeSelect?: (mode: ChatWorkspaceMode) => void;
 }
 
-export function ThemeChooserModal({ open, onClose }: ThemeChooserModalProps) {
+export function ThemeChooserModal({ open, onClose, onWorkspaceModeSelect }: ThemeChooserModalProps) {
   const router = useRouter();
   const t = useTranslations("themeChooser");
   const { theme, setTheme, themePreset, setThemePreset, chatWorkspaceMode, setChatWorkspaceMode } = useTheme();
   const [selectedMode, setSelectedMode] = useState<ThemePreference>(theme);
   const [selectedPreset, setSelectedPreset] = useState<ThemePresetId>(themePreset);
   const [selectedWorkspace, setSelectedWorkspace] = useState<ChatWorkspaceMode>(chatWorkspaceMode);
+
+  useEffect(() => {
+    setSelectedWorkspace(chatWorkspaceMode);
+  }, [chatWorkspaceMode]);
 
   const handleModeSelect = (mode: ThemePreference) => {
     setSelectedMode(mode);
@@ -53,6 +58,7 @@ export function ThemeChooserModal({ open, onClose }: ThemeChooserModalProps) {
 
   const handleWorkspaceSelect = (mode: ChatWorkspaceMode) => {
     setSelectedWorkspace(mode);
+    onWorkspaceModeSelect?.(mode);
     setChatWorkspaceMode(mode);
   };
 

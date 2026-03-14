@@ -618,6 +618,26 @@ describe("Integration — End-to-End Plugin Flow", () => {
     expect(parsed.components.skills.map((s) => s.name)).toContain("folder-skill");
   });
 
+  it("should parse folder-wrapped legacy SKILL.md packages from folder drops", async () => {
+    const parsed = await parsePluginFromFiles([
+      {
+        relativePath: "temp-plugin-test/swiftui-pro/SKILL.md",
+        content: Buffer.from(
+          "---\nname: swiftui-pro\ndescription: SwiftUI reviewer\nlicense: MIT\n---\n\nReview SwiftUI code."
+        ),
+      },
+      {
+        relativePath: "temp-plugin-test/swiftui-pro/references/api.md",
+        content: Buffer.from("API guidance"),
+      },
+    ], { sourceLabel: "temp-plugin-test" });
+
+    expect(parsed.isLegacySkillFormat).toBe(true);
+    expect(parsed.manifest.name).toBe("swiftui-pro");
+    expect(parsed.files.some((file) => file.relativePath === "references/api.md")).toBe(true);
+    expect(parsed.warnings.some((w) => w.includes("nested legacy skill root prefix"))).toBe(true);
+  });
+
   it("should infer nested manifestless plugin roots from folder drops", async () => {
     const parsed = await parsePluginFromFiles([
       {

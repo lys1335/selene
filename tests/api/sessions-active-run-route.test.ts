@@ -95,6 +95,38 @@ describe("GET /api/sessions/[id]/active-run", () => {
     });
   });
 
+  it("does not treat delegated chat runs as foreground active runs", async () => {
+    const now = new Date().toISOString();
+
+    observabilityMocks.listAgentRunsBySession.mockResolvedValue([
+      {
+        id: "run-delegation",
+        sessionId: "session-1",
+        pipelineName: "chat",
+        status: "running",
+        startedAt: now,
+        updatedAt: now,
+        metadata: {
+          isDelegation: true,
+          parentAgentId: "agent-init",
+          workflowId: "wf-1",
+        },
+      },
+    ]);
+
+    const response = await GET(
+      new Request("http://localhost/api/sessions/session-1/active-run") as any,
+      { params: Promise.resolve({ id: "session-1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      hasActiveRun: false,
+      runId: null,
+      shouldResumeBackgroundRun: false,
+    });
+  });
+
   it("reports when a foreground chat run is waiting on interactive user input", async () => {
     const now = new Date().toISOString();
     bridgeMocks.hasPendingInteractiveWait.mockReturnValueOnce(true);

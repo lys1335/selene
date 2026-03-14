@@ -11,13 +11,127 @@ import { taskRegistry } from "@/lib/background-tasks/registry";
 import { limitProgressContent } from "@/lib/background-tasks/progress-content-limiter";
 import { nextOrderingIndex } from "@/lib/session/message-ordering";
 import { nowISO } from "@/lib/utils/timestamp";
-import type { DBContentPart } from "@/lib/messages/converter";
+import type { DBContentPart, DBToolCallPart } from "@/lib/messages/converter";
 import {
   type StreamingMessageState,
   cloneContentParts,
   buildProgressSignature,
   extractTextFromParts,
 } from "./streaming-state";
+
+function collectPersistedToolResultIds(parts: DBContentPart[]): Set<string> {
+  const persistedToolResultIds = new Set<string>();
+  for (const part of parts) {
+    if (part.type === "tool-result" && typeof part.toolCallId === "string") {
+      persistedToolResultIds.add(part.toolCallId);
+    }
+  }
+  return persistedToolResultIds;
+}
+
+function emitDroppedToolCallTelemetry(
+  streamingState: StreamingMessageState,
+  part: DBToolCallPart,
+  reason: "input-streaming" | "malformed-args" | "unresolved-no-result",
+  persistedToolResultIds: Set<string>
+): void {
+  const toolCallId = part.toolCallId || "unknown-tool-call";
+  const toolName = part.toolName || "tool";
+  const logKey = `drop:${reason}:${toolCallId}`;
+  if (streamingState.loggedIncompleteToolCalls.has(logKey)) {
+    return;
+  }
+  streamingState.loggedIncompleteToolCalls.add(logKey);
+
+  console.warn("[CHAT API] Dropped unresolved projected tool call", {
+    toolCallId,
+    toolName,
+    reason,
+    state: part.state,
+    hasArgs: part.args !== undefined,
+    hasArgsText: typeof part.argsText === "string" && part.argsText.length > 0,
+    argsTextLength: typeof part.argsText === "string" ? part.argsText.length : 0,
+    hasResultPart: persistedToolResultIds.has(toolCallId),
+    projection: "streaming-persistence",
+  });
+}
+
+export function filterStreamingPartsForPersistence(
+  streamingState: StreamingMessageState
+): DBContentPart[] {
+  const persistedToolResultIds = collectPersistedToolResultIds(streamingState.parts);
+
+  return streamingState.parts.filter((part) => {
+    if (part.type !== "tool-call") {
+      return true;
+    }
+
+    const hasCompleteArgs = part.args !== undefined;
+    const isStillStreaming = part.state === "input-streaming";
+    if (isStillStreaming && !hasCompleteArgs) {
+      emitDroppedToolCallTelemetry(streamingState, part, "input-streaming", persistedToolResultIds);
+      return false;
+    }
+
+    if (!hasCompleteArgs && part.argsText) {
+      try {
+        JSON.parse(part.argsText);
+      } catch {
+        emitDroppedToolCallTelemetry(streamingState, part, "malformed-args", persistedToolResultIds);
+        return false;
+      }
+    }
+
+    if (!persistedToolResultIds.has(part.toolCallId)) {
+      emitDroppedToolCallTelemetry(
+        streamingState,
+        part,
+        "unresolved-no-result",
+        persistedToolResultIds,
+      );
+      return false;
+    }
+
+    return true;
+  });
+}
+
+export function buildProgressContentSnapshot(
+  streamingState: StreamingMessageState,
+  persistedParts: DBContentPart[]
+): DBContentPart[] {
+  const persistedToolResultIds = collectPersistedToolResultIds(streamingState.parts);
+
+  return streamingState.parts.map((part) => {
+    if (part.type !== "tool-call") {
+      return part;
+    }
+
+    const isResolved = persistedToolResultIds.has(part.toolCallId);
+    if (isResolved) {
+      return part;
+    }
+
+    const progressPart: DBToolCallPart = {
+      ...part,
+      active: true,
+    };
+
+    return progressPart;
+  }).filter((part) => {
+    if (part.type !== "tool-call") {
+      return true;
+    }
+
+    if ((part as DBToolCallPart).active === true) {
+      return true;
+    }
+
+    return persistedParts.some(
+      (candidate) => candidate.type === "tool-call" && candidate.toolCallId === part.toolCallId
+    );
+  });
+}
 
 // Progress content limiter is now ON by default. Set env to "true" to disable.
 const DISABLE_PROGRESS_CONTENT_LIMITER =
@@ -64,40 +178,7 @@ export function createSyncStreamingMessage(
   const syncStreamingMessage = async (force = false): Promise<void> => {
     if (streamingState.parts.length === 0) return;
 
-    let filteredParts = streamingState.parts.filter((part) => {
-      if (part.type === "tool-call") {
-        const hasCompleteArgs = part.args !== undefined;
-        const isStillStreaming = part.state === "input-streaming";
-        if (isStillStreaming && !hasCompleteArgs) {
-          const logKey = `${part.toolCallId}:${part.toolName ?? "tool"}`;
-          if (!streamingState.loggedIncompleteToolCalls.has(logKey)) {
-            streamingState.loggedIncompleteToolCalls.add(logKey);
-            console.log(
-              `[CHAT API] Filtering incomplete tool call ${part.toolCallId} (${part.toolName}) ` +
-                `from streaming persistence - state: ${part.state}, has args: ${hasCompleteArgs}`
-            );
-          }
-          return false;
-        }
-        if (!hasCompleteArgs && part.argsText) {
-          try {
-            JSON.parse(part.argsText);
-          } catch {
-            const logKey = `malformed:${part.toolCallId}:${part.toolName ?? "tool"}`;
-            if (!streamingState.loggedIncompleteToolCalls.has(logKey)) {
-              streamingState.loggedIncompleteToolCalls.add(logKey);
-              console.warn(
-                `[CHAT API] Filtering tool call with malformed argsText from persistence: ` +
-                  `${part.toolName} (${part.toolCallId}), argsText length: ${part.argsText.length}, ` +
-                  `preview: ${part.argsText.substring(0, 120)}...`
-              );
-            }
-            return false;
-          }
-        }
-      }
-      return true;
-    });
+    let filteredParts = filterStreamingPartsForPersistence(streamingState);
 
     if (filteredParts.length === 0 && streamingState.parts.length > 0) {
       filteredParts = [{ type: "text", text: "Working..." }];
@@ -183,10 +264,12 @@ export function createSyncStreamingMessage(
       });
 
       if (progressRunId && progressType) {
+        const progressSnapshot = buildProgressContentSnapshot(streamingState, partsSnapshot);
+
         // Strip argsText from tool-call parts before progress emission.
         // argsText is only needed for finalization, not for display, and can
         // be hundreds of KB from runaway model outputs.
-        const strippedSnapshot = partsSnapshot.map((part) => {
+        const strippedSnapshot = progressSnapshot.map((part) => {
           if (part.type === "tool-call" && "argsText" in part) {
             const { argsText: _strip, ...rest } = part as unknown as Record<string, unknown>;
             return rest as unknown as DBContentPart;

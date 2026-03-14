@@ -53,6 +53,7 @@ const USER_ABORT_PATTERNS = [
 
 const UPSTREAM_ABORT_PATTERNS = [
   /aborterror/i,
+  /^aborted$/i,          // bare "aborted" from H2Proxy mid-stream teardown
   /stream.*aborted/i,
   /upstream.*aborted/i,
   /connection closed/i,

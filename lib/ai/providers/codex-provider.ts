@@ -312,6 +312,104 @@ function buildReplayStream(
   });
 }
 
+// ── Mid-stream retry wrapper ────────────────────────────────────────────────
+
+/**
+ * Wrap a streaming response body so that transient mid-stream errors
+ * (e.g. H2Proxy "aborted", socket hang-up) trigger a full request retry
+ * rather than propagating the error to the AI SDK, which would terminate
+ * the user's chat session.
+ *
+ * When a retryable error is detected mid-stream:
+ *  1. The wrapper signals the retry by resolving `retrySignal`.
+ *  2. The outer fetch loop issues a new HTTP request and calls this function
+ *     again with the fresh body, spliced in transparently.
+ *  3. The ReadableStream returned to the AI SDK never errors — it just
+ *     continues reading from the replacement stream.
+ *
+ * Non-retryable errors are re-thrown so the AI SDK can handle them normally.
+ */
+function wrapWithMidStreamRetry(
+  initialBody: ReadableStream<Uint8Array>,
+  issueRetryRequest: () => Promise<ReadableStream<Uint8Array>>,
+  opts: {
+    maxRetries: number;
+    attempt: number;
+    signal?: AbortSignal;
+    sessionId: string;
+  },
+): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let currentReader = initialBody.getReader();
+      let retriesLeft = opts.maxRetries - opts.attempt;
+
+      const closeController = () => {
+        try { controller.close(); } catch { /* already closed */ }
+      };
+
+      while (true) {
+        try {
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            if (opts.signal?.aborted) {
+              try { currentReader.cancel(); } catch {}
+              closeController();
+              return;
+            }
+            const { done, value } = await currentReader.read();
+            if (done) {
+              closeController();
+              return;
+            }
+            controller.enqueue(value);
+          }
+        } catch (err) {
+          try { currentReader.cancel(); } catch {}
+
+          // If user aborted, stop silently.
+          if (opts.signal?.aborted) {
+            closeController();
+            return;
+          }
+
+          const msg = err instanceof Error ? err.message : String(err);
+          const classification = classifyRecoverability(err);
+          const canRetry = classification.recoverable && retriesLeft > 0;
+
+          if (!canRetry) {
+            // Non-retryable: surface the error to the AI SDK.
+            try { controller.error(err); } catch {}
+            return;
+          }
+
+          retriesLeft -= 1;
+          const retryAttempt = opts.maxRetries - retriesLeft;
+          const delay = getBackoffDelayMs(retryAttempt);
+
+          console.warn("[Codex] Mid-stream error — retrying request", {
+            attempt: retryAttempt,
+            reason: classification.reason,
+            error: msg,
+            delayMs: delay,
+            sessionId: opts.sessionId,
+          });
+
+          try {
+            await sleepWithAbort(delay, opts.signal);
+            const newBody = await issueRetryRequest();
+            currentReader = newBody.getReader();
+          } catch (retryErr) {
+            // Retry setup itself failed (e.g. auth error, user aborted)
+            try { controller.error(retryErr); } catch {}
+            return;
+          }
+        }
+      }
+    },
+  });
+}
+
 // ── Fetch factory ───────────────────────────────────────────────────────────
 
 /**
@@ -568,18 +666,51 @@ function createCodexFetch(): typeof fetch {
             effectiveResponse.body,
             init?.signal ?? undefined,
           );
-          const wrappedBody = wrapWithInactivityTimeout(contentStream);
-          return new Response(wrappedBody, {
+
+          // ── Mid-stream retry: re-issue the HTTP request if the proxy
+          // aborts the body mid-flight (H2Proxy "aborted", socket hang-up).
+          // This is the only place where transient proxy errors can occur
+          // after the Response has already been returned to the AI SDK.
+          const issueRetryRequest = async (): Promise<ReadableStream<Uint8Array>> => {
+            const retryResponse = await fetch(rewriteCodexUrl(url), {
+              ...updatedInit,
+              method: updatedInit?.method || "POST",
+              headers,
+            });
+            if (!retryResponse.ok || !retryResponse.body) {
+              throw new Error(`Codex mid-stream retry got non-OK response: ${retryResponse.status}`);
+            }
+            // Capture updated sticky-routing token from the retry response
+            const retryTurnState = retryResponse.headers.get("x-codex-turn-state");
+            if (retryTurnState) setTurnState(sessionId, retryTurnState);
+
+            const retryContent = await awaitFirstContentOrError(
+              retryResponse.body,
+              init?.signal ?? undefined,
+            );
+            return wrapWithInactivityTimeout(retryContent);
+          };
+
+          const resilientBody = wrapWithMidStreamRetry(
+            wrapWithInactivityTimeout(contentStream),
+            issueRetryRequest,
+            {
+              maxRetries: CODEX_MAX_RETRY_ATTEMPTS,
+              attempt,
+              signal: init?.signal ?? undefined,
+              sessionId,
+            },
+          );
+
+          return new Response(resilientBody, {
             status: effectiveResponse.status,
             headers: effectiveResponse.headers,
           });
         } catch (earlyError) {
           // Early server_error detected in the SSE stream — classify and retry
-          const classification = classifyRecoverability({
-            provider: "codex",
-            error: earlyError,
-            message: earlyError instanceof Error ? earlyError.message : String(earlyError),
-          });
+          const classification = classifyRecoverability(
+            earlyError instanceof Error ? earlyError : new Error(String(earlyError))
+          );
           const retry = shouldRetry({
             classification,
             attempt,

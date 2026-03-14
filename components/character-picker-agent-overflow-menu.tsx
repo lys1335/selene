@@ -18,6 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTranslations } from "next-intl";
+import { useEffect, useState } from "react";
 import type { CharacterSummary } from "@/components/character-picker-types";
 
 const DatabaseIcon = Database;
@@ -69,6 +70,25 @@ export function AgentOverflowMenu({
   removeFromWorkflowLabel,
 }: AgentOverflowMenuProps) {
   const t = useTranslations("picker");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <button
+        type="button"
+        className="absolute top-2 right-2 rounded-md p-1 opacity-40 transition-opacity group-hover:opacity-100"
+        aria-label={`Agent options for ${character.displayName || character.name}`}
+        disabled
+      >
+        <MoreHorizontal className="w-4 h-4 text-terminal-muted" />
+      </button>
+    );
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>

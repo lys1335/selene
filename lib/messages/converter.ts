@@ -21,6 +21,8 @@ export interface DBToolCallPart extends ContextProvenance {
   args?: unknown;
   argsText?: string;
   state?: ToolInvocationState;
+  /** Progress-only hint for live projections; canonical persisted history should not rely on it. */
+  active?: boolean;
 }
 
 export interface DBToolResultPart extends ContextProvenance {

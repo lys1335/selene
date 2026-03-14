@@ -3,6 +3,32 @@ import { describe, expect, it } from "vitest";
 import { sanitizeMessagesForInit } from "@/components/chat-provider";
 
 describe("sanitizeMessagesForInit", () => {
+  it("keeps active tool calls that are explicitly marked as streaming-active", () => {
+    const messages = [
+      {
+        id: "assistant-active",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Working" },
+          {
+            type: "tool-localGrep",
+            toolCallId: "tool-active",
+            state: "input-available",
+            input: { pattern: "todo" },
+            active: true,
+          },
+        ],
+      },
+    ] as any;
+
+    const sanitized = sanitizeMessagesForInit(messages);
+    const assistant = sanitized[0];
+    const activePart = assistant.parts.find((part: any) => part.toolCallId === "tool-active");
+
+    expect(activePart).toBeDefined();
+    expect((activePart as any).active).toBe(true);
+  });
+
   it("removes dangling input-streaming and input-available tool parts", () => {
     const messages = [
       {

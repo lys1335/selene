@@ -20,7 +20,7 @@ import {
   UndoIcon,
   MicIcon,
 } from "lucide-react";
-import { resilientPost } from "@/lib/utils/resilient-fetch";
+import { resilientFetch, resilientPost } from "@/lib/utils/resilient-fetch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -825,16 +825,53 @@ export const Composer: FC<{
     setQueuedMessages((prev) => prev.filter((msg) => msg.id !== id));
   }, []);
 
+  const cancelForegroundRunOnServer = useCallback(async () => {
+    if (!sessionId) return;
+
+    const { data, error } = await resilientFetch<{ hasActiveRun?: boolean; runId?: string | null }>(
+      `/api/sessions/${sessionId}/active-run`,
+      { retries: 0, timeout: 5000 },
+    );
+
+    if (error || !data?.hasActiveRun || !data.runId) {
+      if (error) {
+        console.warn("[Composer] Failed to resolve active foreground run for cancellation:", error);
+      }
+      return;
+    }
+
+    const cancelResult = await resilientPost<{ cancelled?: boolean }>(
+      `/api/agent-runs/${data.runId}/cancel`,
+      {},
+      { retries: 0, timeout: 5000 },
+    );
+
+    // 404/409 are effectively terminal from the UI perspective (already ended / already cancelled).
+    if (cancelResult.error && cancelResult.status !== 404 && cancelResult.status !== 409) {
+      console.warn("[Composer] Failed to cancel foreground run on server:", cancelResult.error);
+    }
+  }, [sessionId]);
+
   const handleCancel = useCallback(() => {
     if (!isOperationRunning || isCancelling) return;
     setIsCancelling(true);
     if (isRunning) {
+      void cancelForegroundRunOnServer();
       try { threadRuntime.cancelRun(); } catch { /* pre-init abort — no-op */ }
     }
     if (deepResearch && (isDeepResearchActive || isDeepResearchLoading)) {
       deepResearch.cancelResearch();
     }
-  }, [deepResearch, isCancelling, isDeepResearchActive, isDeepResearchLoading, isOperationRunning, isRunning, threadRuntime]);
+  }, [
+    cancelForegroundRunOnServer,
+    deepResearch,
+    isCancelling,
+    isDeepResearchActive,
+    isDeepResearchLoading,
+    isOperationRunning,
+    isRunning,
+    threadRuntime,
+  ]);
 
   // When the operation stops after a cancel, refresh messages from DB to
   // restore any messages the AI SDK discarded from its optimistic state

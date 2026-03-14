@@ -8,7 +8,7 @@
  */
 
 import { getAntigravityModels } from "@/lib/auth/antigravity-models";
-import { getCodexModels } from "@/lib/auth/codex-models";
+import { getCodexModels, normalizeCodexModel } from "@/lib/auth/codex-models";
 import { getClaudeCodeModels } from "@/lib/auth/claudecode-models";
 import { getKimiModels } from "@/lib/auth/kimi-models";
 import { getMiniMaxModels } from "@/lib/auth/minimax-models";
@@ -293,7 +293,8 @@ export function buildModelCatalog(
 
   for (const { provider, models } of allSources) {
     for (const model of models) {
-      const meta = MODEL_METADATA[model.id];
+      const resolvedModelId = provider === "codex" ? normalizeCodexModel(model.id) : model.id;
+      const meta = MODEL_METADATA[model.id] ?? MODEL_METADATA[resolvedModelId];
       catalog.push({
         id: model.id,
         name: model.name,

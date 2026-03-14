@@ -1,5 +1,109 @@
 import type { UIMessage } from "ai";
+import type { ChatWorkspaceTab, OpenChatWorkspaceSession } from "@/lib/stores/chat-workspace-store";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
+
+interface SessionCharacterFallback {
+    id?: string | null;
+    name?: string | null;
+}
+
+export const getSessionCharacterId = (session: Pick<SessionInfo, "characterId" | "metadata">) =>
+    session.characterId ?? session.metadata?.characterId ?? null;
+
+export const getSessionCharacterName = (
+    session: Pick<SessionInfo, "characterId" | "metadata">,
+    fallback?: SessionCharacterFallback,
+) => {
+    const explicitName = session.metadata?.characterName ?? null;
+    if (explicitName) {
+        return explicitName;
+    }
+
+    const sessionCharacterId = getSessionCharacterId(session);
+    if (sessionCharacterId && fallback?.id && sessionCharacterId === fallback.id) {
+        return fallback.name ?? null;
+    }
+
+    return null;
+};
+
+export const toOpenChatWorkspaceSession = (
+    session: Pick<SessionInfo, "id" | "title" | "characterId" | "updatedAt" | "metadata">,
+    fallback?: SessionCharacterFallback,
+): OpenChatWorkspaceSession => ({
+    sessionId: session.id,
+    title: session.title ?? null,
+    characterId: getSessionCharacterId(session),
+    characterName: getSessionCharacterName(session, fallback),
+    updatedAt: session.updatedAt ?? null,
+});
+
+export const toOpenChatWorkspaceSessionFromTab = (
+    tab: Pick<ChatWorkspaceTab, "sessionId" | "title" | "characterId" | "characterName" | "updatedAt">,
+): OpenChatWorkspaceSession => ({
+    sessionId: tab.sessionId,
+    title: tab.title ?? null,
+    characterId: tab.characterId ?? null,
+    characterName: tab.characterName ?? null,
+    updatedAt: tab.updatedAt ?? null,
+});
+
+export const resolveCurrentSessionTabData = ({
+    sessionId,
+    currentSessionRecord,
+    persistedTab,
+    currentCharacter,
+}: {
+    sessionId: string | null | undefined;
+    currentSessionRecord?: Pick<SessionInfo, "id" | "title" | "characterId" | "updatedAt" | "metadata"> | null;
+    persistedTab?: Pick<ChatWorkspaceTab, "sessionId" | "title" | "characterId" | "characterName" | "updatedAt"> | null;
+    currentCharacter: { id: string; name: string };
+}): OpenChatWorkspaceSession | null => {
+    if (!sessionId) return null;
+    if (currentSessionRecord) {
+        return toOpenChatWorkspaceSession(currentSessionRecord, currentCharacter);
+    }
+    if (persistedTab) {
+        return toOpenChatWorkspaceSessionFromTab(persistedTab);
+    }
+    // Unknown session identity must remain unset until a session-scoped source appears.
+    return {
+        sessionId,
+        title: null,
+        characterId: null,
+        characterName: null,
+        updatedAt: null,
+    };
+};
+
+export const shouldSkipEnsureCurrentSessionOpen = ({
+    activeSessionId,
+    justClosedActiveSessionId,
+}: {
+    activeSessionId: string | null | undefined;
+    justClosedActiveSessionId: string | null;
+}) =>
+    Boolean(
+        activeSessionId &&
+        justClosedActiveSessionId &&
+        activeSessionId === justClosedActiveSessionId,
+    );
+
+export const buildChatSessionUrl = (characterId: string, sessionId: string) =>
+    `/chat/${characterId}?sessionId=${sessionId}`;
+
+export const resolveSessionSwitchCharacterId = ({
+    targetSession,
+    persistedTab,
+    currentCharacterId,
+}: {
+    targetSession?: Pick<SessionInfo, "characterId" | "metadata"> | null;
+    persistedTab?: Pick<ChatWorkspaceTab, "characterId"> | null;
+    currentCharacterId: string;
+}) => {
+    const sessionCharacterId = targetSession ? getSessionCharacterId(targetSession) : null;
+    return sessionCharacterId ?? persistedTab?.characterId ?? currentCharacterId;
+};
 
 const parseSessionTimestamp = (value: string | null | undefined) => {
     const timestamp = value ? Date.parse(value) : Number.NaN;
@@ -85,6 +189,18 @@ export const getMessagesSignature = (messages: UIMessage[]) => {
     return `${messages.length}:${getMessageSignature(lastMessage)}`;
 };
 
+export interface LivePromptForegroundReconciliationInput {
+    liveThreadMessageCount: number;
+    persistedConversationMessageCount: number;
+    hasInjectedMessages: boolean;
+}
+
+export const shouldDeferLivePromptForegroundReconciliation = (
+    input: LivePromptForegroundReconciliationInput,
+) =>
+    input.hasInjectedMessages &&
+    input.persistedConversationMessageCount <= input.liveThreadMessageCount;
+
 export interface BackgroundRunResolutionInput {
     isForegroundStreaming: boolean;
     hasActiveRun?: boolean;
@@ -101,6 +217,19 @@ export interface BackgroundRunResolution {
     trackedRunId: string | null;
     shouldShowBackgroundRun: boolean;
 }
+
+export interface SessionScopedAsyncResultInput {
+    activeSessionId: string | null | undefined;
+    targetSessionId: string;
+    requestId: number;
+    latestRequestId: number;
+}
+
+export const shouldApplySessionScopedAsyncResult = (
+    input: SessionScopedAsyncResultInput,
+) =>
+    input.activeSessionId === input.targetSessionId &&
+    input.requestId === input.latestRequestId;
 
 export const resolveBackgroundRunState = (
     input: BackgroundRunResolutionInput

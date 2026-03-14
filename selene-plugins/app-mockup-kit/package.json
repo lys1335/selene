@@ -1,0 +1,18 @@
+{
+  "name": "app-mockup-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic CLI mockup renderer and agent skill/plugin package for browser and device-framed app screenshots.",
+  "type": "module",
+  "scripts": {
+    "render": "tsx scripts/render-mockup.ts",
+    "test": "node --test --import tsx tests/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "validate": "npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.7.2"
+  }
+}

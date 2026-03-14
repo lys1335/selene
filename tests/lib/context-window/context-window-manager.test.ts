@@ -221,15 +221,16 @@ describe("ContextWindowManager.preFlightCheck compaction", () => {
 });
 
 describe("Codex model context window limits", () => {
-  it("returns 400K for all codex models", () => {
+  it("returns 400K for legacy codex models", () => {
     const codexModels = [
       "gpt-5.3-codex",
+      "gpt-5.3-codex-medium",
       "gpt-5.2-codex",
-      "gpt-5.2",
+      "gpt-5.2-high",
       "gpt-5.1-codex-max",
-      "gpt-5.1-codex",
+      "gpt-5.1-codex-medium",
       "gpt-5.1-codex-mini",
-      "gpt-5.1",
+      "gpt-5.1-chat-latest",
     ];
 
     for (const modelId of codexModels) {
@@ -238,9 +239,18 @@ describe("Codex model context window limits", () => {
     }
   });
 
-  it("returns 1M for codex provider default (unknown model)", () => {
+  it("returns 1M for normalized GPT-5.4 variants", () => {
+    const codex54Models = ["gpt-5.4", "gpt-5.4-low", "gpt-5.4-high", "gpt-5.4-xhigh"];
+
+    for (const modelId of codex54Models) {
+      const config = getContextWindowConfig(modelId, "codex");
+      expect(config.maxTokens, `${modelId} should have 1M context`).toBe(1_000_000);
+    }
+  });
+
+  it("returns 400K for codex provider default (unknown model)", () => {
     const config = getContextWindowConfig("unknown-codex-model", "codex");
-    expect(config.maxTokens).toBe(1_000_000);
+    expect(config.maxTokens).toBe(400_000);
   });
 
   it("returns correct thresholds for codex models", () => {

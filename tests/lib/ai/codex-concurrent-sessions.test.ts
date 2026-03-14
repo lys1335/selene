@@ -13,6 +13,36 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import {
+  buildChatSessionUrl,
+  getSessionCharacterId,
+  getSessionCharacterName,
+  resolveCurrentSessionTabData,
+  resolveSessionSwitchCharacterId,
+  shouldSkipEnsureCurrentSessionOpen,
+  shouldApplySessionScopedAsyncResult,
+  toOpenChatWorkspaceSession,
+} from "@/components/chat/chat-interface-utils";
+import { useChatWorkspaceStore } from "@/lib/stores/chat-workspace-store";
+import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
+
+function makeSession(overrides: Partial<SessionInfo>): SessionInfo {
+  return {
+    id: overrides.id ?? "session-default",
+    title: overrides.title ?? "Untitled",
+    characterId: overrides.characterId ?? null,
+    createdAt: overrides.createdAt ?? "2026-03-14T08:00:00.000Z",
+    updatedAt: overrides.updatedAt ?? "2026-03-14T08:00:00.000Z",
+    lastMessageAt: overrides.lastMessageAt ?? null,
+    messageCount: overrides.messageCount ?? 0,
+    totalTokenCount: overrides.totalTokenCount ?? 0,
+    channelType: overrides.channelType ?? null,
+    hasActiveRun: overrides.hasActiveRun ?? false,
+    metadata: {
+      ...overrides.metadata,
+    },
+  };
+}
 
 // ── 1. Session Store ────────────────────────────────────────────────────────
 
@@ -298,6 +328,207 @@ describe("Session store + WS gate integration", () => {
 });
 
 // ── 6. Architecture verification (minimal, replaces old regex tests) ────────
+
+describe("Browser chat session identity", () => {
+  beforeEach(() => {
+    useChatWorkspaceStore.getState().reset();
+  });
+
+  it("keeps each tab bound to its session-owned agent metadata", () => {
+    const seleneSession = makeSession({
+      id: "selene-session",
+      characterId: "selene-id",
+      metadata: { characterId: "selene-id", characterName: "Selene" },
+    });
+    const exploreSession = makeSession({
+      id: "explore-session",
+      characterId: "explore-id",
+      metadata: { characterId: "explore-id", characterName: "Explore" },
+    });
+
+    useChatWorkspaceStore.getState().hydrate(toOpenChatWorkspaceSession(seleneSession));
+    useChatWorkspaceStore.getState().openSession(toOpenChatWorkspaceSession(exploreSession));
+    useChatWorkspaceStore.getState().openSession(toOpenChatWorkspaceSession(seleneSession));
+
+    const tabs = useChatWorkspaceStore.getState().tabs;
+    expect(tabs.find((tab) => tab.sessionId === "selene-session")?.characterName).toBe("Selene");
+    expect(tabs.find((tab) => tab.sessionId === "explore-session")?.characterName).toBe("Explore");
+  });
+
+  it("treats openSession as a no-op when tab payload and active session are unchanged", () => {
+    const session = makeSession({
+      id: "stable-session",
+      characterId: "selene-id",
+      metadata: { characterId: "selene-id", characterName: "Selene" },
+    });
+    const payload = toOpenChatWorkspaceSession(session, { id: "selene-id", name: "Selene" });
+    const store = useChatWorkspaceStore.getState();
+
+    store.openSession(payload);
+    const tabsBefore = useChatWorkspaceStore.getState().tabs;
+    const activeBefore = useChatWorkspaceStore.getState().activeSessionId;
+
+    store.openSession(payload);
+    const tabsAfter = useChatWorkspaceStore.getState().tabs;
+    const activeAfter = useChatWorkspaceStore.getState().activeSessionId;
+
+    expect(tabsAfter).toBe(tabsBefore);
+    expect(activeAfter).toBe(activeBefore);
+    expect(activeAfter).toBe("stable-session");
+  });
+
+  it("preserves selene tab identity after opening an explorer tab and navigating back", () => {
+    const seleneOne = makeSession({
+      id: "selene-session-1",
+      characterId: "selene-id",
+      metadata: { characterId: "selene-id", characterName: "Selene" },
+    });
+    const seleneTwo = makeSession({
+      id: "selene-session-2",
+      characterId: "selene-id",
+      metadata: { characterId: "selene-id", characterName: "Selene" },
+    });
+    const explorer = makeSession({
+      id: "explorer-session",
+      characterId: "explorer-id",
+      metadata: { characterId: "explorer-id", characterName: "Explorer" },
+    });
+
+    const store = useChatWorkspaceStore.getState();
+    store.openSession(toOpenChatWorkspaceSession(seleneOne, { id: "selene-id", name: "Selene" }));
+    store.openSession(toOpenChatWorkspaceSession(seleneTwo, { id: "selene-id", name: "Selene" }));
+    store.openSession(toOpenChatWorkspaceSession(explorer, { id: "selene-id", name: "Selene" }));
+    store.setActiveSession("selene-session-1");
+
+    const tabs = useChatWorkspaceStore.getState().tabs;
+    expect(tabs.find((tab) => tab.sessionId === "selene-session-1")).toMatchObject({
+      characterId: "selene-id",
+      characterName: "Selene",
+    });
+    expect(tabs.find((tab) => tab.sessionId === "selene-session-2")).toMatchObject({
+      characterId: "selene-id",
+      characterName: "Selene",
+    });
+    expect(tabs.find((tab) => tab.sessionId === "explorer-session")).toMatchObject({
+      characterId: "explorer-id",
+      characterName: "Explorer",
+    });
+    expect(useChatWorkspaceStore.getState().activeSessionId).toBe("selene-session-1");
+  });
+
+  it("derives session switch targets from the clicked session identity", () => {
+    const seleneSession = makeSession({
+      id: "selene-session",
+      metadata: { characterId: "selene-id", characterName: "Selene" },
+    });
+    const exploreSession = makeSession({
+      id: "explore-session",
+      metadata: { characterId: "explore-id", characterName: "Explore" },
+    });
+
+    const seleneTab = toOpenChatWorkspaceSession(seleneSession, { id: "current-agent", name: "Current" });
+    const exploreTab = toOpenChatWorkspaceSession(exploreSession, { id: "current-agent", name: "Current" });
+
+    expect(seleneTab.characterId).toBe("selene-id");
+    expect(seleneTab.characterName).toBe("Selene");
+    expect(exploreTab.characterId).toBe("explore-id");
+    expect(exploreTab.characterName).toBe("Explore");
+    expect(buildChatSessionUrl(exploreTab.characterId!, exploreTab.sessionId)).toBe("/chat/explore-id?sessionId=explore-session");
+  });
+
+  it("uses persisted tab identity when the current page session list does not include the target session", () => {
+    expect(resolveSessionSwitchCharacterId({
+      targetSession: null,
+      persistedTab: { characterId: "explorer-id" },
+      currentCharacterId: "selene-id",
+    })).toBe("explorer-id");
+  });
+
+  it("prefers persisted tab metadata while the active session record is rehydrating", () => {
+    const resolved = resolveCurrentSessionTabData({
+      sessionId: "selene-session",
+      currentSessionRecord: null,
+      persistedTab: {
+        sessionId: "selene-session",
+        title: "Selene tab",
+        characterId: "selene-id",
+        characterName: "Selene",
+        updatedAt: "2026-03-14T09:00:00.000Z",
+      },
+      currentCharacter: { id: "explore-id", name: "Autonomous Optimization Architect" },
+    });
+
+    expect(resolved).toEqual({
+      sessionId: "selene-session",
+      title: "Selene tab",
+      characterId: "selene-id",
+      characterName: "Selene",
+      updatedAt: "2026-03-14T09:00:00.000Z",
+    });
+  });
+
+  it("does not leak page-agent identity when neither session nor persisted tab metadata exists", () => {
+    const resolved = resolveCurrentSessionTabData({
+      sessionId: "unknown-session",
+      currentSessionRecord: null,
+      persistedTab: null,
+      currentCharacter: { id: "explore-id", name: "Autonomous Optimization Architect" },
+    });
+
+    expect(resolved).toEqual({
+      sessionId: "unknown-session",
+      title: null,
+      characterId: null,
+      characterName: null,
+      updatedAt: null,
+    });
+  });
+
+  it("suppresses ensure-open while the active session is mid-close transition", () => {
+    expect(shouldSkipEnsureCurrentSessionOpen({
+      activeSessionId: "session-a",
+      justClosedActiveSessionId: "session-a",
+    })).toBe(true);
+
+    expect(shouldSkipEnsureCurrentSessionOpen({
+      activeSessionId: "session-b",
+      justClosedActiveSessionId: "session-a",
+    })).toBe(false);
+  });
+
+  it("only falls back to the current page agent for sessions that actually belong to it", () => {
+    const unlabeledCurrentSession = makeSession({
+      id: "current-session",
+      characterId: "selene-id",
+      metadata: {},
+    });
+    const unlabeledForeignSession = makeSession({
+      id: "foreign-session",
+      characterId: "explore-id",
+      metadata: {},
+    });
+
+    expect(getSessionCharacterId(unlabeledCurrentSession)).toBe("selene-id");
+    expect(getSessionCharacterName(unlabeledCurrentSession, { id: "selene-id", name: "Selene" })).toBe("Selene");
+    expect(getSessionCharacterName(unlabeledForeignSession, { id: "selene-id", name: "Selene" })).toBeNull();
+  });
+
+  it("rejects stale async results after a newer session switch", () => {
+    expect(shouldApplySessionScopedAsyncResult({
+      activeSessionId: "session-b",
+      targetSessionId: "session-a",
+      requestId: 1,
+      latestRequestId: 2,
+    })).toBe(false);
+
+    expect(shouldApplySessionScopedAsyncResult({
+      activeSessionId: "session-b",
+      targetSessionId: "session-b",
+      requestId: 2,
+      latestRequestId: 2,
+    })).toBe(true);
+  });
+});
 
 describe("Architecture verification", () => {
   it("codex-provider exports createCodexProvider (not a cached singleton getter)", async () => {

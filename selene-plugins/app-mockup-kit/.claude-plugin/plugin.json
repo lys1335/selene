@@ -1,0 +1,7 @@
+{
+  "name": "app-mockup-kit",
+  "description": "Deterministic app screenshot mockups for agents via a standalone TypeScript CLI and reusable SKILL.md workflow.",
+  "version": "0.1.0",
+  "commands": "commands",
+  "skills": "skills"
+}

@@ -1,0 +1,4 @@
+node_modules
+*.tsbuildinfo
+out
+selene-plugins/_vendor_screenshot_rocks

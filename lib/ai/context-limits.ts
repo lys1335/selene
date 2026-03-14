@@ -1,5 +1,6 @@
 import { MODEL_METADATA } from "@/lib/config/model-catalog";
 import type { LLMProvider } from "@/components/model-bag/model-bag.types";
+import { normalizeCodexModel } from "@/lib/auth/codex-models";
 
 /**
  * Default context window limits per provider (in tokens)
@@ -9,7 +10,7 @@ const DEFAULT_PROVIDER_LIMITS: Record<LLMProvider, number> = {
   anthropic: 200000,   // All Claude models = 200K standard (per Anthropic docs)
   openrouter: 128000,  // Safe default for most modern models
   antigravity: 200000, // Claude-based = 200K; Gemini uses model-specific overrides
-  codex: 1000000,      // GPT-5.4 models are 1M context (legacy 400K)
+  codex: 400000,       // Mixed provider; keep legacy-safe default and override GPT-5.4 explicitly
   claudecode: 200000,  // Claude Opus 4.6 = 200K standard
   kimi: 128000,        // Kimi standard
   minimax: 80000,      // MiniMax M2.1 80K context
@@ -43,9 +44,22 @@ export function parseContextWindow(value: string | undefined): number | null {
  * @param provider The provider (used for fallback defaults)
  * @returns The context window limit in tokens
  */
+function resolveMetadataModelId(modelId: string, provider: LLMProvider): string {
+  const baseModelId = modelId.includes("/") ? modelId.split("/").pop()! : modelId;
+  const lowerModelId = baseModelId.toLowerCase();
+
+  if (provider === "codex" || lowerModelId.includes("codex") || lowerModelId.includes("gpt-5")) {
+    return normalizeCodexModel(baseModelId);
+  }
+
+  return baseModelId;
+}
+
 export function getModelContextLimit(modelId: string, provider: LLMProvider): number {
+  const resolvedModelId = resolveMetadataModelId(modelId, provider);
+
   // 1. Check specific model metadata
-  const meta = MODEL_METADATA[modelId];
+  const meta = MODEL_METADATA[modelId] ?? MODEL_METADATA[resolvedModelId];
   if (meta?.capabilities?.contextWindow) {
     const parsed = parseContextWindow(meta.capabilities.contextWindow);
     if (parsed) return parsed;

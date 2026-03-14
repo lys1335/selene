@@ -8,6 +8,7 @@
  */
 
 import type { LLMProvider } from "@/components/model-bag/model-bag.types";
+import { normalizeCodexModel } from "@/lib/auth/codex-models";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -86,7 +87,7 @@ export const PROVIDER_DEFAULT_LIMITS: Record<LLMProvider, number> = {
   claudecode: 200000, // 200K for Claude Code (Claude Opus 4.6 = 200K standard)
   antigravity: 200000, // Claude-based models = 200K; Gemini models use model-specific overrides
   openrouter: 128000, // Varies widely, conservative default
-  codex: 1000000, // GPT-5.4 models are 1M context (legacy models 400K)
+  codex: 400000, // Mixed provider; keep legacy-safe default and override GPT-5.4 explicitly
   kimi: 128000, // Kimi K2 models range 128K-256K
   minimax: 80000, // MiniMax M2.1 models with 80K context
   ollama: 32000, // Local models typically have smaller context
@@ -264,12 +265,25 @@ export const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>>
  * @param provider - Optional provider for fallback defaults
  * @returns Complete context window configuration
  */
+function resolveContextConfigModelId(modelId: string, provider?: LLMProvider): string {
+  const baseModelId = modelId.includes("/") ? modelId.split("/").pop()! : modelId;
+  const lowerModelId = baseModelId.toLowerCase();
+
+  if (provider === "codex" || lowerModelId.includes("codex") || lowerModelId.includes("gpt-5")) {
+    return normalizeCodexModel(baseModelId);
+  }
+
+  return baseModelId;
+}
+
 export function getContextWindowConfig(
   modelId: string,
   provider?: LLMProvider
 ): ContextWindowConfig {
+  const resolvedModelId = resolveContextConfigModelId(modelId, provider);
+
   // Check for model-specific config
-  const modelConfig = MODEL_CONTEXT_CONFIGS[modelId];
+  const modelConfig = MODEL_CONTEXT_CONFIGS[modelId] ?? MODEL_CONTEXT_CONFIGS[resolvedModelId];
 
   if (modelConfig) {
     return {

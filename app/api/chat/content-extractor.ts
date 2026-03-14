@@ -125,6 +125,19 @@ async function imageUrlToBase64(imageUrl: string): Promise<string> {
 // includeUrlHelpers: when true, adds [Image URL: ...] text for AI context (not for DB storage)
 // convertUserImagesToBase64: when true, converts USER-uploaded image URLs to base64 (not tool-generated images)
 // sessionId: when provided, enables smart truncation with full content retrieval
+function maybePreserveImageReference(
+  contentParts: Array<{ type: string; text?: string; image?: string }>,
+  imageUrl: string,
+  shouldConvert: boolean,
+  includeUrlHelpers: boolean,
+) {
+  // Persist raw attachment URLs when we're storing chat history so follow-up turns
+  // still have a machine-usable reference instead of losing the upload entirely.
+  if (!shouldConvert && !includeUrlHelpers) {
+    contentParts.push({ type: "image", image: imageUrl });
+  }
+}
+
 export async function extractContent(
   msg: {
     role?: string;
@@ -233,6 +246,7 @@ export async function extractContent(
             text: `[Image URL: ${imageUrl}]`,
           });
         }
+        maybePreserveImageReference(contentParts, imageUrl, shouldConvert, includeUrlHelpers);
       } else if (
         part.type === "file" &&
         part.url &&
@@ -254,13 +268,7 @@ export async function extractContent(
             text: `[${label} URL: ${part.url}]`,
           });
         }
-        // ALWAYS preserve the file reference (for DB storage when flags are off)
-        if (!shouldConvert && !includeUrlHelpers) {
-          contentParts.push({
-            type: "image",
-            image: part.url,
-          });
-        }
+        maybePreserveImageReference(contentParts, part.url, shouldConvert, includeUrlHelpers);
       } else if (part.type === "dynamic-tool" && part.toolName) {
         // Handle historical tool calls from DB
         // CRITICAL: Tool results are now kept as structured data, NOT converted to text with [SYSTEM: ...] markers
@@ -602,6 +610,7 @@ export async function extractContent(
               text: `[${label} URL: ${attachment.url}]`,
             });
           }
+          maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
         }
       }
     }
@@ -648,6 +657,7 @@ export async function extractContent(
             text: `[${label} URL: ${attachment.url}]`,
           });
         }
+        maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
       }
     }
 

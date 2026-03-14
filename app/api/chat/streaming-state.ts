@@ -309,6 +309,27 @@ export function sealDanglingToolCalls(
   return changed;
 }
 
+function parseExactToolArgs(argsText: string | undefined): unknown {
+  if (!argsText) return undefined;
+  try {
+    return JSON.parse(argsText);
+  } catch {
+    return undefined;
+  }
+}
+
+function shouldTrustRepairedToolArgs(argsText: string | undefined): boolean {
+  const trimmed = argsText?.trim();
+  if (!trimmed) return false;
+  const lastChar = trimmed[trimmed.length - 1];
+  return !["{", "[", ":", ",", '"', "\\"].includes(lastChar);
+}
+
+function repairToolArgs(argsText: string | undefined): unknown {
+  if (!argsText || !shouldTrustRepairedToolArgs(argsText)) return undefined;
+  return attemptJsonRepair(argsText) ?? undefined;
+}
+
 export function recordStructuredToolCall(
   state: StreamingMessageState,
   toolCallId: string,
@@ -320,15 +341,37 @@ export function recordStructuredToolCall(
   }
   const part = ensureToolCallPart(state, toolCallId, toolName);
 
-  // When a complete tool-call arrives after streaming deltas (e.g. from
-  // experimental_repairToolCall), update argsText to match the new input
-  // so server-side state stays consistent.
   if (part.argsText && part.argsText.length > 0) {
+    const serializedInput = JSON.stringify(input ?? {});
+    const parsedStreamedArgs = parseExactToolArgs(part.argsText);
+    const repairedStreamedArgs = parsedStreamedArgs ?? repairToolArgs(part.argsText);
+    const streamedInputComplete = parsedStreamedArgs !== undefined;
+    const prefixCompatible =
+      serializedInput.startsWith(part.argsText) || part.argsText.startsWith(serializedInput);
+
+    if (!streamedInputComplete && prefixCompatible) {
+      part.state = "input-available";
+      part.args = input;
+      return true;
+    }
+
+    if (repairedStreamedArgs !== undefined) {
+      if (JSON.stringify(repairedStreamedArgs) !== serializedInput) {
+        console.warn(
+          `[CHAT API] recordStructuredToolCall ignored conflicting structured input for ${toolName} (${toolCallId}). ` +
+            `Preserving streamed argsText as the source of truth.`
+        );
+      }
+      part.state = "input-available";
+      part.args = repairedStreamedArgs;
+      return true;
+    }
+
     console.warn(
-      `[CHAT API] recordStructuredToolCall overwriting streaming argsText for ${toolName} (${toolCallId}). ` +
-        `Old argsText length: ${part.argsText.length}`
+      `[CHAT API] recordStructuredToolCall received incompatible structured input for ${toolName} (${toolCallId}) ` +
+        `before streamed argsText was parseable. Keeping streaming input authoritative.`
     );
-    part.argsText = JSON.stringify(input ?? {});
+    return false;
   }
 
   part.state = "input-available";
