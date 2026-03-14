@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { KeyboardEvent, MouseEvent } from "react";
 import { useFormatter, useTranslations } from "next-intl";
@@ -94,7 +94,12 @@ export function SessionItem({
   const itemRef = useRef<HTMLDivElement>(null);
   const editInputRef = useRef<HTMLInputElement>(null);
   const skipBlurRef = useRef(false);
+  const [mounted, setMounted] = useState(false);
   const { isVisible: isSidebarVisible } = useSidebarCollapsed();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Sync with global store for real-time updates
   const syncedSession = useSessionData(initialSession.id);
@@ -341,74 +346,87 @@ export function SessionItem({
         )}
       </div>
       {!isEditing ? (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              aria-label={t("sidebar.moreOptions")}
-              title={t("sidebar.moreOptions")}
-              className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-terminal-muted hover:text-terminal-green hover:bg-terminal-green/10"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
-            {onPin ? (
-              <DropdownMenuItem onSelect={onPin}>
-                {isPinned ? (
-                  <PinOff className="h-3.5 w-3.5" />
-                ) : (
-                  <Pin className="h-3.5 w-3.5" />
-                )}
-                {isPinned ? t("sidebar.unpin") : t("sidebar.pin")}
+        mounted ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={t("sidebar.moreOptions")}
+                title={t("sidebar.moreOptions")}
+                className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-terminal-muted hover:text-terminal-green hover:bg-terminal-green/10"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(event) => event.stopPropagation()}>
+              {onPin ? (
+                <DropdownMenuItem onSelect={onPin}>
+                  {isPinned ? (
+                    <PinOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Pin className="h-3.5 w-3.5" />
+                  )}
+                  {isPinned ? t("sidebar.unpin") : t("sidebar.pin")}
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem onSelect={onStartEdit}>
+                <Pencil className="h-3.5 w-3.5" />
+                {t("sidebar.rename")}
               </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem onSelect={onStartEdit}>
-              <Pencil className="h-3.5 w-3.5" />
-              {t("sidebar.rename")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onExport("markdown")}>
-              <Download className="h-3.5 w-3.5" />
-              {t("sidebar.exportMarkdown")}
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => onExport("json")}>
-              <Download className="h-3.5 w-3.5" />
-              {t("sidebar.exportJson")}
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <a href={`/usage?sessionId=${session.id}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                <BarChart2 className="h-3.5 w-3.5" />
-                {t("sidebar.viewAnalytics")}
-              </a>
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={handleCopyLink}>
-              <Link2 className="h-3.5 w-3.5" />
-              {t("sidebar.copyLink")}
-            </DropdownMenuItem>
-            {effectiveChannel ? (
-              <DropdownMenuItem onSelect={onResetChannel}>
-                <RotateCcw className="h-3.5 w-3.5" />
-                {t("sidebar.resetChannel")}
+              <DropdownMenuItem onSelect={() => onExport("markdown")}>
+                <Download className="h-3.5 w-3.5" />
+                {t("sidebar.exportMarkdown")}
               </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuSeparator />
-            {onArchive ? (
-              <DropdownMenuItem onSelect={onArchive}>
-                <Archive className="h-3.5 w-3.5" />
-                {t("sidebar.archive")}
+              <DropdownMenuItem onSelect={() => onExport("json")}>
+                <Download className="h-3.5 w-3.5" />
+                {t("sidebar.exportJson")}
               </DropdownMenuItem>
-            ) : null}
-            <DropdownMenuItem
-              className="text-red-600 hover:!text-red-600"
-              onSelect={onDelete}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-              {t("sidebar.delete")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuItem asChild>
+                <a href={`/usage?sessionId=${session.id}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                  <BarChart2 className="h-3.5 w-3.5" />
+                  {t("sidebar.viewAnalytics")}
+                </a>
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={handleCopyLink}>
+                <Link2 className="h-3.5 w-3.5" />
+                {t("sidebar.copyLink")}
+              </DropdownMenuItem>
+              {effectiveChannel ? (
+                <DropdownMenuItem onSelect={onResetChannel}>
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  {t("sidebar.resetChannel")}
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuSeparator />
+              {onArchive ? (
+                <DropdownMenuItem onSelect={onArchive}>
+                  <Archive className="h-3.5 w-3.5" />
+                  {t("sidebar.archive")}
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem
+                className="text-red-600 hover:!text-red-600"
+                onSelect={onDelete}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {t("sidebar.delete")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={t("sidebar.moreOptions")}
+            title={t("sidebar.moreOptions")}
+            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-terminal-muted"
+            disabled
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </Button>
+        )
       ) : null}
       <SessionActivityBubble
         activity={sessionActivity}

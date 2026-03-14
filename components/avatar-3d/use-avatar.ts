@@ -210,6 +210,16 @@ export function useAvatar(
 
   const lipsyncLang = config.lipsyncLang ?? DEFAULT_LIPSYNC_LANG;
 
+  const resumeAudioContext = useCallback(async (source: string) => {
+    const audioCtx = headRef.current?.audioCtx;
+    if (!audioCtx || audioCtx.state !== "suspended") return;
+    try {
+      await audioCtx.resume();
+    } catch (error) {
+      console.warn(`[Avatar3D] AudioContext resume blocked (${source}):`, error);
+    }
+  }, []);
+
   // -------------------------------------------------------------------------
   // Initialize / teardown TalkingHead
   // -------------------------------------------------------------------------
@@ -298,7 +308,8 @@ export function useAvatar(
 
         // Shift avatar up in frame by moving the armature
         try { head.armature.position.y += 0.3; } catch { /* best-effort */ }
-        try { head.setAutoRotateSpeed(0.4); } catch { /* best-effort */ }
+        // Keep avatars stationary by default; users can still drag to rotate.
+        try { head.setAutoRotateSpeed(0); } catch { /* best-effort */ }
 
         headRef.current = head;
         isReadyRef.current = true;
@@ -331,6 +342,32 @@ export function useAvatar(
     };
   }, [config.enabled, config.modelUrl, config.bodyType, config.cameraDistance, lipsyncLang, containerRef, resolvePendingSpeech]);
 
+  // Browser dev builds can keep AudioContext suspended until explicit user activation.
+  // Electron production is not affected as often, so proactively unlock on gestures.
+  useEffect(() => {
+    if (state !== "ready") return;
+    let disposed = false;
+
+    const tryResume = () => {
+      if (disposed) return;
+      void resumeAudioContext("user-gesture");
+    };
+
+    // Best-effort immediate resume (works when the page already has activation).
+    void resumeAudioContext("ready-state");
+
+    window.addEventListener("pointerdown", tryResume, { passive: true });
+    window.addEventListener("keydown", tryResume, { passive: true });
+    window.addEventListener("touchstart", tryResume, { passive: true });
+
+    return () => {
+      disposed = true;
+      window.removeEventListener("pointerdown", tryResume);
+      window.removeEventListener("keydown", tryResume);
+      window.removeEventListener("touchstart", tryResume);
+    };
+  }, [resumeAudioContext, state]);
+
   // -------------------------------------------------------------------------
   // Stable method references via useCallback
   // -------------------------------------------------------------------------
@@ -343,7 +380,7 @@ export function useAvatar(
       try {
         const audioCtx = head.audioCtx;
         if (audioCtx.state === "suspended") {
-          await audioCtx.resume();
+          await resumeAudioContext("speak");
         }
 
         const decoded = await audioCtx.decodeAudioData(audioBuffer.slice(0));
@@ -408,7 +445,7 @@ export function useAvatar(
         throw err;
       }
     },
-    [lipsyncLang, resolvePendingSpeech],
+    [lipsyncLang, resolvePendingSpeech, resumeAudioContext],
   );
 
   const stopSpeaking = useCallback(() => {

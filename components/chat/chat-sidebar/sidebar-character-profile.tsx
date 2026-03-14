@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Camera, Cpu, FolderPlus, Plug, MoreHorizontal, Copy, Puzzle, Sparkles } from "lucide-react";
 import {
   Wrench,
@@ -87,6 +87,11 @@ export function SidebarCharacterProfile({
   const t = useTranslations("chat");
   const tPicker = useTranslations("picker");
   const tChannels = useTranslations("channels");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const accentColor = useMemo(
     () => getAgentAccentColor(character.id),
@@ -192,71 +197,82 @@ export function SidebarCharacterProfile({
           </div>
 
           {/* 3-dot overflow menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="absolute top-2 right-2 rounded-md p-1 opacity-40 transition-opacity hover:bg-terminal-dark/10 hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-terminal-green focus-visible:ring-offset-1 focus-visible:ring-offset-terminal-cream"
-                aria-label={`Agent options for ${character.displayName || character.name}`}
+          {mounted ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="absolute top-2 right-2 rounded-md p-1 opacity-40 transition-opacity hover:bg-terminal-dark/10 hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-terminal-green focus-visible:ring-offset-1 focus-visible:ring-offset-terminal-cream"
+                  aria-label={`Agent options for ${character.displayName || character.name}`}
+                >
+                  <MoreHorizontal className="w-4 h-4 text-terminal-muted" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-48 font-mono text-sm"
               >
-                <MoreHorizontal className="w-4 h-4 text-terminal-muted" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-48 font-mono text-sm"
+                <DropdownMenuItem onSelect={onEditIdentity}>
+                  <Pencil className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.editInfo")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onEditModelDefaults}>
+                  <Cpu className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.modelDefaults")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onManageSkills}>
+                  <Sparkles className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.manageSkills")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onEditTools}>
+                  <Wrench className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.manageTools")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onOpenFoldersDialog}>
+                  <Database className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.syncFolders")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onEditMcp}>
+                  <PhosphorPlug className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.mcpTools")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onEditPlugins}>
+                  <Puzzle className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.plugins")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onEditAvatar3d}>
+                  <UserCircle className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.avatar3d")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onNavigateDashboard}>
+                  <ChartBar className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.dashboard")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem disabled={isDuplicating} onSelect={onDuplicate}>
+                  <Copy className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.duplicate")}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={onDelete}
+                  className="text-red-600 focus:text-red-600"
+                >
+                  <Trash className="w-3.5 h-3.5 mr-2" />
+                  {tPicker("menu.delete")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <button
+              type="button"
+              className="absolute top-2 right-2 rounded-md p-1 opacity-40 transition-opacity"
+              aria-label={`Agent options for ${character.displayName || character.name}`}
+              disabled
             >
-              <DropdownMenuItem onSelect={onEditIdentity}>
-                <Pencil className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.editInfo")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onEditModelDefaults}>
-                <Cpu className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.modelDefaults")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onManageSkills}>
-                <Sparkles className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.manageSkills")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onEditTools}>
-                <Wrench className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.manageTools")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onOpenFoldersDialog}>
-                <Database className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.syncFolders")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onEditMcp}>
-                <PhosphorPlug className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.mcpTools")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onEditPlugins}>
-                <Puzzle className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.plugins")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onEditAvatar3d}>
-                <UserCircle className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.avatar3d")}
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={onNavigateDashboard}>
-                <ChartBar className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.dashboard")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled={isDuplicating} onSelect={onDuplicate}>
-                <Copy className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.duplicate")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={onDelete}
-                className="text-red-600 focus:text-red-600"
-              >
-                <Trash className="w-3.5 h-3.5 mr-2" />
-                {tPicker("menu.delete")}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              <MoreHorizontal className="w-4 h-4 text-terminal-muted" />
+            </button>
+          )}
         </div>
       </div>
     </div>
