@@ -106,6 +106,21 @@ export function isChatTask(task: UnifiedTask): task is ChatTask {
   return task.type === "chat";
 }
 
+export function isDelegationTask(task: { type: string; metadata?: unknown }): boolean {
+  if (task.type !== "chat") {
+    return false;
+  }
+  const metadata = task.metadata;
+  if (!metadata || typeof metadata !== "object") {
+    return false;
+  }
+  return (metadata as { isDelegation?: unknown }).isDelegation === true;
+}
+
+export function isBackgroundLifecycleTask(task: { type: string; metadata?: unknown }): boolean {
+  return task.type === "scheduled" || isDelegationTask(task);
+}
+
 export function isTaskSuppressedFromUI(task: UnifiedTask): boolean {
   if (task.type !== "chat") {
     return false;

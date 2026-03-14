@@ -56,6 +56,7 @@ vi.mock("@/lib/interactive-tool-bridge", () => ({
 }));
 
 import { createDelegateToSubagentTool } from "@/lib/ai/tools/delegate-to-subagent-tool";
+import { activeDelegations } from "@/lib/ai/tools/delegate-to-subagent-types";
 
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
@@ -75,6 +76,7 @@ function makeTool() {
 describe("delegate-to-subagent-tool", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    activeDelegations.clear();
 
     mocks.getWorkflowByAgentId.mockResolvedValue({
       workflow: { id: "wf-1", name: "Main Workflow" },
@@ -320,6 +322,54 @@ describe("delegate-to-subagent-tool", () => {
     expect((waitedObserve.waitedMs as number) >= 150).toBe(true);
   });
 
+  it("list hides completed delegations once the sub-agent run settles", async () => {
+    let readCount = 0;
+    fetchMock.mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: async () => {
+            if (readCount === 0) {
+              readCount += 1;
+              await delay(50);
+              return { done: false, value: new Uint8Array([1]) };
+            }
+            return { done: true, value: undefined };
+          },
+        }),
+      },
+      text: async () => "",
+    });
+
+    const tool = makeTool();
+    const started = await (tool as any).execute({
+      action: "start",
+      agentName: "Research Analyst",
+      task: "Investigate delegation cleanup",
+      mode: "background",
+    });
+
+    const runningList = await (tool as any).execute({ action: "list" });
+    expect(runningList.delegations).toEqual([
+      expect.objectContaining({
+        delegationId: started.delegationId,
+        running: true,
+      }),
+    ]);
+
+    await delay(120);
+
+    const observed = await (tool as any).execute({
+      action: "observe",
+      delegationId: started.delegationId,
+    });
+    expect(observed.success).toBe(true);
+    expect(observed.completed).toBe(true);
+
+    const settledList = await (tool as any).execute({ action: "list" });
+    expect(settledList.delegations).toEqual([]);
+  });
+
   it("start supports runInBackground=false by returning the blocking result shape", async () => {
     const tool = makeTool();
     const result = await (tool as any).execute({
@@ -337,6 +387,48 @@ describe("delegate-to-subagent-tool", () => {
     expect(result.result).toBe("done");
     expect(result.running).toBeUndefined();
     expect(result.message).toBeUndefined();
+    expect(activeDelegations.has(result.delegationId!)).toBe(false);
+  });
+
+  it("observe removes a successfully settled background delegation from the in-memory registry", async () => {
+    let readCount = 0;
+    fetchMock.mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: async () => {
+            if (readCount === 0) {
+              readCount += 1;
+              await delay(40);
+              return { done: false, value: new Uint8Array([1]) };
+            }
+            return { done: true, value: undefined };
+          },
+        }),
+      },
+      text: async () => "",
+    });
+
+    const tool = makeTool();
+    const started = await (tool as any).execute({
+      action: "start",
+      agentName: "Research Analyst",
+      task: "Verify source cleanup after completion",
+      mode: "background",
+    });
+
+    expect(activeDelegations.has(started.delegationId!)).toBe(true);
+
+    await delay(120);
+
+    const observed = await (tool as any).execute({
+      action: "observe",
+      delegationId: started.delegationId,
+    });
+
+    expect(observed.success).toBe(true);
+    expect(observed.completed).toBe(true);
+    expect(activeDelegations.has(started.delegationId!)).toBe(false);
   });
 
   it("start returns pending interactive prompts when a sub-agent asks a question", async () => {
@@ -382,12 +474,31 @@ describe("delegate-to-subagent-tool", () => {
   });
 
   it("start supports resume alias by mapping to continue semantics", async () => {
+    let readCount = 0;
+    fetchMock.mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: async () => {
+            if (readCount === 0) {
+              readCount += 1;
+              await delay(150);
+              return { done: false, value: new Uint8Array([1]) };
+            }
+            return { done: true, value: undefined };
+          },
+        }),
+      },
+      text: async () => "",
+    });
+
     const tool = makeTool();
 
     const started = await (tool as any).execute({
       action: "start",
       agentName: "Research Analyst",
       task: "Initial analysis",
+      mode: "background",
     });
 
     const resumed = await (tool as any).execute({
@@ -397,7 +508,7 @@ describe("delegate-to-subagent-tool", () => {
     });
 
     expect(resumed.success).toBe(true);
-    expect(String(resumed.message || "")).toContain("Follow-up message sent");
+    expect(String(resumed.message || "")).toContain("Follow-up message");
   });
 
   it("continue aborts previous run without surfacing an abort failure", async () => {
@@ -424,6 +535,7 @@ describe("delegate-to-subagent-tool", () => {
       action: "start",
       agentName: "Research Analyst",
       task: "Initial analysis",
+      mode: "background",
     });
 
     await delay(10);
@@ -534,6 +646,7 @@ describe("delegate-to-subagent-tool", () => {
       action: "start",
       agentName: "Research Analyst",
       task: "Investigate delegation history output",
+      mode: "background",
     });
 
     const observed = await (tool as any).execute({

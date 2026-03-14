@@ -20,7 +20,7 @@ import {
 } from "@/lib/context-window/provider-limits";
 
 describe("Context Window Fix Validation", () => {
-  describe("Provider Default Limits (200K for Claude, 400K for GPT-5)", () => {
+  describe("Provider Default Limits (200K for Claude, 400K fallback for Codex)", () => {
     it("should set anthropic provider limit to 200K", () => {
       expect(PROVIDER_DEFAULT_LIMITS.anthropic).toBe(200000);
     });
@@ -33,8 +33,25 @@ describe("Context Window Fix Validation", () => {
       expect(PROVIDER_DEFAULT_LIMITS.antigravity).toBe(200000);
     });
 
-    it("should set codex provider limit to 1M (GPT-5.4 models)", () => {
-      expect(PROVIDER_DEFAULT_LIMITS.codex).toBe(1000000);
+    it("should keep codex provider fallback at 400K", () => {
+      expect(PROVIDER_DEFAULT_LIMITS.codex).toBe(400000);
+    });
+  });
+
+  describe("GPT-5.4 model-specific configurations (1M)", () => {
+    const codex54Models = [
+      "gpt-5.4",
+      "gpt-5.4-low",
+      "gpt-5.4-medium",
+      "gpt-5.4-high",
+      "gpt-5.4-xhigh",
+    ];
+
+    codex54Models.forEach((modelId) => {
+      it(`should configure ${modelId} with 1M context window`, () => {
+        const config = getContextWindowConfig(modelId, "codex");
+        expect(config.maxTokens).toBe(1000000);
+      });
     });
   });
 
@@ -58,17 +75,18 @@ describe("Context Window Fix Validation", () => {
   describe("GPT-5/Codex Model-Specific Configurations (400K)", () => {
     const codexModels = [
       "gpt-5.3-codex",
+      "gpt-5.3-codex-medium",
       "gpt-5.2-codex",
-      "gpt-5.2",
+      "gpt-5.2-high",
       "gpt-5.1-codex-max",
-      "gpt-5.1-codex",
+      "gpt-5.1-codex-medium",
       "gpt-5.1-codex-mini",
-      "gpt-5.1",
+      "gpt-5.1-chat-latest",
     ];
 
     codexModels.forEach((modelId) => {
       it(`should configure ${modelId} with 400K context window`, () => {
-        const config = getContextWindowConfig(modelId);
+        const config = getContextWindowConfig(modelId, "codex");
         expect(config.maxTokens).toBe(400000);
       });
     });

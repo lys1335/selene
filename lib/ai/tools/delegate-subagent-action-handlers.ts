@@ -209,6 +209,8 @@ export async function handleStartAction(
     compactResult.message =
       "Sub-agent did not finish within the wait timeout. " +
       "Use observe(delegationId) to check later, or stop(delegationId) to cancel.";
+  } else {
+    activeDelegations.delete(startResult.delegationId);
   }
 
   return compactResult;
@@ -424,8 +426,7 @@ export async function handleObserve(
   const isRunning = !delegation.settled;
   const waitedMs = Date.now() - observeStart;
 
-  // Auto-cleanup finished delegations older than 10 minutes
-  if (delegation.settled && Date.now() - delegation.startedAt > 10 * 60 * 1000) {
+  if (delegation.settled && pendingInteractivePrompts.length === 0) {
     activeDelegations.delete(delegationId);
   }
 
@@ -673,15 +674,16 @@ export async function handleList(
 
   const results: DelegateResult["delegations"] = [];
 
-  // Clean up stale entries and collect results
+  // Clean up stale entries and collect only delegations that are still active.
   const staleIds: string[] = [];
 
   for (const [id, del] of activeDelegations.entries()) {
     if (del.delegatorId !== characterId) continue;
 
-    // Auto-cleanup settled delegations older than 10 minutes
-    if (del.settled && Date.now() - del.startedAt > 10 * 60 * 1000) {
-      staleIds.push(id);
+    if (del.settled) {
+      if (Date.now() - del.startedAt > 10 * 60 * 1000) {
+        staleIds.push(id);
+      }
       continue;
     }
 
@@ -691,7 +693,7 @@ export async function handleList(
       delegateAgentId: del.delegateId,
       delegateAgent: del.delegateName,
       task: del.task.length > 100 ? del.task.slice(0, 100) + "..." : del.task,
-      running: !del.settled,
+      running: true,
       elapsed: Date.now() - del.startedAt,
     });
   }

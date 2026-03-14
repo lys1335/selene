@@ -61,8 +61,10 @@ export function getActiveDelegationsForCharacter(
   const staleIds: string[] = [];
   for (const [id, del] of activeDelegations.entries()) {
     if (del.delegatorId !== characterId) continue;
-    if (del.settled && Date.now() - del.startedAt > 10 * 60 * 1000) {
-      staleIds.push(id);
+    if (del.settled) {
+      if (Date.now() - del.startedAt > 10 * 60 * 1000) {
+        staleIds.push(id);
+      }
       continue;
     }
     results.push({
@@ -71,7 +73,7 @@ export function getActiveDelegationsForCharacter(
       delegateAgentId: del.delegateId,
       delegateAgent: del.delegateName,
       task: del.task.length > 100 ? del.task.slice(0, 100) + "..." : del.task,
-      running: !del.settled,
+      running: true,
       elapsed: Date.now() - del.startedAt,
     });
   }
