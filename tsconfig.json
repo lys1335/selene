@@ -45,6 +45,7 @@
     "tmp-clawdbot/**/*",
     "electron/**/*",
     "dist-electron/**/*",
+    "selene-plugins/**/*",
     "**/*.unused.ts"
   ]
 }
