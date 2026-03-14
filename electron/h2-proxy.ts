@@ -108,17 +108,22 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
         // Handle upstream reset mid-stream (e.g., Next.js crashes while
         // sending a response). Without this handler the error is uncaught
         // and could crash the Electron main process.
+        // Note: clientDisconnected is set before we destroy proxyReq/proxyRes,
+        // so errors triggered by our own teardown are silently swallowed here.
         proxyRes.on("error", (err) => {
-          if (res.destroyed) return;
+          if (res.destroyed || clientDisconnected) return;
           debugError("[H2Proxy] Upstream response stream error:", err.message);
           res.end();
         });
+
+        // Track the active upstream response so the close handler can tear it down.
+        activeProxyRes = proxyRes;
       },
     );
 
     // Handle upstream connection errors (server down, refused, etc.)
     proxyReq.on("error", (err: NodeJS.ErrnoException) => {
-      if (res.destroyed) return;
+      if (res.destroyed || clientDisconnected) return;
       debugError("[H2Proxy] Upstream request error:", err.message);
       if (!res.headersSent) {
         res.writeHead(502, { "content-type": "text/plain" });
@@ -126,10 +131,19 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
       res.end();
     });
 
-    // If the client disconnects early, abort the in-flight upstream request.
+    // If the client disconnects early, cleanly tear down the upstream pipeline.
+    // We set clientDisconnected first so the error handlers on proxyReq/proxyRes
+    // know not to log or re-respond — the "aborted" errors they emit are a
+    // side-effect of our own destroy() calls, not real upstream failures.
+    let clientDisconnected = false;
+    let activeProxyRes: http.IncomingMessage | null = null;
     req.on("close", () => {
+      clientDisconnected = true;
       if (!proxyReq.destroyed) {
         proxyReq.destroy();
+      }
+      if (activeProxyRes && !activeProxyRes.destroyed) {
+        activeProxyRes.destroy();
       }
     });
 

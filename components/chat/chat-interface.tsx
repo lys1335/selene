@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect, useMemo, type MutableRefObject, type FC } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo, type CSSProperties, type MutableRefObject, type FC } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useThread } from "@assistant-ui/react";
 import { Shell } from "@/components/layout/shell";
@@ -24,13 +24,21 @@ import { useOptionalVoice } from "@/components/assistant-ui/voice-context";
 import { SentenceSplitter, StableStreamingLifecycle, StreamingTTSQueue } from "@/lib/voice/streaming-tts";
 import type { UIMessage } from "ai";
 import type { ChatInterfaceProps, ActiveRunState, SessionState, ActiveRunLookupResponse } from "@/components/chat/chat-interface-types";
-import { getSessionSignature, getMessagesSignature } from "@/components/chat/chat-interface-utils";
+import {
+    buildChatSessionUrl,
+    getSessionCharacterId,
+    getSessionCharacterName,
+    getSessionSignature,
+    getMessagesSignature,
+    toOpenChatWorkspaceSession,
+} from "@/components/chat/chat-interface-utils";
 import { ChatSidebarHeader, ScheduledRunBanner } from "@/components/chat/chat-interface-parts";
 import { useBackgroundProcessing, useSessionManager } from "@/components/chat/chat-interface-hooks";
 import { ThemeChooserModal } from "@/components/theme/theme-chooser-modal";
 import { BrowserChatWorkspace } from "@/components/chat/browser-chat-workspace";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
 import { useChatWorkspaceStore } from "@/lib/stores/chat-workspace-store";
+import type { ChatWorkspaceMode } from "@/lib/chat/workspace-mode";
 
 interface DetectedGitFolder {
     id: string;
@@ -68,27 +76,32 @@ const ChatSetMessagesBridge: FC<{
 
 const ForegroundStreamingBridge: FC<{
     isForegroundStreamingRef: MutableRefObject<boolean>;
+    onForegroundStreamingChange?: (isRunning: boolean) => void;
     onForegroundRunFinished?: () => void;
 }> = ({
     isForegroundStreamingRef,
+    onForegroundStreamingChange,
     onForegroundRunFinished,
 }) => {
     const isRunning = useThread((thread) => thread.isRunning);
     const wasRunningRef = useRef(false);
 
     useEffect(() => {
-        isForegroundStreamingRef.current = Boolean(isRunning);
+        const running = Boolean(isRunning);
+        isForegroundStreamingRef.current = running;
+        onForegroundStreamingChange?.(running);
 
-        if (!isRunning && wasRunningRef.current) {
+        if (!running && wasRunningRef.current) {
             onForegroundRunFinished?.();
         }
 
-        wasRunningRef.current = Boolean(isRunning);
+        wasRunningRef.current = running;
 
         return () => {
             isForegroundStreamingRef.current = false;
+            onForegroundStreamingChange?.(false);
         };
-    }, [isRunning, isForegroundStreamingRef, onForegroundRunFinished]);
+    }, [isRunning, isForegroundStreamingRef, onForegroundStreamingChange, onForegroundRunFinished]);
 
     return null;
 };
@@ -345,9 +358,14 @@ export default function ChatInterface({
     const [availableAgents, setAvailableAgents] = useState<Array<{ id: string; name: string; avatarUrl?: string | null }>>([]);
     const [browserArchivedSessions, setBrowserArchivedSessions] = useState<SessionInfo[]>([]);
     const [browserArchivedLoading, setBrowserArchivedLoading] = useState(false);
+    const [isForegroundStreaming, setIsForegroundStreaming] = useState(false);
+    const [workspaceTransitionStage, setWorkspaceTransitionStage] = useState<"idle" | "animating">("idle");
+    const [workspaceRenderMode, setWorkspaceRenderMode] = useState<ChatWorkspaceMode>(chatWorkspaceMode);
+    const workspaceTransitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // ── Browser-tabs workspace mode ──
-    const isBrowserTabs = chatWorkspaceMode === "browser-tabs";
+    const isBrowserTabs = workspaceRenderMode === "browser-tabs";
+    const isWorkspaceTransitioning = workspaceTransitionStage === "animating";
     const workspaceTabs = useChatWorkspaceStore((s) => s.tabs);
     const workspaceActiveSessionId = useChatWorkspaceStore((s) => s.activeSessionId);
     const workspaceRecentlyClosed = useChatWorkspaceStore((s) => s.recentlyClosed);
@@ -438,39 +456,44 @@ export default function ChatInterface({
     // Wire up ref to real implementation now that sm is initialized
     notifySessionUpdateRef.current = sm.notifySessionUpdate;
 
+    const currentSessionRecord = useMemo(
+        () => sm.sessions.find((s) => s.id === sessionId) ?? null,
+        [sm.sessions, sessionId],
+    );
+
+    const currentSessionTabData = useMemo(
+        () => currentSessionRecord
+            ? toOpenChatWorkspaceSession(currentSessionRecord, {
+                id: character.id,
+                name: character.name,
+            })
+            : sessionId
+                ? {
+                    sessionId,
+                    title: null,
+                    characterId: character.id,
+                    characterName: character.name,
+                    updatedAt: null,
+                }
+                : null,
+        [character.id, character.name, currentSessionRecord, sessionId],
+    );
+
     // ── Browser-tabs: hydrate workspace store on first render ──
     useEffect(() => {
         if (!isBrowserTabs) return;
         const store = useChatWorkspaceStore.getState();
         if (store.hydrated) return;
-        const currentSession = sm.sessions.find((s) => s.id === sessionId);
-        store.hydrate(
-            sessionId
-                ? {
-                      sessionId,
-                      title: currentSession?.title ?? null,
-                      characterId: character.id,
-                      characterName: character.name,
-                      updatedAt: currentSession?.updatedAt ?? null,
-                  }
-                : null,
-        );
-    }, [isBrowserTabs]); // eslint-disable-line react-hooks/exhaustive-deps
+        store.hydrate(currentSessionTabData);
+    }, [currentSessionTabData, isBrowserTabs]);
 
     // ── Browser-tabs: ensure current session is always open as a tab ──
     useEffect(() => {
-        if (!isBrowserTabs || !sessionId) return;
+        if (!isBrowserTabs || !sessionId || !currentSessionTabData) return;
         const store = useChatWorkspaceStore.getState();
         if (!store.hydrated) return;
-        const session = sm.sessions.find((s) => s.id === sessionId);
-        store.openSession({
-            sessionId,
-            title: session?.title ?? null,
-            characterId: character.id,
-            characterName: character.name,
-            updatedAt: session?.updatedAt ?? null,
-        });
-    }, [isBrowserTabs, sessionId]); // eslint-disable-line react-hooks/exhaustive-deps
+        store.openSession(currentSessionTabData);
+    }, [currentSessionTabData, isBrowserTabs, sessionId]);
 
     // ── Browser-tabs: sync session titles into open tabs ──
     useEffect(() => {
@@ -480,15 +503,12 @@ export default function ChatInterface({
         const openIds = new Set(store.tabs.map((tab) => tab.sessionId));
         const toSync = sm.sessions
             .filter((s) => openIds.has(s.id))
-            .map((s) => ({
-                sessionId: s.id,
-                title: s.title ?? null,
-                characterId: character.id,
-                characterName: character.name,
-                updatedAt: s.updatedAt ?? null,
+            .map((s) => toOpenChatWorkspaceSession(s, {
+                id: character.id,
+                name: character.name,
             }));
         if (toSync.length > 0) store.syncSessions(toSync);
-    }, [isBrowserTabs, sm.sessions]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [character.id, character.name, isBrowserTabs, sm.sessions]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // ── Browser-tabs: fetch available agents for new-tab picker ──
     useEffect(() => {
@@ -529,14 +549,16 @@ export default function ChatInterface({
     const handleTabActivate = useCallback(
         async (tabSessionId: string) => {
             if (tabSessionId === sessionId) return;
-            const success = await sm.switchSession(tabSessionId);
+            const targetSession = sm.sessions.find((session) => session.id === tabSessionId);
+            const targetCharacterId = getSessionCharacterId(targetSession) ?? character.id;
+            const success = await sm.switchSession(tabSessionId, { characterId: targetCharacterId });
             if (success) {
                 useChatWorkspaceStore.getState().setActiveSession(tabSessionId);
             } else {
                 useChatWorkspaceStore.getState().markUnavailable(tabSessionId, true);
             }
         },
-        [sessionId, sm.switchSession],
+        [character.id, sessionId, sm.sessions, sm.switchSession],
     );
 
     const handleTabClose = useCallback(
@@ -556,15 +578,12 @@ export default function ChatInterface({
         }
         const newSession = await sm.createNewSession();
         if (newSession) {
-            useChatWorkspaceStore.getState().openSession({
-                sessionId: newSession.id,
-                title: newSession.title ?? null,
-                characterId: character.id,
-                characterName: character.name,
-                updatedAt: newSession.updatedAt ?? null,
-            });
+            useChatWorkspaceStore.getState().openSession(toOpenChatWorkspaceSession(newSession, {
+                id: character.id,
+                name: character.name,
+            }));
         }
-    }, [sm.createNewSession, character.id, router]);
+    }, [character.id, character.name, router, sm.createNewSession]);
 
     const handleTabReopenLastClosed = useCallback(async () => {
         const reopenedId = useChatWorkspaceStore.getState().reopenLastClosed();
@@ -1204,6 +1223,64 @@ export default function ChatInterface({
             body: JSON.stringify({ hasSeenThemeChooser: true }),
         }).catch(() => {});
     }, []);
+
+    const handleWorkspaceModeSelect = useCallback((mode: ChatWorkspaceMode) => {
+        if (workspaceTransitionTimerRef.current) {
+            clearTimeout(workspaceTransitionTimerRef.current);
+            workspaceTransitionTimerRef.current = null;
+        }
+
+        if (mode === workspaceRenderMode) {
+            setWorkspaceTransitionStage("idle");
+            return;
+        }
+
+        if (isForegroundStreaming) {
+            setWorkspaceTransitionStage("idle");
+            return;
+        }
+
+        setWorkspaceTransitionStage("animating");
+        const delayMs = 180;
+        workspaceTransitionTimerRef.current = setTimeout(() => {
+            setWorkspaceRenderMode(mode);
+            setWorkspaceTransitionStage("idle");
+            workspaceTransitionTimerRef.current = null;
+        }, delayMs);
+    }, [isForegroundStreaming, workspaceRenderMode]);
+
+    useEffect(() => {
+        if (chatWorkspaceMode === workspaceRenderMode || isForegroundStreaming) return;
+        handleWorkspaceModeSelect(chatWorkspaceMode);
+    }, [chatWorkspaceMode, workspaceRenderMode, isForegroundStreaming, handleWorkspaceModeSelect]);
+
+    useEffect(() => {
+        if (!isForegroundStreaming) return;
+        if (chatWorkspaceMode === workspaceRenderMode) return;
+        setWorkspaceRenderMode(chatWorkspaceMode);
+    }, [chatWorkspaceMode, workspaceRenderMode, isForegroundStreaming]);
+
+    useEffect(() => {
+        return () => {
+            if (workspaceTransitionTimerRef.current) {
+                clearTimeout(workspaceTransitionTimerRef.current);
+            }
+        };
+    }, []);
+
+    const workspaceContentStyle = useMemo<CSSProperties>(() => {
+        const durationMs = isForegroundStreaming ? 260 : 160;
+        return {
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            opacity: bg.isChatFading || isWorkspaceTransitioning ? 0.68 : 1,
+            transform: isWorkspaceTransitioning ? "translateY(10px) scale(0.992)" : "translateY(0) scale(1)",
+            filter: isWorkspaceTransitioning ? "blur(8px)" : "blur(0px)",
+            transition: `opacity ${durationMs}ms ease, transform ${durationMs}ms ease, filter ${durationMs}ms ease`,
+            willChange: isWorkspaceTransitioning ? "opacity, transform, filter" : undefined,
+        };
+    }, [bg.isChatFading, isForegroundStreaming, isWorkspaceTransitioning]);
 
     if (sm.isLoading && !isBrowserTabs) {
         return (

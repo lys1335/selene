@@ -477,8 +477,9 @@ export function useSessionManager({
 
     // Session switches should not trigger an App Router navigation because that remounts
     // the chat shell and restarts ambient video backgrounds.
-    const replaceSessionUrl = useCallback((targetSessionId: string) => {
-        const chatPathSuffix = `/chat/${character.id}`;
+    const replaceSessionUrl = useCallback((targetSessionId: string, targetCharacterId?: string | null) => {
+        const resolvedCharacterId = targetCharacterId ?? character.id;
+        const chatPathSuffix = `/chat/${resolvedCharacterId}`;
         const nextUrl = `${chatPathSuffix}?sessionId=${targetSessionId}`;
         if (typeof window !== "undefined") {
             const currentPath = window.location.pathname.replace(/\/$/, "");
@@ -490,12 +491,17 @@ export function useSessionManager({
         router.replace(nextUrl, { scroll: false });
     }, [character.id, router]);
 
-    const switchSession = useCallback(async (newSessionId: string): Promise<boolean> => {
+    const switchSession = useCallback(async (
+        newSessionId: string,
+        options?: { characterId?: string | null },
+    ): Promise<boolean> => {
         // Guard: clicking the same session while a run is active must be a no-op.
         // clearBackgroundState() would drop processingRunId / isProcessingInBackground,
         // making the UI think nothing is running and allowing a new message to be sent
         // while the old run is still executing server-side.
-        if (newSessionId === sessionId) return true;
+        if (newSessionId === sessionId && (!options?.characterId || options.characterId === character.id)) {
+            return true;
+        }
         try {
             setIsLoading(true);
             clearBackgroundState();
@@ -505,7 +511,7 @@ export function useSessionManager({
             notifySessionUpdate(newSessionId, {
                 messageCount: sessionPayload.conversationalMessageCount,
             });
-            replaceSessionUrl(newSessionId);
+            replaceSessionUrl(newSessionId, options?.characterId);
             return true;
         } catch (err) {
             console.error("Failed to switch session:", err);
@@ -513,7 +519,7 @@ export function useSessionManager({
         } finally {
             setIsLoading(false);
         }
-    }, [sessionId, fetchSessionMessages, clearBackgroundState, notifySessionUpdate, replaceSessionUrl, setSessionState]);
+    }, [character.id, sessionId, fetchSessionMessages, clearBackgroundState, notifySessionUpdate, replaceSessionUrl, setSessionState]);
 
     const createNewSession = useCallback(async (): Promise<SessionInfo | null> => {
         try {

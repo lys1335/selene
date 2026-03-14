@@ -13,6 +13,32 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import {
+  buildChatSessionUrl,
+  getSessionCharacterId,
+  getSessionCharacterName,
+  toOpenChatWorkspaceSession,
+} from "@/components/chat/chat-interface-utils";
+import { useChatWorkspaceStore } from "@/lib/stores/chat-workspace-store";
+import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
+
+function makeSession(overrides: Partial<SessionInfo>): SessionInfo {
+  return {
+    id: overrides.id ?? "session-default",
+    title: overrides.title ?? "Untitled",
+    characterId: overrides.characterId ?? null,
+    createdAt: overrides.createdAt ?? "2026-03-14T08:00:00.000Z",
+    updatedAt: overrides.updatedAt ?? "2026-03-14T08:00:00.000Z",
+    lastMessageAt: overrides.lastMessageAt ?? null,
+    messageCount: overrides.messageCount ?? 0,
+    totalTokenCount: overrides.totalTokenCount ?? 0,
+    channelType: overrides.channelType ?? null,
+    hasActiveRun: overrides.hasActiveRun ?? false,
+    metadata: {
+      ...overrides.metadata,
+    },
+  };
+}
 
 // ── 1. Session Store ────────────────────────────────────────────────────────
 
@@ -298,6 +324,70 @@ describe("Session store + WS gate integration", () => {
 });
 
 // ── 6. Architecture verification (minimal, replaces old regex tests) ────────
+
+describe("Browser chat session identity", () => {
+  beforeEach(() => {
+    useChatWorkspaceStore.getState().reset();
+  });
+
+  it("keeps each tab bound to its session-owned agent metadata", () => {
+    const seleneSession = makeSession({
+      id: "selene-session",
+      characterId: "selene-id",
+      metadata: { characterId: "selene-id", characterName: "Selene" },
+    });
+    const exploreSession = makeSession({
+      id: "explore-session",
+      characterId: "explore-id",
+      metadata: { characterId: "explore-id", characterName: "Explore" },
+    });
+
+    useChatWorkspaceStore.getState().hydrate(toOpenChatWorkspaceSession(seleneSession));
+    useChatWorkspaceStore.getState().openSession(toOpenChatWorkspaceSession(exploreSession));
+    useChatWorkspaceStore.getState().openSession(toOpenChatWorkspaceSession(seleneSession));
+
+    const tabs = useChatWorkspaceStore.getState().tabs;
+    expect(tabs.find((tab) => tab.sessionId === "selene-session")?.characterName).toBe("Selene");
+    expect(tabs.find((tab) => tab.sessionId === "explore-session")?.characterName).toBe("Explore");
+  });
+
+  it("derives session switch targets from the clicked session identity", () => {
+    const seleneSession = makeSession({
+      id: "selene-session",
+      metadata: { characterId: "selene-id", characterName: "Selene" },
+    });
+    const exploreSession = makeSession({
+      id: "explore-session",
+      metadata: { characterId: "explore-id", characterName: "Explore" },
+    });
+
+    const seleneTab = toOpenChatWorkspaceSession(seleneSession, { id: "current-agent", name: "Current" });
+    const exploreTab = toOpenChatWorkspaceSession(exploreSession, { id: "current-agent", name: "Current" });
+
+    expect(seleneTab.characterId).toBe("selene-id");
+    expect(seleneTab.characterName).toBe("Selene");
+    expect(exploreTab.characterId).toBe("explore-id");
+    expect(exploreTab.characterName).toBe("Explore");
+    expect(buildChatSessionUrl(exploreTab.characterId!, exploreTab.sessionId)).toBe("/chat/explore-id?sessionId=explore-session");
+  });
+
+  it("only falls back to the current page agent for sessions that actually belong to it", () => {
+    const unlabeledCurrentSession = makeSession({
+      id: "current-session",
+      characterId: "selene-id",
+      metadata: {},
+    });
+    const unlabeledForeignSession = makeSession({
+      id: "foreign-session",
+      characterId: "explore-id",
+      metadata: {},
+    });
+
+    expect(getSessionCharacterId(unlabeledCurrentSession)).toBe("selene-id");
+    expect(getSessionCharacterName(unlabeledCurrentSession, { id: "selene-id", name: "Selene" })).toBe("Selene");
+    expect(getSessionCharacterName(unlabeledForeignSession, { id: "selene-id", name: "Selene" })).toBeNull();
+  });
+});
 
 describe("Architecture verification", () => {
   it("codex-provider exports createCodexProvider (not a cached singleton getter)", async () => {

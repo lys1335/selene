@@ -1,5 +1,45 @@
 import type { UIMessage } from "ai";
+import type { OpenChatWorkspaceSession } from "@/lib/stores/chat-workspace-store";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
+
+interface SessionCharacterFallback {
+    id?: string | null;
+    name?: string | null;
+}
+
+export const getSessionCharacterId = (session: Pick<SessionInfo, "characterId" | "metadata">) =>
+    session.characterId ?? session.metadata?.characterId ?? null;
+
+export const getSessionCharacterName = (
+    session: Pick<SessionInfo, "characterId" | "metadata">,
+    fallback?: SessionCharacterFallback,
+) => {
+    const explicitName = session.metadata?.characterName ?? null;
+    if (explicitName) {
+        return explicitName;
+    }
+
+    const sessionCharacterId = getSessionCharacterId(session);
+    if (sessionCharacterId && fallback?.id && sessionCharacterId === fallback.id) {
+        return fallback.name ?? null;
+    }
+
+    return null;
+};
+
+export const toOpenChatWorkspaceSession = (
+    session: Pick<SessionInfo, "id" | "title" | "characterId" | "updatedAt" | "metadata">,
+    fallback?: SessionCharacterFallback,
+): OpenChatWorkspaceSession => ({
+    sessionId: session.id,
+    title: session.title ?? null,
+    characterId: getSessionCharacterId(session),
+    characterName: getSessionCharacterName(session, fallback),
+    updatedAt: session.updatedAt ?? null,
+});
+
+export const buildChatSessionUrl = (characterId: string, sessionId: string) =>
+    `/chat/${characterId}?sessionId=${sessionId}`;
 
 const parseSessionTimestamp = (value: string | null | undefined) => {
     const timestamp = value ? Date.parse(value) : Number.NaN;
