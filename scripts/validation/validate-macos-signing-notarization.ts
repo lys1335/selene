@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Validate macOS signing + notarization guard rails.
+ * Validate macOS builds stay unsigned and skip notarization.
  *
  * Usage:
  *   npx tsx scripts/validation/validate-macos-signing-notarization.ts [--dry-run]
@@ -14,57 +14,21 @@ interface GuardCheck {
   description: string;
   filePath: string;
   requiredSnippets: string[];
+  forbiddenSnippets?: string[];
 }
 
 const checks: GuardCheck[] = [
   {
-    id: "electron-builder-after-sign-hook",
-    description: "electron-builder triggers notarization after signing",
+    id: "electron-builder-signing-disabled",
+    description: "electron-builder keeps macOS signing and notarization disabled",
     filePath: "electron-builder.yml",
-    requiredSnippets: [
+    requiredSnippets: ["mac:", "identity: null", "hardenedRuntime: false", "dmg:", "sign: false"],
+    forbiddenSnippets: [
       'afterSign: "scripts/notarize.js"',
-      "sign: true",
-      "hardenedRuntime: true",
       'entitlements: "build-resources/entitlements.mac.plist"',
       'entitlementsInherit: "build-resources/entitlements.mac.inherit.plist"',
-      "dmg:",
-    ],
-  },
-  {
-    id: "electron-builder-dmg-signing",
-    description: "macOS DMG artifacts are signed",
-    filePath: "electron-builder.yml",
-    requiredSnippets: ["dmg:", "sign: true"],
-  },
-  {
-    id: "notarize-script-supported-auth-strategies",
-    description: "notarization script supports keychain, API key, and Apple ID auth",
-    filePath: "scripts/notarize.js",
-    requiredSnippets: [
-      'tool: "notarytool"',
-      "APPLE_KEYCHAIN_PROFILE",
-      "APPLE_API_KEY",
-      "APPLE_API_KEY_ID",
-      "APPLE_API_ISSUER",
-      "APPLE_ID",
-      "APPLE_TEAM_ID",
-      "APPLE_APP_SPECIFIC_PASSWORD",
-      "Missing notarization credentials",
-    ],
-  },
-  {
-    id: "env-example-documents-notary-vars",
-    description: ".env example documents notarization environment variables",
-    filePath: ".env.example",
-    requiredSnippets: [
-      "APPLE_KEYCHAIN_PROFILE",
-      "APPLE_API_KEY",
-      "APPLE_API_KEY_ID",
-      "APPLE_API_ISSUER",
-      "APPLE_ID",
-      "APPLE_TEAM_ID",
-      "APPLE_APP_SPECIFIC_PASSWORD",
-      "APPLE_NOTARIZE_SKIP",
+      "hardenedRuntime: true",
+      "sign: true",
     ],
   },
 ];

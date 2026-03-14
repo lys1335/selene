@@ -140,8 +140,6 @@ mac:
   identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
-  entitlements: "build-resources/entitlements.mac.plist"
-  entitlementsInherit: "build-resources/entitlements.mac.inherit.plist"
   # Build only for current architecture by default (use CLI flags to override)
   target:
     - target: "dir"
@@ -153,7 +151,7 @@ mac:
 
 # Windows specific configuration
 win:
-  signAndEditExecutable: false
+  signAndEditExecutable: true
   target:
     - target: "nsis"
     - target: "portable"
@@ -174,7 +172,7 @@ nsis:
 # DMG settings for macOS
 dmg:
   title: "Selene"
-  sign: false
+  sign: true
   contents:
     - x: 130
       y: 220
