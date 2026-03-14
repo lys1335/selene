@@ -718,8 +718,10 @@ export function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
           p.output !== undefined ||
           p.errorText !== undefined ||
           p.result !== undefined;
-        if (!hasAnyOutput) {
-          // Tool call with args but no output payload is incomplete and can break hydration.
+        const isExplicitlyActive = p.active === true;
+        if (!hasAnyOutput && !isExplicitlyActive) {
+          // Tool call with args but no output payload is incomplete unless the
+          // backend explicitly marks it as an active in-flight operation.
           needsSanitization = true;
           break;
         }

@@ -10,19 +10,20 @@ import {
     countVisibleConversationMessages,
     hasLivePromptInjectedMessages,
 } from "@/lib/messages/converter";
-import type { TaskEvent, TaskStatus, UnifiedTask } from "@/lib/background-tasks/types";
 import { useUnifiedTasksStore } from "@/lib/stores/unified-tasks-store";
+import type { TaskEvent } from "@/lib/background-tasks/types";
 import { useSessionSync } from "@/lib/hooks/use-session-sync";
 import { useSessionSyncNotifier } from "@/lib/hooks/use-session-sync";
 import { useSessionSyncStore, sessionInfoArrayToSyncData } from "@/lib/stores/session-sync-store";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
 import type { UIMessage } from "ai";
-import type { DBMessage, ActiveRunState, SessionState, ChannelFilter, DateRangeFilter } from "@/components/chat/chat-interface-types";
+import type { DBMessage, SessionState, ChannelFilter, DateRangeFilter } from "@/components/chat/chat-interface-types";
 import {
     sortSessionsByUpdatedAt,
     areSessionsEquivalent,
     getSessionSignature,
     getMessagesSignature,
+    shouldDeferLivePromptForegroundReconciliation,
 } from "@/components/chat/chat-interface-utils";
 
 // ---------------------------------------------------------------------------
@@ -35,7 +36,35 @@ interface UseBackgroundProcessingOptions {
     notifySessionUpdate: (id: string, data: Record<string, unknown>) => void;
     setSessionState: React.Dispatch<React.SetStateAction<SessionState>>;
     chatSetMessagesRef: React.MutableRefObject<((msgs: UIMessage[]) => void) | null>;
+    liveThreadMessagesRef: React.MutableRefObject<UIMessage[]>;
+    activeSessionIdRef: React.MutableRefObject<string>;
     shouldSkipBackgroundRefresh?: () => boolean;
+}
+
+export function shouldReloadSessionFromTaskProgress(input: {
+    detail: TaskEvent | null | undefined;
+    sessionId: string;
+    isChannelSession: boolean;
+    isProcessingInBackground: boolean;
+}): boolean {
+    const { detail, sessionId, isChannelSession, isProcessingInBackground } = input;
+    if (!detail || detail.eventType !== "task:progress" || detail.sessionId !== sessionId) {
+        return false;
+    }
+
+    if (isChannelSession || isProcessingInBackground) {
+        return true;
+    }
+
+    if (detail.type !== "chat") {
+        return false;
+    }
+
+    const progressContent = Array.isArray(detail.progressContent) ? detail.progressContent : [];
+    return progressContent.some((part) => {
+        if (!part || typeof part !== "object") return false;
+        return (part as { toolName?: unknown }).toolName === "delegateToSubagent";
+    });
 }
 
 export function useBackgroundProcessing({
@@ -43,6 +72,8 @@ export function useBackgroundProcessing({
     notifySessionUpdate,
     setSessionState,
     chatSetMessagesRef,
+    liveThreadMessagesRef,
+    activeSessionIdRef,
     shouldSkipBackgroundRefresh,
 }: UseBackgroundProcessingOptions) {
     const t = useTranslations("chat");
@@ -53,6 +84,13 @@ export function useBackgroundProcessing({
     const [isCancellingBackgroundRun, setIsCancellingBackgroundRun] = useState(false);
     const lastMessageSigRef = useRef<string>("");
     const isRunActiveRef = useRef(false);
+    const removeTask = useUnifiedTasksStore((state) => state.removeTask);
+
+    type ClearTrackedRunStateOptions = {
+        runId?: string | null;
+        refreshMessages?: boolean;
+        clearTaskState?: boolean;
+    };
 
     const refreshMessages = useCallback(async () => {
         if (shouldSkipBackgroundRefresh?.()) {
@@ -65,6 +103,10 @@ export function useBackgroundProcessing({
         );
         if (error || !data) {
             console.error("[Background Processing] Failed to fetch messages:", status, error);
+            return;
+        }
+
+        if (activeSessionIdRef.current !== sessionId) {
             return;
         }
 
@@ -86,15 +128,21 @@ export function useBackgroundProcessing({
             .join("|");
         if (sig === lastMessageSigRef.current) return;
 
-        // If a background run is active and the message set includes a live-prompt-
-        // injected message, skip pushing to the thread. This prevents the
-        // injected message from appearing mid-run (matching foreground behavior
-        // where shouldSkipBackgroundRefresh blocks all updates). The sig is
-        // intentionally NOT updated so the final refresh (after the run completes)
-        // sees a changed sig and processes normally.
-        if (isRunActiveRef.current && hasLivePromptInjectedMessages(data.messages)) {
+        const conversationalMessageCount = countVisibleConversationMessages(data.messages);
+
+        // Defer reconciliation only while persisted history is not yet ahead of the
+        // live thread. Once the DB contains an extra visible turn, apply it so the
+        // UI cannot snap back to the pre-injection state after completion.
+        if (
+            isRunActiveRef.current &&
+            shouldDeferLivePromptForegroundReconciliation({
+                hasInjectedMessages: hasLivePromptInjectedMessages(data.messages),
+                persistedConversationMessageCount: conversationalMessageCount,
+                liveThreadMessageCount: liveThreadMessagesRef.current.length,
+            })
+        ) {
             notifySessionUpdate(sessionId, {
-                messageCount: countVisibleConversationMessages(data.messages),
+                messageCount: conversationalMessageCount,
             });
             return;
         }
@@ -104,7 +152,7 @@ export function useBackgroundProcessing({
         const uiMessages = convertDBMessagesToUIMessages(data.messages);
 
         notifySessionUpdate(sessionId, {
-            messageCount: countVisibleConversationMessages(data.messages),
+            messageCount: conversationalMessageCount,
         });
 
         // Update session state for sidebar / session switching
@@ -114,7 +162,7 @@ export function useBackgroundProcessing({
         if (chatSetMessagesRef.current) {
             chatSetMessagesRef.current(uiMessages);
         }
-    }, [sessionId, notifySessionUpdate, setSessionState, chatSetMessagesRef, shouldSkipBackgroundRefresh]);
+    }, [sessionId, notifySessionUpdate, setSessionState, chatSetMessagesRef, liveThreadMessagesRef, shouldSkipBackgroundRefresh]);
 
     // isChatFading is local to this hook's refreshMessages but needs to be surfaced
     // back to the component. We keep a state for it here too.
@@ -127,6 +175,51 @@ export function useBackgroundProcessing({
     useEffect(() => { refreshMessagesRef.current = refreshMessages; }, [refreshMessages]);
 
     const consecutiveErrorsRef = useRef<number>(0);
+
+    const clearTrackedRunState = useCallback(async (options: ClearTrackedRunStateOptions = {}) => {
+        const runId = options.runId ?? processingRunId;
+
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+        }
+
+        setIsProcessingInBackground(false);
+        setProcessingRunId(null);
+        setIsZombieRun(false);
+        setIsCancellingBackgroundRun(false);
+        isRunActiveRef.current = false;
+
+        if (options.clearTaskState && runId) {
+            removeTask(runId);
+
+            const sessionSyncState = useSessionSyncStore.getState();
+            if (sessionSyncState.activeRuns.get(sessionId) === runId) {
+                sessionSyncState.setActiveRun(sessionId, null);
+            }
+
+            const activity = sessionSyncState.getSessionActivity(sessionId);
+            if (!activity || activity.runId === runId) {
+                sessionSyncState.setSessionActivity(sessionId, null);
+            }
+        }
+
+        if (options.refreshMessages) {
+            await refreshMessagesRef.current();
+        }
+    }, [processingRunId, removeTask, sessionId]);
+
+    const resetBackgroundState = useCallback(() => {
+        if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+        }
+        setIsProcessingInBackground(false);
+        setProcessingRunId(null);
+        setIsZombieRun(false);
+        setIsCancellingBackgroundRun(false);
+        isRunActiveRef.current = false;
+    }, []);
 
     const startPollingForCompletion = useCallback((runId: string) => {
         isRunActiveRef.current = true;
@@ -141,26 +234,28 @@ export function useBackgroundProcessing({
 
         const pollOnce = async () => {
             try {
-                const { data, error } = await resilientFetch<{ status: string; isZombie?: boolean }>(
+                const { data, error, status } = await resilientFetch<{ status: string; isZombie?: boolean }>(
                     `/api/agent-runs/${runId}/status`,
                     { retries: 0 }
                 );
                 if (error || !data) {
+                    if (status === 404) {
+                        console.warn("[Background Processing] Run vanished during polling, clearing local state:", runId);
+                        await clearTrackedRunState({
+                            runId,
+                            refreshMessages: true,
+                            clearTaskState: true,
+                        });
+                        return;
+                    }
+
                     consecutiveErrorsRef.current += 1;
                     console.error("[Background Processing] Polling error:", error, `(${consecutiveErrorsRef.current}/${MAX_CONSECUTIVE_ERRORS})`);
 
                     // Too many consecutive errors — run may have been deleted or server is unhealthy
                     if (consecutiveErrorsRef.current >= MAX_CONSECUTIVE_ERRORS) {
                         console.warn("[Background Processing] Too many consecutive polling errors — force-clearing");
-                        if (pollingIntervalRef.current) {
-                            clearInterval(pollingIntervalRef.current);
-                            pollingIntervalRef.current = null;
-                        }
-                        setIsProcessingInBackground(false);
-                        setProcessingRunId(null);
-                        setIsZombieRun(false);
-                        isRunActiveRef.current = false;
-                        await refreshMessagesRef.current();
+                        await clearTrackedRunState({ runId, refreshMessages: true });
                     }
                     return;
                 }
@@ -183,28 +278,17 @@ export function useBackgroundProcessing({
                     return;
                 }
                 console.log("[Background Processing] Run completed with status:", data.status);
-                if (pollingIntervalRef.current) {
-                    clearInterval(pollingIntervalRef.current);
-                    pollingIntervalRef.current = null;
-                }
-                setIsProcessingInBackground(false);
-                setProcessingRunId(null);
-                setIsZombieRun(false);
-                isRunActiveRef.current = false;
-                await refreshMessagesRef.current();
+                await clearTrackedRunState({
+                    runId,
+                    refreshMessages: true,
+                    clearTaskState: true,
+                });
             } catch (error) {
                 consecutiveErrorsRef.current += 1;
                 console.error("[Background Processing] Polling error:", error, `(${consecutiveErrorsRef.current}/${MAX_CONSECUTIVE_ERRORS})`);
                 if (consecutiveErrorsRef.current >= MAX_CONSECUTIVE_ERRORS) {
                     console.warn("[Background Processing] Too many consecutive exceptions — force-clearing");
-                    if (pollingIntervalRef.current) {
-                        clearInterval(pollingIntervalRef.current);
-                        pollingIntervalRef.current = null;
-                    }
-                    setIsProcessingInBackground(false);
-                    setProcessingRunId(null);
-                    setIsZombieRun(false);
-                    isRunActiveRef.current = false;
+                    await clearTrackedRunState({ runId });
                 }
             }
         };
@@ -244,28 +328,24 @@ export function useBackgroundProcessing({
                 { method: "POST", headers: { "Content-Type": "application/json" }, retries: 0 }
             );
             if (result.error) {
-                const shouldTreatAsCancelled = result.status === 409;
+                const shouldTreatAsCancelled = result.status === 409 || result.status === 404;
                 if (!shouldTreatAsCancelled) {
                     throw new Error("Failed to cancel run");
                 }
             }
             toast.success(t("backgroundRun.cancelled"));
-            if (pollingIntervalRef.current) {
-                clearInterval(pollingIntervalRef.current);
-                pollingIntervalRef.current = null;
-            }
-            setIsProcessingInBackground(false);
-            setProcessingRunId(null);
-            setIsZombieRun(false);
-            isRunActiveRef.current = false;
-            await refreshMessages();
+            await clearTrackedRunState({
+                runId,
+                refreshMessages: true,
+                clearTaskState: true,
+            });
         } catch (err) {
             console.error("Failed to cancel background run:", err);
             toast.error(t("backgroundRun.cancelError"));
         } finally {
             setIsCancellingBackgroundRun(false);
         }
-    }, [processingRunId, refreshMessages, t]);
+    }, [clearTrackedRunState, processingRunId, t]);
 
     return {
         pollingIntervalRef,
@@ -279,6 +359,8 @@ export function useBackgroundProcessing({
         isCancellingBackgroundRun,
         setIsCancellingBackgroundRun,
         refreshMessages,
+        clearTrackedRunState,
+        resetBackgroundState,
         startPollingForCompletion,
         handleCancelBackgroundRun,
         /** Exposed so reloadSessionMessages can skip injected-message pushes mid-run. */
@@ -297,11 +379,7 @@ interface UseSessionManagerOptions {
     initialSessions: SessionInfo[];
     sessionId: string;
     setSessionState: React.Dispatch<React.SetStateAction<SessionState>>;
-    pollingIntervalRef: React.MutableRefObject<NodeJS.Timeout | null>;
-    setIsProcessingInBackground: (v: boolean) => void;
-    setProcessingRunId: (v: string | null) => void;
-    setIsZombieRun: (v: boolean) => void;
-    setIsCancellingBackgroundRun: (v: boolean) => void;
+    resetBackgroundState: () => void;
 }
 
 export function useSessionManager({
@@ -310,11 +388,7 @@ export function useSessionManager({
     initialSessions,
     sessionId,
     setSessionState,
-    pollingIntervalRef,
-    setIsProcessingInBackground,
-    setProcessingRunId,
-    setIsZombieRun,
-    setIsCancellingBackgroundRun,
+    resetBackgroundState,
 }: UseSessionManagerOptions) {
     const router = useRouter();
     const tc = useTranslations("common");
@@ -337,6 +411,7 @@ export function useSessionManager({
     const userLoadedMoreRef = useRef(false);
     const filterKeyRef = useRef(`${searchQuery}|${channelFilter}|${dateRange}`);
     const filtersRef = useRef({ searchQuery, channelFilter, dateRange });
+    const switchRequestIdRef = useRef(0);
     filtersRef.current = { searchQuery, channelFilter, dateRange };
 
     // Sync sessions to global store whenever local sessions change
@@ -464,17 +539,6 @@ export function useSessionManager({
         return () => clearTimeout(timeout);
     }, [searchQuery, channelFilter, dateRange, loadSessions]);
 
-    const clearBackgroundState = useCallback(() => {
-        if (pollingIntervalRef.current) {
-            clearInterval(pollingIntervalRef.current);
-            pollingIntervalRef.current = null;
-        }
-        setIsProcessingInBackground(false);
-        setProcessingRunId(null);
-        setIsZombieRun(false);
-        setIsCancellingBackgroundRun(false);
-    }, [pollingIntervalRef, setIsProcessingInBackground, setProcessingRunId, setIsZombieRun, setIsCancellingBackgroundRun]);
-
     // Session switches should not trigger an App Router navigation because that remounts
     // the chat shell and restarts ambient video backgrounds.
     const replaceSessionUrl = useCallback((targetSessionId: string, targetCharacterId?: string | null) => {
@@ -503,10 +567,12 @@ export function useSessionManager({
             return true;
         }
         try {
+            const requestId = ++switchRequestIdRef.current;
             setIsLoading(true);
-            clearBackgroundState();
             const sessionPayload = await fetchSessionMessages(newSessionId);
             if (!sessionPayload) return false;
+            if (requestId !== switchRequestIdRef.current) return false;
+            resetBackgroundState();
             setSessionState({ sessionId: newSessionId, messages: sessionPayload.uiMessages });
             notifySessionUpdate(newSessionId, {
                 messageCount: sessionPayload.conversationalMessageCount,
@@ -519,7 +585,7 @@ export function useSessionManager({
         } finally {
             setIsLoading(false);
         }
-    }, [character.id, sessionId, fetchSessionMessages, clearBackgroundState, notifySessionUpdate, replaceSessionUrl, setSessionState]);
+    }, [character.id, sessionId, fetchSessionMessages, notifySessionUpdate, replaceSessionUrl, resetBackgroundState, setSessionState]);
 
     const createNewSession = useCallback(async (): Promise<SessionInfo | null> => {
         try {
@@ -530,7 +596,7 @@ export function useSessionManager({
             );
             if (!error && createData) {
                 const { session } = createData;
-                clearBackgroundState();
+                resetBackgroundState();
                 setSessionState({ sessionId: session.id, messages: [] });
                 syncSessions([session]);
                 await loadSessions();
@@ -544,7 +610,7 @@ export function useSessionManager({
         } finally {
             setIsLoading(false);
         }
-    }, [character.id, character.name, loadSessions, router, clearBackgroundState, setSessionState]);
+    }, [character.id, character.name, loadSessions, router, resetBackgroundState, setSessionState]);
 
     const resetChannelSession = useCallback(async (sessionToResetId: string, options?: { archiveOld?: boolean }) => {
         try {

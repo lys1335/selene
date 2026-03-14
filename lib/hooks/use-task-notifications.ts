@@ -19,10 +19,11 @@ import {
   type SessionActivityState,
   type SessionActivityTone,
 } from "@/lib/stores/session-sync-store";
-import type {
-  TaskEvent,
-  TaskProgressEvent,
-  UnifiedTask,
+import {
+  isBackgroundLifecycleTask,
+  type TaskEvent,
+  type TaskProgressEvent,
+  type UnifiedTask,
 } from "@/lib/background-tasks/types";
 import { formatDuration } from "@/lib/utils/timestamp";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
@@ -476,6 +477,78 @@ function deriveCompletionIndicators(task: UnifiedTask): SessionActivityIndicator
   return uniqueIndicators(indicators);
 }
 
+export function buildReconciledCompletionEvent(task: UnifiedTask): Extract<TaskEvent, { eventType: "task:completed" }> {
+  return {
+    eventType: "task:completed",
+    task: {
+      ...task,
+      status: task.status === "running" || task.status === "queued" ? "cancelled" : task.status,
+      completedAt: task.completedAt ?? new Date().toISOString(),
+    },
+    timestamp: new Date().toISOString(),
+  };
+}
+
+export function reconcileTaskSnapshotWithStores(
+  currentTasks: UnifiedTask[],
+  serverTasks: UnifiedTask[],
+  callbacks: {
+    addTask: (task: UnifiedTask) => void;
+    updateTask: (runId: string, updates: Partial<UnifiedTask>) => void;
+    completeTask: (task: UnifiedTask) => void;
+    dispatchTaskReconciledEvent?: (event: Extract<TaskEvent, { eventType: "task:completed" }>) => void;
+  }
+): void {
+  const serverRunIds = new Set(serverTasks.map((task) => task.runId));
+  const sessionSyncState = useSessionSyncStore.getState();
+
+  for (const task of currentTasks) {
+    if (!serverRunIds.has(task.runId)) {
+      const reconciledCompletion = buildReconciledCompletionEvent(task);
+      callbacks.completeTask(reconciledCompletion.task);
+      if (task.sessionId) {
+        sessionSyncState.setActiveRun(task.sessionId, null);
+        sessionSyncState.setSessionActivity(task.sessionId, null);
+      }
+      if (isBackgroundLifecycleTask(task)) {
+        callbacks.dispatchTaskReconciledEvent?.(reconciledCompletion);
+      }
+    }
+  }
+
+  for (const task of serverTasks) {
+    const existing = currentTasks.find((current) => current.runId === task.runId);
+    if (existing) {
+      callbacks.updateTask(task.runId, task);
+    } else {
+      callbacks.addTask(task);
+    }
+
+    if (task.sessionId) {
+      sessionSyncState.setActiveRun(task.sessionId, task.runId);
+      const previous = sessionSyncState.getSessionActivity(task.sessionId);
+      if (previous && !previous.isRunning && previous.runId === task.runId) {
+        continue;
+      }
+      sessionSyncState.setSessionActivity(
+        task.sessionId,
+        buildActivityState(task.sessionId, task.runId, deriveTaskIndicators(task), {
+          isRunning: true,
+          previous,
+        })
+      );
+    }
+  }
+
+  const currentActiveRuns = sessionSyncState.activeRuns;
+  for (const [sessionId] of currentActiveRuns) {
+    if (!serverTasks.some((t) => t.sessionId === sessionId)) {
+      sessionSyncState.setActiveRun(sessionId, null);
+      sessionSyncState.setSessionActivity(sessionId, null);
+    }
+  }
+}
+
 export function useTaskNotifications() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
@@ -509,6 +582,10 @@ export function useTaskNotifications() {
   const dispatchLifecycleEvent = useCallback((eventName: "background-task-started" | "background-task-completed", event: TaskEvent) => {
     if (typeof window === "undefined") return;
     window.dispatchEvent(new CustomEvent(eventName, { detail: event }));
+  }, []);
+  const dispatchTaskReconciledEvent = useCallback((event: TaskEvent) => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent("background-task-reconciled", { detail: event }));
   }, []);
   const shouldShowChatToast = useCallback((task: UnifiedTask) => {
     if (typeof window === "undefined") return true;
@@ -776,6 +853,16 @@ export function useTaskNotifications() {
     shouldShowChatToast,
   ]);
 
+  const buildReconciledCompletionEvent = useCallback((task: UnifiedTask): Extract<TaskEvent, { eventType: "task:completed" }> => ({
+    eventType: "task:completed",
+    task: {
+      ...task,
+      status: task.status === "running" || task.status === "queued" ? "cancelled" : task.status,
+      completedAt: task.completedAt ?? new Date().toISOString(),
+    },
+    timestamp: new Date().toISOString(),
+  }), []);
+
   // Connect to SSE endpoint
   useEffect(() => {
     if (isLoading || !user?.id) {
@@ -820,57 +907,20 @@ export function useTaskNotifications() {
           return;
         }
         const tasks = data.tasks;
-
         const currentTasks = useUnifiedTasksStore.getState().tasks;
-        const serverRunIds = new Set(tasks.map((task) => task.runId));
-        const sessionSyncState = useSessionSyncStore.getState();
 
-        for (const task of currentTasks) {
-          if (!serverRunIds.has(task.runId)) {
-            console.log(`[TaskNotifications] Removing stale task: ${task.runId}`);
-            completeTask(task);
-            if (task.sessionId) {
-              sessionSyncState.setActiveRun(task.sessionId, null);
-              sessionSyncState.setSessionActivity(task.sessionId, null);
-            }
-          }
-        }
-
-        for (const task of tasks) {
-          const existing = currentTasks.find((current) => current.runId === task.runId);
-          if (existing) {
-            updateTask(task.runId, task);
-          } else {
+        reconcileTaskSnapshotWithStores(currentTasks, tasks, {
+          addTask: (task) => {
             console.log(`[TaskNotifications] Adding missing task: ${task.runId}`);
             addTask(task);
-          }
-
-          if (task.sessionId) {
-            sessionSyncState.setActiveRun(task.sessionId, task.runId);
-            const previous = sessionSyncState.getSessionActivity(task.sessionId);
-            // Don't overwrite a completed/settling bubble for the same run —
-            // let it finish its natural lifecycle instead of resetting to running.
-            if (previous && !previous.isRunning && previous.runId === task.runId) {
-              continue;
-            }
-            sessionSyncState.setSessionActivity(
-              task.sessionId,
-              buildActivityState(task.sessionId, task.runId, deriveTaskIndicators(task), {
-                isRunning: true,
-                previous,
-              })
-            );
-          }
-        }
-
-        // Sync active runs to session-sync-store for sidebar/character indicators
-        const currentActiveRuns = sessionSyncState.activeRuns;
-        for (const [sessionId] of currentActiveRuns) {
-          if (!tasks.some((t) => t.sessionId === sessionId)) {
-            sessionSyncState.setActiveRun(sessionId, null);
-            sessionSyncState.setSessionActivity(sessionId, null);
-          }
-        }
+          },
+          updateTask,
+          completeTask: (task) => {
+            console.log(`[TaskNotifications] Removing stale task: ${task.runId}`);
+            completeTask(task);
+          },
+          dispatchTaskReconciledEvent,
+        });
 
         if (showToast && tasks.length > 0) {
           toast.success(t("taskReconnected"), {

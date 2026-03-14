@@ -57,6 +57,17 @@ function buildTab(session: OpenChatWorkspaceSession, existing?: ChatWorkspaceTab
   };
 }
 
+function areTabsEqual(left: ChatWorkspaceTab, right: ChatWorkspaceTab): boolean {
+  return (
+    left.sessionId === right.sessionId &&
+    left.title === right.title &&
+    left.characterId === right.characterId &&
+    left.characterName === right.characterName &&
+    left.updatedAt === right.updatedAt &&
+    left.unavailable === right.unavailable
+  );
+}
+
 function isChatWorkspaceTab(value: unknown): value is ChatWorkspaceTab {
   if (!value || typeof value !== "object") {
     return false;
@@ -187,13 +198,20 @@ export const useChatWorkspaceStore = create<ChatWorkspaceState>((set, get) => ({
     const current = get();
     const existing = current.tabs.find((tab) => tab.sessionId === session.sessionId);
     const nextTab = buildTab(session, existing);
+    const tabChanged = existing ? !areTabsEqual(existing, nextTab) : true;
     const nextTabs = existing
-      ? current.tabs.map((tab) => (tab.sessionId === session.sessionId ? nextTab : tab))
+      ? (tabChanged ? current.tabs.map((tab) => (tab.sessionId === session.sessionId ? nextTab : tab)) : current.tabs)
       : [...current.tabs, nextTab];
+    const nextRecentlyClosed = current.recentlyClosed.filter((tab) => tab.sessionId !== session.sessionId);
+    const activeChanged = current.activeSessionId !== session.sessionId;
+    const recentlyClosedChanged = nextRecentlyClosed.length !== current.recentlyClosed.length;
+    if (!tabChanged && !activeChanged && !recentlyClosedChanged) {
+      return;
+    }
     const nextState = {
       tabs: nextTabs,
       activeSessionId: session.sessionId,
-      recentlyClosed: current.recentlyClosed.filter((tab) => tab.sessionId !== session.sessionId),
+      recentlyClosed: nextRecentlyClosed,
     };
     persistState(nextState);
     set(nextState);
@@ -223,6 +241,9 @@ export const useChatWorkspaceStore = create<ChatWorkspaceState>((set, get) => ({
   },
   setActiveSession: (sessionId) => {
     const current = get();
+    if (current.activeSessionId === sessionId) {
+      return;
+    }
     const nextState = {
       tabs: current.tabs,
       activeSessionId: sessionId,

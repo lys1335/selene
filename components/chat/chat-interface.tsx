@@ -11,7 +11,7 @@ import { CharacterProvider, type CharacterDisplayData } from "@/components/assis
 import { GitBranchIcon, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { resilientFetch, resilientPost } from "@/lib/utils/resilient-fetch";
-import type { TaskEvent, TaskStatus } from "@/lib/background-tasks/types";
+import { isBackgroundLifecycleTask, isDelegationTask, type TaskEvent, type TaskStatus } from "@/lib/background-tasks/types";
 import { useUnifiedTasksStore } from "@/lib/stores/unified-tasks-store";
 import { CharacterSidebar } from "@/components/chat/chat-sidebar";
 import { WorkspaceIndicator } from "@/components/workspace/workspace-indicator";
@@ -30,10 +30,15 @@ import {
     getSessionCharacterName,
     getSessionSignature,
     getMessagesSignature,
+    resolveCurrentSessionTabData,
+    resolveSessionSwitchCharacterId,
+    shouldDeferLivePromptForegroundReconciliation,
+    shouldSkipEnsureCurrentSessionOpen,
+    shouldApplySessionScopedAsyncResult,
     toOpenChatWorkspaceSession,
 } from "@/components/chat/chat-interface-utils";
 import { ChatSidebarHeader, ScheduledRunBanner } from "@/components/chat/chat-interface-parts";
-import { useBackgroundProcessing, useSessionManager } from "@/components/chat/chat-interface-hooks";
+import { shouldReloadSessionFromTaskProgress, useBackgroundProcessing, useSessionManager } from "@/components/chat/chat-interface-hooks";
 import { ThemeChooserModal } from "@/components/theme/theme-chooser-modal";
 import { BrowserChatWorkspace } from "@/components/chat/browser-chat-workspace";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
@@ -61,8 +66,7 @@ interface DetectedGitFolder {
  * — with love, Selene (https://github.com/tercumantanumut/selene)
  */
 function isBackgroundTask(task: { type: string; metadata?: unknown }): boolean {
-    return task.type === "scheduled" ||
-        (task.type === "chat" && task.metadata != null && typeof task.metadata === "object" && "isDelegation" in task.metadata);
+    return isBackgroundLifecycleTask(task);
 }
 
 /** Bridge component: lives inside ChatProvider to pipe setMessages out via ref */
@@ -71,6 +75,16 @@ const ChatSetMessagesBridge: FC<{
 }> = ({ setMessagesRef }) => {
     const setMessages = useChatSetMessages();
     useEffect(() => { setMessagesRef.current = setMessages; }, [setMessages, setMessagesRef]);
+    return null;
+};
+
+const ChatMessagesBridge: FC<{
+    messagesRef: MutableRefObject<UIMessage[]>;
+}> = ({ messagesRef }) => {
+    const threadMessages = useThread((thread) => thread.messages);
+    useEffect(() => {
+        messagesRef.current = [...threadMessages] as unknown as UIMessage[];
+    }, [threadMessages, messagesRef]);
     return null;
 };
 
@@ -115,9 +129,11 @@ const AvatarAudioBridge: FC<{
     mutedRef: React.RefObject<boolean>;
 }> = ({ avatarRef, mutedRef }) => {
     const voiceCtx = useOptionalVoice();
+    const registerExternalPlayer = voiceCtx?.registerExternalPlayer;
+    const unregisterExternalPlayer = voiceCtx?.unregisterExternalPlayer;
 
     useEffect(() => {
-        if (!voiceCtx) return;
+        if (!registerExternalPlayer || !unregisterExternalPlayer) return;
 
         const externalPlayer = async (url: string) => {
             if (mutedRef.current) {
@@ -136,9 +152,9 @@ const AvatarAudioBridge: FC<{
             avatarRef.current?.stopSpeaking();
         };
 
-        voiceCtx.registerExternalPlayer(externalPlayer, stopExternalPlayer);
-        return () => voiceCtx.unregisterExternalPlayer();
-    }, [voiceCtx, avatarRef, mutedRef]);
+        registerExternalPlayer(externalPlayer, stopExternalPlayer);
+        return () => unregisterExternalPlayer();
+    }, [avatarRef, mutedRef, registerExternalPlayer, unregisterExternalPlayer]);
 
     return null;
 };
@@ -338,7 +354,9 @@ export default function ChatInterface({
         messages: initialMessages,
     }));
     const { sessionId, messages } = sessionState;
+    const activeSessionIdRef = useRef(sessionState.sessionId);
     const chatSetMessagesRef = useRef<((msgs: UIMessage[]) => void) | null>(null);
+    const liveThreadMessagesRef = useRef<UIMessage[]>(messages);
     const [characterDisplay, setCharacterDisplay] = useState<CharacterDisplayData>(initialCharacterDisplay);
     const [activeRun, setActiveRun] = useState<ActiveRunState | null>(null);
     const [isCancellingRun, setIsCancellingRun] = useState(false);
@@ -418,9 +436,23 @@ export default function ChatInterface({
 
     const activeTasks = useUnifiedTasksStore((state) => state.tasks);
     const completeTask = useUnifiedTasksStore((state) => state.completeTask);
-    const activeTaskForSession = sessionId
+    const activeScheduledTaskForSession = sessionId
         ? activeTasks.find((task) => task.sessionId === sessionId && task.type === "scheduled")
         : undefined;
+    const activeBackgroundTaskForSession = sessionId
+        ? activeTasks.find((task) => task.sessionId === sessionId && task.status === "running" && isBackgroundTask(task))
+        : undefined;
+    const activeDelegationTaskForSession = activeBackgroundTaskForSession && isDelegationTask(activeBackgroundTaskForSession)
+        ? activeBackgroundTaskForSession
+        : undefined;
+
+    const clearScheduledBanner = useCallback((runId?: string | null) => {
+        setActiveRun((current) => {
+            if (!current) return current;
+            if (runId && current.runId !== runId) return current;
+            return null;
+        });
+    }, []);
 
     // Stable ref-based wrappers to break the circular dependency between
     // useBackgroundProcessing (needs sm callbacks) and useSessionManager (needs bg state).
@@ -436,8 +468,19 @@ export default function ChatInterface({
         notifySessionUpdate: stableNotifySessionUpdate,
         setSessionState,
         chatSetMessagesRef,
+        liveThreadMessagesRef,
+        activeSessionIdRef,
         shouldSkipBackgroundRefresh: () => isForegroundStreamingRef.current,
     });
+
+    const clearTerminalRunUi = useCallback(async (runId?: string | null, options?: { refreshMessages?: boolean; clearTaskState?: boolean }) => {
+        clearScheduledBanner(runId);
+        await bg.clearTrackedRunState({
+            runId,
+            refreshMessages: options?.refreshMessages,
+            clearTaskState: options?.clearTaskState,
+        });
+    }, [bg, clearScheduledBanner]);
 
     // ── Session CRUD & list management ──
     const sm = useSessionManager({
@@ -446,11 +489,7 @@ export default function ChatInterface({
         initialSessions,
         sessionId,
         setSessionState,
-        pollingIntervalRef: bg.pollingIntervalRef,
-        setIsProcessingInBackground: bg.setIsProcessingInBackground,
-        setProcessingRunId: bg.setProcessingRunId,
-        setIsZombieRun: bg.setIsZombieRun,
-        setIsCancellingBackgroundRun: bg.setIsCancellingBackgroundRun,
+        resetBackgroundState: bg.resetBackgroundState,
     });
 
     // Wire up ref to real implementation now that sm is initialized
@@ -461,23 +500,30 @@ export default function ChatInterface({
         [sm.sessions, sessionId],
     );
 
+    const persistedCurrentSessionTab = useMemo(
+        () => workspaceTabs.find((tab) => tab.sessionId === sessionId) ?? null,
+        [sessionId, workspaceTabs],
+    );
+
     const currentSessionTabData = useMemo(
-        () => currentSessionRecord
-            ? toOpenChatWorkspaceSession(currentSessionRecord, {
+        () => resolveCurrentSessionTabData({
+            sessionId,
+            currentSessionRecord,
+            persistedTab: persistedCurrentSessionTab,
+            currentCharacter: {
                 id: character.id,
                 name: character.name,
-            })
-            : sessionId
-                ? {
-                    sessionId,
-                    title: null,
-                    characterId: character.id,
-                    characterName: character.name,
-                    updatedAt: null,
-                }
-                : null,
-        [character.id, character.name, currentSessionRecord, sessionId],
+            },
+        }),
+        [character.id, character.name, currentSessionRecord, persistedCurrentSessionTab, sessionId],
     );
+    const justClosedActiveSessionIdRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (justClosedActiveSessionIdRef.current && sessionId !== justClosedActiveSessionIdRef.current) {
+            justClosedActiveSessionIdRef.current = null;
+        }
+    }, [sessionId]);
 
     // ── Browser-tabs: hydrate workspace store on first render ──
     useEffect(() => {
@@ -490,8 +536,26 @@ export default function ChatInterface({
     // ── Browser-tabs: ensure current session is always open as a tab ──
     useEffect(() => {
         if (!isBrowserTabs || !sessionId || !currentSessionTabData) return;
+        if (shouldSkipEnsureCurrentSessionOpen({
+            activeSessionId: sessionId,
+            justClosedActiveSessionId: justClosedActiveSessionIdRef.current,
+        })) return;
         const store = useChatWorkspaceStore.getState();
         if (!store.hydrated) return;
+        const existingTab = store.tabs.find((tab) => tab.sessionId === sessionId);
+        const isSameTab = Boolean(
+            existingTab &&
+            (existingTab.title ?? null) === (currentSessionTabData.title ?? null) &&
+            (existingTab.characterId ?? null) === (currentSessionTabData.characterId ?? null) &&
+            (existingTab.characterName ?? null) === (currentSessionTabData.characterName ?? null) &&
+            (existingTab.updatedAt ?? null) === (currentSessionTabData.updatedAt ?? null),
+        );
+        if (isSameTab) {
+            if (store.activeSessionId !== sessionId) {
+                store.setActiveSession(sessionId);
+            }
+            return;
+        }
         store.openSession(currentSessionTabData);
     }, [currentSessionTabData, isBrowserTabs, sessionId]);
 
@@ -549,8 +613,13 @@ export default function ChatInterface({
     const handleTabActivate = useCallback(
         async (tabSessionId: string) => {
             if (tabSessionId === sessionId) return;
+            const persistedTab = useChatWorkspaceStore.getState().tabs.find((tab) => tab.sessionId === tabSessionId);
             const targetSession = sm.sessions.find((session) => session.id === tabSessionId);
-            const targetCharacterId = getSessionCharacterId(targetSession) ?? character.id;
+            const targetCharacterId = resolveSessionSwitchCharacterId({
+                targetSession,
+                persistedTab,
+                currentCharacterId: character.id,
+            });
             const success = await sm.switchSession(tabSessionId, { characterId: targetCharacterId });
             if (success) {
                 useChatWorkspaceStore.getState().setActiveSession(tabSessionId);
@@ -563,12 +632,24 @@ export default function ChatInterface({
 
     const handleTabClose = useCallback(
         async (tabSessionId: string) => {
-            const { nextActiveSessionId } = useChatWorkspaceStore.getState().closeSession(tabSessionId);
+            const isClosingActiveSession = tabSessionId === sessionId;
+            if (isClosingActiveSession) {
+                justClosedActiveSessionIdRef.current = tabSessionId;
+            }
+            const store = useChatWorkspaceStore.getState();
+            const { closed, nextActiveSessionId } = store.closeSession(tabSessionId);
+            if (!closed) {
+                if (isClosingActiveSession) {
+                    justClosedActiveSessionIdRef.current = null;
+                }
+                return;
+            }
             if (nextActiveSessionId && nextActiveSessionId !== sessionId) {
-                await sm.switchSession(nextActiveSessionId);
+                const nextTab = useChatWorkspaceStore.getState().tabs.find((tab) => tab.sessionId === nextActiveSessionId);
+                await sm.switchSession(nextActiveSessionId, { characterId: nextTab?.characterId ?? character.id });
             }
         },
-        [sessionId, sm.switchSession],
+        [character.id, sessionId, sm.switchSession],
     );
 
     const handleTabNewSession = useCallback(async (targetCharacterId?: string) => {
@@ -588,12 +669,13 @@ export default function ChatInterface({
     const handleTabReopenLastClosed = useCallback(async () => {
         const reopenedId = useChatWorkspaceStore.getState().reopenLastClosed();
         if (reopenedId) {
-            const success = await sm.switchSession(reopenedId);
+            const reopenedTab = useChatWorkspaceStore.getState().tabs.find((tab) => tab.sessionId === reopenedId);
+            const success = await sm.switchSession(reopenedId, { characterId: reopenedTab?.characterId ?? character.id });
             if (!success) {
                 useChatWorkspaceStore.getState().markUnavailable(reopenedId, true);
             }
         }
-    }, [sm.switchSession]);
+    }, [character.id, sm.switchSession]);
 
     const handleBrowserTabDeleteSession = useCallback(
         async (sessionToDeleteId: string) => {
@@ -696,6 +778,8 @@ export default function ChatInterface({
     const lastProgressTimeRef = useRef<number>(0);
     const lastSessionSignatureRef = useRef<string>(getMessagesSignature(initialMessages));
     const sessionListSignatureRef = useRef<string>(sm.sessions.map(getSessionSignature).join("||"));
+    const reloadRequestIdRef = useRef(0);
+    const activeRunCheckRequestIdRef = useRef(0);
     const reloadDebounceRef = useRef<NodeJS.Timeout | null>(null);
     const loadSessionsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadSessionsAbortRef = useRef<AbortController | null>(null);
@@ -731,23 +815,44 @@ export default function ChatInterface({
         }
     }, [initialSessionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    useEffect(() => {
+        activeSessionIdRef.current = sessionId;
+        reloadRequestIdRef.current += 1;
+        activeRunCheckRequestIdRef.current += 1;
+        clearScheduledBanner();
+        bg.resetBackgroundState();
+    }, [bg.resetBackgroundState, clearScheduledBanner, sessionId]);
+
     const reloadSessionMessages = useCallback(async (
         targetSessionId: string,
         options?: { force?: boolean }
     ) => {
+        const requestId = ++reloadRequestIdRef.current;
         const sessionPayload = await sm.fetchSessionMessages(targetSessionId);
         if (!sessionPayload) return;
-        if (sessionId && sessionId !== targetSessionId) return;
+        if (!shouldApplySessionScopedAsyncResult({
+            activeSessionId: activeSessionIdRef.current,
+            targetSessionId,
+            requestId,
+            latestRequestId: reloadRequestIdRef.current,
+        })) return;
 
         const { uiMessages, conversationalMessageCount, hasInjectedMessages } = sessionPayload;
 
         // ── Ghost-branch prevention ──────────────────────────────────────────
-        // When a background run is active and the DB contains live-prompt-
-        // injected messages, pushing them to the thread before the run completes
-        // causes assistant-ui to interpret the split assistant message as a
-        // branch fork ("ghost branch"). Skip the push — the final refresh
-        // after the run ends (with isRunActiveRef cleared) will reconcile.
-        if (bg.isRunActiveRef.current && !options?.force && hasInjectedMessages) {
+        // Defer reconciliation only while persisted history is not yet ahead of the
+        // live thread. Once the DB contains an extra visible turn (e.g. final
+        // assistant completion), apply it immediately so injected turns cannot roll
+        // the UI back to the pre-injection state.
+        if (
+            bg.isRunActiveRef.current &&
+            !options?.force &&
+            shouldDeferLivePromptForegroundReconciliation({
+                hasInjectedMessages,
+                persistedConversationMessageCount: conversationalMessageCount,
+                liveThreadMessageCount: liveThreadMessagesRef.current.length,
+            })
+        ) {
             sm.notifySessionUpdate(targetSessionId, {
                 messageCount: conversationalMessageCount,
             });
@@ -772,7 +877,7 @@ export default function ChatInterface({
             messageCount: conversationalMessageCount,
         });
         sm.refreshSessionTimestamp(targetSessionId);
-    }, [sm.fetchSessionMessages, sm.notifySessionUpdate, sm.refreshSessionTimestamp, sessionId, bg.isRunActiveRef]);
+    }, [bg.isRunActiveRef, sm.fetchSessionMessages, sm.notifySessionUpdate, sm.refreshSessionTimestamp]);
 
     // ── Pathname-triggered refresh ──────────────────────────────────────────
     // When navigating away (e.g. to /settings) and back, the Next.js Router
@@ -807,11 +912,19 @@ export default function ChatInterface({
 
     useEffect(() => {
         checkActiveRunRef.current = async () => {
+            const targetSessionId = sessionId;
+            const requestId = ++activeRunCheckRequestIdRef.current;
             const { data, error } = await resilientFetch<ActiveRunLookupResponse>(
-                `/api/sessions/${sessionId}/active-run`,
+                `/api/sessions/${targetSessionId}/active-run`,
                 { retries: 0 }
             );
             if (checkActiveRunCancelledRef.current) return;
+            if (!shouldApplySessionScopedAsyncResult({
+                activeSessionId: activeSessionIdRef.current,
+                targetSessionId,
+                requestId,
+                latestRequestId: activeRunCheckRequestIdRef.current,
+            })) return;
             if (error || !data) {
                 if (error) console.error("[Background Processing] Failed to check active run:", error);
                 return;
@@ -848,12 +961,31 @@ export default function ChatInterface({
                     clearInterval(bg.pollingIntervalRef.current);
                     bg.pollingIntervalRef.current = null;
                 }
-                void reloadSessionMessages(sessionId, { force: true });
-            } else {
-                bg.setIsProcessingInBackground(false);
-                bg.setProcessingRunId(null);
-                bg.setIsZombieRun(false);
+                void reloadSessionMessages(targetSessionId, { force: true });
+                return;
             }
+
+            if (activeDelegationTaskForSession?.runId) {
+                const delegationRunId = activeDelegationTaskForSession.runId;
+                bg.setIsProcessingInBackground(true);
+                bg.setProcessingRunId(delegationRunId);
+                bg.setIsZombieRun(false);
+                bg.startPollingForCompletion(delegationRunId);
+                void reloadSessionMessages(targetSessionId, { force: true });
+                return;
+            }
+
+            if (bg.processingRunId) {
+                await clearTerminalRunUi(bg.processingRunId, {
+                    clearTaskState: true,
+                });
+                return;
+            }
+
+            clearScheduledBanner();
+            bg.setIsProcessingInBackground(false);
+            bg.setProcessingRunId(null);
+            bg.setIsZombieRun(false);
         };
     });
 
@@ -868,7 +1000,14 @@ export default function ChatInterface({
                 bg.pollingIntervalRef.current = null;
             }
         };
-    }, [sessionId, bg.startPollingForCompletion]);
+    }, [
+        activeDelegationTaskForSession,
+        bg,
+        clearScheduledBanner,
+        clearTerminalRunUi,
+        reloadSessionMessages,
+        sessionId,
+    ]);
 
     useEffect(() => {
         if (!bg.processingRunId || !sessionId) return;
@@ -924,10 +1063,21 @@ export default function ChatInterface({
             storeCheckDebounceRef.current = null;
             // Re-check: task might have completed during the debounce window
             const stillActive = useUnifiedTasksStore.getState().tasks.find(
-                (t) => t.sessionId === sessionId && t.status === "running"
+                (t) => t.sessionId === sessionId && t.status === "running" && isBackgroundTask(t)
             );
-            if (stillActive && !bg.processingRunId) {
-                console.log("[Background Processing] Detected active task from store:", stillActive.runId);
+            if (!stillActive) return;
+
+            console.log("[Background Processing] Detected active task from store:", stillActive.runId);
+            if (isDelegationTask(stillActive)) {
+                bg.setIsProcessingInBackground(true);
+                bg.setProcessingRunId(stillActive.runId);
+                bg.setIsZombieRun(false);
+                bg.startPollingForCompletion(stillActive.runId);
+                void reloadSessionMessages(sessionId, { force: true });
+                return;
+            }
+
+            if (!bg.processingRunId) {
                 void checkActiveRunRef.current();
             }
         }, 1500);
@@ -937,37 +1087,37 @@ export default function ChatInterface({
                 storeCheckDebounceRef.current = null;
             }
         };
-    }, [activeTasks, sessionId, bg.processingRunId]);
+    }, [activeTasks, bg, reloadSessionMessages, sessionId]);
 
     useEffect(() => {
-        if (activeTaskForSession?.type === "scheduled") {
+        if (activeScheduledTaskForSession?.type === "scheduled") {
             setActiveRun({
-                runId: activeTaskForSession.runId,
-                taskName: activeTaskForSession.taskName || t("scheduledRun.backgroundTask"),
-                startedAt: activeTaskForSession.startedAt,
+                runId: activeScheduledTaskForSession.runId,
+                taskName: activeScheduledTaskForSession.taskName || t("scheduledRun.backgroundTask"),
+                startedAt: activeScheduledTaskForSession.startedAt,
             });
         } else {
             setActiveRun(null);
         }
-    }, [activeTaskForSession]);
+    }, [activeScheduledTaskForSession, t]);
 
     useEffect(() => {
-        if (!activeTaskForSession?.runId) return;
+        if (!activeScheduledTaskForSession?.runId) return;
         let isCancelled = false;
         let interval: NodeJS.Timeout | null = null;
         const pollRunStatus = async () => {
             try {
                 const { data, error } = await resilientFetch<{ status: TaskStatus; completedAt?: string; durationMs?: number }>(
-                    `/api/schedules/runs/${activeTaskForSession.runId}/status`,
+                    `/api/schedules/runs/${activeScheduledTaskForSession.runId}/status`,
                     { retries: 0 }
                 );
                 if (error || !data || isCancelled) return;
                 if (!["pending", "queued", "running"].includes(data.status)) {
                     completeTask({
-                        ...activeTaskForSession,
+                        ...activeScheduledTaskForSession,
                         status: data.status,
                         completedAt: data.completedAt ?? new Date().toISOString(),
-                        durationMs: data.durationMs ?? activeTaskForSession.durationMs,
+                        durationMs: data.durationMs ?? activeScheduledTaskForSession.durationMs,
                     });
                     setActiveRun(null);
                     if (interval) { clearInterval(interval); interval = null; }
@@ -982,7 +1132,19 @@ export default function ChatInterface({
             isCancelled = true;
             if (interval) clearInterval(interval);
         };
-    }, [activeTaskForSession, completeTask]);
+    }, [activeScheduledTaskForSession, completeTask]);
+
+    useEffect(() => {
+        if (!activeDelegationTaskForSession?.runId) return;
+        if (bg.processingRunId === activeDelegationTaskForSession.runId && bg.pollingIntervalRef.current) {
+            return;
+        }
+
+        bg.setIsProcessingInBackground(true);
+        bg.setProcessingRunId(activeDelegationTaskForSession.runId);
+        bg.setIsZombieRun(false);
+        bg.startPollingForCompletion(activeDelegationTaskForSession.runId);
+    }, [activeDelegationTaskForSession, bg]);
 
     const handleCancelRun = useCallback(async () => {
         if (!activeRun || !sessionId) return;
@@ -1023,23 +1185,9 @@ export default function ChatInterface({
                     void reloadSessionMessages(sessionId, { force: true });
                     reloadDebounceRef.current = null;
                 }, 150);
-                setActiveRun((current) => {
-                    if (current?.runId === detail.task.runId) return null;
-                    return current;
+                void clearTerminalRunUi(detail.task.runId, {
+                    clearTaskState: false,
                 });
-                // Safety net: SSE task:completed must also clear background
-                // processing state. Polling normally handles this, but if the
-                // poll missed the completion (network blip, timing) the button
-                // would stay visible forever without this.
-                if (bg.processingRunId === detail.task.runId) {
-                    if (bg.pollingIntervalRef.current) {
-                        clearInterval(bg.pollingIntervalRef.current);
-                        bg.pollingIntervalRef.current = null;
-                    }
-                    bg.setIsProcessingInBackground(false);
-                    bg.setProcessingRunId(null);
-                    bg.setIsZombieRun(false);
-                }
             }
             if (detail.eventType === "task:completed" && detail.task.characterId === character.id) {
                 debouncedLoadSessions();
@@ -1050,11 +1198,23 @@ export default function ChatInterface({
             const detail = (event as CustomEvent<TaskEvent>).detail;
             if (!detail) return;
             if (detail.eventType === "task:started" && isBackgroundTask(detail.task) && detail.task.sessionId === sessionId) {
-                setActiveRun({
-                    runId: detail.task.runId,
-                    taskName: "taskName" in detail.task ? detail.task.taskName : undefined,
-                    startedAt: detail.task.startedAt,
-                });
+                if (detail.task.type === "scheduled") {
+                    setActiveRun({
+                        runId: detail.task.runId,
+                        taskName: "taskName" in detail.task ? detail.task.taskName : undefined,
+                        startedAt: detail.task.startedAt,
+                    });
+                } else {
+                    clearScheduledBanner(detail.task.runId);
+                }
+
+                if (isDelegationTask(detail.task)) {
+                    bg.setIsProcessingInBackground(true);
+                    bg.setProcessingRunId(detail.task.runId);
+                    bg.setIsZombieRun(false);
+                    bg.startPollingForCompletion(detail.task.runId);
+                }
+
                 void reloadSessionMessages(sessionId, { force: true });
             }
             if (detail.eventType === "task:started" && detail.task.characterId === character.id) {
@@ -1079,7 +1239,18 @@ export default function ChatInterface({
                 loadSessionsAbortRef.current = null;
             }
         };
-    }, [applyWorkspaceUpdate, character.id, currentWorkspaceInfo?.status, debouncedLoadSessions, reloadSessionMessages, sessionId, sm.userLoadedMoreRef]);
+    }, [
+        applyWorkspaceUpdate,
+        bg,
+        character.id,
+        clearScheduledBanner,
+        clearTerminalRunUi,
+        currentWorkspaceInfo?.status,
+        debouncedLoadSessions,
+        reloadSessionMessages,
+        sessionId,
+        sm.userLoadedMoreRef,
+    ]);
 
     useEffect(() => {
         if (!sessionId) return;
@@ -1145,8 +1316,12 @@ export default function ChatInterface({
         if (typeof window === "undefined") return;
         const handleTaskProgress = (event: Event) => {
             const detail = (event as CustomEvent<TaskEvent>).detail;
-            if (!detail || detail.eventType !== "task:progress" || detail.sessionId !== sessionId) return;
-            if (!isChannelSession && !bg.isProcessingInBackground) return;
+            if (!shouldReloadSessionFromTaskProgress({
+                detail,
+                sessionId,
+                isChannelSession,
+                isProcessingInBackground: bg.isProcessingInBackground,
+            })) return;
             const now = Date.now();
             if (now - lastProgressTimeRef.current < PROGRESS_THROTTLE_MS) return;
             lastProgressTimeRef.current = now;
@@ -1209,11 +1384,13 @@ export default function ChatInterface({
 
     const handleForegroundRunFinished = useCallback(() => {
         if (!sessionId) return;
-        // Foreground runs already stream directly into useChat state.
-        // Rehydrating from DB here can reintroduce stale branches/messages.
-        sm.notifySessionUpdate(sessionId, { messageCount: messages.length });
+        // Foreground runs already stream directly into useChat state, but live-prompt
+        // injection can persist an extra assistant turn that never entered the live
+        // thread. Force one DB reconciliation so the injected turn cannot be lost.
+        void reloadSessionMessages(sessionId, { force: true }).catch(() => {});
+        sm.notifySessionUpdate(sessionId, { messageCount: liveThreadMessagesRef.current.length });
         sm.refreshSessionTimestamp(sessionId, { includeActivity: true });
-    }, [sessionId, sm.notifySessionUpdate, sm.refreshSessionTimestamp, messages.length]);
+    }, [sessionId, reloadSessionMessages, sm.notifySessionUpdate, sm.refreshSessionTimestamp]);
 
     const handleThemeChooserClose = useCallback(() => {
         setShowThemeChooser(false);
@@ -1340,6 +1517,7 @@ export default function ChatInterface({
                                 initialMessages={messages}
                             >
                                 <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
+                                <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
                                 <ForegroundStreamingBridge
                                     isForegroundStreamingRef={isForegroundStreamingRef}
                                     onForegroundRunFinished={handleForegroundRunFinished}
@@ -1493,6 +1671,7 @@ export default function ChatInterface({
                         initialMessages={messages}
                     >
                         <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
+                        <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
                         <ForegroundStreamingBridge
                             isForegroundStreamingRef={isForegroundStreamingRef}
                             onForegroundRunFinished={handleForegroundRunFinished}

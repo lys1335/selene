@@ -17,6 +17,10 @@ import {
   buildChatSessionUrl,
   getSessionCharacterId,
   getSessionCharacterName,
+  resolveCurrentSessionTabData,
+  resolveSessionSwitchCharacterId,
+  shouldSkipEnsureCurrentSessionOpen,
+  shouldApplySessionScopedAsyncResult,
   toOpenChatWorkspaceSession,
 } from "@/components/chat/chat-interface-utils";
 import { useChatWorkspaceStore } from "@/lib/stores/chat-workspace-store";
@@ -351,6 +355,67 @@ describe("Browser chat session identity", () => {
     expect(tabs.find((tab) => tab.sessionId === "explore-session")?.characterName).toBe("Explore");
   });
 
+  it("treats openSession as a no-op when tab payload and active session are unchanged", () => {
+    const session = makeSession({
+      id: "stable-session",
+      characterId: "selene-id",
+      metadata: { characterId: "selene-id", characterName: "Selene" },
+    });
+    const payload = toOpenChatWorkspaceSession(session, { id: "selene-id", name: "Selene" });
+    const store = useChatWorkspaceStore.getState();
+
+    store.openSession(payload);
+    const tabsBefore = useChatWorkspaceStore.getState().tabs;
+    const activeBefore = useChatWorkspaceStore.getState().activeSessionId;
+
+    store.openSession(payload);
+    const tabsAfter = useChatWorkspaceStore.getState().tabs;
+    const activeAfter = useChatWorkspaceStore.getState().activeSessionId;
+
+    expect(tabsAfter).toBe(tabsBefore);
+    expect(activeAfter).toBe(activeBefore);
+    expect(activeAfter).toBe("stable-session");
+  });
+
+  it("preserves selene tab identity after opening an explorer tab and navigating back", () => {
+    const seleneOne = makeSession({
+      id: "selene-session-1",
+      characterId: "selene-id",
+      metadata: { characterId: "selene-id", characterName: "Selene" },
+    });
+    const seleneTwo = makeSession({
+      id: "selene-session-2",
+      characterId: "selene-id",
+      metadata: { characterId: "selene-id", characterName: "Selene" },
+    });
+    const explorer = makeSession({
+      id: "explorer-session",
+      characterId: "explorer-id",
+      metadata: { characterId: "explorer-id", characterName: "Explorer" },
+    });
+
+    const store = useChatWorkspaceStore.getState();
+    store.openSession(toOpenChatWorkspaceSession(seleneOne, { id: "selene-id", name: "Selene" }));
+    store.openSession(toOpenChatWorkspaceSession(seleneTwo, { id: "selene-id", name: "Selene" }));
+    store.openSession(toOpenChatWorkspaceSession(explorer, { id: "selene-id", name: "Selene" }));
+    store.setActiveSession("selene-session-1");
+
+    const tabs = useChatWorkspaceStore.getState().tabs;
+    expect(tabs.find((tab) => tab.sessionId === "selene-session-1")).toMatchObject({
+      characterId: "selene-id",
+      characterName: "Selene",
+    });
+    expect(tabs.find((tab) => tab.sessionId === "selene-session-2")).toMatchObject({
+      characterId: "selene-id",
+      characterName: "Selene",
+    });
+    expect(tabs.find((tab) => tab.sessionId === "explorer-session")).toMatchObject({
+      characterId: "explorer-id",
+      characterName: "Explorer",
+    });
+    expect(useChatWorkspaceStore.getState().activeSessionId).toBe("selene-session-1");
+  });
+
   it("derives session switch targets from the clicked session identity", () => {
     const seleneSession = makeSession({
       id: "selene-session",
@@ -371,6 +436,66 @@ describe("Browser chat session identity", () => {
     expect(buildChatSessionUrl(exploreTab.characterId!, exploreTab.sessionId)).toBe("/chat/explore-id?sessionId=explore-session");
   });
 
+  it("uses persisted tab identity when the current page session list does not include the target session", () => {
+    expect(resolveSessionSwitchCharacterId({
+      targetSession: null,
+      persistedTab: { characterId: "explorer-id" },
+      currentCharacterId: "selene-id",
+    })).toBe("explorer-id");
+  });
+
+  it("prefers persisted tab metadata while the active session record is rehydrating", () => {
+    const resolved = resolveCurrentSessionTabData({
+      sessionId: "selene-session",
+      currentSessionRecord: null,
+      persistedTab: {
+        sessionId: "selene-session",
+        title: "Selene tab",
+        characterId: "selene-id",
+        characterName: "Selene",
+        updatedAt: "2026-03-14T09:00:00.000Z",
+      },
+      currentCharacter: { id: "explore-id", name: "Autonomous Optimization Architect" },
+    });
+
+    expect(resolved).toEqual({
+      sessionId: "selene-session",
+      title: "Selene tab",
+      characterId: "selene-id",
+      characterName: "Selene",
+      updatedAt: "2026-03-14T09:00:00.000Z",
+    });
+  });
+
+  it("does not leak page-agent identity when neither session nor persisted tab metadata exists", () => {
+    const resolved = resolveCurrentSessionTabData({
+      sessionId: "unknown-session",
+      currentSessionRecord: null,
+      persistedTab: null,
+      currentCharacter: { id: "explore-id", name: "Autonomous Optimization Architect" },
+    });
+
+    expect(resolved).toEqual({
+      sessionId: "unknown-session",
+      title: null,
+      characterId: null,
+      characterName: null,
+      updatedAt: null,
+    });
+  });
+
+  it("suppresses ensure-open while the active session is mid-close transition", () => {
+    expect(shouldSkipEnsureCurrentSessionOpen({
+      activeSessionId: "session-a",
+      justClosedActiveSessionId: "session-a",
+    })).toBe(true);
+
+    expect(shouldSkipEnsureCurrentSessionOpen({
+      activeSessionId: "session-b",
+      justClosedActiveSessionId: "session-a",
+    })).toBe(false);
+  });
+
   it("only falls back to the current page agent for sessions that actually belong to it", () => {
     const unlabeledCurrentSession = makeSession({
       id: "current-session",
@@ -386,6 +511,22 @@ describe("Browser chat session identity", () => {
     expect(getSessionCharacterId(unlabeledCurrentSession)).toBe("selene-id");
     expect(getSessionCharacterName(unlabeledCurrentSession, { id: "selene-id", name: "Selene" })).toBe("Selene");
     expect(getSessionCharacterName(unlabeledForeignSession, { id: "selene-id", name: "Selene" })).toBeNull();
+  });
+
+  it("rejects stale async results after a newer session switch", () => {
+    expect(shouldApplySessionScopedAsyncResult({
+      activeSessionId: "session-b",
+      targetSessionId: "session-a",
+      requestId: 1,
+      latestRequestId: 2,
+    })).toBe(false);
+
+    expect(shouldApplySessionScopedAsyncResult({
+      activeSessionId: "session-b",
+      targetSessionId: "session-b",
+      requestId: 2,
+      latestRequestId: 2,
+    })).toBe(true);
   });
 });
 
