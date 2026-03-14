@@ -39,6 +39,7 @@ function visibleConversationCountSql(sessionId: string) {
 // Messages
 export async function createMessage(data: NewMessage) {
   try {
+    const countsAsVisibleConversation = countsTowardVisibleConversation(data);
     const [message] = await db
       .insert(messages)
       .values(data)
@@ -47,15 +48,14 @@ export async function createMessage(data: NewMessage) {
     if (message) {
       const tokenCount = typeof message.tokenCount === "number" ? message.tokenCount : 0;
       const nowIso = new Date().toISOString();
-      const countsAsVisibleConversation = countsTowardVisibleConversation(message);
       await db
         .update(sessions)
         .set({
           updatedAt: countsAsVisibleConversation ? nowIso : sessions.updatedAt,
           lastMessageAt: countsAsVisibleConversation ? nowIso : sessions.lastMessageAt,
-          messageCount: countsAsVisibleConversation
-            ? sql`${sessions.messageCount} + 1`
-            : sessions.messageCount,
+          // Recompute from persisted rows to avoid incremental drift in mixed
+          // visibility flows (e.g. livePromptInjected reconciliation).
+          messageCount: visibleConversationCountSql(data.sessionId),
           totalTokenCount: sql`${sessions.totalTokenCount} + ${tokenCount}`,
         })
         .where(eq(sessions.id, data.sessionId));
@@ -102,7 +102,10 @@ export async function updateMessage(
     const nextTokenCount = updated.tokenCount ?? 0;
     const delta = nextTokenCount - previousTokenCount;
     const visibilityChanged = existing
-      ? countsTowardVisibleConversation(existing) !== countsTowardVisibleConversation(updated)
+      ? countsTowardVisibleConversation(existing) !== countsTowardVisibleConversation({
+          ...existing,
+          ...data,
+        })
       : false;
     await db
       .update(sessions)
