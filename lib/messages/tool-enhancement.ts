@@ -35,7 +35,15 @@ export interface FrontendMessage {
   role: string;
   content?: string | unknown;
   parts?: FrontendMessagePart[];
-  experimental_attachments?: Array<{ name?: string; contentType?: string; url?: string }>;
+  experimental_attachments?: Array<{
+    name?: string;
+    contentType?: string;
+    url?: string;
+    localPath?: string;
+    filePath?: string;
+    size?: number;
+    kind?: string;
+  }>;
 }
 
 export interface ToolResultEnhancementOptions {

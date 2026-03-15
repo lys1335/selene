@@ -756,6 +756,7 @@ export const ChatProvider: FC<ChatProviderProps> = ({
             size: file.size,
             url: data.url,
             localPath: data.localPath,
+            filePath: data.filePath,
           });
         }
 
@@ -777,6 +778,7 @@ export const ChatProvider: FC<ChatProviderProps> = ({
           metadata: {
             url: data.url,
             localPath: data.localPath,
+            filePath: data.filePath,
             contentType: data.contentType,
             size: data.size,
             kind: "image",

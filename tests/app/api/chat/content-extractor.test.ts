@@ -102,7 +102,7 @@ describe("extractContent attachment persistence", () => {
     ]);
   });
 
-  it("keeps helper text mode unchanged for live model requests", async () => {
+  it("prefers filePath in helper text for live model requests", async () => {
     const result = await extractContent(
       {
         role: "user",
@@ -111,6 +111,10 @@ describe("extractContent attachment persistence", () => {
             name: "mockup.png",
             contentType: "image/png",
             url: "/api/media/sessions/sess-1/uploads/mockup.png",
+            localPath: "sessions/sess-1/uploads/mockup.png",
+            filePath: "/tmp/sessions/sess-1/uploads/mockup.png",
+            size: 123,
+            kind: "image",
           },
         ],
       },
@@ -118,6 +122,83 @@ describe("extractContent attachment persistence", () => {
       false,
     );
 
-    expect(result).toBe("[mockup.png URL: /api/media/sessions/sess-1/uploads/mockup.png]");
+    expect(result).toBe("[Attachment: mockup.png | filePath: /tmp/sessions/sess-1/uploads/mockup.png]");
+  });
+
+  it("uses metadata filePath in helper text when part only has URL", async () => {
+    const result = await extractContent(
+      {
+        role: "user",
+        parts: [
+          {
+            type: "text",
+            text: "this?",
+          },
+          {
+            type: "file",
+            url: "/api/media/sessions/sess-1/uploads/mockup.png",
+            filename: "mockup.png",
+            mediaType: "image/png",
+          },
+        ],
+        metadata: {
+          custom: {
+            attachments: [
+              {
+                name: "mockup.png",
+                contentType: "image/png",
+                url: "/api/media/sessions/sess-1/uploads/mockup.png",
+                localPath: "sessions/sess-1/uploads/mockup.png",
+                filePath: "/tmp/sessions/sess-1/uploads/mockup.png",
+              },
+            ],
+          },
+        },
+      },
+      true,
+      false,
+    );
+
+    expect(result).toEqual([
+      { type: "text", text: "this?" },
+      { type: "text", text: "[Attachment: mockup.png | filePath: /tmp/sessions/sess-1/uploads/mockup.png]" },
+    ]);
+  });
+
+  it("falls back to localPath then url when filePath is missing", async () => {
+    const localPathOnly = await extractContent(
+      {
+        role: "user",
+        experimental_attachments: [
+          {
+            name: "local-only.png",
+            contentType: "image/png",
+            url: "/api/media/sessions/sess-1/uploads/local-only.png",
+            localPath: "sessions/sess-1/uploads/local-only.png",
+          },
+        ],
+      },
+      true,
+      false,
+    );
+
+    expect(localPathOnly).toBe("[Attachment: local-only.png | localPath: sessions/sess-1/uploads/local-only.png]");
+
+    const urlOnly = await extractContent(
+      {
+        role: "user",
+        experimental_attachments: [
+          {
+            name: "url-only.png",
+            contentType: "image/png",
+            url: "/api/media/sessions/sess-1/uploads/url-only.png",
+          },
+        ],
+      },
+      true,
+      false,
+    );
+
+    expect(urlOnly).toBe("[Attachment: url-only.png | url: /api/media/sessions/sess-1/uploads/url-only.png]");
   });
 });

@@ -148,6 +148,90 @@ function trackAttachmentUrl(
   return true;
 }
 
+type AttachmentPathMetadata = {
+  name?: string;
+  url?: string;
+  localPath?: string;
+  filePath?: string;
+};
+
+function normalizeAttachmentString(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function buildAttachmentLookup(msg: {
+  experimental_attachments?: Array<AttachmentPathMetadata>;
+  metadata?: {
+    custom?: {
+      attachments?: Array<AttachmentPathMetadata>;
+    };
+  };
+}): Map<string, AttachmentPathMetadata> {
+  const lookup = new Map<string, AttachmentPathMetadata>();
+
+  const register = (attachment: AttachmentPathMetadata) => {
+    const url = normalizeAttachmentString(attachment.url);
+    if (!url) return;
+
+    const existing = lookup.get(url);
+    lookup.set(url, {
+      url,
+      name: normalizeAttachmentString(existing?.name) ?? normalizeAttachmentString(attachment.name),
+      filePath: normalizeAttachmentString(existing?.filePath) ?? normalizeAttachmentString(attachment.filePath),
+      localPath: normalizeAttachmentString(existing?.localPath) ?? normalizeAttachmentString(attachment.localPath),
+    });
+  };
+
+  const metadataAttachments = msg.metadata?.custom?.attachments ?? [];
+  for (const attachment of metadataAttachments) {
+    register(attachment);
+  }
+
+  const experimentalAttachments = msg.experimental_attachments ?? [];
+  for (const attachment of experimentalAttachments) {
+    register(attachment);
+  }
+
+  return lookup;
+}
+
+function resolveAttachmentForHelper(
+  lookup: Map<string, AttachmentPathMetadata>,
+  attachment: AttachmentPathMetadata,
+): AttachmentPathMetadata {
+  const url = normalizeAttachmentString(attachment.url);
+  const fromLookup = url ? lookup.get(url) : undefined;
+
+  return {
+    name: normalizeAttachmentString(attachment.name) ?? normalizeAttachmentString(fromLookup?.name),
+    url,
+    filePath: normalizeAttachmentString(attachment.filePath) ?? normalizeAttachmentString(fromLookup?.filePath),
+    localPath: normalizeAttachmentString(attachment.localPath) ?? normalizeAttachmentString(fromLookup?.localPath),
+  };
+}
+
+function formatAttachmentHelperText(
+  attachment: AttachmentPathMetadata,
+  fallbackName = "uploaded image",
+): string | null {
+  const filePath = normalizeAttachmentString(attachment.filePath);
+  const localPath = normalizeAttachmentString(attachment.localPath);
+  const url = normalizeAttachmentString(attachment.url);
+
+  const pathLabelAndValue: [label: "filePath" | "localPath" | "url", value: string] | null =
+    filePath ? ["filePath", filePath]
+      : localPath ? ["localPath", localPath]
+        : url ? ["url", url]
+          : null;
+
+  if (!pathLabelAndValue) return null;
+
+  const displayName = normalizeAttachmentString(attachment.name) ?? fallbackName;
+  return `[Attachment: ${displayName} | ${pathLabelAndValue[0]}: ${pathLabelAndValue[1]}]`;
+}
+
 export async function extractContent(
   msg: {
     role?: string;
@@ -157,6 +241,8 @@ export async function extractContent(
       text?: string;
       image?: string;
       url?: string;
+      localPath?: string;
+      filePath?: string;
       mediaType?: string;
       filename?: string;
       // For dynamic-tool parts (historical tool calls from DB)
@@ -220,6 +306,7 @@ export async function extractContent(
 
   // If parts array exists (assistant-ui format), convert it
   if (msg.parts && Array.isArray(msg.parts)) {
+    const attachmentLookup = buildAttachmentLookup(msg);
     const seenAttachmentUrls = new Set<string>();
     const explicitToolResultIds = new Set(
       msg.parts
@@ -268,12 +355,18 @@ export async function extractContent(
           // User uploaded image - add as actual image for Claude to see
           contentParts.push({ type: "image", image: finalImageUrl });
         }
-        // Add URL as text so Claude can use it in tool calls
+        // Add deterministic attachment path helper text so the model can act on files.
         if (includeUrlHelpers) {
-          contentParts.push({
-            type: "text",
-            text: `[Image URL: ${imageUrl}]`,
-          });
+          const helperText = formatAttachmentHelperText(
+            resolveAttachmentForHelper(attachmentLookup, { url: imageUrl }),
+            "uploaded image",
+          );
+          if (helperText) {
+            contentParts.push({
+              type: "text",
+              text: helperText,
+            });
+          }
         }
         maybePreserveImageReference(contentParts, imageUrl, shouldConvert, includeUrlHelpers);
       } else if (
@@ -290,13 +383,23 @@ export async function extractContent(
           // User uploaded image - add as actual image for Claude to see
           contentParts.push({ type: "image", image: finalImageUrl });
         }
-        // Add URL as text so Claude can use it in tool calls
+        // Add deterministic attachment path helper text so the model can act on files.
         if (includeUrlHelpers) {
-          const label = part.filename || "uploaded image";
-          contentParts.push({
-            type: "text",
-            text: `[${label} URL: ${part.url}]`,
-          });
+          const helperText = formatAttachmentHelperText(
+            resolveAttachmentForHelper(attachmentLookup, {
+              name: part.filename,
+              url: part.url,
+              localPath: part.localPath,
+              filePath: part.filePath,
+            }),
+            part.filename || "uploaded image",
+          );
+          if (helperText) {
+            contentParts.push({
+              type: "text",
+              text: helperText,
+            });
+          }
         }
         maybePreserveImageReference(contentParts, part.url, shouldConvert, includeUrlHelpers);
       } else if (part.type === "dynamic-tool" && part.toolName) {
@@ -633,13 +736,18 @@ export async function extractContent(
             // User uploaded image - add as actual image for Claude to see
             contentParts.push({ type: "image", image: finalImageUrl });
           }
-          // Add URL as text so Claude can use it in tool calls
+          // Add deterministic attachment path helper text so the model can act on files.
           if (includeUrlHelpers) {
-            const label = attachment.name || "uploaded image";
-            contentParts.push({
-              type: "text",
-              text: `[${label} URL: ${attachment.url}]`,
-            });
+            const helperText = formatAttachmentHelperText(
+              resolveAttachmentForHelper(attachmentLookup, attachment),
+              attachment.name || "uploaded image",
+            );
+            if (helperText) {
+              contentParts.push({
+                type: "text",
+                text: helperText,
+              });
+            }
           }
           maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
         }
@@ -660,11 +768,16 @@ export async function extractContent(
             contentParts.push({ type: "image", image: finalImageUrl });
           }
           if (includeUrlHelpers) {
-            const label = attachment.name || "uploaded image";
-            contentParts.push({
-              type: "text",
-              text: `[${label} URL: ${attachment.url}]`,
-            });
+            const helperText = formatAttachmentHelperText(
+              resolveAttachmentForHelper(attachmentLookup, attachment),
+              attachment.name || "uploaded image",
+            );
+            if (helperText) {
+              contentParts.push({
+                type: "text",
+                text: helperText,
+              });
+            }
           }
           maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
         }
@@ -691,6 +804,7 @@ export async function extractContent(
     (msg.experimental_attachments && Array.isArray(msg.experimental_attachments))
     || (msg.metadata?.custom?.attachments && Array.isArray(msg.metadata.custom.attachments))
   ) {
+    const attachmentLookup = buildAttachmentLookup(msg);
     const seenAttachmentUrls = new Set<string>();
     const contentParts: Array<{ type: string; text?: string; image?: string }> = [];
     const isUserMessage = msg.role === "user";
@@ -714,11 +828,16 @@ export async function extractContent(
             contentParts.push({ type: "image", image: finalImageUrl });
           }
           if (includeUrlHelpers) {
-            const label = attachment.name || "uploaded image";
-            contentParts.push({
-              type: "text",
-              text: `[${label} URL: ${attachment.url}]`,
-            });
+            const helperText = formatAttachmentHelperText(
+              resolveAttachmentForHelper(attachmentLookup, attachment),
+              attachment.name || "uploaded image",
+            );
+            if (helperText) {
+              contentParts.push({
+                type: "text",
+                text: helperText,
+              });
+            }
           }
           maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
         }
@@ -738,11 +857,16 @@ export async function extractContent(
             contentParts.push({ type: "image", image: finalImageUrl });
           }
           if (includeUrlHelpers) {
-            const label = attachment.name || "uploaded image";
-            contentParts.push({
-              type: "text",
-              text: `[${label} URL: ${attachment.url}]`,
-            });
+            const helperText = formatAttachmentHelperText(
+              resolveAttachmentForHelper(attachmentLookup, attachment),
+              attachment.name || "uploaded image",
+            );
+            if (helperText) {
+              contentParts.push({
+                type: "text",
+                text: helperText,
+              });
+            }
           }
           maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
         }

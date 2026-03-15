@@ -220,7 +220,15 @@ export async function POST(req: Request) {
         role: string;
         content?: string | unknown;
         parts?: Array<{ type: string; text?: string; image?: string; url?: string }>;
-        experimental_attachments?: Array<{ name?: string; contentType?: string; url?: string }>;
+        experimental_attachments?: Array<{
+          name?: string;
+          contentType?: string;
+          url?: string;
+          localPath?: string;
+          filePath?: string;
+          size?: number;
+          kind?: string;
+        }>;
         metadata?: {
           custom?: {
             attachments?: Array<{
