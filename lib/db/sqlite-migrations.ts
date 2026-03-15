@@ -7,6 +7,10 @@ import { initSkillsTablesWith, runSkillsMigrations } from "./migrations/skills-t
 import { initPluginWorkflowTablesWith } from "./migrations/plugin-workflow-tables";
 import { runDataMigrations } from "./migrations/data-migrations";
 
+const globalForSqliteMigrations = globalThis as typeof globalThis & {
+  didLogSqliteTableInit?: boolean;
+};
+
 // Re-export for external consumers that import from this file path.
 export { runSkillsMigrations } from "./migrations/skills-tables";
 export { runDataMigrations } from "./migrations/data-migrations";
@@ -23,7 +27,10 @@ export function initializeTables(sqlite: Database.Database): void {
   initSkillsTablesWith(sqlite);
   initPluginWorkflowTablesWith(sqlite);
 
-  console.log("[SQLite] All tables initialized (including plugin and workflow systems)");
+  if (!globalForSqliteMigrations.didLogSqliteTableInit) {
+    console.log("[SQLite] All tables initialized (including plugin and workflow systems)");
+    globalForSqliteMigrations.didLogSqliteTableInit = true;
+  }
 
   runDataMigrations(sqlite);
   runSkillsMigrations(sqlite);

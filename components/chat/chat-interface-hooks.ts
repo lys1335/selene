@@ -84,6 +84,7 @@ export function useBackgroundProcessing({
     const [isCancellingBackgroundRun, setIsCancellingBackgroundRun] = useState(false);
     const lastMessageSigRef = useRef<string>("");
     const isRunActiveRef = useRef(false);
+    const activePollingRunIdRef = useRef<string | null>(null);
     const removeTask = useUnifiedTasksStore((state) => state.removeTask);
 
     type ClearTrackedRunStateOptions = {
@@ -183,6 +184,7 @@ export function useBackgroundProcessing({
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
         }
+        activePollingRunIdRef.current = null;
 
         setIsProcessingInBackground(false);
         setProcessingRunId(null);
@@ -214,6 +216,7 @@ export function useBackgroundProcessing({
             clearInterval(pollingIntervalRef.current);
             pollingIntervalRef.current = null;
         }
+        activePollingRunIdRef.current = null;
         setIsProcessingInBackground(false);
         setProcessingRunId(null);
         setIsZombieRun(false);
@@ -222,10 +225,14 @@ export function useBackgroundProcessing({
     }, []);
 
     const startPollingForCompletion = useCallback((runId: string) => {
+        if (activePollingRunIdRef.current === runId && pollingIntervalRef.current) {
+            return;
+        }
         isRunActiveRef.current = true;
         if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);
         }
+        activePollingRunIdRef.current = runId;
         setIsZombieRun(false);
         consecutiveErrorsRef.current = 0;
 
@@ -271,6 +278,7 @@ export function useBackgroundProcessing({
                             clearInterval(pollingIntervalRef.current);
                             pollingIntervalRef.current = null;
                         }
+                        activePollingRunIdRef.current = null;
                         return;
                     }
                     // Fetch intermediate messages while still running for live updates
@@ -307,6 +315,7 @@ export function useBackgroundProcessing({
                 clearInterval(pollingIntervalRef.current);
                 pollingIntervalRef.current = null;
             }
+            activePollingRunIdRef.current = null;
         };
     }, []);
 
@@ -349,6 +358,7 @@ export function useBackgroundProcessing({
 
     return {
         pollingIntervalRef,
+        activePollingRunIdRef,
         isProcessingInBackground,
         setIsProcessingInBackground,
         processingRunId,

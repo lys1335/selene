@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   getSessionActivityTimestamp,
+  shouldBypassLivePromptForegroundDeferral,
   shouldDeferLivePromptForegroundReconciliation,
   sortSessionsByUpdatedAt,
 } from "@/components/chat/chat-interface-utils";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
+import type { UIMessage } from "ai";
 
 function createSession(overrides: Partial<SessionInfo> & Pick<SessionInfo, "id">): SessionInfo {
   return {
@@ -67,6 +69,70 @@ describe("chat session ordering helpers", () => {
       hasInjectedMessages: false,
       persistedConversationMessageCount: 3,
       liveThreadMessageCount: 3,
+    })).toBe(false);
+  });
+
+  it("bypasses live-prompt deferral when progress points at a new persisted assistant segment", () => {
+    const liveThreadMessages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Original prompt" }],
+      },
+      {
+        id: "assistant-pre",
+        role: "assistant",
+        parts: [{ type: "text", text: "Initial assistant segment" }],
+      },
+    ] as UIMessage[];
+
+    const persistedUiMessages = [
+      ...liveThreadMessages,
+      {
+        id: "assistant-post",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "Continuation after queued (injected) message" },
+          {
+            type: "tool-localGrep",
+            toolCallId: "call-real-1",
+            state: "input-available",
+            input: {
+              pattern: "queued-live",
+              paths: ["/Users/umuttan/seline/seline/components"],
+              caseInsensitive: true,
+              maxResults: 20,
+            },
+          },
+        ],
+      } as UIMessage,
+    ];
+
+    expect(shouldBypassLivePromptForegroundDeferral({
+      liveThreadMessages,
+      persistedUiMessages,
+      progressAssistantMessageId: "assistant-post",
+    })).toBe(true);
+  });
+
+  it("keeps deferral when progress still points at the current live assistant segment", () => {
+    const liveThreadMessages = [
+      {
+        id: "user-1",
+        role: "user",
+        parts: [{ type: "text", text: "Original prompt" }],
+      },
+      {
+        id: "assistant-pre",
+        role: "assistant",
+        parts: [{ type: "text", text: "Initial assistant segment" }],
+      },
+    ] as UIMessage[];
+
+    expect(shouldBypassLivePromptForegroundDeferral({
+      liveThreadMessages,
+      persistedUiMessages: liveThreadMessages,
+      progressAssistantMessageId: "assistant-pre",
     })).toBe(false);
   });
 });
