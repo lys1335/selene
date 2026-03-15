@@ -41,6 +41,67 @@ describe("extractContent attachment persistence", () => {
     ]);
   });
 
+  it("preserves attachment metadata payloads emitted by the chat runtime", async () => {
+    const result = await extractContent({
+      role: "user",
+      metadata: {
+        custom: {
+          attachments: [
+            {
+              name: "mockup.png",
+              contentType: "image/png",
+              url: "/api/media/sessions/sess-1/uploads/mockup.png",
+              localPath: "sessions/sess-1/uploads/mockup.png",
+              filePath: "/tmp/sessions/sess-1/uploads/mockup.png",
+              size: 123,
+              kind: "image",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result).toEqual([
+      {
+        type: "image",
+        image: "/api/media/sessions/sess-1/uploads/mockup.png",
+      },
+    ]);
+  });
+
+  it("deduplicates identical image references when both parts and metadata attachments are present", async () => {
+    const result = await extractContent({
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: "/api/media/sessions/sess-1/uploads/mockup.png",
+          mediaType: "image/png",
+          filename: "mockup.png",
+        },
+      ],
+      metadata: {
+        custom: {
+          attachments: [
+            {
+              name: "mockup.png",
+              contentType: "image/png",
+              url: "/api/media/sessions/sess-1/uploads/mockup.png",
+              localPath: "sessions/sess-1/uploads/mockup.png",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(result).toEqual([
+      {
+        type: "image",
+        image: "/api/media/sessions/sess-1/uploads/mockup.png",
+      },
+    ]);
+  });
+
   it("keeps helper text mode unchanged for live model requests", async () => {
     const result = await extractContent(
       {

@@ -144,6 +144,23 @@ export async function prepareMessagesForRequest(
               typeof content === "string"
                 ? content.length
                 : (content as unknown[]).length,
+            contentPreview:
+              Array.isArray(content)
+                ? (content as Array<{ type: string; image?: string; text?: string }>).map((part) => ({
+                    type: part.type,
+                    hasImage: typeof part.image === "string",
+                    imagePreview:
+                      typeof part.image === "string"
+                        ? part.image.slice(0, 80)
+                        : undefined,
+                    textPreview:
+                      typeof part.text === "string"
+                        ? part.text.slice(0, 120)
+                        : undefined,
+                  }))
+                : typeof content === "string"
+                  ? content.slice(0, 200)
+                  : null,
           },
           null,
           2
@@ -184,11 +201,34 @@ export async function prepareMessagesForRequest(
       );
     } else if (Array.isArray(msg.content)) {
       const types = (
-        msg.content as Array<{ type: string; toolCallId?: string }>
-      ).map((p) => p.type + (p.toolCallId ? `:${p.toolCallId}` : ""));
+        msg.content as Array<{ type: string; toolCallId?: string; image?: string; mediaType?: string }>
+      ).map((p) => {
+        const suffix = p.toolCallId
+          ? `:${p.toolCallId}`
+          : p.type === "image"
+            ? ":image"
+            : p.type === "file" && typeof p.mediaType === "string"
+              ? `:${p.mediaType}`
+              : "";
+        return p.type + suffix;
+      });
       console.log(
         `  [${idx}] role=${msg.role}, parts=[${types.join(", ")}]`
       );
+      if (msg.role === "user") {
+        console.log(
+          `  [${idx}] userContentDetail=${JSON.stringify(
+            (msg.content as Array<{ type: string; image?: string; text?: string; mediaType?: string }>).map((part) => ({
+              type: part.type,
+              mediaType: part.mediaType,
+              imagePreview:
+                typeof part.image === "string" ? part.image.slice(0, 120) : undefined,
+              textPreview:
+                typeof part.text === "string" ? part.text.slice(0, 120) : undefined,
+            })),
+          )}`
+        );
+      }
     }
   });
 

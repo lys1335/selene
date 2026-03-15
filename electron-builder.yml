@@ -172,7 +172,7 @@ nsis:
 # DMG settings for macOS
 dmg:
   title: "Selene"
-  sign: true
+  sign: false
   contents:
     - x: 130
       y: 220

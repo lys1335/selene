@@ -51,6 +51,11 @@ export interface ContentPart {
   type: "text" | "image";
   text?: string;
   image?: string;
+  contentType?: string;
+  localPath?: string;
+  filePath?: string;
+  size?: number;
+  kind?: string;
 }
 
 export interface TiptapEditorHandle {
@@ -91,10 +96,37 @@ interface TiptapEditorProps {
 // Image upload helper
 // ============================================================================
 
+type UploadedImage = {
+  url: string;
+  localPath?: string;
+  filePath?: string;
+  contentType?: string;
+  size?: number;
+  kind: "image";
+};
+
+const uploadedImageMetadata = new Map<string, UploadedImage>();
+
+function rememberUploadedImage(image: UploadedImage) {
+  uploadedImageMetadata.set(image.url, image);
+}
+
+function getUploadedImageMetadata(url: string): UploadedImage | undefined {
+  const cached = uploadedImageMetadata.get(url);
+  if (cached) return cached;
+  if (!url.startsWith("/api/media/")) return undefined;
+
+  return {
+    url,
+    localPath: url.replace("/api/media/", ""),
+    kind: "image",
+  };
+}
+
 async function uploadImage(
   file: File,
   sessionId?: string,
-): Promise<string | null> {
+): Promise<UploadedImage | null> {
   const MAX_SIZE = 10 * 1024 * 1024; // 10MB
   if (file.size > MAX_SIZE) {
     toast.error(
@@ -120,7 +152,16 @@ async function uploadImage(
     }
 
     const data = await response.json();
-    return data.url as string;
+    const uploadedImage: UploadedImage = {
+      url: data.url as string,
+      localPath: typeof data.localPath === "string" ? data.localPath : undefined,
+      filePath: typeof data.filePath === "string" ? data.filePath : undefined,
+      contentType: typeof data.contentType === "string" ? data.contentType : file.type || undefined,
+      size: typeof data.size === "number" ? data.size : file.size,
+      kind: "image",
+    };
+    rememberUploadedImage(uploadedImage);
+    return uploadedImage;
   } catch {
     toast.error("Failed to upload image");
     return null;
@@ -261,7 +302,16 @@ export function serializeDocToContentArray(
       flushText();
       const attrs = node.attrs as { src?: string } | undefined;
       if (attrs?.src) {
-        parts.push({ type: "image", image: attrs.src });
+        const metadata = getUploadedImageMetadata(attrs.src);
+        parts.push({
+          type: "image",
+          image: attrs.src,
+          contentType: metadata?.contentType,
+          localPath: metadata?.localPath,
+          filePath: metadata?.filePath,
+          size: metadata?.size,
+          kind: metadata?.kind,
+        });
       }
       return;
     }
@@ -560,9 +610,9 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(
         }
 
         // Upload to server
-        const remoteUrl = await uploadImage(file, sessionId);
+        const uploadedImage = await uploadImage(file, sessionId);
 
-        if (remoteUrl) {
+        if (uploadedImage) {
           // Replace local URL with remote URL in all image nodes
           const { doc } = editor.state;
           const tr = editor.state.tr;
@@ -575,7 +625,7 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(
             ) {
               tr.setNodeMarkup(pos, undefined, {
                 ...node.attrs,
-                src: remoteUrl,
+                src: uploadedImage.url,
               });
               replaced = true;
             }

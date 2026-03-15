@@ -90,6 +90,7 @@ export default async function RootLayout({
   const settings = loadSettings();
   const initialTheme = settings.theme ?? "system";
   const initialChatWorkspaceMode = settings.chatWorkspaceMode ?? "sidebar";
+  const chatRefreshDebugStorageKey = "selene-debug-chat-refresh";
   const themeScript = `
 (() => {
   try {
@@ -103,6 +104,7 @@ export default async function RootLayout({
     root.dataset.theme = preference;
     const preset = localStorage.getItem("selene-theme-preset");
     if (preset && preset !== "ember") root.dataset.themePreset = preset;
+    root.dataset.seleneThemeBootstrapped = "1";
   } catch {}
 })();
   `;
@@ -121,12 +123,42 @@ export default async function RootLayout({
   var REQUIRED_FAILS = 2;
   var CHECK_INTERVAL = 3000;
   var INITIAL_GRACE = 15000;
+  var HEARTBEAT_STALE_MS = 20000;
+  var DEBUG_KEY = ${JSON.stringify(chatRefreshDebugStorageKey)};
+
+  function isDebugEnabled() {
+    try {
+      return localStorage.getItem(DEBUG_KEY) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  function debug(event, details) {
+    if (!isDebugEnabled()) return;
+    console.debug('[Selene][renderer-recovery]', event, details || {});
+  }
+
+  function getHeartbeatAge() {
+    var heartbeat = window.__seleneAppHeartbeat;
+    return typeof heartbeat === 'number' ? Date.now() - heartbeat : Number.POSITIVE_INFINITY;
+  }
 
   function checkAlive() {
     checkTimer = null;
     var root = document.getElementById('app-root');
-    // Alive = root exists, has layout height, and has rendered children
-    if (root && root.offsetHeight > 0 && root.childElementCount > 0) {
+    var heartbeatAge = getHeartbeatAge();
+    var heartbeatFresh = !!root && root.dataset.seleneAppAlive === '1' && heartbeatAge <= HEARTBEAT_STALE_MS;
+    var rootLooksRendered = !!root && root.offsetHeight > 0 && root.childElementCount > 0;
+    debug('check', {
+      failCount: failCount,
+      heartbeatAge: heartbeatAge,
+      heartbeatFresh: heartbeatFresh,
+      hasRoot: !!root,
+      offsetHeight: root ? root.offsetHeight : 0,
+      childElementCount: root ? root.childElementCount : 0,
+    });
+    if (rootLooksRendered || heartbeatFresh) {
       failCount = 0;
       return;
     }
@@ -140,6 +172,11 @@ export default async function RootLayout({
   }
 
   document.addEventListener('visibilitychange', function() {
+    debug('visibility-change', {
+      state: document.visibilityState,
+      sinceLoadMs: Date.now() - loadedAt,
+      heartbeatAge: getHeartbeatAge(),
+    });
     if (document.visibilityState !== 'visible') {
       if (checkTimer) { clearTimeout(checkTimer); checkTimer = null; }
       failCount = 0;

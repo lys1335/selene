@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   filterCodexInput,
+  MAX_CODEX_PAYLOAD_BYTES,
+  MAX_CODEX_VISION_PAYLOAD_BYTES,
   normalizeOrphanedToolOutputs,
   truncateCodexInput,
   type CodexInputItem,
@@ -291,5 +293,42 @@ describe("truncateCodexInput", () => {
 
     logSpy.mockRestore();
     warnSpy.mockRestore();
+  });
+
+  it("preserves image-bearing user messages under the vision payload budget", () => {
+    const imageData = `data:image/png;base64,${"A".repeat(1200 * 1024)}`;
+    const input: CodexInputItem[] = [
+      {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "input_text", text: "whats in the image" },
+          { type: "input_image", image_url: imageData },
+        ],
+      },
+      {
+        type: "message",
+        role: "assistant",
+        content: "I don't see an image attached yet.",
+      },
+      {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "input_text", text: "try again" },
+          { type: "input_image", image_url: imageData },
+        ],
+      },
+    ];
+
+    const originalSize = JSON.stringify(input).length;
+    expect(originalSize).toBeGreaterThan(MAX_CODEX_PAYLOAD_BYTES);
+    expect(originalSize).toBeLessThan(MAX_CODEX_VISION_PAYLOAD_BYTES);
+
+    const result = truncateCodexInput(input);
+
+    expect(result).toEqual(input);
+    expect((result[0].content as Array<Record<string, unknown>>).some((part) => part.type === "input_image")).toBe(true);
+    expect((result[2].content as Array<Record<string, unknown>>).some((part) => part.type === "input_image")).toBe(true);
   });
 });

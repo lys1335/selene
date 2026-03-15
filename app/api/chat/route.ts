@@ -20,6 +20,7 @@ import {
   getSessionProviderTemperatureForSession,
   resolveSessionLanguageModelForSession,
   resolveSessionModelScopeForSession,
+  resolveSessionVisionModelForSession,
 } from "@/lib/ai/session-model-resolver";
 import { generateSessionTitle } from "@/lib/ai/title-generator";
 import { createSession, createMessage, updateMessage, getSession, getOrCreateLocalUser, updateSession, deleteMessagesNotIn, getInjectedMessageIds, getSessionWithMessages } from "@/lib/db/queries";
@@ -220,6 +221,19 @@ export async function POST(req: Request) {
         content?: string | unknown;
         parts?: Array<{ type: string; text?: string; image?: string; url?: string }>;
         experimental_attachments?: Array<{ name?: string; contentType?: string; url?: string }>;
+        metadata?: {
+          custom?: {
+            attachments?: Array<{
+              name?: string;
+              contentType?: string;
+              url?: string;
+              localPath?: string;
+              filePath?: string;
+              size?: number;
+              kind?: string;
+            }>;
+          };
+        };
       }>;
       sessionId?: string;
     };
@@ -236,6 +250,11 @@ export async function POST(req: Request) {
 
     const lastMsg = messages[messages.length - 1];
     console.debug(`[CHAT API] Last message: role=${lastMsg?.role}, hasParts=${!!lastMsg?.parts}, partsCount=${lastMsg?.parts?.length}, hasAttachments=${!!(lastMsg as any)?.experimental_attachments}`);
+    console.debug("[CHAT API] Last message detail", {
+      metadata: lastMsg?.metadata,
+      parts: lastMsg?.parts,
+      experimental_attachments: (lastMsg as { experimental_attachments?: unknown })?.experimental_attachments,
+    });
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(
@@ -729,6 +748,13 @@ export async function POST(req: Request) {
 
     // ── Apply caching to messages ──────────────────────────────────────────────
     const cachedMessages = useCaching ? applyCacheToMessages(coreMessages) : coreMessages;
+    const hasUserImageInput = cachedMessages.some((message) => {
+      if (message.role !== "user" || !Array.isArray(message.content)) return false;
+      return message.content.some((part) =>
+        part.type === "image"
+        || (part.type === "file" && typeof part.mediaType === "string" && part.mediaType.startsWith("image/"))
+      );
+    });
 
     if (useCaching && injectContext) {
       const estimatedSavings = estimateCacheSavings(
@@ -745,7 +771,9 @@ export async function POST(req: Request) {
       characterId,
       settings: appSettings,
     });
-    console.debug(`[CHAT API] Using LLM: ${sessionDisplayName}, inject=${injectContext}, caching=${useCaching ? "on" : "off"}`);
+    console.debug(
+      `[CHAT API] Using LLM: ${sessionDisplayName}, inject=${injectContext}, caching=${useCaching ? "on" : "off"}, imageInput=${hasUserImageInput ? "yes" : "no"}`,
+    );
 
     // Think-tag filter: strip <think>...</think> blocks from non-Anthropic providers.
     // NOTE: This filter currently operates on text deltas as they are persisted to
@@ -893,10 +921,15 @@ export async function POST(req: Request) {
         () => withRunContext(
         { runId, sessionId, pipelineName: "chat", characterId: characterId || undefined },
         async () => streamText({
-          model: await resolveSessionLanguageModelForSession(sessionMetadata, {
-            characterId,
-            settings: appSettings,
-          }),
+          model: hasUserImageInput
+            ? await resolveSessionVisionModelForSession(sessionMetadata, {
+                characterId,
+                settings: appSettings,
+              })
+            : await resolveSessionLanguageModelForSession(sessionMetadata, {
+                characterId,
+                settings: appSettings,
+              }),
           ...(injectContext && { system: systemPromptValue }),
           messages: cachedMessages,
           tools: allToolsWithMCP,
