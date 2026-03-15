@@ -58,10 +58,11 @@ Run shell commands safely within synced folders. Dangerous commands (rm, sudo, f
       loading: { deferLoading: true },
       requiresSession: true,
     } satisfies ToolMetadata,
-    ({ sessionId, characterId }) =>
+    ({ sessionId, characterId, onExecuteCommandProgress }) =>
       createExecuteCommandTool({
         sessionId: sessionId || "UNSCOPED",
         characterId: characterId ?? null,
+        onProgress: onExecuteCommandProgress,
       })
   );
 

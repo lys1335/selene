@@ -16,6 +16,7 @@
  */
 
 import { tool, jsonSchema, type Tool } from "ai";
+import type { ExecuteCommandProgressUpdate } from "@/lib/command-execution/types";
 import {
   createDocsSearchTool,
   createRetrieveFullContentTool,
@@ -76,6 +77,7 @@ export interface ToolsBuildContext {
   toolLoadingMode: "deferred" | "always";
   devWorkspaceEnabled: boolean;
   streamToolResultBudgetTokens: number;
+  onExecuteCommandProgress?: (update: ExecuteCommandProgressUpdate) => void;
   /** Pre-resolved plugin roots for ${CLAUDE_PLUGIN_ROOT} substitution */
   pluginRoots: Map<string, string>;
   /** Pre-resolved scoped plugin names for hook filtering */
@@ -120,6 +122,7 @@ export async function buildToolsForRequest(
     toolLoadingMode,
     devWorkspaceEnabled,
     streamToolResultBudgetTokens,
+    onExecuteCommandProgress,
     pluginRoots,
     allowedPluginNames,
     workflowPromptContextInput,
@@ -230,6 +233,7 @@ export async function buildToolsForRequest(
       executeCommand: createExecuteCommandTool({
         sessionId,
         characterId: characterId || null,
+        onProgress: onExecuteCommandProgress,
       }),
     }),
     ...(allTools.editFile && {

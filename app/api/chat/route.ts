@@ -355,6 +355,46 @@ export async function POST(req: Request) {
         })
       : undefined;
 
+    const handleExecuteCommandProgress = shouldEmitProgress && streamingState && syncStreamingMessage
+      ? (update: import("@/lib/command-execution/types").ExecuteCommandProgressUpdate) => {
+          if (!update.toolCallId) return;
+
+          const commandLabel = [update.command, ...(update.args ?? [])].join(" ").trim();
+          const progressMessage = update.message?.trim()
+            || (commandLabel ? `Running ${commandLabel}...` : "Running command...");
+
+          const normalizedResult = {
+            status: update.status,
+            stdout: update.stdout,
+            stderr: update.stderr,
+            exitCode: update.exitCode,
+            executionTime: update.executionTime,
+            error: update.error,
+            logId: update.logId,
+            isTruncated: update.isTruncated,
+            startedAt: update.startedAt,
+            message: progressMessage,
+          };
+
+          if (!streamingState.toolCallParts.has(update.toolCallId)) {
+            recordStructuredToolCall(streamingState, update.toolCallId, "executeCommand", {
+              command: update.command,
+              args: update.args,
+              cwd: update.cwd,
+            });
+          }
+
+          recordToolResultChunk(
+            streamingState,
+            update.toolCallId,
+            "executeCommand",
+            normalizedResult,
+            update.status === "running"
+          );
+          void syncStreamingMessage();
+        }
+      : undefined;
+
     const contextTracking = getContextInjectionTracking(sessionMetadata);
     const injectContext = shouldInjectContext(contextTracking, isNewSession, toolLoadingMode);
     console.debug(`[CHAT API] Context injection: isNew=${isNewSession}, tracking=${JSON.stringify(contextTracking)}, inject=${injectContext}`);
@@ -636,6 +676,7 @@ export async function POST(req: Request) {
       toolLoadingMode,
       devWorkspaceEnabled: appSettings.devWorkspaceEnabled ?? false,
       streamToolResultBudgetTokens,
+      onExecuteCommandProgress: handleExecuteCommandProgress,
       pluginRoots,
       allowedPluginNames,
       workflowPromptContextInput,
@@ -719,6 +760,7 @@ export async function POST(req: Request) {
           void _sync();
         };
       })(),
+      onExecuteCommandProgress: handleExecuteCommandProgress,
       sdkToolResultBridge,
       onQueueMessages: (() => {
         const _state = streamingState;
