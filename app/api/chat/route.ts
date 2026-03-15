@@ -1020,6 +1020,11 @@ export async function POST(req: Request) {
                 streamingState.lastBroadcastSignature = "";
                 streamingState.pendingBroadcast = false;
                 streamingState.isCreating = false;
+                // Rotate the assistant UUID so the post-injection segment does not
+                // collide with the already-persisted pre-injection assistant row.
+                // Background mode persists the pre-split row mid-run, so reusing
+                // the same ID would collapse the continuation segment.
+                assistantMessageId = crypto.randomUUID();
                 streamingState.stepOffset = stepNumber;
               }
 

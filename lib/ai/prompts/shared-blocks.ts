@@ -155,4 +155,3 @@ Image edit/reference tools support **multiple images**. Automatically combine AL
 export function combineBlocks(...blocks: string[]): string {
   return blocks.filter(Boolean).join("\n\n");
 }
-

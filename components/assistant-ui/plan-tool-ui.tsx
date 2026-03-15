@@ -44,6 +44,44 @@ const STATUS_CONFIG: Record<PlanStep["status"], { glyph: string; color: string; 
   canceled:    { glyph: "[-]", color: "text-terminal-muted",  textClass: "text-terminal-muted line-through" },
 };
 
+function coerceStepStatus(status: string | undefined): PlanStep["status"] {
+  if (status === "in_progress" || status === "completed" || status === "canceled") {
+    return status;
+  }
+  return "pending";
+}
+
+function buildPlanFromArgs(args: UpdatePlanArgs, version: number | undefined): PlanState | null {
+  if (!args || !Array.isArray(args.steps) || args.steps.length === 0) {
+    return null;
+  }
+
+  const normalizedSteps: PlanStep[] = args.steps
+    .map((step, idx) => {
+      const text = typeof step?.text === "string" ? step.text.trim() : "";
+      if (!text) return null;
+      const id = typeof step.id === "string" && step.id.trim().length > 0
+        ? step.id
+        : `step_${idx + 1}`;
+      return {
+        id,
+        text,
+        status: coerceStepStatus(typeof step.status === "string" ? step.status : undefined),
+      };
+    })
+    .filter((step): step is PlanStep => Boolean(step));
+
+  if (normalizedSteps.length === 0) {
+    return null;
+  }
+
+  return {
+    version: typeof version === "number" ? version : 0,
+    steps: normalizedSteps,
+    explanation: typeof args.explanation === "string" ? args.explanation : undefined,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -79,8 +117,8 @@ export const PlanToolUI: ToolCallContentPartComponent = ({ args, result }) => {
   }
 
   // --- Success state ---
-  const plan = result.plan;
-  // Compact result from merge-mode updates (no full plan, just confirmation)
+  // Prefer server-provided plan; fallback to args for legacy compact tool results.
+  const plan = result.plan ?? buildPlanFromArgs(args, result.version);
   if (!plan || !plan.steps || !Array.isArray(plan.steps) || plan.steps.length === 0) {
     if (result.version != null) {
       const updatedCount = result.updatedStepIds?.length ?? 0;

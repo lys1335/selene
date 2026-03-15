@@ -391,7 +391,7 @@ Creates or updates a visible task plan. First call creates; subsequent calls upd
 Example: \`{ "steps": [{"id": "step_abc", "status": "completed"}], "mode": "merge" }\`
 
 **Constraints:** Max 20 steps. Only 1 step can be "in_progress" at a time. Use returned step ids for merge updates.`,
-      loading: { deferLoading: true },
+      loading: { alwaysLoad: true },
       requiresSession: true,
     } satisfies ToolMetadata,
     ({ sessionId }) => createUpdatePlanTool({ sessionId: sessionId || "UNSCOPED" })

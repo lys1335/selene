@@ -348,11 +348,13 @@ The plan persists across messages and page refreshes.`,
           },
         });
 
-        // 6. Return — compact result for merge updates, full plan for replace/creation
+        // 6. Return full plan for all successful updates.
+        // Keep merge metadata so callers can still show concise deltas when desired.
         if (isMergeUpdate) {
           const changedStepIds = computeChangedStepIds(currentPlan.steps, normalizedSteps);
           return {
             status: "success" as const,
+            plan: newPlan,
             version: newPlan.version,
             stepCount: newPlan.steps.length,
             updatedStepIds: changedStepIds,
