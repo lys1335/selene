@@ -8,6 +8,7 @@ import {
   useThreadRuntime,
   useThreadComposer,
 } from "@assistant-ui/react";
+import type { CompleteAttachment } from "@assistant-ui/react";
 import type { JSONContent } from "@tiptap/core";
 import {
   ClockIcon,
@@ -564,74 +565,44 @@ export const Composer: FC<{
   );
 
   // -----------------------------------------------------------------------
-  // Tiptap editor submit — Path B: multimodal content array
+  // Tiptap editor submit — Path B: preserve composer attachment serialization
   // -----------------------------------------------------------------------
   const handleEditorSubmit = useCallback(
-    (contentParts: ContentPart[]) => {
-      // Composer attachments (from the paperclip button) live in the
-      // threadRuntime composer state — tiptap's own inline images are
-      // already part of contentParts, but composer-level attachments
-      // are not, so we must merge them manually.
-      const composerAttachments = threadRuntime.composer.getState().attachments ?? [];
+    async (contentParts: ContentPart[]) => {
+      const inlineImageParts = contentParts.filter(
+        (part): part is ContentPart & { type: "image"; image: string } =>
+          part.type === "image" && typeof part.image === "string",
+      );
+      const rawComposerAttachments = threadRuntime.composer.getState().attachments ?? [];
+      const composerAttachments = rawComposerAttachments.filter(
+        (attachment): attachment is CompleteAttachment => attachment.status.type === "complete",
+      );
+      if (contentParts.length === 0 && attachmentCount === 0 && inlineImageParts.length === 0) return;
 
-      if (contentParts.length === 0 && composerAttachments.length === 0) return;
+      const textOnly = contentParts
+        .filter((p): p is { type: "text"; text: string } => p.type === "text" && typeof p.text === "string")
+        .map((p) => p.text)
+        .join("\n")
+        .trim();
 
-      // Deep research mode only takes text — extract text parts
+      // Deep research mode only accepts text.
       if (isDeepResearchMode && deepResearch && !isQueueBlocked) {
-        const textOnly = contentParts
-          .filter((p) => p.type === "text" && p.text)
-          .map((p) => p.text!)
-          .join("\n");
-        if (textOnly.trim()) {
-          deepResearch.startResearch(textOnly.trim());
+        if (textOnly) {
+          deepResearch.startResearch(textOnly);
         }
         tiptapRef.current?.clear();
         clearTiptapDraft();
         return;
       }
 
-      // Build the multimodal content array for threadRuntime.append()
-      const apiContent: Array<
-        | { type: "text"; text: string }
-        | { type: "image"; image: string }
-      > = [];
-
-      for (const part of contentParts) {
-        if (part.type === "text" && part.text) {
-          apiContent.push({ type: "text", text: part.text });
-        } else if (part.type === "image" && part.image) {
-          apiContent.push({ type: "image", image: part.image });
-        }
-      }
-
-      // Merge composer attachments (uploaded via the attachment button)
-      for (const attachment of composerAttachments) {
-        if (attachment.content) {
-          for (const part of attachment.content) {
-            if (part.type === "image" && "image" in part) {
-              apiContent.push({ type: "image", image: (part as { type: "image"; image: string }).image });
-            }
-          }
-        }
-      }
-
-      if (apiContent.length === 0) return;
-
-      // Extract text for queue display
-      const textForQueue = apiContent
-        .filter((p) => p.type === "text")
-        .map((p) => (p as { type: "text"; text: string }).text)
-        .join(" ")
-        .slice(0, 100);
-
       if (isQueueBlocked) {
-        if (textForQueue) {
+        if (textOnly) {
           const msgId = `queued-${Date.now()}`;
           setQueuedMessages((prev) => [
             ...prev,
             {
               id: msgId,
-              content: textForQueue,
+              content: textOnly.slice(0, 100),
               mode: isDeepResearchMode ? "deep-research" : "chat",
               status: "queued-classic",
             },
@@ -639,16 +610,42 @@ export const Composer: FC<{
         }
         tiptapRef.current?.clear();
         clearTiptapDraft();
-        if (composerAttachments.length > 0) {
+        if (attachmentCount > 0) {
           threadRuntime.composer.clearAttachments();
         }
         return;
       }
 
-      // Direct submit via threadRuntime.append() — multimodal interleaving
+      const composerText = contentPartsToComposerText(contentParts).trim();
+      if (!composerText && composerAttachments.length === 0 && inlineImageParts.length === 0) {
+        return;
+      }
+      if (composerAttachments.length !== rawComposerAttachments.length) {
+        toast.error("Wait for attachments to finish uploading before sending.");
+        return;
+      }
+
+      const inlineAttachments = inlineImageParts.map((part, index) => ({
+        id: `tiptap-inline-${Date.now()}-${index}`,
+        type: "image" as const,
+        name: `inline-image-${index + 1}`,
+        contentType: part.contentType ?? "image/*",
+        content: [{ type: "image" as const, image: part.image }],
+        status: { type: "complete" as const },
+        metadata: {
+          url: part.image,
+          localPath: part.localPath,
+          filePath: part.filePath,
+          contentType: part.contentType,
+          size: part.size,
+          kind: part.kind ?? "image",
+        },
+      }));
+
       threadRuntime.append({
         role: "user",
-        content: apiContent,
+        content: composerText ? [{ type: "text", text: composerText }] : [],
+        attachments: [...composerAttachments, ...inlineAttachments],
       });
 
       tiptapRef.current?.clear();
@@ -659,13 +656,14 @@ export const Composer: FC<{
       }
     },
     [
-      isQueueBlocked,
-      isDeepResearchMode,
-      deepResearch,
-      threadRuntime,
+      attachmentCount,
       clearEnhancement,
       clearTiptapDraft,
-      attachmentCount,
+      deepResearch,
+      isDeepResearchMode,
+      isQueueBlocked,
+      t,
+      threadRuntime,
     ]
   );
 

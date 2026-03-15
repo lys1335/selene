@@ -152,6 +152,48 @@ export async function transformCodexRequest(
     const filtered = filterCodexInput(body.input as CodexInputItem[]) || [];
     const normalized = normalizeOrphanedToolOutputs(filtered);
     body.input = truncateCodexInput(normalized);
+    const inputSummary = body.input.map((item: CodexInputItem) => {
+      const content = item.content;
+      return {
+        type: item.type,
+        role: item.role,
+        name: item.name,
+        hasContentArray: Array.isArray(content),
+        contentSummary: Array.isArray(content)
+          ? content.map((part) => {
+              if (typeof part === "string") {
+                return { type: "string", preview: part.slice(0, 80) };
+              }
+              if (!part || typeof part !== "object") {
+                return { type: typeof part };
+              }
+              const typedPart = part as Record<string, unknown>;
+              return {
+                type: typedPart.type,
+                imageUrlPreview:
+                  typeof typedPart.image_url === "string"
+                    ? typedPart.image_url.slice(0, 120)
+                    : undefined,
+                imagePreview:
+                  typeof typedPart.image === "string"
+                    ? typedPart.image.slice(0, 120)
+                    : undefined,
+                fileUrlPreview:
+                  typeof typedPart.url === "string"
+                    ? typedPart.url.slice(0, 120)
+                    : undefined,
+                textPreview:
+                  typeof typedPart.text === "string"
+                    ? typedPart.text.slice(0, 120)
+                    : undefined,
+              };
+            })
+          : typeof content === "string"
+            ? content.slice(0, 160)
+            : null,
+      };
+    });
+    console.log(`[CODEX] Input summary after transform: ${JSON.stringify(inputSummary)}`);
   }
 
   const requestedEffort =

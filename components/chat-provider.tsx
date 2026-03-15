@@ -19,13 +19,14 @@ import {
   type AttachmentAdapter,
   type PendingAttachment,
   type CompleteAttachment,
+  type AppendMessage,
 } from "@assistant-ui/react";
 import {
   useAISDKRuntime,
   AssistantChatTransport,
 } from "@assistant-ui/react-ai-sdk";
 import { useChat } from "@ai-sdk/react";
-import type { UIMessage, UIMessageChunk } from "ai";
+import type { CreateUIMessage, UIMessage, UIMessageChunk } from "ai";
 import { DeepResearchProvider } from "./assistant-ui/deep-research-context";
 import { VoiceProvider } from "./assistant-ui/voice-context";
 import { Loader2 } from "lucide-react";
@@ -39,10 +40,6 @@ import {
 import { getLastUserMessageId, shouldAutoRetryClientChat } from "@/lib/chat/client-retry";
 import { parseChatPreflightResponse } from "@/lib/chat/preflight";
 
-// ============================================================================
-// Error Boundary for Tool Streaming Errors
-// ============================================================================
-
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
@@ -52,12 +49,7 @@ function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
-/**
- * Check if an error is a recoverable streaming/tool-related error that should
- * auto-retry rather than crash the page.
- */
 function isRecoverableStreamingError(error: Error): boolean {
-  // Abort errors from user-initiated stop (especially pre-initialization)
   if (error.name === "AbortError") return true;
   const msg = error.message || "";
   if (msg.includes("aborted")) return true;
@@ -67,63 +59,39 @@ function isRecoverableStreamingError(error: Error): boolean {
     message: msg,
   });
   if (classification.recoverable) return true;
-  // assistant-ui internal: argsText append ordering error
   if (msg.includes("argsText can only be appended")) return true;
-  // JSON parse failures from malformed tool call argsText during streaming
   if (error instanceof SyntaxError && msg.includes("JSON")) return true;
-  // assistant-ui internal: controller closed during streaming
   if (msg.includes("controller was closed")) return true;
-  // Generic tool invocation errors from assistant-ui
   if (msg.includes("toolCallId") && msg.includes("not found")) return true;
-  // Tool result processing errors (e.g., accessing undefined/null properties during streaming)
   if (msg.includes("Cannot read properties of undefined")) return true;
   if (msg.includes("Cannot read property") && msg.includes("undefined")) return true;
   if (msg.includes("Cannot read properties of null")) return true;
-  // assistant-ui store: index out of bounds during streaming state updates
   if (msg.includes("out of bounds")) return true;
-  // Fetch/network errors from early abort (before response arrives)
   if (msg.includes("Failed to fetch")) return true;
-  if (msg.includes("Load failed")) return true; // Safari variant
+  if (msg.includes("Load failed")) return true;
   if (msg.includes("NetworkError")) return true;
   if (msg.includes("network error")) return true;
   if (msg.includes("fetch") && error instanceof TypeError) return true;
-  // Stream/reader errors from abort during stream consumption
   if (msg.includes("reader") && (msg.includes("released") || msg.includes("cancel"))) return true;
   if (msg.includes("enqueue") && msg.includes("closed")) return true;
   if (msg.includes("stream") && (msg.includes("locked") || msg.includes("disturbed"))) return true;
-  // Generic TypeError during render of partially-constructed message state
   if (error instanceof TypeError && (msg.includes("is not a function") || msg.includes("is not iterable"))) return true;
   return false;
 }
 
-/**
- * Error boundary that catches tool argument streaming errors from assistant-ui.
- * Handles:
- * - "argsText can only be appended" errors from tool streaming
- * - JSON SyntaxError from malformed argsText reaching the client
- * - Controller-closed errors from interrupted streams
- * Shows a loading state and auto-retries after a short delay.
- */
 class ChatErrorBoundary extends Component<
   {
     children: ReactNode;
     processingText: string;
     genericError: string;
     recoveryRef?: MutableRefObject<(() => void) | null>;
-    /** Ref that holds the timestamp of the last active stream. Used to treat
-     *  any error occurring shortly after a cancel/abort as recoverable. */
     lastStreamingRef?: MutableRefObject<number>;
   },
   ErrorBoundaryState
 > {
   private resetTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /** Grace period (ms) after streaming ends during which ALL errors are
-   *  treated as recoverable. This catches unpredictable errors from
-   *  partially-constructed message state after a fast Stop press. */
   private static readonly ABORT_GRACE_MS = 2000;
 
-  /** Returns true when the chat was streaming very recently (within grace period). */
   private wasRecentlyStreaming(): boolean {
     const ts = this.props.lastStreamingRef?.current;
     if (!ts) return false;
@@ -132,75 +100,16 @@ class ChatErrorBoundary extends Component<
 
   private isRecoverable(error: Error): boolean {
     if (isRecoverableStreamingError(error)) return true;
-    // Catch-all: any error within the abort grace window is treated as
-    // recoverable — the exact error message varies across browsers and
-    // assistant-ui/AI-SDK versions, so we can't enumerate them all.
     if (this.wasRecentlyStreaming()) {
-      console.warn("[ChatErrorBoundary] Error within abort grace window — treating as recoverable:", error.message);
+      console.warn("[ChatErrorBoundary] Error within abort grace window - treating as recoverable:", error.message);
       return true;
     }
     return false;
   }
 
-  private scheduleRecoverableReset() {
-    if (this.resetTimer) {
-      clearTimeout(this.resetTimer);
-    }
-    this.resetTimer = setTimeout(() => {
-      // Clear bad state (e.g. broken tool-call argsText) from useChat
-      // BEFORE re-rendering children, to prevent the same error re-throwing.
-      if (this.props.recoveryRef?.current) {
-        try {
-          this.props.recoveryRef.current();
-        } catch (e) {
-          console.warn("[ChatErrorBoundary] Recovery callback failed:", e);
-        }
-      }
-      this.setState({ hasError: false, error: null });
-      this.resetTimer = null;
-    }, 500);
-  }
-
-  private handleAsyncError = (errorLike: unknown): boolean => {
-    const error = toError(errorLike);
-    if (!this.isRecoverable(error)) {
-      return false;
-    }
-    console.warn("[ChatErrorBoundary] Recoverable async streaming error - will retry", error.message);
-    this.setState({ hasError: true, error });
-    this.scheduleRecoverableReset();
-    return true;
-  };
-
-  private onUnhandledRejection = (event: PromiseRejectionEvent) => {
-    if (this.handleAsyncError(event.reason)) {
-      event.preventDefault();
-    }
-  };
-
-  private onWindowError = (event: ErrorEvent) => {
-    if (this.handleAsyncError(event.error ?? event.message)) {
-      event.preventDefault();
-    }
-  };
-
-  constructor(props: { children: ReactNode; processingText: string; genericError: string }) {
+  constructor(props: any) {
     super(props);
     this.state = { hasError: false, error: null };
-  }
-
-  componentDidMount() {
-    window.addEventListener("unhandledrejection", this.onUnhandledRejection);
-    window.addEventListener("error", this.onWindowError);
-  }
-
-  componentWillUnmount() {
-    window.removeEventListener("unhandledrejection", this.onUnhandledRejection);
-    window.removeEventListener("error", this.onWindowError);
-    if (this.resetTimer) {
-      clearTimeout(this.resetTimer);
-      this.resetTimer = null;
-    }
   }
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -209,30 +118,42 @@ class ChatErrorBoundary extends Component<
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     if (this.isRecoverable(error)) {
-      console.warn("[ChatErrorBoundary] Recoverable streaming error - will retry", error.message);
-      this.scheduleRecoverableReset();
-    } else {
-      console.error("[ChatErrorBoundary] Unexpected error:", error, errorInfo);
+      console.warn("[ChatErrorBoundary] Caught recoverable tool/streaming error:", error.message, errorInfo);
+      if (this.resetTimer) clearTimeout(this.resetTimer);
+      this.resetTimer = setTimeout(() => {
+        try {
+          this.props.recoveryRef?.current?.();
+        } catch (recoveryError) {
+          console.warn("[ChatErrorBoundary] Recovery hook failed:", recoveryError);
+        }
+        this.setState({ hasError: false, error: null });
+        this.resetTimer = null;
+      }, 1200);
+      return;
     }
+
+    console.error("[ChatErrorBoundary] Fatal error:", error, errorInfo);
+  }
+
+  componentWillUnmount() {
+    if (this.resetTimer) clearTimeout(this.resetTimer);
   }
 
   render() {
     if (this.state.hasError) {
-      // Show loading state for recoverable streaming errors
-      if (this.state.error && this.isRecoverable(this.state.error)) {
+      const err = this.state.error;
+      if (err && this.isRecoverable(err)) {
         return (
-          <div className="flex items-center justify-center p-8 bg-terminal-cream min-h-full">
-            <div className="flex flex-col items-center gap-4">
-              <Loader2 className="h-8 w-8 animate-spin text-terminal-green" />
-              <p className="text-sm font-mono text-terminal-muted">{this.props.processingText}</p>
-            </div>
+          <div className="flex min-h-[120px] w-full items-center justify-center text-sm text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {this.props.processingText}
           </div>
         );
       }
-      // For other errors, show a proper error state
+
       return (
-        <div className="flex items-center justify-center p-8 bg-terminal-cream min-h-full">
-          <p className="text-sm font-mono text-red-600">{this.props.genericError}</p>
+        <div className="flex min-h-[120px] w-full items-center justify-center text-sm text-destructive">
+          {this.props.genericError}
         </div>
       );
     }
@@ -241,45 +162,6 @@ class ChatErrorBoundary extends Component<
   }
 }
 
-// ============================================================================
-// Chat setMessages context — allows background polling to update the thread
-// in-place without remounting the ChatProvider.
-// ============================================================================
-
-type SetMessagesFn = (messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[])) => void;
-const ChatSetMessagesContext = createContext<SetMessagesFn | null>(null);
-export const useChatSetMessages = () => useContext(ChatSetMessagesContext);
-
-const ChatSessionIdContext = createContext<string | undefined>(undefined);
-export const useChatSessionId = () => useContext(ChatSessionIdContext);
-
-const ChatTransportErrorContext = createContext<{
-  error: ChatTransportErrorPayload | null;
-  clearError: () => void;
-} | null>(null);
-
-export const useChatTransportError = () => useContext(ChatTransportErrorContext);
-
-// ============================================================================
-// Dynamic transport proxy (same as useChatRuntime does internally)
-// ============================================================================
-
-function useDynamicChatTransport<T extends AssistantChatTransport<UIMessage>>(transport: T): T {
-  const transportRef = useRef(transport);
-  useEffect(() => { transportRef.current = transport; });
-  return useMemo(() => new Proxy(transportRef.current, {
-    get(_, prop) {
-      const res = (transportRef.current as any)[prop];
-      return typeof res === "function" ? res.bind(transportRef.current) : res;
-    },
-  }) as T, []);
-}
-
-// ============================================================================
-// Chat Provider
-// ============================================================================
-
-
 interface ChatProviderProps {
   children: ReactNode;
   sessionId?: string;
@@ -287,13 +169,111 @@ interface ChatProviderProps {
   initialMessages?: UIMessage[];
 }
 
-// =============================================================================
-// Streaming Transport with Text Delta Batching
-// =============================================================================
-// OpenRouter models can emit very small text deltas, which causes excessive
-// React re-renders in the browser and Electron shell during long responses.
-// This transport coalesces high-frequency text/tool-input delta chunks on the
-// client before they reach the runtime to reduce React re-render pressure.
+const ChatSessionIdContext = createContext<string | undefined>(undefined);
+const ChatTransportErrorContext = createContext<{
+  error: ChatTransportErrorPayload | null;
+  clearError: () => void;
+} | null>(null);
+const ChatSetMessagesContext = createContext<
+  ((messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[])) => void) | null
+>(null);
+
+export function useChatSessionId() {
+  return useContext(ChatSessionIdContext);
+}
+
+export function useChatTransportError() {
+  return useContext(ChatTransportErrorContext);
+}
+
+export function useChatSetMessages() {
+  const value = useContext(ChatSetMessagesContext);
+  if (!value) {
+    throw new Error("useChatSetMessages must be used within ChatProvider");
+  }
+  return value;
+}
+
+function useDynamicChatTransport<T extends AssistantChatTransport<UIMessage>>(transport: T): T {
+  const transportRef = useRef(transport);
+  useEffect(() => {
+    transportRef.current = transport;
+  }, [transport]);
+
+  return useMemo(
+    () =>
+      new Proxy(transportRef.current, {
+        get(_, prop) {
+          const value = (transportRef.current as Record<PropertyKey, unknown>)[prop];
+          return typeof value === "function" ? value.bind(transportRef.current) : value;
+        },
+      }) as T,
+    [],
+  );
+}
+
+function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
+  return messages.map((msg) => {
+    if (!msg.parts || !Array.isArray(msg.parts)) return msg;
+
+    const seenToolCalls = new Set<string>();
+    const toolCallsWithOutput = new Set<string>();
+
+    msg.parts.forEach((part: any) => {
+      if (part.type?.startsWith("tool-") && part.toolCallId) {
+        if (
+          part.state === "output-available" ||
+          part.state === "output-error" ||
+          part.output !== undefined ||
+          part.result !== undefined
+        ) {
+          toolCallsWithOutput.add(part.toolCallId);
+        }
+      }
+    });
+
+    const sanitizedParts = msg.parts.filter((part: any) => {
+      if (part.type?.startsWith("tool-") && part.toolCallId) {
+        const toolCallId = part.toolCallId;
+        const key = `${msg.id}:${toolCallId}`;
+
+        if (seenToolCalls.has(toolCallId)) {
+          if (!loggedSanitizerToolCallIds.has(key)) {
+            loggedSanitizerToolCallIds.add(key);
+            console.warn("[ChatProvider] Removing duplicate tool part:", toolCallId);
+          }
+          return false;
+        }
+        seenToolCalls.add(toolCallId);
+
+        if (
+          part.state === "input-available" &&
+          part.output === undefined &&
+          part.result === undefined &&
+          !toolCallsWithOutput.has(toolCallId)
+        ) {
+          if (!loggedSanitizerToolCallIds.has(key)) {
+            loggedSanitizerToolCallIds.add(key);
+            console.warn("[ChatProvider] Removing dangling input-available tool part:", toolCallId);
+          }
+          return false;
+        }
+      }
+      return true;
+    });
+
+    if (sanitizedParts.length === 0) {
+      return {
+        ...msg,
+        parts: [{ type: "text" as const, text: "" }],
+      };
+    }
+
+    return sanitizedParts.length !== msg.parts.length
+      ? { ...msg, parts: sanitizedParts as UIMessage["parts"] }
+      : msg;
+  });
+}
 
 const STREAM_BATCH_ENABLED =
   process.env.NEXT_PUBLIC_STREAM_BATCH_ENABLED !== "false";
@@ -317,6 +297,108 @@ const TOOL_INPUT_BATCH_MAX_CHARS = Number.isFinite(envToolInputMax)
   : 8192;
 const loggedSanitizerToolCallIds = new Set<string>();
 const DEBUG_CHAT = process.env.NEXT_PUBLIC_DEBUG_CHAT === "true";
+
+type AttachmentMetadata = {
+  url?: string;
+  localPath?: string;
+  filePath?: string;
+  contentType?: string;
+  size?: number;
+  kind?: string;
+};
+
+type AttachmentAwarePending = PendingAttachment & {
+  metadata?: AttachmentMetadata;
+};
+
+type AttachmentAwareComplete = CompleteAttachment & {
+  metadata?: AttachmentMetadata;
+};
+
+type CustomToCreateMessageFunction = <UI_MESSAGE extends UIMessage = UIMessage>(
+  message: AppendMessage,
+) => CreateUIMessage<UI_MESSAGE>;
+
+const toCreateMessageWithAttachmentMetadata: CustomToCreateMessageFunction = <
+  UI_MESSAGE extends UIMessage = UIMessage,
+>(message: AppendMessage): CreateUIMessage<UI_MESSAGE> => {
+  const inputParts = [
+    ...message.content.filter((part) => part.type !== "file"),
+    ...(message.attachments?.flatMap((attachment) =>
+      attachment.content.map((contentPart) => ({
+        ...contentPart,
+        filename: attachment.name,
+      })),
+    ) ?? []),
+  ];
+
+  const parts = inputParts.map((part) => {
+    switch (part.type) {
+      case "text":
+        return { type: "text" as const, text: part.text };
+      case "image":
+        return {
+          type: "file" as const,
+          url: part.image,
+          ...(part.filename && { filename: part.filename }),
+          mediaType: "contentType" in part && typeof part.contentType === "string"
+            ? part.contentType
+            : "image/png",
+        };
+      case "file":
+        return {
+          type: "file" as const,
+          url: part.data,
+          mediaType: part.mimeType,
+          ...(part.filename && { filename: part.filename }),
+        };
+      default:
+        throw new Error(`Unsupported part type: ${part.type}`);
+    }
+  });
+
+  const attachmentMetadata = (message.attachments ?? [])
+    .map((attachment) => {
+      const contentPart = attachment.content[0] as
+        | { type?: string; image?: string; data?: string }
+        | undefined;
+      const metadata = ((attachment as AttachmentAwareComplete).metadata ?? {}) as AttachmentMetadata;
+      const url = metadata.url
+        ?? (contentPart?.type === "image" ? contentPart.image : undefined)
+        ?? (contentPart?.type === "file" ? contentPart.data : undefined);
+
+      if (!url) return null;
+      const inferredLocalPath = metadata.localPath
+        ?? (url.startsWith("/api/media/") ? url.replace("/api/media/", "") : undefined);
+
+      return {
+        name: attachment.name,
+        contentType: attachment.contentType,
+        url,
+        localPath: inferredLocalPath,
+        filePath: metadata.filePath,
+        size: metadata.size,
+        kind: metadata.kind ?? attachment.type,
+      };
+    })
+    .filter((attachment): attachment is NonNullable<typeof attachment> => attachment !== null);
+
+  return {
+    role: message.role,
+    parts,
+    metadata: {
+      ...(message.metadata ?? {}),
+      ...(attachmentMetadata.length > 0
+        ? {
+            custom: {
+              ...(((message.metadata as { custom?: Record<string, unknown> } | undefined)?.custom) ?? {}),
+              attachments: attachmentMetadata,
+            },
+          }
+        : {}),
+    },
+  } satisfies CreateUIMessage<UIMessage> as CreateUIMessage<UI_MESSAGE>;
+};
 
 class BufferedAssistantChatTransport extends AssistantChatTransport<UIMessage> {
   private wrapStreamWithRecovery(
@@ -374,7 +456,6 @@ class BufferedAssistantChatTransport extends AssistantChatTransport<UIMessage> {
     if (!STREAM_BATCH_ENABLED) {
       return this.wrapStreamWithRecovery(baseStream);
     }
-
 
     let bufferedDelta = "";
     let lastTextId: string | null = null;
@@ -521,265 +602,101 @@ class BufferedAssistantChatTransport extends AssistantChatTransport<UIMessage> {
       }, STREAM_BATCH_INTERVAL_MS);
     };
 
-    // Track tool call IDs that received streaming input deltas.
-    // When a "tool-input-available" arrives for one of these, the
-    // structured input may conflict with the accumulated argsText
-    // (e.g. {} vs {"questions":[...]}) — causing @assistant-ui/react
-    // to throw "argsText can only be appended, not updated".
-    // We drop the conflicting "tool-input-available" so the runtime
-    // finalizes from the streaming deltas instead.
     const toolCallsWithDeltas = new Set<string>();
 
-    const bufferedStream = baseStream.pipeThrough(
+    const transformed = baseStream.pipeThrough(
       new TransformStream<UIMessageChunk, UIMessageChunk>({
-        transform(chunk, controller) {
-          if (streamErrored) return;
-          switch (chunk.type) {
-            case "text-start": {
-              // Flush anything pending before a new text stream begins.
-              flushAllToolInputBuffers(controller);
+        transform: (chunk, controller) => {
+          if (chunk.type === "text-delta") {
+            const textChunk = chunk as UIMessageChunk & { id: string; delta: string };
+            if (lastTextId && textChunk.id !== lastTextId) {
               flushBuffer(controller);
-              lastTextId = chunk.id;
-              safeEnqueue(controller, chunk);
-              return;
             }
-            case "text-delta": {
-              flushAllToolInputBuffers(controller);
-              lastTextId = chunk.id;
-              bufferedDelta += chunk.delta;
+            lastTextId = textChunk.id;
+            bufferedDelta += textChunk.delta;
 
-              // Flush immediately if the buffer grows too large to avoid UI jank.
-              if (bufferedDelta.length >= STREAM_BATCH_MAX_CHARS) {
-                clearTimer();
-                flushBuffer(controller);
-                return;
-              }
-
+            if (bufferedDelta.length >= STREAM_BATCH_MAX_CHARS) {
+              flushBuffer(controller);
+            } else {
               scheduleFlush(controller);
-              return;
             }
-            case "text-end": {
-              // Ensure final buffered text is emitted before the end marker.
-              clearTimer();
-              flushAllToolInputBuffers(controller);
-              flushBuffer(controller);
-              safeEnqueue(controller, chunk);
-              return;
-            }
-            case "tool-input-delta": {
-              // Track that this tool call had streaming deltas.
-              const deltaChunk = chunk as UIMessageChunk & {
-                toolCallId?: string;
-                inputTextDelta?: string;
-                delta?: string;
-              };
-              if (deltaChunk.toolCallId) toolCallsWithDeltas.add(deltaChunk.toolCallId);
-              clearTimer();
-              flushBuffer(controller);
-              const deltaText =
-                typeof deltaChunk.inputTextDelta === "string"
-                  ? deltaChunk.inputTextDelta
-                  : typeof deltaChunk.delta === "string"
-                    ? deltaChunk.delta
-                    : "";
-              if (!deltaChunk.toolCallId || !deltaText) {
-                safeEnqueue(controller, chunk);
-                return;
-              }
-              bufferToolInputDelta(deltaChunk.toolCallId, deltaText, controller);
-              return;
-            }
-            case "tool-input-available": {
-              flushAllToolInputBuffers(controller);
-              // If this tool call already received streaming deltas, the
-              // structured input may conflict with accumulated argsText.
-              // Drop it to prevent the "argsText can only be appended" crash.
-              const availChunk = chunk as UIMessageChunk & { toolCallId: string };
-              if (availChunk.toolCallId && toolCallsWithDeltas.has(availChunk.toolCallId)) {
-                if (DEBUG_CHAT) {
-                  console.warn(
-                    `[ChatTransport] Dropping conflicting tool-input-available for ${availChunk.toolCallId} ` +
-                      `(had prior streaming deltas). Runtime will finalize from deltas.`
-                  );
-                }
-                return; // Drop this chunk
-              }
-              clearTimer();
-              flushBuffer(controller);
-              safeEnqueue(controller, chunk);
-              return;
-            }
-            case "tool-input-error": {
-              flushAllToolInputBuffers(controller);
-              // Same as tool-input-available: if this tool call had streaming
-              // deltas, dropping the error chunk prevents argsText reset.
-              // The subsequent tool-output-error will preserve the streamed input.
-              const errChunk = chunk as UIMessageChunk & { toolCallId: string };
-              if (errChunk.toolCallId && toolCallsWithDeltas.has(errChunk.toolCallId)) {
-                if (DEBUG_CHAT) {
-                  console.warn(
-                    `[ChatTransport] Dropping tool-input-error for ${errChunk.toolCallId} ` +
-                      `(had prior streaming deltas). Subsequent tool-output-error will preserve input.`
-                  );
-                }
-                return;
-              }
-              clearTimer();
-              flushBuffer(controller);
-              safeEnqueue(controller, chunk);
-              return;
-            }
-            case "tool-output-available":
-            case "tool-output-error":
-            case "tool-output-denied": {
-              const outChunk = chunk as UIMessageChunk & { toolCallId?: string };
-              if (outChunk.toolCallId) {
-                // Clear delta-tracking only after tool output is finalized.
-                toolCallsWithDeltas.delete(outChunk.toolCallId);
-              }
-              clearTimer();
-              flushAllToolInputBuffers(controller);
-              flushBuffer(controller);
-              safeEnqueue(controller, chunk);
-              return;
-            }
-            default: {
-              // Tool and control events should not be delayed.
-              clearTimer();
-              flushAllToolInputBuffers(controller);
-              flushBuffer(controller);
-              safeEnqueue(controller, chunk);
+            return;
+          }
+
+          flushBuffer(controller);
+
+          if (chunk.type === "tool-input-delta") {
+            const inputChunk = chunk as UIMessageChunk & { toolCallId: string; inputTextDelta: string };
+            if (inputChunk.toolCallId) {
+              toolCallsWithDeltas.add(inputChunk.toolCallId);
+              bufferToolInputDelta(
+                inputChunk.toolCallId,
+                inputChunk.inputTextDelta,
+                controller,
+              );
               return;
             }
           }
+
+          if (TOOL_INPUT_BATCH_ENABLED && toolCallsWithDeltas.size > 0) {
+            if (chunk.type === "tool-input-available") {
+              const availChunk = chunk as UIMessageChunk & { toolCallId: string };
+              if (availChunk.toolCallId && toolCallsWithDeltas.has(availChunk.toolCallId)) {
+                flushToolInputBuffer(availChunk.toolCallId, controller);
+                toolCallsWithDeltas.delete(availChunk.toolCallId);
+                if (DEBUG_CHAT) {
+                  console.debug("[ChatTransport] Flushed batched tool input before input-available", {
+                    toolCallId: availChunk.toolCallId,
+                    rawToolInputDeltaChunks,
+                    emittedToolInputDeltaChunks,
+                  });
+                }
+              }
+            } else if (chunk.type === "tool-output-available") {
+              const outputChunk = chunk as UIMessageChunk & { toolCallId: string };
+              if (outputChunk.toolCallId && toolCallsWithDeltas.has(outputChunk.toolCallId)) {
+                flushToolInputBuffer(outputChunk.toolCallId, controller);
+                toolCallsWithDeltas.delete(outputChunk.toolCallId);
+              }
+            } else if (chunk.type === "tool-output-error") {
+              const errChunk = chunk as UIMessageChunk & { toolCallId: string };
+              if (errChunk.toolCallId && toolCallsWithDeltas.has(errChunk.toolCallId)) {
+                flushToolInputBuffer(errChunk.toolCallId, controller);
+                toolCallsWithDeltas.delete(errChunk.toolCallId);
+                if (DEBUG_CHAT) {
+                  console.debug("[ChatTransport] Flushed batched tool input before tool-output-error", {
+                    toolCallId: errChunk.toolCallId,
+                    rawToolInputDeltaChunks,
+                    emittedToolInputDeltaChunks,
+                  });
+                }
+              }
+            }
+          }
+
+          safeEnqueue(controller, chunk);
         },
-        flush(controller) {
+        flush: (controller) => {
           clearTimer();
-          flushAllToolInputBuffers(controller);
           flushBuffer(controller);
+          flushAllToolInputBuffers(controller);
           if (
             TOOL_INPUT_BATCH_ENABLED &&
             rawToolInputDeltaChunks > 0 &&
             DEBUG_CHAT
           ) {
-            console.log(
-              `[ChatTransport] tool-input-delta batching: raw=${rawToolInputDeltaChunks}, emitted=${emittedToolInputDeltaChunks}`,
-            );
+            console.debug("[ChatTransport] Tool input batching stats", {
+              rawToolInputDeltaChunks,
+              emittedToolInputDeltaChunks,
+            });
           }
-          toolCallsWithDeltas.clear();
           clearAllToolInputBuffers();
         },
       }),
     );
-    return this.wrapStreamWithRecovery(bufferedStream);
+
+    return this.wrapStreamWithRecovery(transformed);
   }
-}
-
-/**
- * Sanitize initial messages to prevent client-side crashes from incomplete
- * tool calls that were persisted during streaming interruptions.
- *
- * When an Agent SDK stream is interrupted (user navigates away), the last
- * assistant message may contain tool-call parts in "input-available" state
- * with no matching result. The @assistant-ui/react runtime can throw when
- * it encounters these during initialization.
- *
- * IMPORTANT: Keep interrupted tool calls/results so chromiumWorkspace/browser
- * sessions remain visible after a user presses Stop. We only drop truly
- * incomplete parts that can crash hydration.
- */
-export function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
-  if (!messages || messages.length === 0) return messages;
-
-  return messages.map((msg) => {
-    if (msg.role !== "assistant" || !msg.parts || msg.parts.length === 0) {
-      return msg;
-    }
-
-    // Check if any tool parts have problematic state
-    let needsSanitization = false;
-    for (const part of msg.parts) {
-      if (!part || typeof part !== "object") continue;
-      const p = part as Record<string, unknown>;
-      // Tool parts have type starting with "tool-" or "dynamic-tool"
-      const isToolPart =
-        (typeof p.type === "string" && p.type.startsWith("tool-")) ||
-        p.type === "dynamic-tool";
-      if (!isToolPart) continue;
-
-      const state = p.state as string | undefined;
-      // input-streaming = incomplete streaming, input-available without output = pending
-      if (state === "input-streaming") {
-        needsSanitization = true;
-        break;
-      }
-      if (state === "input-available" && p.output === undefined) {
-        const hasAnyOutput =
-          p.output !== undefined ||
-          p.errorText !== undefined ||
-          p.result !== undefined;
-        const isExplicitlyActive = p.active === true;
-        if (!hasAnyOutput && !isExplicitlyActive) {
-          // Tool call with args but no output payload is incomplete unless the
-          // backend explicitly marks it as an active in-flight operation.
-          needsSanitization = true;
-          break;
-        }
-      }
-    }
-
-    if (!needsSanitization) return msg;
-
-    // Filter out problematic tool parts
-    const sanitizedParts = msg.parts.filter((part) => {
-      if (!part || typeof part !== "object") return true;
-      const p = part as Record<string, unknown>;
-      const isToolPart =
-        (typeof p.type === "string" && p.type.startsWith("tool-")) ||
-        p.type === "dynamic-tool";
-      if (!isToolPart) return true;
-
-      const state = p.state as string | undefined;
-      const toolCallId =
-        typeof p.toolCallId === "string" ? p.toolCallId : "unknown-tool-call";
-      if (state === "input-streaming") {
-        const key = `input-streaming:${toolCallId}`;
-        if (!loggedSanitizerToolCallIds.has(key)) {
-          loggedSanitizerToolCallIds.add(key);
-          console.warn("[ChatProvider] Removing input-streaming tool part:", toolCallId);
-        }
-        return false;
-      }
-      if (state === "input-available" && p.output === undefined) {
-        const hasAnyOutput =
-          p.output !== undefined ||
-          p.errorText !== undefined ||
-          p.result !== undefined;
-        if (!hasAnyOutput) {
-          const key = `input-available:${toolCallId}`;
-          if (!loggedSanitizerToolCallIds.has(key)) {
-            loggedSanitizerToolCallIds.add(key);
-            console.warn("[ChatProvider] Removing dangling input-available tool part:", toolCallId);
-          }
-          return false;
-        }
-      }
-      // Keep all other parts (including input-available with output)
-      return true;
-    });
-
-    // Ensure we have at least one part
-    if (sanitizedParts.length === 0) {
-      return {
-        ...msg,
-        parts: [{ type: "text" as const, text: "" }],
-      };
-    }
-
-    return sanitizedParts.length !== msg.parts.length
-      ? { ...msg, parts: sanitizedParts as UIMessage["parts"] }
-      : msg;
-  });
 }
 
 export const ChatProvider: FC<ChatProviderProps> = ({
@@ -798,7 +715,6 @@ export const ChatProvider: FC<ChatProviderProps> = ({
         const id = `${file.name}-${Date.now()}`;
         const localPreviewUrl = URL.createObjectURL(file);
 
-        // First yield: Show uploading state with local preview
         yield {
           id,
           type: "image",
@@ -814,7 +730,6 @@ export const ChatProvider: FC<ChatProviderProps> = ({
           status: { type: "running", reason: "uploading", progress: 0 },
         };
 
-        // Upload the file
         const formData = new FormData();
         formData.append("file", file);
         if (sessionId) {
@@ -828,40 +743,65 @@ export const ChatProvider: FC<ChatProviderProps> = ({
         });
 
         if (!response.ok) {
-          // Clean up local URL on error
           URL.revokeObjectURL(localPreviewUrl);
           throw new Error(tAssistant("uploadError"));
         }
 
         const data = await response.json();
 
-        // Clean up local URL now that we have the remote URL
+        if (DEBUG_CHAT) {
+          console.debug("[ChatProvider] Upload complete", {
+            name: file.name,
+            contentType: file.type,
+            size: file.size,
+            url: data.url,
+            localPath: data.localPath,
+            filePath: data.filePath,
+          });
+        }
+
         URL.revokeObjectURL(localPreviewUrl);
 
-        // Final yield: Upload complete with remote URL
-        yield {
+        const completeAttachment = {
           id,
-          type: "image",
+          type: "image" as const,
           name: file.name,
           contentType: file.type,
           file,
           content: [
             {
-              type: "image",
+              type: "image" as const,
               image: data.url,
             },
           ],
-          status: { type: "requires-action", reason: "composer-send" },
-        };
+          status: { type: "requires-action" as const, reason: "composer-send" as const },
+          metadata: {
+            url: data.url,
+            localPath: data.localPath,
+            filePath: data.filePath,
+            contentType: data.contentType,
+            size: data.size,
+            kind: "image",
+          },
+        } as AttachmentAwarePending;
+        yield completeAttachment;
       },
 
       async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
-        // File was already uploaded in add(), just mark as complete
+        const typedAttachment = attachment as AttachmentAwarePending;
+        if (DEBUG_CHAT) {
+          console.debug("[ChatProvider] Finalizing attachment for send", {
+            id: typedAttachment.id,
+            name: typedAttachment.name,
+            status: typedAttachment.status,
+            metadata: typedAttachment.metadata,
+          });
+        }
         return {
-          ...attachment,
-          content: attachment.content || [],
+          ...typedAttachment,
+          content: typedAttachment.content || [],
           status: { type: "complete" },
-        };
+        } as AttachmentAwareComplete;
       },
 
       async remove(): Promise<void> {
@@ -871,9 +811,6 @@ export const ChatProvider: FC<ChatProviderProps> = ({
     [sessionId, tAssistant]
   );
 
-
-
-  // Build headers for the chat transport
   const headers: Record<string, string> = {};
   if (sessionId) {
     headers["X-Session-Id"] = sessionId;
@@ -932,6 +869,20 @@ export const ChatProvider: FC<ChatProviderProps> = ({
         }
 
         try {
+          if (DEBUG_CHAT && typeof input === "string" && input === "/api/chat" && init?.body) {
+            try {
+              const parsedBody = JSON.parse(String(init.body)) as {
+                messages?: Array<{ role?: string; parts?: unknown[]; metadata?: unknown }>;
+              };
+              const lastMessage = parsedBody.messages?.[parsedBody.messages.length - 1];
+              console.debug("[ChatProvider] Outbound /api/chat payload", {
+                messageCount: parsedBody.messages?.length ?? 0,
+                lastMessage,
+              });
+            } catch (parseError) {
+              console.warn("[ChatProvider] Failed to parse outbound chat payload", parseError);
+            }
+          }
           const response = await fetch(input, init);
           if (!response.ok) {
             setTransportError(await parseTransportErrorResponse(response));
@@ -954,14 +905,10 @@ export const ChatProvider: FC<ChatProviderProps> = ({
           headers: Object.keys(headers).length > 0 ? headers : undefined,
           fetch: transportFetch,
         }),
-      // eslint-disable-next-line react-hooks/exhaustive-deps
       [sessionId, characterId, transportFetch],
     ),
   );
 
-  // Sanitize initial messages to prevent crashes from incomplete tool calls
-  // persisted during Agent SDK streaming interruptions.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const safeMessages = useMemo(() => sanitizeMessagesForInit(initialMessages ?? []), [initialMessages]);
 
   const chatStatusRef = useRef("ready");
@@ -974,17 +921,12 @@ export const ChatProvider: FC<ChatProviderProps> = ({
     id: sessionId,
     transport,
     messages: safeMessages,
-    // Generate UUIDs so client message IDs match the DB format.
-    // Without this, AI SDK generates 16-char base62 IDs that fail the server's
-    // uuidRegex check, causing the server to assign new UUIDs — the resulting
-    // ID mismatch creates phantom branches in assistant-ui's MessageRepository.
     generateId: () => crypto.randomUUID(),
     onFinish: ({ isError }) => {
       if (!isError) {
         autoRetryAttemptRef.current = 0;
       }
     },
-    // Suppress user-triggered abort noise, but surface request-start failures.
     onError: (error) => {
       if (shouldIgnoreUseChatError(error, chatStatusRef.current)) {
         return;
@@ -1023,9 +965,9 @@ export const ChatProvider: FC<ChatProviderProps> = ({
 
   const runtime = useAISDKRuntime(chat, {
     adapters: { attachments: attachmentAdapter },
+    toCreateMessage: toCreateMessageWithAttachmentMetadata,
   });
 
-  // Connect transport ↔ runtime (same as useChatRuntime does internally)
   useEffect(() => {
     if (transport instanceof AssistantChatTransport) {
       (transport as AssistantChatTransport<UIMessage>).setRuntime(runtime);
@@ -1096,8 +1038,6 @@ export const ChatProvider: FC<ChatProviderProps> = ({
     }, delayMs);
   }, [chat, chat.error, chat.messages, chat.status]);
 
-  // Recovery callback: sanitize messages to clear broken tool-call state
-  // so the error boundary can re-render without hitting the same error.
   const recoveryRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     recoveryRef.current = () => {
@@ -1108,11 +1048,6 @@ export const ChatProvider: FC<ChatProviderProps> = ({
     };
   }, [chat]);
 
-  // Track when streaming was last active. The error boundary uses this
-  // to treat ANY error within a short grace window after stop/abort as
-  // recoverable — prevents crash from unpredictable abort-time errors.
-  // Updated on every render (not just status changes) so the timestamp
-  // stays fresh during long streaming runs.
   const lastStreamingRef = useRef<number>(0);
   if (chat.status === "streaming" || chat.status === "submitted") {
     lastStreamingRef.current = Date.now();

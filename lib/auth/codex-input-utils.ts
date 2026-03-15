@@ -22,6 +22,7 @@ export type CodexInputItem = {
  * transformCodexRequest adds on top of the input array.
  */
 export const MAX_CODEX_PAYLOAD_BYTES = 990 * 1024;
+export const MAX_CODEX_VISION_PAYLOAD_BYTES = 5 * 1024 * 1024;
 
 const TOOL_CALL_TYPES = new Set([
   "function_call",
@@ -53,6 +54,56 @@ const isToolCallType = (type: unknown): type is string =>
 
 const isToolOutputType = (type: unknown): type is string =>
   typeof type === "string" && TOOL_OUTPUT_TYPES.has(type);
+
+function isImageLikeContentPart(part: unknown): boolean {
+  if (!part || typeof part !== "object") return false;
+  const candidate = part as Record<string, unknown>;
+  const type = typeof candidate.type === "string" ? candidate.type : "";
+  const mediaType =
+    typeof candidate.mediaType === "string"
+      ? candidate.mediaType
+      : typeof candidate.media_type === "string"
+        ? candidate.media_type
+        : "";
+
+  if (
+    type === "image" ||
+    type === "input_image" ||
+    type === "image_url" ||
+    type === "file" ||
+    type === "input_file"
+  ) {
+    return true;
+  }
+
+  if (mediaType.startsWith("image/")) {
+    return true;
+  }
+
+  const possibleUrls = [
+    candidate.image,
+    candidate.image_url,
+    candidate.url,
+    candidate.file_url,
+    candidate.file_data,
+  ];
+
+  return possibleUrls.some(
+    (value) =>
+      typeof value === "string" &&
+      (value.startsWith("data:image/") || value.includes("image/"))
+  );
+}
+
+function itemHasImageInput(item: CodexInputItem): boolean {
+  if (!Array.isArray(item.content)) return false;
+  return item.content.some((part) => isImageLikeContentPart(part));
+}
+
+function getCodexPayloadLimit(input: CodexInputItem[]): number {
+  const hasImageInput = input.some((item) => item.role === "user" && itemHasImageInput(item));
+  return hasImageInput ? MAX_CODEX_VISION_PAYLOAD_BYTES : MAX_CODEX_PAYLOAD_BYTES;
+}
 
 const mapOutputTypeToCallType = (outputType: string): string => {
   if (outputType === "local_shell_call_output") return "local_shell_call";
@@ -377,6 +428,12 @@ function capItemContent(item: CodexInputItem, maxBytes: number): CodexInputItem 
     let budget = maxBytes;
 
     for (const part of item.content as Array<Record<string, unknown>>) {
+      if (isImageLikeContentPart(part)) {
+        cappedParts.push(part);
+        budget -= JSON.stringify(part).length;
+        continue;
+      }
+
       const partStr = JSON.stringify(part);
       if (partStr.length <= budget) {
         cappedParts.push(part);
@@ -422,8 +479,10 @@ function capItemContent(item: CodexInputItem, maxBytes: number): CodexInputItem 
  *    are always kept.
  */
 export function truncateCodexInput(input: CodexInputItem[]): CodexInputItem[] {
+  const payloadLimit = getCodexPayloadLimit(input);
+
   // Fast path: payload within byte budget
-  if (JSON.stringify(input).length <= MAX_CODEX_PAYLOAD_BYTES) {
+  if (JSON.stringify(input).length <= payloadLimit) {
     return input;
   }
 
@@ -434,6 +493,7 @@ export function truncateCodexInput(input: CodexInputItem[]): CodexInputItem[] {
   let cappedAnchors = 0;
   let capped = input.map((item) => {
     if (isToolCallType(item.type) || isToolOutputType(item.type)) return item;
+    if (itemHasImageInput(item)) return item;
     const serialized = JSON.stringify(item);
     if (serialized.length <= MAX_ANCHOR_ITEM_BYTES) return item;
 
@@ -449,7 +509,7 @@ export function truncateCodexInput(input: CodexInputItem[]): CodexInputItem[] {
   }
 
   // Re-check after anchor capping
-  if (JSON.stringify(capped).length <= MAX_CODEX_PAYLOAD_BYTES) {
+  if (JSON.stringify(capped).length <= payloadLimit) {
     return capped;
   }
 
@@ -503,7 +563,7 @@ export function truncateCodexInput(input: CodexInputItem[]): CodexInputItem[] {
 
   while (
     dropCount < maxDroppable &&
-    JSON.stringify(rebuild()).length > MAX_CODEX_PAYLOAD_BYTES
+    JSON.stringify(rebuild()).length > payloadLimit
   ) {
     // Track what we're dropping so we can summarize for the model
     const cid = pairOrder[dropCount];

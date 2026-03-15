@@ -18,6 +18,31 @@ const PRESET_STORAGE_KEY = "selene-theme-preset";
 const HOMEPAGE_BG_STORAGE_KEY = "selene-homepage-bg";
 const CHAT_BG_STORAGE_KEY = "selene-chat-bg";
 const CHAT_WORKSPACE_MODE_STORAGE_KEY = "selene-chat-workspace-mode";
+const CHAT_REFRESH_DEBUG_STORAGE_KEY = "selene-debug-chat-refresh";
+const APP_HEARTBEAT_INTERVAL_MS = 5000;
+
+const shouldDebugThemeLifecycle = (): boolean => {
+  if (typeof window === "undefined") return false;
+  try {
+    return window.localStorage.getItem(CHAT_REFRESH_DEBUG_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+const debugThemeLifecycle = (event: string, details?: Record<string, unknown>): void => {
+  if (!shouldDebugThemeLifecycle()) return;
+  console.debug("[Selene][theme]", event, details ?? {});
+};
+
+const touchAppHeartbeat = (source: string): void => {
+  if (typeof window === "undefined") return;
+  const root = document.documentElement;
+  (window as Window & { __seleneAppHeartbeat?: number }).__seleneAppHeartbeat = Date.now();
+  root.dataset.seleneAppAlive = "1";
+  debugThemeLifecycle("heartbeat", { source });
+};
+
 
 type ThemeContextValue = {
   theme: ThemePreference;
@@ -89,6 +114,7 @@ const applyTheme = (theme: ThemePreference): ResolvedTheme => {
   root.classList.toggle("dark", resolved === "dark");
   root.style.colorScheme = resolved;
   root.dataset.theme = theme;
+  debugThemeLifecycle("apply-theme", { theme, resolved });
   return resolved;
 };
 
@@ -99,6 +125,7 @@ const applyPreset = (preset: ThemePresetId): void => {
   } else {
     root.dataset.themePreset = preset;
   }
+  debugThemeLifecycle("apply-preset", { preset });
 };
 
 const DEFAULT_BG: BackgroundConfig = { type: "none" };
@@ -163,6 +190,29 @@ export function ThemeProvider({
     media.addEventListener("change", handleChange);
     return () => media.removeEventListener("change", handleChange);
   }, [theme]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleFocus = () => touchAppHeartbeat("window-focus");
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        touchAppHeartbeat("visibility-visible");
+      }
+    };
+
+    touchAppHeartbeat("mount");
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    const intervalId = window.setInterval(() => touchAppHeartbeat("interval"), APP_HEARTBEAT_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      delete document.documentElement.dataset.seleneAppAlive;
+    };
+  }, []);
 
   const setThemePreset = (preset: ThemePresetId) => {
     setThemePresetState(preset);

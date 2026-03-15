@@ -138,6 +138,100 @@ function maybePreserveImageReference(
   }
 }
 
+function trackAttachmentUrl(
+  seenUrls: Set<string>,
+  url: string | undefined,
+): boolean {
+  if (!url) return false;
+  if (seenUrls.has(url)) return false;
+  seenUrls.add(url);
+  return true;
+}
+
+type AttachmentPathMetadata = {
+  name?: string;
+  url?: string;
+  localPath?: string;
+  filePath?: string;
+};
+
+function normalizeAttachmentString(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function buildAttachmentLookup(msg: {
+  experimental_attachments?: Array<AttachmentPathMetadata>;
+  metadata?: {
+    custom?: {
+      attachments?: Array<AttachmentPathMetadata>;
+    };
+  };
+}): Map<string, AttachmentPathMetadata> {
+  const lookup = new Map<string, AttachmentPathMetadata>();
+
+  const register = (attachment: AttachmentPathMetadata) => {
+    const url = normalizeAttachmentString(attachment.url);
+    if (!url) return;
+
+    const existing = lookup.get(url);
+    lookup.set(url, {
+      url,
+      name: normalizeAttachmentString(existing?.name) ?? normalizeAttachmentString(attachment.name),
+      filePath: normalizeAttachmentString(existing?.filePath) ?? normalizeAttachmentString(attachment.filePath),
+      localPath: normalizeAttachmentString(existing?.localPath) ?? normalizeAttachmentString(attachment.localPath),
+    });
+  };
+
+  const metadataAttachments = msg.metadata?.custom?.attachments ?? [];
+  for (const attachment of metadataAttachments) {
+    register(attachment);
+  }
+
+  const experimentalAttachments = msg.experimental_attachments ?? [];
+  for (const attachment of experimentalAttachments) {
+    register(attachment);
+  }
+
+  return lookup;
+}
+
+function resolveAttachmentForHelper(
+  lookup: Map<string, AttachmentPathMetadata>,
+  attachment: AttachmentPathMetadata,
+): AttachmentPathMetadata {
+  const url = normalizeAttachmentString(attachment.url);
+  const fromLookup = url ? lookup.get(url) : undefined;
+
+  return {
+    name: normalizeAttachmentString(attachment.name) ?? normalizeAttachmentString(fromLookup?.name),
+    url,
+    filePath: normalizeAttachmentString(attachment.filePath) ?? normalizeAttachmentString(fromLookup?.filePath),
+    localPath: normalizeAttachmentString(attachment.localPath) ?? normalizeAttachmentString(fromLookup?.localPath),
+  };
+}
+
+function formatAttachmentHelperText(
+  attachment: AttachmentPathMetadata,
+  fallbackName = "uploaded image",
+): string | null {
+  const filePath = normalizeAttachmentString(attachment.filePath);
+  const localPath = normalizeAttachmentString(attachment.localPath);
+  const url = normalizeAttachmentString(attachment.url);
+
+  const pathLabelAndValue: [label: "filePath" | "localPath" | "url", value: string] | null =
+    filePath ? ["filePath", filePath]
+      : localPath ? ["localPath", localPath]
+        : url ? ["url", url]
+          : null;
+
+  if (!pathLabelAndValue) return null;
+
+  const displayName = normalizeAttachmentString(attachment.name) ?? fallbackName;
+  return `[Attachment: ${displayName} | ${pathLabelAndValue[0]}: ${pathLabelAndValue[1]}]`;
+}
+
 export async function extractContent(
   msg: {
     role?: string;
@@ -147,6 +241,8 @@ export async function extractContent(
       text?: string;
       image?: string;
       url?: string;
+      localPath?: string;
+      filePath?: string;
       mediaType?: string;
       filename?: string;
       // For dynamic-tool parts (historical tool calls from DB)
@@ -162,7 +258,24 @@ export async function extractContent(
       name?: string;
       contentType?: string;
       url?: string;
+      localPath?: string;
+      filePath?: string;
+      size?: number;
+      kind?: string;
     }>;
+    metadata?: {
+      custom?: {
+        attachments?: Array<{
+          name?: string;
+          contentType?: string;
+          url?: string;
+          localPath?: string;
+          filePath?: string;
+          size?: number;
+          kind?: string;
+        }>;
+      };
+    };
   },
   includeUrlHelpers = false,
   convertUserImagesToBase64 = false,
@@ -193,6 +306,8 @@ export async function extractContent(
 
   // If parts array exists (assistant-ui format), convert it
   if (msg.parts && Array.isArray(msg.parts)) {
+    const attachmentLookup = buildAttachmentLookup(msg);
+    const seenAttachmentUrls = new Set<string>();
     const explicitToolResultIds = new Set(
       msg.parts
         .filter(
@@ -230,6 +345,7 @@ export async function extractContent(
         if (finalText.trim()) contentParts.push({ type: "text", text: finalText });
       } else if (part.type === "image" && (part.image || part.url)) {
         const imageUrl = (part.image || part.url) as string;
+        if (!trackAttachmentUrl(seenAttachmentUrls, imageUrl)) continue;
         // ONLY convert to base64 for USER-uploaded images
         // Assistant/tool-generated images should NOT be converted (they're just URLs for reference)
         const shouldConvert = convertUserImagesToBase64 && isUserMessage;
@@ -239,12 +355,18 @@ export async function extractContent(
           // User uploaded image - add as actual image for Claude to see
           contentParts.push({ type: "image", image: finalImageUrl });
         }
-        // Add URL as text so Claude can use it in tool calls
+        // Add deterministic attachment path helper text so the model can act on files.
         if (includeUrlHelpers) {
-          contentParts.push({
-            type: "text",
-            text: `[Image URL: ${imageUrl}]`,
-          });
+          const helperText = formatAttachmentHelperText(
+            resolveAttachmentForHelper(attachmentLookup, { url: imageUrl }),
+            "uploaded image",
+          );
+          if (helperText) {
+            contentParts.push({
+              type: "text",
+              text: helperText,
+            });
+          }
         }
         maybePreserveImageReference(contentParts, imageUrl, shouldConvert, includeUrlHelpers);
       } else if (
@@ -252,6 +374,7 @@ export async function extractContent(
         part.url &&
         part.mediaType?.startsWith("image/")
       ) {
+        if (!trackAttachmentUrl(seenAttachmentUrls, part.url)) continue;
         // ONLY convert to base64 for USER-uploaded files
         const shouldConvert = convertUserImagesToBase64 && isUserMessage;
         const finalImageUrl = shouldConvert ? await imageUrlToBase64(part.url) : part.url;
@@ -260,13 +383,23 @@ export async function extractContent(
           // User uploaded image - add as actual image for Claude to see
           contentParts.push({ type: "image", image: finalImageUrl });
         }
-        // Add URL as text so Claude can use it in tool calls
+        // Add deterministic attachment path helper text so the model can act on files.
         if (includeUrlHelpers) {
-          const label = part.filename || "uploaded image";
-          contentParts.push({
-            type: "text",
-            text: `[${label} URL: ${part.url}]`,
-          });
+          const helperText = formatAttachmentHelperText(
+            resolveAttachmentForHelper(attachmentLookup, {
+              name: part.filename,
+              url: part.url,
+              localPath: part.localPath,
+              filePath: part.filePath,
+            }),
+            part.filename || "uploaded image",
+          );
+          if (helperText) {
+            contentParts.push({
+              type: "text",
+              text: helperText,
+            });
+          }
         }
         maybePreserveImageReference(contentParts, part.url, shouldConvert, includeUrlHelpers);
       } else if (part.type === "dynamic-tool" && part.toolName) {
@@ -593,6 +726,7 @@ export async function extractContent(
     if (msg.experimental_attachments && Array.isArray(msg.experimental_attachments)) {
       console.log(`[EXTRACT] Processing ${msg.experimental_attachments.length} experimental_attachments`);
       for (const attachment of msg.experimental_attachments) {
+        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
         if (attachment.url && attachment.contentType?.startsWith("image/")) {
           console.log(`[EXTRACT] Found image attachment: ${attachment.name}, url: ${attachment.url}`);
           const shouldConvert = convertUserImagesToBase64 && isUserMessage;
@@ -602,13 +736,48 @@ export async function extractContent(
             // User uploaded image - add as actual image for Claude to see
             contentParts.push({ type: "image", image: finalImageUrl });
           }
-          // Add URL as text so Claude can use it in tool calls
+          // Add deterministic attachment path helper text so the model can act on files.
           if (includeUrlHelpers) {
-            const label = attachment.name || "uploaded image";
-            contentParts.push({
-              type: "text",
-              text: `[${label} URL: ${attachment.url}]`,
-            });
+            const helperText = formatAttachmentHelperText(
+              resolveAttachmentForHelper(attachmentLookup, attachment),
+              attachment.name || "uploaded image",
+            );
+            if (helperText) {
+              contentParts.push({
+                type: "text",
+                text: helperText,
+              });
+            }
+          }
+          maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
+        }
+      }
+    }
+
+    const metadataAttachments = msg.metadata?.custom?.attachments;
+    if (metadataAttachments && Array.isArray(metadataAttachments)) {
+      console.log(`[EXTRACT] Processing ${metadataAttachments.length} metadata attachments`);
+      for (const attachment of metadataAttachments) {
+        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
+        if (attachment.url && attachment.contentType?.startsWith("image/")) {
+          console.log(`[EXTRACT] Found metadata image attachment: ${attachment.name}, url: ${attachment.url}`);
+          const shouldConvert = convertUserImagesToBase64 && isUserMessage;
+          const finalImageUrl = shouldConvert ? await imageUrlToBase64(attachment.url) : attachment.url;
+
+          if (shouldConvert) {
+            contentParts.push({ type: "image", image: finalImageUrl });
+          }
+          if (includeUrlHelpers) {
+            const helperText = formatAttachmentHelperText(
+              resolveAttachmentForHelper(attachmentLookup, attachment),
+              attachment.name || "uploaded image",
+            );
+            if (helperText) {
+              contentParts.push({
+                type: "text",
+                text: helperText,
+              });
+            }
           }
           maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
         }
@@ -630,8 +799,13 @@ export async function extractContent(
     return normalizedParts;
   }
 
-  // Also check for experimental_attachments even without parts array
-  if (msg.experimental_attachments && Array.isArray(msg.experimental_attachments)) {
+  // Also check for experimental_attachments and metadata attachments even without parts array
+  if (
+    (msg.experimental_attachments && Array.isArray(msg.experimental_attachments))
+    || (msg.metadata?.custom?.attachments && Array.isArray(msg.metadata.custom.attachments))
+  ) {
+    const attachmentLookup = buildAttachmentLookup(msg);
+    const seenAttachmentUrls = new Set<string>();
     const contentParts: Array<{ type: string; text?: string; image?: string }> = [];
     const isUserMessage = msg.role === "user";
 
@@ -640,24 +814,62 @@ export async function extractContent(
       contentParts.push({ type: "text", text: sanitizeTextContent(msg.content, "string content with attachments", sessionId) });
     }
 
-    console.log(`[EXTRACT] Processing ${msg.experimental_attachments.length} experimental_attachments (no parts)`);
-    for (const attachment of msg.experimental_attachments) {
-      if (attachment.url && attachment.contentType?.startsWith("image/")) {
-        console.log(`[EXTRACT] Found image attachment: ${attachment.name}, url: ${attachment.url}`);
-        const shouldConvert = convertUserImagesToBase64 && isUserMessage;
-        const finalImageUrl = shouldConvert ? await imageUrlToBase64(attachment.url) : attachment.url;
+    const metadataAttachments = msg.metadata?.custom?.attachments ?? [];
+    if (metadataAttachments.length > 0) {
+      console.log(`[EXTRACT] Processing ${metadataAttachments.length} metadata attachments (no parts)`);
+      for (const attachment of metadataAttachments) {
+        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
+        if (attachment.url && attachment.contentType?.startsWith("image/")) {
+          console.log(`[EXTRACT] Found metadata image attachment: ${attachment.name}, url: ${attachment.url}`);
+          const shouldConvert = convertUserImagesToBase64 && isUserMessage;
+          const finalImageUrl = shouldConvert ? await imageUrlToBase64(attachment.url) : attachment.url;
 
-        if (shouldConvert) {
-          contentParts.push({ type: "image", image: finalImageUrl });
+          if (shouldConvert) {
+            contentParts.push({ type: "image", image: finalImageUrl });
+          }
+          if (includeUrlHelpers) {
+            const helperText = formatAttachmentHelperText(
+              resolveAttachmentForHelper(attachmentLookup, attachment),
+              attachment.name || "uploaded image",
+            );
+            if (helperText) {
+              contentParts.push({
+                type: "text",
+                text: helperText,
+              });
+            }
+          }
+          maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
         }
-        if (includeUrlHelpers) {
-          const label = attachment.name || "uploaded image";
-          contentParts.push({
-            type: "text",
-            text: `[${label} URL: ${attachment.url}]`,
-          });
+      }
+    }
+
+    if (msg.experimental_attachments && Array.isArray(msg.experimental_attachments)) {
+      console.log(`[EXTRACT] Processing ${msg.experimental_attachments.length} experimental_attachments (no parts)`);
+      for (const attachment of msg.experimental_attachments) {
+        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
+        if (attachment.url && attachment.contentType?.startsWith("image/")) {
+          console.log(`[EXTRACT] Found image attachment: ${attachment.name}, url: ${attachment.url}`);
+          const shouldConvert = convertUserImagesToBase64 && isUserMessage;
+          const finalImageUrl = shouldConvert ? await imageUrlToBase64(attachment.url) : attachment.url;
+
+          if (shouldConvert) {
+            contentParts.push({ type: "image", image: finalImageUrl });
+          }
+          if (includeUrlHelpers) {
+            const helperText = formatAttachmentHelperText(
+              resolveAttachmentForHelper(attachmentLookup, attachment),
+              attachment.name || "uploaded image",
+            );
+            if (helperText) {
+              contentParts.push({
+                type: "text",
+                text: helperText,
+              });
+            }
+          }
+          maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
         }
-        maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
       }
     }
 

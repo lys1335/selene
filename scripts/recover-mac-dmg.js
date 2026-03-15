@@ -10,13 +10,9 @@ const distDir = path.join(rootDir, 'dist-electron');
 const version = require(path.join(rootDir, 'package.json')).version;
 const forceMetadataRefresh = process.argv.includes('--refresh-metadata');
 const appName = 'Selene.app';
-const dmgName = `Selene-${version}-arm64.dmg`;
-const dmgPath = path.join(distDir, dmgName);
-const appPath = path.join(distDir, 'mac-arm64', appName);
 const volumeName = 'Selene';
 const backgroundName = '.background.tiff';
 const iconName = '.VolumeIcon.icns';
-const mountRoot = '/Volumes';
 
 function exists(targetPath) {
   return fs.existsSync(targetPath);
@@ -38,29 +34,81 @@ function detachIfMounted(volumePath) {
   }
 }
 
-function nextFreeVolumePath(baseName) {
-  let candidate = path.join(mountRoot, baseName);
-  let index = 1;
-  while (exists(candidate)) {
-    index += 1;
-    candidate = path.join(mountRoot, `${baseName} ${index}`);
+function attachedDevicesForImage(targetDmgPath) {
+  const output = run('hdiutil', ['info'], { capture: true });
+  const lines = output.split('\n');
+  const devices = [];
+  let inMatchingImage = false;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+
+    if (line.startsWith('image-path')) {
+      const imagePath = line.split(':').slice(1).join(':').trim();
+      inMatchingImage = imagePath === targetDmgPath;
+      continue;
+    }
+
+    if (!inMatchingImage) continue;
+
+    const match = line.match(/^\/dev\/disk\d+/);
+    if (match) {
+      devices.push(match[0]);
+      continue;
+    }
+
+    if (line.startsWith('================================================')) {
+      inMatchingImage = false;
+    }
   }
-  return candidate;
+
+  return [...new Set(devices)];
 }
 
-function attachDmg(targetDmgPath) {
-  const expectedMountPath = nextFreeVolumePath(volumeName);
-  run('hdiutil', ['attach', '-nobrowse', '-readonly', targetDmgPath]);
-  return expectedMountPath;
+function detachImageIfMounted(targetDmgPath) {
+  const devices = attachedDevicesForImage(targetDmgPath);
+  for (const device of devices.reverse()) {
+    try {
+      run('hdiutil', ['detach', device]);
+    } catch {
+      try {
+        run('hdiutil', ['detach', '-force', device]);
+      } catch (error) {
+        const message = String(error && error.message ? error.message : error);
+        if (
+          message.includes('No such file or directory') ||
+          message.includes('Resource busy')
+        ) {
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+}
+
+function attachDmg(targetDmgPath, mountPath) {
+  const output = run('hdiutil', ['attach', '-nobrowse', '-readonly', '-mountpoint', mountPath, targetDmgPath], {
+    capture: true,
+  });
+  if (!output.includes(mountPath)) {
+    throw new Error(`Unable to mount ${path.basename(targetDmgPath)} at ${mountPath}`);
+  }
+  return mountPath;
 }
 
 function dmgContainsApp(targetDmgPath) {
   if (!exists(targetDmgPath)) return false;
-  const mountPath = attachDmg(targetDmgPath);
+  const tempDir = fs.mkdtempSync(path.join(distDir, '__dmg-check-'));
+  const mountPath = path.join(tempDir, 'mnt');
+  fs.mkdirSync(mountPath, { recursive: true });
+
+  attachDmg(targetDmgPath, mountPath);
   try {
     return exists(path.join(mountPath, appName));
   } finally {
     detachIfMounted(mountPath);
+    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -76,18 +124,51 @@ function ensureMountedStaging(targetPath, mountPath) {
   ]);
 }
 
-function createRecoveryDmg() {
+function listMacDmgs() {
+  if (!exists(distDir)) return [];
+  return fs
+    .readdirSync(distDir)
+    .filter((name) => name.endsWith('.dmg') && name.includes(version))
+    .map((name) => path.join(distDir, name))
+    .sort();
+}
+
+function resolveAppPathForDmg(dmgPath) {
+  const dmgName = path.basename(dmgPath).toLowerCase();
+  const preferredDirs = [];
+
+  if (dmgName.includes('arm64')) preferredDirs.push('mac-arm64');
+  if (dmgName.includes('x64')) preferredDirs.push('mac');
+  if (dmgName.includes('intel')) preferredDirs.push('mac');
+
+  preferredDirs.push('mac-arm64', 'mac');
+
+  for (const dirName of preferredDirs) {
+    const candidate = path.join(distDir, dirName, appName);
+    if (exists(candidate)) return candidate;
+  }
+
+  return null;
+}
+
+function createRecoveryDmg(dmgPath, appPath) {
   if (!exists(appPath)) {
     throw new Error(`Missing app bundle at ${appPath}`);
   }
 
+  const dmgName = path.basename(dmgPath);
   const tempDir = path.join(distDir, '__dmg-recovery__');
   const stagingDmg = path.join(tempDir, 'Selene-staging.dmg');
   const finalDmg = path.join(tempDir, dmgName);
   const mountPath = path.join(tempDir, 'mnt');
+  const sourceDir = path.join(tempDir, 'source');
 
+  detachImageIfMounted(dmgPath);
   fs.rmSync(tempDir, { recursive: true, force: true });
   fs.mkdirSync(tempDir, { recursive: true });
+  fs.mkdirSync(sourceDir, { recursive: true });
+
+  run('ditto', [appPath, path.join(sourceDir, appName)]);
 
   const appSizeKb = Number(run('du', ['-sk', appPath], { capture: true }).trim().split(/\s+/)[0]);
   const imageSizeMb = Math.ceil((appSizeKb * 1.2) / 1024) + 256;
@@ -95,7 +176,7 @@ function createRecoveryDmg() {
   run('hdiutil', [
     'create',
     '-srcfolder',
-    path.join(distDir, 'mac-arm64'),
+    sourceDir,
     '-volname',
     volumeName,
     '-fs',
@@ -140,7 +221,7 @@ function createRecoveryDmg() {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
 
-function updateLatestMacYaml() {
+function updateLatestMacYaml(dmgPath) {
   const latestMacPath = path.join(distDir, 'latest-mac.yml');
   if (!exists(dmgPath)) return;
 
@@ -162,34 +243,29 @@ function updateLatestMacYaml() {
   fs.writeFileSync(latestMacPath, `${content}\n`);
 }
 
-function main() {
-  if (process.platform !== 'darwin') {
-    console.log('Skipping DMG recovery: macOS only.');
-    return;
-  }
-
-  if (!exists(dmgPath)) {
-    console.log(`Skipping DMG recovery: missing ${dmgName}.`);
-    return;
-  }
-
+function recoverDmg(dmgPath) {
   if (dmgContainsApp(dmgPath)) {
     if (forceMetadataRefresh) {
       const staleBlockmapPath = `${dmgPath}.blockmap`;
       if (exists(staleBlockmapPath)) {
         fs.rmSync(staleBlockmapPath, { force: true });
       }
-      updateLatestMacYaml();
-      console.log('DMG looks healthy; metadata refreshed.');
+      updateLatestMacYaml(dmgPath);
+      console.log(`DMG looks healthy; metadata refreshed for ${path.basename(dmgPath)}.`);
       return;
     }
 
-    console.log('DMG looks healthy; no recovery needed.');
+    console.log(`DMG looks healthy; no recovery needed for ${path.basename(dmgPath)}.`);
     return;
   }
 
-  console.warn('Generated DMG is missing Selene.app. Rebuilding DMG from dist-electron/mac-arm64/Selene.app...');
-  createRecoveryDmg();
+  const appPath = resolveAppPathForDmg(dmgPath);
+  if (!appPath) {
+    throw new Error(`Could not find packaged ${appName} for ${path.basename(dmgPath)}`);
+  }
+
+  console.warn(`Generated DMG is missing ${appName}. Rebuilding ${path.basename(dmgPath)} from ${path.relative(rootDir, appPath)}...`);
+  createRecoveryDmg(dmgPath, appPath);
 
   const staleBlockmapPath = `${dmgPath}.blockmap`;
   if (exists(staleBlockmapPath)) {
@@ -200,8 +276,25 @@ function main() {
     throw new Error('Recovered DMG is still missing Selene.app');
   }
 
-  updateLatestMacYaml();
+  updateLatestMacYaml(dmgPath);
   console.log(`Recovered DMG at ${dmgPath}`);
+}
+
+function main() {
+  if (process.platform !== 'darwin') {
+    console.log('Skipping DMG recovery: macOS only.');
+    return;
+  }
+
+  const dmgPaths = listMacDmgs();
+  if (dmgPaths.length === 0) {
+    console.log(`Skipping DMG recovery: no macOS DMGs found for version ${version}.`);
+    return;
+  }
+
+  for (const dmgPath of dmgPaths) {
+    recoverDmg(dmgPath);
+  }
 }
 
 main();
