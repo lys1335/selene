@@ -50,8 +50,8 @@ export async function POST(req: NextRequest) {
         role as "upload" | "reference" | "generated" | "mask" | "tile"
       );
 
-      // Save to database if we have a real session
-      if (sessionId) {
+      // Only image uploads belong in the session image table.
+      if (sessionId && file.type.startsWith("image/")) {
         await createImage({
           sessionId,
           role: role as "upload" | "reference" | "generated" | "mask" | "tile",

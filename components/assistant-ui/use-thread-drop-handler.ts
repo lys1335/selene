@@ -2,6 +2,10 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { resilientPost } from "@/lib/utils/resilient-fetch";
+import {
+  getUnsupportedAttachmentHint,
+  isSupportedDocumentAttachment,
+} from "@/lib/documents/file-types";
 import type { CustomComfyUIInput, CustomComfyUIOutput } from "@/lib/comfyui/custom/types";
 import type {
   DroppedImportFile,
@@ -334,9 +338,8 @@ export function useThreadDropHandler({
     t,
   ]);
 
-  // ── Window blur / dragend safety: force-reset drag state ────────────────
-  // When the window loses focus during a drag (e.g. alt-tab in Electron),
-  // the browser may never fire dragleave/drop, leaving the overlay stuck.
+  // When the window loses focus during a drag, the browser may never fire
+  // dragleave/drop, leaving the overlay stuck.
   const resetDragState = useCallback(() => {
     dragCounter.current = 0;
     setIsDragging(false);
@@ -346,15 +349,12 @@ export function useThreadDropHandler({
   const dragSafetyTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    // Keep mount flag accurate in React Strict Mode dev remount cycles.
     isMountedRef.current = true;
 
-    // Force-clear on window blur — covers alt-tab, Electron focus loss
     const handleBlur = () => {
       resetDragState();
     };
 
-    // dragend fires when the drag operation finishes for any reason
     const handleDragEnd = () => {
       resetDragState();
     };
@@ -389,26 +389,20 @@ export function useThreadDropHandler({
     };
   }, [resetDragState]);
 
-  // ── Drag-and-drop handlers (full-page drop zone) ──────────────────────
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // Track last dragover timestamp for safety timeout
     dragoverActivityRef.current = Date.now();
   }, []);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
-    // Only count enters from outside the component tree — ignore
-    // bubbled events from child elements (especially the overlay itself)
     if (e.dataTransfer.types.includes("Files")) {
       dragCounter.current += 1;
       if (dragCounter.current === 1) {
         setIsDragging(true);
         dragoverActivityRef.current = Date.now();
 
-        // Safety timeout: if no dragover fires for 3s, the drag was
-        // probably abandoned (alt-tab, Electron focus loss, etc.)
         if (dragSafetyTimerRef.current) clearInterval(dragSafetyTimerRef.current);
         dragSafetyTimerRef.current = setInterval(() => {
           if (Date.now() - dragoverActivityRef.current > 3000) {
@@ -439,7 +433,6 @@ export function useThreadDropHandler({
     async (e: React.DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      // Force-reset drag state to prevent stuck overlay
       dragCounter.current = 0;
       setIsDragging(false);
       if (dragSafetyTimerRef.current) {
@@ -447,7 +440,6 @@ export function useThreadDropHandler({
         dragSafetyTimerRef.current = null;
       }
 
-      // Block drops in deep research mode
       if (isDeepResearchMode) {
         toast.error(t("composer.attachmentsDisabledResearch"));
         return;
@@ -455,7 +447,6 @@ export function useThreadDropHandler({
 
       const droppedItems = await collectDroppedImportFiles(e);
 
-      // ── Skill/plugin files (.zip / .md / .mds / folder structures) ───────
       const pluginItems = droppedItems.filter(
         ({ relativePath }) => isDirectPluginFile(relativePath) || isPluginStructureFile(relativePath)
       );
@@ -661,33 +652,35 @@ export function useThreadDropHandler({
       }
 
       const files = droppedItems.map(({ file }) => file);
+      const supportedFiles = files.filter((file) => isSupportedDocumentAttachment(file.type, file.name));
+      const unsupportedFiles = files.filter((file) => !isSupportedDocumentAttachment(file.type, file.name));
 
-      // ── Image attachments ─────────────────────────────────────────
-      const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+      if (unsupportedFiles.length > 0) {
+        const hint = getUnsupportedAttachmentHint(unsupportedFiles[0].name);
+        toast.error(hint || t("composer.unsupportedAttachment"));
+      }
 
-      if (imageFiles.length === 0) {
-        toast.error(t("composer.onlyImagesSupported"));
+      if (supportedFiles.length === 0) {
         return;
       }
 
-      const MAX_SIZE = 10 * 1024 * 1024;
-      const oversizedFiles = imageFiles.filter((f) => f.size > MAX_SIZE);
-
+      const MAX_SIZE = 100 * 1024 * 1024;
+      const oversizedFiles = supportedFiles.filter((file) => file.size > MAX_SIZE);
       if (oversizedFiles.length > 0) {
         toast.error(
           t("composer.someFilesTooLarge", {
             count: oversizedFiles.length,
-            max: 10,
+            max: 100,
           })
         );
         return;
       }
 
       let successCount = 0;
-      for (const file of imageFiles) {
+      for (const file of supportedFiles) {
         try {
           await threadRuntime.composer.addAttachment(file);
-          successCount++;
+          successCount += 1;
         } catch (error) {
           console.error("[Thread] Failed to attach dropped file:", file.name, error);
         }

@@ -1,6 +1,11 @@
 import fs from "fs/promises";
 import path from "path";
+
 import { normalizeToolResultOutput } from "@/lib/ai/tool-result-utils";
+import { transcribeAudio } from "@/lib/audio/transcription";
+import { extractTextFromDocument } from "@/lib/documents/parser";
+import { getFullPathFromMediaRef } from "@/lib/storage/local-storage";
+
 import {
   sanitizeTextContent,
   stripFakeToolCallJson,
@@ -9,7 +14,6 @@ import {
 } from "./content-sanitizer";
 import { reconcileToolCallPairs, toModelToolResultOutput, normalizeToolCallInput } from "./tool-call-utils";
 
-// Image mime types recognized for base64 conversion
 const IMAGE_MIME_TYPES: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -18,20 +22,56 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
-// Most AI provider APIs cap base64 image payloads around 5 MB.
-// 4.5 MB leaves headroom for data-URI overhead and minor size variance.
 const MAX_BASE64_BYTES = 4.5 * 1024 * 1024;
-
-// base64 encoding inflates size by ~1.33x; use 1.37 to account for
-// data-URI prefix and small overhead.
 const BASE64_OVERHEAD = 1.37;
+const MAX_ATTACHMENT_TEXT_CHARS = 20_000;
 
-/**
- * Resize an image buffer so its base64 representation stays under the API limit.
- * Uses a two-pass strategy: first attempt with generous dimensions/quality,
- * then a tighter pass if still too large.
- * Returns the original buffer unchanged when sharp is unavailable or on error.
- */
+type AttachmentPathMetadata = {
+  name?: string;
+  contentType?: string;
+  url?: string;
+  localPath?: string;
+  filePath?: string;
+  size?: number;
+  kind?: string;
+};
+
+type ModelContentPart = {
+  type: string;
+  text?: string;
+  image?: string;
+  toolCallId?: string;
+  toolName?: string;
+  input?: unknown;
+  output?: unknown;
+};
+
+type MessageInput = {
+  role?: string;
+  content?: string | unknown;
+  parts?: Array<{
+    type: string;
+    text?: string;
+    image?: string;
+    url?: string;
+    localPath?: string;
+    filePath?: string;
+    mediaType?: string;
+    filename?: string;
+    toolName?: string;
+    toolCallId?: string;
+    input?: unknown;
+    output?: unknown;
+    result?: unknown;
+  }>;
+  experimental_attachments?: AttachmentPathMetadata[];
+  metadata?: {
+    custom?: {
+      attachments?: AttachmentPathMetadata[];
+    };
+  };
+};
+
 async function resizeImageIfNeeded(
   buffer: Buffer,
   imageUrl: string,
@@ -39,7 +79,6 @@ async function resizeImageIfNeeded(
   try {
     const sharp = (await import("sharp")).default;
 
-    // First pass — preserve detail where possible
     let resized = await sharp(buffer)
       .resize({ width: 2048, height: 2048, fit: "inside", withoutEnlargement: true })
       .jpeg({ quality: 85 })
@@ -48,12 +87,11 @@ async function resizeImageIfNeeded(
     if (resized.length * BASE64_OVERHEAD <= MAX_BASE64_BYTES) {
       console.log(
         `[CHAT API] Resized oversized image: ${imageUrl} ` +
-        `(${buffer.length} → ${resized.length} bytes, ~${Math.round(resized.length * BASE64_OVERHEAD / 1024)}KB base64)`,
+        `(${buffer.length} -> ${resized.length} bytes, ~${Math.round(resized.length * BASE64_OVERHEAD / 1024)}KB base64)`,
       );
       return { buffer: resized, mimeType: "image/jpeg" };
     }
 
-    // Second pass — tighter constraints
     resized = await sharp(buffer)
       .resize({ width: 1536, height: 1536, fit: "inside", withoutEnlargement: true })
       .jpeg({ quality: 75 })
@@ -61,7 +99,7 @@ async function resizeImageIfNeeded(
 
     console.log(
       `[CHAT API] Resized oversized image (pass 2): ${imageUrl} ` +
-      `(${buffer.length} → ${resized.length} bytes, ~${Math.round(resized.length * BASE64_OVERHEAD / 1024)}KB base64)`,
+      `(${buffer.length} -> ${resized.length} bytes, ~${Math.round(resized.length * BASE64_OVERHEAD / 1024)}KB base64)`,
     );
     return { buffer: resized, mimeType: "image/jpeg" };
   } catch (resizeError) {
@@ -70,34 +108,25 @@ async function resizeImageIfNeeded(
   }
 }
 
-// Helper to convert relative image URLs to base64 data URIs for AI providers
 async function imageUrlToBase64(imageUrl: string): Promise<string> {
-  // If already a data URI or absolute URL, return as-is
   if (imageUrl.startsWith("data:") || imageUrl.startsWith("http")) {
     return imageUrl;
   }
 
-  // Handle relative /api/media/ paths
   if (imageUrl.startsWith("/api/media/")) {
     try {
-      // Extract path after /api/media/
       const relativePath = imageUrl.replace("/api/media/", "");
       const mediaRoot = path.resolve(process.env.LOCAL_DATA_PATH || ".local-data", "media");
       const filePath = path.resolve(mediaRoot, relativePath);
-      // Prevent path traversal: ensure resolved path stays inside mediaRoot
       if (!filePath.startsWith(mediaRoot + path.sep) && filePath !== mediaRoot) {
         console.warn(`[CHAT API] Path traversal blocked: ${imageUrl}`);
         return imageUrl;
       }
 
       let fileBuffer = await fs.readFile(filePath);
-
-      // Determine mime type from extension
       const ext = path.extname(filePath).toLowerCase();
       let mimeType = IMAGE_MIME_TYPES[ext] || "image/png";
 
-      // If the image would produce an oversized base64 payload, resize it.
-      // Only applies to recognized image types — non-image media passes through untouched.
       if (fileBuffer.length * BASE64_OVERHEAD > MAX_BASE64_BYTES && ext in IMAGE_MIME_TYPES) {
         const resized = await resizeImageIfNeeded(fileBuffer, imageUrl);
         if (resized) {
@@ -107,53 +136,15 @@ async function imageUrlToBase64(imageUrl: string): Promise<string> {
       }
 
       const base64 = fileBuffer.toString("base64");
-
       console.log(`[CHAT API] Converted image to base64: ${imageUrl} (${mimeType}, ${Math.round(base64.length / 1024)}KB)`);
       return `data:${mimeType};base64,${base64}`;
     } catch (error) {
       console.error(`[CHAT API] Failed to convert image to base64: ${imageUrl}`, error);
-      // Fall through to return original URL
     }
   }
 
   return imageUrl;
 }
-
-// Helper to extract content from assistant-ui message format
-// assistant-ui sends messages with `parts` array, but AI SDK expects `content`
-// Also handles `experimental_attachments` from AI SDK format
-// includeUrlHelpers: when true, adds [Image URL: ...] text for AI context (not for DB storage)
-// convertUserImagesToBase64: when true, converts USER-uploaded image URLs to base64 (not tool-generated images)
-// sessionId: when provided, enables smart truncation with full content retrieval
-function maybePreserveImageReference(
-  contentParts: Array<{ type: string; text?: string; image?: string }>,
-  imageUrl: string,
-  shouldConvert: boolean,
-  includeUrlHelpers: boolean,
-) {
-  // Persist raw attachment URLs when we're storing chat history so follow-up turns
-  // still have a machine-usable reference instead of losing the upload entirely.
-  if (!shouldConvert && !includeUrlHelpers) {
-    contentParts.push({ type: "image", image: imageUrl });
-  }
-}
-
-function trackAttachmentUrl(
-  seenUrls: Set<string>,
-  url: string | undefined,
-): boolean {
-  if (!url) return false;
-  if (seenUrls.has(url)) return false;
-  seenUrls.add(url);
-  return true;
-}
-
-type AttachmentPathMetadata = {
-  name?: string;
-  url?: string;
-  localPath?: string;
-  filePath?: string;
-};
 
 function normalizeAttachmentString(value: string | undefined): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -179,18 +170,17 @@ function buildAttachmentLookup(msg: {
     lookup.set(url, {
       url,
       name: normalizeAttachmentString(existing?.name) ?? normalizeAttachmentString(attachment.name),
+      contentType: normalizeAttachmentString(existing?.contentType) ?? normalizeAttachmentString(attachment.contentType),
       filePath: normalizeAttachmentString(existing?.filePath) ?? normalizeAttachmentString(attachment.filePath),
       localPath: normalizeAttachmentString(existing?.localPath) ?? normalizeAttachmentString(attachment.localPath),
+      kind: normalizeAttachmentString(existing?.kind) ?? normalizeAttachmentString(attachment.kind),
     });
   };
 
-  const metadataAttachments = msg.metadata?.custom?.attachments ?? [];
-  for (const attachment of metadataAttachments) {
+  for (const attachment of msg.metadata?.custom?.attachments ?? []) {
     register(attachment);
   }
-
-  const experimentalAttachments = msg.experimental_attachments ?? [];
-  for (const attachment of experimentalAttachments) {
+  for (const attachment of msg.experimental_attachments ?? []) {
     register(attachment);
   }
 
@@ -206,15 +196,17 @@ function resolveAttachmentForHelper(
 
   return {
     name: normalizeAttachmentString(attachment.name) ?? normalizeAttachmentString(fromLookup?.name),
+    contentType: normalizeAttachmentString(attachment.contentType) ?? normalizeAttachmentString(fromLookup?.contentType),
     url,
     filePath: normalizeAttachmentString(attachment.filePath) ?? normalizeAttachmentString(fromLookup?.filePath),
     localPath: normalizeAttachmentString(attachment.localPath) ?? normalizeAttachmentString(fromLookup?.localPath),
+    kind: normalizeAttachmentString(attachment.kind) ?? normalizeAttachmentString(fromLookup?.kind),
   };
 }
 
 function formatAttachmentHelperText(
   attachment: AttachmentPathMetadata,
-  fallbackName = "uploaded image",
+  fallbackName = "uploaded file",
 ): string | null {
   const filePath = normalizeAttachmentString(attachment.filePath);
   const localPath = normalizeAttachmentString(attachment.localPath);
@@ -232,183 +224,270 @@ function formatAttachmentHelperText(
   return `[Attachment: ${displayName} | ${pathLabelAndValue[0]}: ${pathLabelAndValue[1]}]`;
 }
 
+function maybePreserveImageReference(
+  contentParts: ModelContentPart[],
+  imageUrl: string,
+  shouldConvert: boolean,
+  includeUrlHelpers: boolean,
+) {
+  if (!shouldConvert && !includeUrlHelpers) {
+    contentParts.push({ type: "image", image: imageUrl });
+  }
+}
+
+function trackAttachmentUrl(
+  seenUrls: Set<string>,
+  url: string | undefined,
+): boolean {
+  if (!url) return false;
+  if (seenUrls.has(url)) return false;
+  seenUrls.add(url);
+  return true;
+}
+
+function inferAttachmentContentType(attachment: AttachmentPathMetadata, fallback?: string): string {
+  const contentType = normalizeAttachmentString(attachment.contentType);
+  if (contentType) return contentType;
+  const name = normalizeAttachmentString(attachment.name) ?? normalizeAttachmentString(fallback) ?? "";
+  const ext = path.extname(name).toLowerCase();
+  switch (ext) {
+    case ".pdf":
+      return "application/pdf";
+    case ".docx":
+      return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    case ".pptx":
+      return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    case ".xlsx":
+      return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    case ".md":
+    case ".markdown":
+      return "text/markdown";
+    case ".html":
+    case ".htm":
+      return "text/html";
+    case ".csv":
+      return "text/csv";
+    case ".txt":
+      return "text/plain";
+    case ".vtt":
+      return "text/vtt";
+    case ".xml":
+      return "application/xml";
+    default:
+      return "application/octet-stream";
+  }
+}
+
+function formatDocumentAttachmentContext(
+  attachment: AttachmentPathMetadata,
+  extractedText: string,
+): string {
+  const displayName = normalizeAttachmentString(attachment.name) ?? "uploaded document";
+  const helper = formatAttachmentHelperText(attachment, displayName);
+  const safeText = extractedText.length > MAX_ATTACHMENT_TEXT_CHARS
+    ? `${extractedText.slice(0, MAX_ATTACHMENT_TEXT_CHARS)}\n...[truncated]`
+    : extractedText;
+
+  return [
+    helper,
+    `[Attachment content: ${displayName}]`,
+    safeText,
+  ].filter(Boolean).join("\n");
+}
+
+async function extractAttachmentContextText(
+  attachment: AttachmentPathMetadata,
+  sessionId?: string,
+): Promise<string | null> {
+  const attachmentPath = normalizeAttachmentString(attachment.filePath)
+    ?? getFullPathFromMediaRef(normalizeAttachmentString(attachment.url) ?? "")
+    ?? undefined;
+
+  if (!attachmentPath) {
+    return formatAttachmentHelperText(attachment);
+  }
+
+  try {
+    const fileBuffer = await fs.readFile(attachmentPath);
+    const contentType = inferAttachmentContentType(attachment, path.basename(attachmentPath));
+    const filename = normalizeAttachmentString(attachment.name) ?? path.basename(attachmentPath);
+
+    if (contentType.startsWith("audio/")) {
+      const transcription = await transcribeAudio(fileBuffer, contentType, filename);
+      const transcript = sanitizeTextContent(transcription.text.trim(), `audio attachment ${filename}`, sessionId);
+      if (!transcript) {
+        return formatAttachmentHelperText(attachment, filename);
+      }
+      return [
+        formatAttachmentHelperText(attachment, filename),
+        `[Audio transcript: ${filename}]`,
+        transcript,
+      ].filter(Boolean).join("\n");
+    }
+
+    const parsed = await extractTextFromDocument(fileBuffer, contentType, filename, "chat-attachment");
+    const sanitized = sanitizeTextContent(parsed.text, `attachment ${filename}`, sessionId);
+    if (!sanitized) {
+      return formatAttachmentHelperText(attachment, filename);
+    }
+
+    return formatDocumentAttachmentContext(attachment, sanitized);
+  } catch (error) {
+    console.warn("[EXTRACT] Failed to extract attachment content", {
+      name: attachment.name,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return formatAttachmentHelperText(attachment, attachment.name || "uploaded file");
+  }
+}
+
+function appendTextPartIfPresent(
+  contentParts: ModelContentPart[],
+  text: string | null | undefined,
+) {
+  if (!text) return;
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  contentParts.push({ type: "text", text: trimmed });
+}
+
+async function appendImagePart(
+  contentParts: ModelContentPart[],
+  attachmentLookup: Map<string, AttachmentPathMetadata>,
+  seenAttachmentUrls: Set<string>,
+  url: string,
+  fallbackName: string,
+  includeUrlHelpers: boolean,
+  convertUserImagesToBase64: boolean,
+  isUserMessage: boolean,
+) {
+  if (!trackAttachmentUrl(seenAttachmentUrls, url)) return;
+
+  const shouldConvert = convertUserImagesToBase64 && isUserMessage;
+  const finalImageUrl = shouldConvert ? await imageUrlToBase64(url) : url;
+
+  if (shouldConvert) {
+    contentParts.push({ type: "image", image: finalImageUrl });
+  }
+
+  if (includeUrlHelpers) {
+    appendTextPartIfPresent(
+      contentParts,
+      formatAttachmentHelperText(
+        resolveAttachmentForHelper(attachmentLookup, { url, name: fallbackName }),
+        fallbackName,
+      ),
+    );
+  }
+
+  maybePreserveImageReference(contentParts, url, shouldConvert, includeUrlHelpers);
+}
+
+async function appendNonImageAttachment(
+  contentParts: ModelContentPart[],
+  attachmentLookup: Map<string, AttachmentPathMetadata>,
+  attachment: AttachmentPathMetadata,
+  sessionId?: string,
+) {
+  const resolved = resolveAttachmentForHelper(attachmentLookup, attachment);
+  appendTextPartIfPresent(contentParts, await extractAttachmentContextText(resolved, sessionId));
+}
+
+function buildTextPart(text: string, role: string | undefined, sessionId?: string): string {
+  const { cleanedText, pasteBlocks } = extractPasteBlocks(text);
+  const strippedText = stripFakeToolCallJson(cleanedText);
+  if (!strippedText.trim() && pasteBlocks.length === 0) return "";
+  const sanitizedText = sanitizeTextContent(strippedText, `text part in ${role} message`, sessionId);
+  return reinsertPasteBlocks(sanitizedText, pasteBlocks);
+}
+
+function getStringContent(content: unknown, sessionId?: string): string {
+  if (typeof content !== "string" || !content) return "";
+  const { cleanedText, pasteBlocks } = extractPasteBlocks(content);
+  const stripped = stripFakeToolCallJson(cleanedText);
+  if (!stripped.trim() && pasteBlocks.length === 0) return "";
+  const sanitized = sanitizeTextContent(stripped, "string content", sessionId);
+  return reinsertPasteBlocks(sanitized, pasteBlocks);
+}
+
 export async function extractContent(
-  msg: {
-    role?: string;
-    content?: string | unknown;
-    parts?: Array<{
-      type: string;
-      text?: string;
-      image?: string;
-      url?: string;
-      localPath?: string;
-      filePath?: string;
-      mediaType?: string;
-      filename?: string;
-      // For dynamic-tool parts (historical tool calls from DB)
-      toolName?: string;
-      toolCallId?: string;
-      input?: unknown;
-      output?: unknown;
-      // For streaming tool parts from assistant-ui (format: "tool-{toolName}")
-      result?: unknown;
-    }>;
-    // AI SDK experimental_attachments format
-    experimental_attachments?: Array<{
-      name?: string;
-      contentType?: string;
-      url?: string;
-      localPath?: string;
-      filePath?: string;
-      size?: number;
-      kind?: string;
-    }>;
-    metadata?: {
-      custom?: {
-        attachments?: Array<{
-          name?: string;
-          contentType?: string;
-          url?: string;
-          localPath?: string;
-          filePath?: string;
-          size?: number;
-          kind?: string;
-        }>;
-      };
-    };
-  },
+  msg: MessageInput,
   includeUrlHelpers = false,
   convertUserImagesToBase64 = false,
   sessionId?: string,
-): Promise<string | Array<{
-  type: string;
-  text?: string;
-  image?: string;
-  toolCallId?: string;
-  toolName?: string;
-  input?: unknown;
-  output?: unknown;
-}>> {
-  // If content exists and is a string, use it directly (with sanitization)
-  if (typeof msg.content === "string" && msg.content) {
-    // Extract paste blocks before sanitization so they bypass the truncation limit.
-    // sanitizeTextContent only sees the user's short query; paste content is reinserted after.
-    const { cleanedText, pasteBlocks } = extractPasteBlocks(msg.content);
-    // Strip fake tool call JSON that may have been saved from previous model outputs
-    const stripped = stripFakeToolCallJson(cleanedText);
-    if (!stripped.trim() && pasteBlocks.length === 0) return "";
-    const sanitized = sanitizeTextContent(stripped, "string content", sessionId);
-    return reinsertPasteBlocks(sanitized, pasteBlocks);
+): Promise<string | ModelContentPart[]> {
+  const directContent = getStringContent(msg.content, sessionId);
+  if (directContent) {
+    return directContent;
   }
 
-  // Determine if this is a user message (only user images should be converted to base64)
   const isUserMessage = msg.role === "user";
 
-  // If parts array exists (assistant-ui format), convert it
   if (msg.parts && Array.isArray(msg.parts)) {
     const attachmentLookup = buildAttachmentLookup(msg);
     const seenAttachmentUrls = new Set<string>();
     const explicitToolResultIds = new Set(
       msg.parts
         .filter(
-          (
-            part
-          ): part is {
-            type: "tool-result";
-            toolCallId: string;
-          } => part.type === "tool-result" && typeof part.toolCallId === "string"
+          (part): part is { type: "tool-result"; toolCallId: string } =>
+            part.type === "tool-result" && typeof part.toolCallId === "string",
         )
-        .map((part) => part.toolCallId)
+        .map((part) => part.toolCallId),
     );
-    const contentParts: Array<{
-      type: string;
-      text?: string;
-      image?: string;
-      toolCallId?: string;
-      toolName?: string;
-      input?: unknown;
-      output?: unknown;
-    }> =
-      [];
+
+    const contentParts: ModelContentPart[] = [];
 
     for (const part of msg.parts) {
       if (part.type === "text" && part.text?.trim()) {
-        // Extract paste blocks before sanitization — paste content must not be truncated.
-        // sanitizeTextContent only sees the user's short query text; blocks are reinserted after.
-        const { cleanedText, pasteBlocks } = extractPasteBlocks(part.text);
-        // Strip fake tool call JSON that the model may have output as text in previous turns
-        const strippedText = stripFakeToolCallJson(cleanedText);
-        if (!strippedText.trim() && pasteBlocks.length === 0) continue; // Skip entirely empty parts
-        // Sanitize text to prevent base64 leakage (with smart truncation if sessionId provided)
-        const sanitizedText = sanitizeTextContent(strippedText, `text part in ${msg.role} message`, sessionId);
-        const finalText = reinsertPasteBlocks(sanitizedText, pasteBlocks);
-        if (finalText.trim()) contentParts.push({ type: "text", text: finalText });
-      } else if (part.type === "image" && (part.image || part.url)) {
-        const imageUrl = (part.image || part.url) as string;
-        if (!trackAttachmentUrl(seenAttachmentUrls, imageUrl)) continue;
-        // ONLY convert to base64 for USER-uploaded images
-        // Assistant/tool-generated images should NOT be converted (they're just URLs for reference)
-        const shouldConvert = convertUserImagesToBase64 && isUserMessage;
-        const finalImageUrl = shouldConvert ? await imageUrlToBase64(imageUrl) : imageUrl;
+        appendTextPartIfPresent(contentParts, buildTextPart(part.text, msg.role, sessionId));
+        continue;
+      }
 
-        if (shouldConvert) {
-          // User uploaded image - add as actual image for Claude to see
-          contentParts.push({ type: "image", image: finalImageUrl });
-        }
-        // Add deterministic attachment path helper text so the model can act on files.
-        if (includeUrlHelpers) {
-          const helperText = formatAttachmentHelperText(
-            resolveAttachmentForHelper(attachmentLookup, { url: imageUrl }),
-            "uploaded image",
+      if (part.type === "image" && (part.image || part.url)) {
+        await appendImagePart(
+          contentParts,
+          attachmentLookup,
+          seenAttachmentUrls,
+          (part.image || part.url) as string,
+          "uploaded image",
+          includeUrlHelpers,
+          convertUserImagesToBase64,
+          isUserMessage,
+        );
+        continue;
+      }
+
+      if (part.type === "file" && part.url) {
+        if (part.mediaType?.startsWith("image/")) {
+          await appendImagePart(
+            contentParts,
+            attachmentLookup,
+            seenAttachmentUrls,
+            part.url,
+            part.filename || "uploaded image",
+            includeUrlHelpers,
+            convertUserImagesToBase64,
+            isUserMessage,
           );
-          if (helperText) {
-            contentParts.push({
-              type: "text",
-              text: helperText,
-            });
-          }
-        }
-        maybePreserveImageReference(contentParts, imageUrl, shouldConvert, includeUrlHelpers);
-      } else if (
-        part.type === "file" &&
-        part.url &&
-        part.mediaType?.startsWith("image/")
-      ) {
-        if (!trackAttachmentUrl(seenAttachmentUrls, part.url)) continue;
-        // ONLY convert to base64 for USER-uploaded files
-        const shouldConvert = convertUserImagesToBase64 && isUserMessage;
-        const finalImageUrl = shouldConvert ? await imageUrlToBase64(part.url) : part.url;
-
-        if (shouldConvert) {
-          // User uploaded image - add as actual image for Claude to see
-          contentParts.push({ type: "image", image: finalImageUrl });
-        }
-        // Add deterministic attachment path helper text so the model can act on files.
-        if (includeUrlHelpers) {
-          const helperText = formatAttachmentHelperText(
-            resolveAttachmentForHelper(attachmentLookup, {
+        } else {
+          await appendNonImageAttachment(
+            contentParts,
+            attachmentLookup,
+            {
               name: part.filename,
+              contentType: part.mediaType,
               url: part.url,
               localPath: part.localPath,
               filePath: part.filePath,
-            }),
-            part.filename || "uploaded image",
+            },
+            sessionId,
           );
-          if (helperText) {
-            contentParts.push({
-              type: "text",
-              text: helperText,
-            });
-          }
         }
-        maybePreserveImageReference(contentParts, part.url, shouldConvert, includeUrlHelpers);
-      } else if (part.type === "dynamic-tool" && part.toolName) {
-        // Handle historical tool calls from DB
-        // CRITICAL: Tool results are now kept as structured data, NOT converted to text with [SYSTEM: ...] markers
-        // This prevents the model from learning to mimic these markers and causing fake tool call hallucinations
-        const toolName = part.toolName || "tool";
+        continue;
+      }
 
-        console.log(`[EXTRACT] Found dynamic-tool: ${toolName}, output:`, JSON.stringify(part.output, null, 2));
+      if (part.type === "dynamic-tool" && part.toolName) {
+        const toolName = part.toolName || "tool";
         const output = part.output as {
           images?: Array<{ url: string; localPath?: string; filePath?: string }>;
           videos?: Array<{ url: string; localPath?: string; filePath?: string }>;
@@ -419,6 +498,7 @@ export async function extractContent(
         const normalizedInput = toolCallId
           ? normalizeToolCallInput(part.input, toolName, toolCallId) ?? {}
           : null;
+
         if (toolCallId && normalizedInput) {
           contentParts.push({
             type: "tool-call",
@@ -433,7 +513,7 @@ export async function extractContent(
             toolName,
             output,
             normalizedInput,
-            { mode: "projection" }
+            { mode: "projection" },
           ).output;
           contentParts.push({
             type: "tool-result",
@@ -443,90 +523,35 @@ export async function extractContent(
           });
         }
 
-        // For image/video generation tools, add a natural language reference so AI can use the URLs
         if (output?.images && output.images.length > 0) {
-          const urlList = output.images.map((img, idx) => `  ${idx + 1}. ${img.url}${img.localPath ? ` (localPath: ${img.localPath})` : ""}${img.filePath ? ` (filePath: ${img.filePath})` : ""}`).join("\n");
-          console.log(`[EXTRACT] Adding generated image URLs to context: ${urlList}`);
+          const urlList = output.images
+            .map((img, idx) => `  ${idx + 1}. ${img.url}${img.localPath ? ` (localPath: ${img.localPath})` : ""}${img.filePath ? ` (filePath: ${img.filePath})` : ""}`)
+            .join("\n");
           contentParts.push({
             type: "text",
             text: `Previously generated ${output.images.length} image(s) using ${toolName}:\n${urlList}\nUse these URLs for EDITING requests. For NEW image generation, call the tool.`,
           });
         } else if (output?.videos && output.videos.length > 0) {
-          const urlList = output.videos.map((vid, idx) => `  ${idx + 1}. ${vid.url}${vid.localPath ? ` (localPath: ${vid.localPath})` : ""}${vid.filePath ? ` (filePath: ${vid.filePath})` : ""}`).join("\n");
-          console.log(`[EXTRACT] Adding generated video URLs to context: ${urlList}`);
+          const urlList = output.videos
+            .map((vid, idx) => `  ${idx + 1}. ${vid.url}${vid.localPath ? ` (localPath: ${vid.localPath})` : ""}${vid.filePath ? ` (filePath: ${vid.filePath})` : ""}`)
+            .join("\n");
           contentParts.push({
             type: "text",
             text: `Previously generated ${output.videos.length} video(s) using ${toolName}:\n${urlList}\nUse these URLs for EDITING requests. For NEW video generation, call the tool.`,
           });
-        }
-        // For other tools, the structured tool-result part is already in the message parts
-        // and will be handled by the AI SDK - no need to add text markers
-        // Just log for debugging purposes
-        else if (toolName === "searchTools") {
-          const searchOutput = output as { status?: string; query?: string; results?: Array<{ name?: string; displayName?: string; isAvailable?: boolean }> } | null;
-          if (searchOutput?.results && searchOutput.results.length > 0) {
-            const toolNames = searchOutput.results
-              .filter((t) => t.isAvailable)
-              .map((t) => t.displayName || t.name)
-              .join(", ");
-            console.log(`[EXTRACT] searchTools found: ${toolNames}`);
-          }
-        } else if (toolName === "webSearch") {
-          const webSearchOutput = output as {
-            status?: string;
-            query?: string;
-            sources?: Array<{ url: string; title: string; snippet: string }>;
-            answer?: string;
-            formattedResults?: string;
-          } | null;
-          if (webSearchOutput?.sources && webSearchOutput.sources.length > 0) {
-            console.log(`[EXTRACT] webSearch completed: ${webSearchOutput.query} (${webSearchOutput.sources.length} sources)`);
-          }
-        } else if (toolName === "vectorSearch") {
-          const vectorSearchOutput = output as {
-            status?: string;
-            strategy?: string;
-            reasoning?: string;
-            findings?: Array<{ filePath: string; lineRange?: string; snippet: string; explanation: string; confidence: number }>;
-            summary?: string;
-            suggestedRefinements?: string[];
-          } | null;
-          if (vectorSearchOutput?.findings && vectorSearchOutput.findings.length > 0) {
-            console.log(`[EXTRACT] vectorSearch completed: ${vectorSearchOutput.findings.length} findings`);
-          }
-        } else if (toolName === "showProductImages") {
-          const productGalleryOutput = output as {
-            status?: string;
-            query?: string;
-            products?: Array<{
-              id: string;
-              name: string;
-              imageUrl: string;
-              price?: string;
-              sourceUrl?: string;
-              description?: string;
-            }>;
-          } | null;
-          if (productGalleryOutput?.products && productGalleryOutput.products.length > 0) {
-            console.log(`[EXTRACT] showProductImages completed: ${productGalleryOutput.products.length} products for "${productGalleryOutput.query}"`);
-          }
-        } else if (toolName === "executeCommand") {
-          console.log("[EXTRACT] executeCommand output preserved as structured data");
         } else {
-          // Handle universal truncation notice from limitToolOutput
-          const resultObj = output as any;
+          const resultObj = output as { truncated?: boolean; truncatedContentId?: string } | null;
           if (resultObj?.truncated && resultObj?.truncatedContentId) {
             contentParts.push({
               type: "text",
               text: `\n---\n⚠️ CONTENT TRUNCATED: Full content available via retrieveFullContent with contentId="${resultObj.truncatedContentId}"\n---`,
             });
           }
-
-          // For tools with text output or other results, log but don't add [SYSTEM: ...] markers
-          // The structured tool-result part is already preserved in the message
-          console.log(`[EXTRACT] dynamic-tool ${toolName} output preserved as structured data`);
         }
-      } else if (part.type === "tool-call" && part.toolCallId && part.toolName) {
+        continue;
+      }
+
+      if (part.type === "tool-call" && part.toolCallId && part.toolName) {
         const normalizedInput = normalizeToolCallInput(part.input, part.toolName, part.toolCallId) ?? {};
         contentParts.push({
           type: "tool-call",
@@ -535,15 +560,13 @@ export async function extractContent(
           input: normalizedInput,
         });
 
-        // Some historical messages store tool output inline on the tool-call part.
-        // Preserve that as a structured tool-result to keep call/result pairs valid.
         const rawOutput = part.output ?? part.result;
         if (rawOutput !== undefined && !explicitToolResultIds.has(part.toolCallId)) {
           const normalizedOutput = normalizeToolResultOutput(
             part.toolName,
             rawOutput,
             normalizedInput,
-            { mode: "projection" }
+            { mode: "projection" },
           ).output;
           contentParts.push({
             type: "tool-result",
@@ -551,36 +574,18 @@ export async function extractContent(
             toolName: part.toolName,
             output: toModelToolResultOutput(normalizedOutput),
           });
-
-          // For image/video generation tools, add a natural language reference so AI can use the URLs
-          const toolCallOutput = rawOutput as {
-            images?: Array<{ url: string; localPath?: string; filePath?: string }>;
-            videos?: Array<{ url: string; localPath?: string; filePath?: string }>;
-          } | null;
-          if (toolCallOutput?.images && toolCallOutput.images.length > 0) {
-            const urlList = toolCallOutput.images.map((img, idx) => `  ${idx + 1}. ${img.url}${img.localPath ? ` (localPath: ${img.localPath})` : ""}${img.filePath ? ` (filePath: ${img.filePath})` : ""}`).join("\n");
-            console.log(`[EXTRACT] Adding generated image URLs to context (tool-call path): ${urlList}`);
-            contentParts.push({
-              type: "text",
-              text: `Previously generated ${toolCallOutput.images.length} image(s) using ${part.toolName}:\n${urlList}\nUse these URLs for EDITING requests. For NEW image generation, call the tool.`,
-            });
-          } else if (toolCallOutput?.videos && toolCallOutput.videos.length > 0) {
-            const urlList = toolCallOutput.videos.map((vid, idx) => `  ${idx + 1}. ${vid.url}${vid.localPath ? ` (localPath: ${vid.localPath})` : ""}${vid.filePath ? ` (filePath: ${vid.filePath})` : ""}`).join("\n");
-            console.log(`[EXTRACT] Adding generated video URLs to context (tool-call path): ${urlList}`);
-            contentParts.push({
-              type: "text",
-              text: `Previously generated ${toolCallOutput.videos.length} video(s) using ${part.toolName}:\n${urlList}\nUse these URLs for EDITING requests. For NEW video generation, call the tool.`,
-            });
-          }
         }
-      } else if (part.type === "tool-result" && part.toolCallId && part.toolName) {
+        continue;
+      }
+
+      if (part.type === "tool-result" && part.toolCallId && part.toolName) {
         const normalizedInput = normalizeToolCallInput(part.input, part.toolName, part.toolCallId) ?? {};
         const rawOutput = part.output ?? part.result;
         const normalizedOutput = normalizeToolResultOutput(
           part.toolName,
           rawOutput,
           normalizedInput,
-          { mode: "projection" }
+          { mode: "projection" },
         ).output;
         contentParts.push({
           type: "tool-result",
@@ -588,29 +593,14 @@ export async function extractContent(
           toolName: part.toolName,
           output: toModelToolResultOutput(normalizedOutput),
         });
-      } else if (part.type.startsWith("tool-") && part.type !== "tool-call" && part.type !== "tool-result") {
-        // Handle streaming tool calls from assistant-ui (format: "tool-{toolName}")
-        // CRITICAL: Tool results are kept as structured data in the parts, NOT converted to text
-        // The AI SDK handles tool-result parts natively - no need for [SYSTEM: ...] markers
-        const toolName = part.type.replace("tool-", "");
+        continue;
+      }
 
-        const partWithOutput = part as typeof part & {
-          input?: unknown;
-          output?: {
-            images?: Array<{ url: string; localPath?: string; filePath?: string }>;
-            videos?: Array<{ url: string; localPath?: string; filePath?: string }>;
-            text?: string;
-          };
-          result?: {
-            images?: Array<{ url: string; localPath?: string; filePath?: string }>;
-            videos?: Array<{ url: string; localPath?: string; filePath?: string }>;
-            text?: string;
-          };
-        };
-        const toolOutput = partWithOutput.output ?? partWithOutput.result;
+      if (part.type.startsWith("tool-") && part.type !== "tool-call" && part.type !== "tool-result") {
+        const toolName = part.type.replace("tool-", "");
         const toolCallId = part.toolCallId;
         const normalizedInput = toolCallId
-          ? normalizeToolCallInput(partWithOutput.input, toolName, toolCallId) ?? {}
+          ? normalizeToolCallInput(part.input, toolName, toolCallId) ?? {}
           : null;
         if (toolCallId && normalizedInput) {
           contentParts.push({
@@ -621,12 +611,13 @@ export async function extractContent(
           });
         }
 
+        const toolOutput = part.output ?? part.result;
         if (toolCallId && toolOutput !== undefined) {
           const normalizedOutput = normalizeToolResultOutput(
             toolName,
             toolOutput,
             normalizedInput,
-            { mode: "projection" }
+            { mode: "projection" },
           ).output;
           contentParts.push({
             type: "tool-result",
@@ -635,241 +626,132 @@ export async function extractContent(
             output: toModelToolResultOutput(normalizedOutput),
           });
         }
-        console.log(`[EXTRACT] Found tool-${toolName}, result:`, JSON.stringify(toolOutput, null, 2));
-
-        // For image/video generation tools, add natural language reference so AI can use the URLs
-        if (toolOutput?.images && toolOutput.images.length > 0) {
-          const urlList = toolOutput.images.map((img, idx) => `  ${idx + 1}. ${img.url}${img.localPath ? ` (localPath: ${img.localPath})` : ""}${img.filePath ? ` (filePath: ${img.filePath})` : ""}`).join("\n");
-          console.log(`[EXTRACT] Adding generated image URLs to context: ${urlList}`);
-          contentParts.push({
-            type: "text",
-            text: `Previously generated ${toolOutput.images.length} image(s) using ${toolName}:\n${urlList}\nUse these URLs for EDITING requests. For NEW image generation, call the tool.`,
-          });
-        } else if (toolOutput?.videos && toolOutput.videos.length > 0) {
-          const urlList = toolOutput.videos.map((vid, idx) => `  ${idx + 1}. ${vid.url}${vid.localPath ? ` (localPath: ${vid.localPath})` : ""}${vid.filePath ? ` (filePath: ${vid.filePath})` : ""}`).join("\n");
-          console.log(`[EXTRACT] Adding generated video URLs to context: ${urlList}`);
-          contentParts.push({
-            type: "text",
-            text: `Previously generated ${toolOutput.videos.length} video(s) using ${toolName}:\n${urlList}\nUse these URLs for EDITING requests. For NEW video generation, call the tool.`,
-          });
-        }
-        // For other tools, the structured tool-result part is already in the message parts
-        // and will be handled by the AI SDK - no need to add text markers
-        // Just log for debugging purposes
-        else if (toolName === "searchTools") {
-          const searchResult = toolOutput as { status?: string; query?: string; results?: Array<{ name?: string; displayName?: string; isAvailable?: boolean }> } | undefined;
-          if (searchResult?.results && searchResult.results.length > 0) {
-            const toolNames = searchResult.results
-              .filter((t) => t.isAvailable)
-              .map((t) => t.displayName || t.name)
-              .join(", ");
-            console.log(`[EXTRACT] searchTools found: ${toolNames}`);
-          }
-        } else if (toolName === "webSearch") {
-          const webSearchResult = toolOutput as {
-            status?: string;
-            query?: string;
-            sources?: Array<{ url: string; title: string; snippet: string }>;
-            answer?: string;
-          } | undefined;
-          if (webSearchResult?.sources && webSearchResult.sources.length > 0) {
-            console.log(`[EXTRACT] webSearch completed: ${webSearchResult.query} (${webSearchResult.sources.length} sources)`);
-          }
-        } else if (toolName === "vectorSearch") {
-          const vectorSearchResult = toolOutput as {
-            status?: string;
-            strategy?: string;
-            reasoning?: string;
-            findings?: Array<{ filePath: string; lineRange?: string; snippet: string; explanation: string; confidence: number }>;
-            summary?: string;
-            suggestedRefinements?: string[];
-          } | undefined;
-          if (vectorSearchResult?.findings && vectorSearchResult.findings.length > 0) {
-            console.log(`[EXTRACT] vectorSearch completed: ${vectorSearchResult.findings.length} findings`);
-          }
-        } else if (toolName === "showProductImages") {
-          const productGalleryResult = toolOutput as {
-            status?: string;
-            query?: string;
-            products?: Array<{
-              id: string;
-              name: string;
-              imageUrl: string;
-              price?: string;
-              sourceUrl?: string;
-              description?: string;
-            }>;
-          } | undefined;
-          if (productGalleryResult?.products && productGalleryResult.products.length > 0) {
-            console.log(`[EXTRACT] showProductImages completed: ${productGalleryResult.products.length} products for "${productGalleryResult.query}"`);
-          }
-        } else if (toolName === "executeCommand") {
-          console.log("[EXTRACT] tool-executeCommand output preserved as structured data");
-        } else {
-          // Handle universal truncation notice from limitToolOutput
-          const resultObj = toolOutput as any;
-          if (resultObj?.truncated && resultObj?.truncatedContentId) {
-            contentParts.push({
-              type: "text",
-              text: `\n---\n⚠️ CONTENT TRUNCATED: Full content available via retrieveFullContent with contentId="${resultObj.truncatedContentId}"\n---`,
-            });
-          }
-
-          // For tools with other output, log but don't add [SYSTEM: ...] markers
-          // The structured tool-result part is already preserved in the message
-          console.log(`[EXTRACT] tool-${toolName} output preserved as structured data`);
-        }
       }
     }
 
-    // Also process experimental_attachments (AI SDK format for file uploads)
     if (msg.experimental_attachments && Array.isArray(msg.experimental_attachments)) {
-      console.log(`[EXTRACT] Processing ${msg.experimental_attachments.length} experimental_attachments`);
       for (const attachment of msg.experimental_attachments) {
-        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
-        if (attachment.url && attachment.contentType?.startsWith("image/")) {
-          console.log(`[EXTRACT] Found image attachment: ${attachment.name}, url: ${attachment.url}`);
-          const shouldConvert = convertUserImagesToBase64 && isUserMessage;
-          const finalImageUrl = shouldConvert ? await imageUrlToBase64(attachment.url) : attachment.url;
-
-          if (shouldConvert) {
-            // User uploaded image - add as actual image for Claude to see
-            contentParts.push({ type: "image", image: finalImageUrl });
-          }
-          // Add deterministic attachment path helper text so the model can act on files.
-          if (includeUrlHelpers) {
-            const helperText = formatAttachmentHelperText(
-              resolveAttachmentForHelper(attachmentLookup, attachment),
-              attachment.name || "uploaded image",
-            );
-            if (helperText) {
-              contentParts.push({
-                type: "text",
-                text: helperText,
-              });
-            }
-          }
-          maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
+        if (!attachment.url) continue;
+        if (attachment.contentType?.startsWith("image/")) {
+          await appendImagePart(
+            contentParts,
+            attachmentLookup,
+            seenAttachmentUrls,
+            attachment.url,
+            attachment.name || "uploaded image",
+            includeUrlHelpers,
+            convertUserImagesToBase64,
+            isUserMessage,
+          );
+        } else {
+          await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
         }
       }
     }
 
     const metadataAttachments = msg.metadata?.custom?.attachments;
     if (metadataAttachments && Array.isArray(metadataAttachments)) {
-      console.log(`[EXTRACT] Processing ${metadataAttachments.length} metadata attachments`);
       for (const attachment of metadataAttachments) {
-        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
-        if (attachment.url && attachment.contentType?.startsWith("image/")) {
-          console.log(`[EXTRACT] Found metadata image attachment: ${attachment.name}, url: ${attachment.url}`);
-          const shouldConvert = convertUserImagesToBase64 && isUserMessage;
-          const finalImageUrl = shouldConvert ? await imageUrlToBase64(attachment.url) : attachment.url;
-
-          if (shouldConvert) {
-            contentParts.push({ type: "image", image: finalImageUrl });
-          }
-          if (includeUrlHelpers) {
-            const helperText = formatAttachmentHelperText(
-              resolveAttachmentForHelper(attachmentLookup, attachment),
-              attachment.name || "uploaded image",
-            );
-            if (helperText) {
-              contentParts.push({
-                type: "text",
-                text: helperText,
-              });
-            }
-          }
-          maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
+        if (!attachment.url) continue;
+        if (attachment.contentType?.startsWith("image/")) {
+          await appendImagePart(
+            contentParts,
+            attachmentLookup,
+            seenAttachmentUrls,
+            attachment.url,
+            attachment.name || "uploaded image",
+            includeUrlHelpers,
+            convertUserImagesToBase64,
+            isUserMessage,
+          );
+        } else {
+          await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
         }
       }
     }
 
     const normalizedParts = reconcileToolCallPairs(contentParts);
-
-    // If no content parts, return non-empty fallback string for AI providers
     if (normalizedParts.length === 0) {
       return "[Message content not available]";
     }
-
-    // If only one text part, return as string for simplicity
     if (normalizedParts.length === 1 && normalizedParts[0].type === "text") {
       return normalizedParts[0].text || "";
     }
-
     return normalizedParts;
   }
 
-  // Also check for experimental_attachments and metadata attachments even without parts array
   if (
-    (msg.experimental_attachments && Array.isArray(msg.experimental_attachments))
-    || (msg.metadata?.custom?.attachments && Array.isArray(msg.metadata.custom.attachments))
+    (msg.experimental_attachments && Array.isArray(msg.experimental_attachments)) ||
+    (msg.metadata?.custom?.attachments && Array.isArray(msg.metadata.custom.attachments))
   ) {
     const attachmentLookup = buildAttachmentLookup(msg);
     const seenAttachmentUrls = new Set<string>();
-    const contentParts: Array<{ type: string; text?: string; image?: string }> = [];
-    const isUserMessage = msg.role === "user";
+    const contentParts: ModelContentPart[] = [];
 
-    // If there's string content, add it first (with smart truncation if sessionId provided)
     if (typeof msg.content === "string" && msg.content) {
-      contentParts.push({ type: "text", text: sanitizeTextContent(msg.content, "string content with attachments", sessionId) });
+      appendTextPartIfPresent(
+        contentParts,
+        sanitizeTextContent(msg.content, "string content with attachments", sessionId),
+      );
     }
 
-    const metadataAttachments = msg.metadata?.custom?.attachments ?? [];
-    if (metadataAttachments.length > 0) {
-      console.log(`[EXTRACT] Processing ${metadataAttachments.length} metadata attachments (no parts)`);
-      for (const attachment of metadataAttachments) {
-        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
-        if (attachment.url && attachment.contentType?.startsWith("image/")) {
-          console.log(`[EXTRACT] Found metadata image attachment: ${attachment.name}, url: ${attachment.url}`);
-          const shouldConvert = convertUserImagesToBase64 && isUserMessage;
-          const finalImageUrl = shouldConvert ? await imageUrlToBase64(attachment.url) : attachment.url;
-
-          if (shouldConvert) {
-            contentParts.push({ type: "image", image: finalImageUrl });
-          }
-          if (includeUrlHelpers) {
-            const helperText = formatAttachmentHelperText(
-              resolveAttachmentForHelper(attachmentLookup, attachment),
-              attachment.name || "uploaded image",
-            );
-            if (helperText) {
-              contentParts.push({
-                type: "text",
-                text: helperText,
-              });
-            }
-          }
-          maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
+    for (const attachment of msg.metadata?.custom?.attachments ?? []) {
+      const contentType = inferAttachmentContentType(attachment, attachment.name);
+      if (!attachment.url) {
+        if (contentType.startsWith("image/")) {
+          appendTextPartIfPresent(
+            contentParts,
+            includeUrlHelpers
+              ? formatAttachmentHelperText(resolveAttachmentForHelper(attachmentLookup, attachment), attachment.name || "uploaded image")
+              : null,
+          );
         }
+        continue;
+      }
+      if (contentType.startsWith("image/")) {
+        await appendImagePart(
+          contentParts,
+          attachmentLookup,
+          seenAttachmentUrls,
+          attachment.url,
+          attachment.name || "uploaded image",
+          includeUrlHelpers,
+          convertUserImagesToBase64,
+          isUserMessage,
+        );
+      } else {
+        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
+        await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
       }
     }
 
-    if (msg.experimental_attachments && Array.isArray(msg.experimental_attachments)) {
-      console.log(`[EXTRACT] Processing ${msg.experimental_attachments.length} experimental_attachments (no parts)`);
-      for (const attachment of msg.experimental_attachments) {
-        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
-        if (attachment.url && attachment.contentType?.startsWith("image/")) {
-          console.log(`[EXTRACT] Found image attachment: ${attachment.name}, url: ${attachment.url}`);
-          const shouldConvert = convertUserImagesToBase64 && isUserMessage;
-          const finalImageUrl = shouldConvert ? await imageUrlToBase64(attachment.url) : attachment.url;
-
-          if (shouldConvert) {
-            contentParts.push({ type: "image", image: finalImageUrl });
-          }
-          if (includeUrlHelpers) {
-            const helperText = formatAttachmentHelperText(
-              resolveAttachmentForHelper(attachmentLookup, attachment),
-              attachment.name || "uploaded image",
-            );
-            if (helperText) {
-              contentParts.push({
-                type: "text",
-                text: helperText,
-              });
-            }
-          }
-          maybePreserveImageReference(contentParts, attachment.url, shouldConvert, includeUrlHelpers);
+    for (const attachment of msg.experimental_attachments ?? []) {
+      const contentType = inferAttachmentContentType(attachment, attachment.name);
+      if (!attachment.url) {
+        if (contentType.startsWith("image/")) {
+          appendTextPartIfPresent(
+            contentParts,
+            includeUrlHelpers
+              ? formatAttachmentHelperText(resolveAttachmentForHelper(attachmentLookup, attachment), attachment.name || "uploaded image")
+              : null,
+          );
         }
+        continue;
+      }
+      if (contentType.startsWith("image/")) {
+        await appendImagePart(
+          contentParts,
+          attachmentLookup,
+          seenAttachmentUrls,
+          attachment.url,
+          attachment.name || "uploaded image",
+          includeUrlHelpers,
+          convertUserImagesToBase64,
+          isUserMessage,
+        );
+      } else {
+        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
+        await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
       }
     }
 
@@ -881,19 +763,9 @@ export async function extractContent(
     }
   }
 
-  // If content is an array, pass it through
   if (Array.isArray(msg.content)) {
-    return msg.content as Array<{
-      type: string;
-      text?: string;
-      image?: string;
-      toolCallId?: string;
-      toolName?: string;
-      input?: unknown;
-      output?: unknown;
-    }>;
+    return msg.content as ModelContentPart[];
   }
 
-  // Fallback
   return "[Message content not available]";
 }

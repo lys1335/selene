@@ -21,6 +21,10 @@ import {
   CircleStopIcon,
   Volume2Icon,
   Loader2Icon,
+  FileTextIcon,
+  FileSpreadsheetIcon,
+  PresentationIcon,
+  Music4Icon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -103,28 +107,80 @@ function mcpAwareToolMap(map: Record<string, FC<any>>): Record<string, FC<any>> 
   });
 }
 
+function getAttachmentImageUrl(attachment: {
+  content?: Array<{ type?: string; image?: string }>;
+}): string | undefined {
+  const imageContent = attachment.content?.find(
+    (content): content is { type: "image"; image: string } =>
+      content.type === "image" && typeof content.image === "string",
+  );
+  return imageContent?.image;
+}
+
+function getAttachmentMediaType(attachment: {
+  contentType?: string;
+  content?: Array<{ type?: string; mimeType?: string }>;
+}): string {
+  return attachment.contentType
+    || attachment.content?.find((content) => typeof content.mimeType === "string")?.mimeType
+    || "application/octet-stream";
+}
+
+function getAttachmentIcon(mediaType: string) {
+  if (mediaType.startsWith("audio/")) {
+    return Music4Icon;
+  }
+  if (mediaType.includes("presentation") || mediaType.includes("powerpoint")) {
+    return PresentationIcon;
+  }
+  if (mediaType.includes("spreadsheet") || mediaType.includes("excel") || mediaType.includes("csv")) {
+    return FileSpreadsheetIcon;
+  }
+  return FileTextIcon;
+}
+
+function renderAttachmentTile(
+  attachment: {
+    name?: string;
+    contentType?: string;
+    content?: Array<{ type?: string; image?: string; mimeType?: string }>;
+    status?: { type?: string };
+  },
+  sizeClass: string,
+) {
+  const imageUrl = getAttachmentImageUrl(attachment);
+  const mediaType = getAttachmentMediaType(attachment);
+  const Icon = getAttachmentIcon(mediaType);
+  const extension = attachment.name?.split(".").pop()?.toUpperCase() || "FILE";
+
+  if (imageUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={imageUrl}
+        alt={attachment.name}
+        className={`${sizeClass} object-cover`}
+      />
+    );
+  }
+
+  return (
+    <div className={`${sizeClass} flex flex-col items-center justify-center gap-1 px-2 text-terminal-muted`}>
+      <Icon className="size-5" />
+      <span className="max-w-full truncate text-[10px] font-semibold tracking-wide">
+        {extension}
+      </span>
+    </div>
+  );
+}
+
 export const ComposerAttachment: FC = () => {
   const attachment = useThreadComposerAttachment((a) => a);
   const isUploading = attachment.status?.type === "running";
 
-  // Get image URL from content if available
-  const imageContent = attachment.content?.find(
-    (c): c is { type: "image"; image: string } => c.type === "image"
-  );
-  const imageUrl = imageContent?.image;
-
   return (
     <AttachmentPrimitive.Root className="relative flex size-16 items-center justify-center rounded-lg bg-terminal-cream shadow-sm overflow-hidden">
-      {imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={imageUrl}
-          alt={attachment.name}
-          className="size-full object-cover"
-        />
-      ) : (
-        <AttachmentPrimitive.unstable_Thumb className="size-full flex items-center justify-center text-xs text-terminal-muted font-mono" />
-      )}
+      {renderAttachmentTile(attachment, "size-full")}
       {isUploading && (
         <div className="absolute inset-0 flex items-center justify-center bg-terminal-cream/80">
           <div className="size-4 animate-spin rounded-full border-2 border-terminal-green border-t-transparent" />
@@ -168,24 +224,9 @@ export const UserMessage: FC = () => {
 export const UserAttachment: FC = () => {
   const attachment = useMessageAttachment((a) => a);
 
-  // Get image URL from content if available
-  const imageContent = attachment.content?.find(
-    (c): c is { type: "image"; image: string } => c.type === "image"
-  );
-  const imageUrl = imageContent?.image;
-
   return (
     <AttachmentPrimitive.Root className="relative flex size-20 items-center justify-center rounded-lg bg-terminal-cream shadow-sm overflow-hidden">
-      {imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={imageUrl}
-          alt={attachment.name}
-          className="size-full object-cover"
-        />
-      ) : (
-        <AttachmentPrimitive.unstable_Thumb className="size-full flex items-center justify-center text-xs text-terminal-muted font-mono" />
-      )}
+      {renderAttachmentTile(attachment, "size-full")}
     </AttachmentPrimitive.Root>
   );
 };
