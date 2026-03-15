@@ -201,6 +201,37 @@ export const shouldDeferLivePromptForegroundReconciliation = (
     input.hasInjectedMessages &&
     input.persistedConversationMessageCount <= input.liveThreadMessageCount;
 
+export interface LivePromptForegroundDeferralBypassInput {
+    liveThreadMessages: UIMessage[];
+    persistedUiMessages: UIMessage[];
+    progressAssistantMessageId?: string | null;
+}
+
+export const shouldBypassLivePromptForegroundDeferral = (
+    input: LivePromptForegroundDeferralBypassInput,
+) => {
+    const progressAssistantMessageId = input.progressAssistantMessageId?.trim();
+    if (!progressAssistantMessageId) {
+        return false;
+    }
+
+    // The progress event is already describing a message the live thread knows
+    // about, so the usual count-based deferral remains safe.
+    if (input.liveThreadMessages.some((message) => message.id === progressAssistantMessageId)) {
+        return false;
+    }
+
+    // A queued (injected) message can rotate the assistant segment mid-run.
+    // If the persisted snapshot now contains that new assistant message, the UI
+    // must reconcile immediately or it will keep rendering the old branch while
+    // the backend continues streaming into the new one.
+    return input.persistedUiMessages.some(
+        (message) =>
+            message.id === progressAssistantMessageId &&
+            message.role === "assistant",
+    );
+};
+
 export interface BackgroundRunResolutionInput {
     isForegroundStreaming: boolean;
     hasActiveRun?: boolean;

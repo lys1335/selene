@@ -14,11 +14,14 @@ const baseRuntime: BundledRuntimeInfo = {
     isProductionBuild: true,
     nodeBinDir: null,
     toolsBinDir: null,
+    ripgrepBinDir: null,
     bundledBinDirs: [],
     bundledNodePath: null,
     bundledNpmCliPath: null,
     bundledNpxCliPath: null,
 };
+
+const bundledRipgrepBinDir = "/bundle/node_modules/@vscode/ripgrep/bin";
 
 describe("buildSafeEnvironment", () => {
     const originalEnv = process.env;
@@ -54,10 +57,10 @@ describe("buildSafeEnvironment", () => {
 
         const env = buildSafeEnvironment({
             ...baseRuntime,
-            bundledBinDirs: ["/bundle/node/.bin", "/bundle/tools/bin"],
+            bundledBinDirs: ["/bundle/node/.bin", "/bundle/tools/bin", bundledRipgrepBinDir],
         });
 
-        expect(env.PATH).toBe(`/bundle/node/.bin${sep}/bundle/tools/bin${sep}/usr/local/bin${sep}/usr/bin`);
+        expect(env.PATH).toBe(`/bundle/node/.bin${sep}/bundle/tools/bin${sep}${bundledRipgrepBinDir}${sep}/usr/local/bin${sep}/usr/bin`);
     });
 
     it("preserves important defaults when shell env is sparse", () => {

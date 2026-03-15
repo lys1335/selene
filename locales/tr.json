@@ -893,6 +893,7 @@
     "title": "Bilgi Tabanı",
     "add": "Doküman Ekle",
     "empty": "Henüz doküman yüklenmedi",
+    "supportedFormats": "Desteklenen biçimler: {formats}",
     "status": {
       "processing": "İşleniyor...",
       "failed": "Başarısız"
@@ -909,7 +910,14 @@
       "pdf": "PDF",
       "txt": "TXT",
       "md": "MD",
-      "html": "HTML"
+      "html": "HTML",
+      "csv": "CSV",
+      "docx": "DOCX",
+      "pptx": "PPTX",
+      "xlsx": "XLSX",
+      "vtt": "VTT",
+      "xml": "XML",
+      "audio": "AUDIO"
     },
     "units": {
       "bytes": "B",
@@ -935,11 +943,11 @@
       "stop": "Durdur",
       "imagePasted": "Panodan görsel yapıştırıldı",
       "pasteError": "Görsel yapıştırılamadı",
-      "filesDropped": "{count, plural, one {# görsel} other {# görsel}} eklendi",
-      "dropError": "Görseller eklenemedi",
-      "dropHint": "Görselleri buraya bırakın",
-      "dropHintSubtext": "Eklemek için bırakın",
-      "onlyImagesSupported": "Yalnızca görsel dosyaları desteklenir",
+      "filesDropped": "{count, plural, one {# ek} other {# ek}} eklendi",
+      "dropError": "Dosyalar eklenemedi",
+      "dropHint": "Dosyaları buraya bırakın",
+      "dropHintSubtext": "Görseller, ses, PDF, DOCX, PPTX, XLSX, VTT, JATS XML, Markdown, HTML, CSV ve TXT desteklenir",
+      "unsupportedAttachment": "Bu dosya türü ek olarak desteklenmiyor.",
       "fileTooLarge": "Dosya çok büyük ({size}MB). Maksimum: {max}MB",
       "someFilesTooLarge": "{count, plural, one {# dosya} other {# dosya}} çok büyük. Maksimum: {max}MB",
       "attachmentsDisabledResearch": "Derin Araştırma modunda ekler kullanılamaz",
@@ -978,7 +986,7 @@
       "disable": "Derin Araştırmayı Devre Dışı Bırak"
     },
     "tooltips": {
-      "addImage": "Görsel ekle",
+      "addAttachment": "Ek ekle",
       "sendMessage": "Mesaj gönder",
       "queueMessage": "Mesajı sıraya ekle",
       "stopResponse": "Yaniti durdur",
@@ -1858,7 +1866,7 @@
       "uploading": "Yükleniyor...",
       "clickToUpload": "Yüklemek için tıklayın",
       "orDragFiles": "veya dosyaları buraya sürükleyin",
-      "supportedFormats": "PDF, TXT, Markdown, HTML desteklenir",
+      "supportedFormats": "Desteklenen biçimler: {formats}",
       "uploadedDocuments": "Yüklenen Belgeler",
       "confirmDelete": "Onayla?",
       "skipHint": "Bu adımı atlayabilir ve belgeleri daha sonra ekleyebilirsiniz",

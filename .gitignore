@@ -123,5 +123,12 @@ docs/
 # Working plans / scratch files
 plan.md
 
-rtk/
+# Local docling temp outputs
+sample3.xlsx
+tmp/docling-local-pptx/
+tmp/docling-local-xlsx/
+tmp/docling-matrix/
+tmp/docling-office/
+tmp/docling-retry/
 
+rtk/

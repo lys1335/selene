@@ -298,7 +298,13 @@ export function runSkillsMigrations(sqlite: Database.Database): void {
       }
     }
 
-    console.log("[SQLite Migration] Skills schema migrations complete");
+    const globalForSkillsMigrations = globalThis as typeof globalThis & {
+      didLogSkillsMigrationsComplete?: boolean;
+    };
+    if (!globalForSkillsMigrations.didLogSkillsMigrationsComplete) {
+      console.log("[SQLite Migration] Skills schema migrations complete");
+      globalForSkillsMigrations.didLogSkillsMigrationsComplete = true;
+    }
   } catch (error) {
     console.error("[SQLite Migration] Skills migrations failed:", error);
   }

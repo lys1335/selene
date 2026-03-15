@@ -37,10 +37,11 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             const mockResourcesPath = "/app/Contents/Resources";
             const expectedNodeBinPath = join(mockResourcesPath, "standalone", "node_modules", ".bin");
             const expectedToolsBinPath = join(mockResourcesPath, "standalone", "tools", "bin");
+            const expectedRipgrepBinPath = join(mockResourcesPath, "standalone", "node_modules", "@vscode", "ripgrep", "bin");
 
             (process as any).resourcesPath = mockResourcesPath;
             vi.mocked(existsSync).mockImplementation((candidatePath) => {
-                return candidatePath === expectedNodeBinPath || candidatePath === expectedToolsBinPath;
+                return candidatePath === expectedNodeBinPath || candidatePath === expectedToolsBinPath || candidatePath === expectedRipgrepBinPath;
             });
 
             // We can't directly test the private function, but we can verify
@@ -65,6 +66,9 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             expect(consoleLogSpy).toHaveBeenCalledWith(
                 expect.stringContaining(expectedToolsBinPath)
             );
+            expect(consoleLogSpy).toHaveBeenCalledWith(
+                expect.stringContaining(expectedRipgrepBinPath)
+            );
 
             consoleLogSpy.mockRestore();
         });
@@ -73,10 +77,11 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             const mockResourcesPath = "C:\\\\app\\\\resources";
             const expectedNodeBinPath = join(mockResourcesPath, "standalone", "node_modules", ".bin");
             const expectedToolsBinPath = join(mockResourcesPath, "standalone", "tools", "bin");
+            const expectedRipgrepBinPath = join(mockResourcesPath, "standalone", "node_modules", "@vscode", "ripgrep", "bin");
 
             process.env.ELECTRON_RESOURCES_PATH = mockResourcesPath;
             vi.mocked(existsSync).mockImplementation((candidatePath) => {
-                return candidatePath === expectedNodeBinPath || candidatePath === expectedToolsBinPath;
+                return candidatePath === expectedNodeBinPath || candidatePath === expectedToolsBinPath || candidatePath === expectedRipgrepBinPath;
             });
 
             const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -95,6 +100,9 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             );
             expect(consoleLogSpy).toHaveBeenCalledWith(
                 expect.stringContaining(expectedToolsBinPath)
+            );
+            expect(consoleLogSpy).toHaveBeenCalledWith(
+                expect.stringContaining(expectedRipgrepBinPath)
             );
 
             consoleLogSpy.mockRestore();
@@ -153,11 +161,12 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             const mockSystemPath = "C:\\\\Windows\\\\System32;C:\\\\Program Files";
             const expectedNodeBinPath = join(mockResourcesPath, "standalone", "node_modules", ".bin");
             const expectedToolsBinPath = join(mockResourcesPath, "standalone", "tools", "bin");
+            const expectedRipgrepBinPath = join(mockResourcesPath, "standalone", "node_modules", "@vscode", "ripgrep", "bin");
 
             process.env.ELECTRON_RESOURCES_PATH = mockResourcesPath;
             process.env.PATH = mockSystemPath;
             vi.mocked(existsSync).mockImplementation((candidatePath) => {
-                return candidatePath === expectedNodeBinPath || candidatePath === expectedToolsBinPath;
+                return candidatePath === expectedNodeBinPath || candidatePath === expectedToolsBinPath || candidatePath === expectedRipgrepBinPath;
             });
 
             const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -187,11 +196,12 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             const mockSystemPath = "/usr/local/bin:/usr/bin:/bin";
             const expectedNodeBinPath = join(mockResourcesPath, "standalone", "node_modules", ".bin");
             const expectedToolsBinPath = join(mockResourcesPath, "standalone", "tools", "bin");
+            const expectedRipgrepBinPath = join(mockResourcesPath, "standalone", "node_modules", "@vscode", "ripgrep", "bin");
 
             (process as any).resourcesPath = mockResourcesPath;
             process.env.PATH = mockSystemPath;
             vi.mocked(existsSync).mockImplementation((candidatePath) => {
-                return candidatePath === expectedNodeBinPath || candidatePath === expectedToolsBinPath;
+                return candidatePath === expectedNodeBinPath || candidatePath === expectedToolsBinPath || candidatePath === expectedRipgrepBinPath;
             });
 
             const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});

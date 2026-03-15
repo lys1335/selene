@@ -39,6 +39,11 @@ import {
 } from "@/lib/chat/transport-errors";
 import { getLastUserMessageId, shouldAutoRetryClientChat } from "@/lib/chat/client-retry";
 import { parseChatPreflightResponse } from "@/lib/chat/preflight";
+import {
+  CHAT_ATTACHMENT_ACCEPT,
+  getDocumentTypeLabel,
+  isImageAttachment,
+} from "@/lib/documents/file-types";
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -57,57 +62,25 @@ function isRecoverableStreamingError(error: Error): boolean {
     provider: "client-ui",
     error,
     message: msg,
+    phase: "streaming",
   });
-  if (classification.recoverable) return true;
-  if (msg.includes("argsText can only be appended")) return true;
-  if (error instanceof SyntaxError && msg.includes("JSON")) return true;
-  if (msg.includes("controller was closed")) return true;
-  if (msg.includes("toolCallId") && msg.includes("not found")) return true;
-  if (msg.includes("Cannot read properties of undefined")) return true;
-  if (msg.includes("Cannot read property") && msg.includes("undefined")) return true;
-  if (msg.includes("Cannot read properties of null")) return true;
-  if (msg.includes("out of bounds")) return true;
-  if (msg.includes("Failed to fetch")) return true;
-  if (msg.includes("Load failed")) return true;
-  if (msg.includes("NetworkError")) return true;
-  if (msg.includes("network error")) return true;
-  if (msg.includes("fetch") && error instanceof TypeError) return true;
-  if (msg.includes("reader") && (msg.includes("released") || msg.includes("cancel"))) return true;
-  if (msg.includes("enqueue") && msg.includes("closed")) return true;
-  if (msg.includes("stream") && (msg.includes("locked") || msg.includes("disturbed"))) return true;
-  if (error instanceof TypeError && (msg.includes("is not a function") || msg.includes("is not iterable"))) return true;
-  return false;
+  return classification.recoverable;
 }
 
-class ChatErrorBoundary extends Component<
-  {
+class ChatErrorBoundary extends Component<{
+  children: ReactNode;
+  processingText: string;
+  genericError: string;
+  recoveryRef?: MutableRefObject<(() => void) | null>;
+  lastStreamingRef?: MutableRefObject<number>;
+}, ErrorBoundaryState> {
+  constructor(props: {
     children: ReactNode;
     processingText: string;
     genericError: string;
     recoveryRef?: MutableRefObject<(() => void) | null>;
     lastStreamingRef?: MutableRefObject<number>;
-  },
-  ErrorBoundaryState
-> {
-  private resetTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly ABORT_GRACE_MS = 2000;
-
-  private wasRecentlyStreaming(): boolean {
-    const ts = this.props.lastStreamingRef?.current;
-    if (!ts) return false;
-    return Date.now() - ts < ChatErrorBoundary.ABORT_GRACE_MS;
-  }
-
-  private isRecoverable(error: Error): boolean {
-    if (isRecoverableStreamingError(error)) return true;
-    if (this.wasRecentlyStreaming()) {
-      console.warn("[ChatErrorBoundary] Error within abort grace window - treating as recoverable:", error.message);
-      return true;
-    }
-    return false;
-  }
-
-  constructor(props: any) {
+  }) {
     super(props);
     this.state = { hasError: false, error: null };
   }
@@ -116,44 +89,65 @@ class ChatErrorBoundary extends Component<
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    if (this.isRecoverable(error)) {
-      console.warn("[ChatErrorBoundary] Caught recoverable tool/streaming error:", error.message, errorInfo);
-      if (this.resetTimer) clearTimeout(this.resetTimer);
-      this.resetTimer = setTimeout(() => {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    const recentlyStreaming = this.props.lastStreamingRef
+      ? Date.now() - this.props.lastStreamingRef.current < 5000
+      : false;
+
+    if (recentlyStreaming && isRecoverableStreamingError(error)) {
+      console.warn("[ChatProvider] Recoverable render/stream error caught by boundary:", error.message);
+      setTimeout(() => {
         try {
           this.props.recoveryRef?.current?.();
-        } catch (recoveryError) {
-          console.warn("[ChatErrorBoundary] Recovery hook failed:", recoveryError);
+        } finally {
+          this.setState({ hasError: false, error: null });
         }
-        this.setState({ hasError: false, error: null });
-        this.resetTimer = null;
-      }, 1200);
+      }, 0);
       return;
     }
 
-    console.error("[ChatErrorBoundary] Fatal error:", error, errorInfo);
+    console.error("[ChatProvider] UI Error:", error, errorInfo);
   }
 
-  componentWillUnmount() {
-    if (this.resetTimer) clearTimeout(this.resetTimer);
-  }
+  private handleRetry = () => {
+    try {
+      this.props.recoveryRef?.current?.();
+    } finally {
+      this.setState({ hasError: false, error: null });
+    }
+  };
 
   render() {
     if (this.state.hasError) {
-      const err = this.state.error;
-      if (err && this.isRecoverable(err)) {
-        return (
-          <div className="flex min-h-[120px] w-full items-center justify-center text-sm text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            {this.props.processingText}
-          </div>
-        );
-      }
+      const message = this.state.error?.message ?? this.props.genericError;
+      const lowered = message.toLowerCase();
+      const isProcessing =
+        lowered.includes("args") ||
+        lowered.includes("tool") ||
+        lowered.includes("invalid") ||
+        lowered.includes("stream") ||
+        lowered.includes("parse");
 
       return (
-        <div className="flex min-h-[120px] w-full items-center justify-center text-sm text-destructive">
-          {this.props.genericError}
+        <div className="flex h-full min-h-[240px] items-center justify-center p-6">
+          <div className="flex max-w-md flex-col items-center gap-3 rounded-lg border border-terminal-border bg-terminal-cream p-6 text-center shadow-sm">
+            <Loader2 className="h-5 w-5 animate-spin text-terminal-muted" />
+            <div className="space-y-1">
+              <p className="font-mono text-sm text-terminal-dark">
+                {isProcessing ? this.props.processingText : this.props.genericError}
+              </p>
+              <p className="text-xs text-terminal-muted font-mono break-all">
+                {message}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={this.handleRetry}
+              className="rounded border border-terminal-border px-3 py-1.5 text-xs font-mono text-terminal-dark hover:bg-terminal-dark/5"
+            >
+              Retry
+            </button>
+          </div>
         </div>
       );
     }
@@ -173,10 +167,8 @@ const ChatSessionIdContext = createContext<string | undefined>(undefined);
 const ChatTransportErrorContext = createContext<{
   error: ChatTransportErrorPayload | null;
   clearError: () => void;
-} | null>(null);
-const ChatSetMessagesContext = createContext<
-  ((messages: UIMessage[] | ((messages: UIMessage[]) => UIMessage[])) => void) | null
->(null);
+}>({ error: null, clearError: () => {} });
+const ChatSetMessagesContext = createContext<((updater: UIMessage[] | ((messages: UIMessage[]) => UIMessage[])) => void) | null>(null);
 
 export function useChatSessionId() {
   return useContext(ChatSessionIdContext);
@@ -212,7 +204,7 @@ function useDynamicChatTransport<T extends AssistantChatTransport<UIMessage>>(tr
   );
 }
 
-function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
+export function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
   return messages.map((msg) => {
     if (!msg.parts || !Array.isArray(msg.parts)) return msg;
 
@@ -247,10 +239,24 @@ function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
         seenToolCalls.add(toolCallId);
 
         if (
+          part.state === "input-streaming" &&
+          part.output === undefined &&
+          part.result === undefined &&
+          !(part as { active?: boolean }).active
+        ) {
+          if (!loggedSanitizerToolCallIds.has(key)) {
+            loggedSanitizerToolCallIds.add(key);
+            console.warn("[ChatProvider] Removing dangling input-streaming tool part:", toolCallId);
+          }
+          return false;
+        }
+
+        if (
           part.state === "input-available" &&
           part.output === undefined &&
           part.result === undefined &&
-          !toolCallsWithOutput.has(toolCallId)
+          !toolCallsWithOutput.has(toolCallId) &&
+          !(part as { active?: boolean }).active
         ) {
           if (!loggedSanitizerToolCallIds.has(key)) {
             loggedSanitizerToolCallIds.add(key);
@@ -259,6 +265,7 @@ function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
           return false;
         }
       }
+
       return true;
     });
 
@@ -319,10 +326,30 @@ type CustomToCreateMessageFunction = <UI_MESSAGE extends UIMessage = UIMessage>(
   message: AppendMessage,
 ) => CreateUIMessage<UI_MESSAGE>;
 
-const toCreateMessageWithAttachmentMetadata: CustomToCreateMessageFunction = <
+export const toCreateMessageWithAttachmentMetadata: CustomToCreateMessageFunction = <
   UI_MESSAGE extends UIMessage = UIMessage,
 >(message: AppendMessage): CreateUIMessage<UI_MESSAGE> => {
-  const inputParts = [
+  const attachmentDetailsByUrl = new Map<
+    string,
+    { filename?: string; contentType?: string }
+  >();
+  for (const attachment of message.attachments ?? []) {
+    const contentPart = attachment.content[0] as
+      | { type?: string; image?: string; data?: string }
+      | undefined;
+    const url = contentPart?.type === "image"
+      ? contentPart.image
+      : contentPart?.type === "file"
+        ? contentPart.data
+        : undefined;
+    if (!url) continue;
+    attachmentDetailsByUrl.set(url, {
+      filename: attachment.name,
+      contentType: attachment.contentType,
+    });
+  }
+
+  const rawInputParts = [
     ...message.content.filter((part) => part.type !== "file"),
     ...(message.attachments?.flatMap((attachment) =>
       attachment.content.map((contentPart) => ({
@@ -331,27 +358,60 @@ const toCreateMessageWithAttachmentMetadata: CustomToCreateMessageFunction = <
       })),
     ) ?? []),
   ];
+  const seenStructuredParts = new Set<string>();
+  const inputParts = rawInputParts.filter((part) => {
+    if (part.type === "text") {
+      return true;
+    }
+
+    if (part.type === "image" || part.type === "file") {
+      const assetUrl = part.type === "image" ? part.image : part.data;
+      const mediaType =
+        part.type === "image"
+          ? ("contentType" in part && typeof part.contentType === "string" ? part.contentType : "image/png")
+          : part.mimeType;
+      const key = `asset:${assetUrl}:${mediaType ?? ""}`;
+      if (seenStructuredParts.has(key)) {
+        return false;
+      }
+      seenStructuredParts.add(key);
+      return true;
+    }
+
+    return true;
+  });
 
   const parts = inputParts.map((part) => {
     switch (part.type) {
       case "text":
         return { type: "text" as const, text: part.text };
       case "image":
+        {
+          const attachmentDetails = attachmentDetailsByUrl.get(part.image);
         return {
           type: "file" as const,
           url: part.image,
-          ...(part.filename && { filename: part.filename }),
-          mediaType: "contentType" in part && typeof part.contentType === "string"
-            ? part.contentType
-            : "image/png",
+          ...((part.filename || attachmentDetails?.filename) && {
+            filename: part.filename || attachmentDetails?.filename,
+          }),
+          mediaType:
+            ("contentType" in part && typeof part.contentType === "string"
+              ? part.contentType
+              : attachmentDetails?.contentType) || "image/png",
         };
+        }
       case "file":
+        {
+          const attachmentDetails = attachmentDetailsByUrl.get(part.data);
         return {
           type: "file" as const,
           url: part.data,
-          mediaType: part.mimeType,
-          ...(part.filename && { filename: part.filename }),
+          mediaType: part.mimeType || attachmentDetails?.contentType || "application/octet-stream",
+          ...((part.filename || attachmentDetails?.filename) && {
+            filename: part.filename || attachmentDetails?.filename,
+          }),
         };
+        }
       default:
         throw new Error(`Unsupported part type: ${part.type}`);
     }
@@ -699,6 +759,71 @@ class BufferedAssistantChatTransport extends AssistantChatTransport<UIMessage> {
   }
 }
 
+function buildPendingAttachment(file: File, previewUrl: string): AttachmentAwarePending {
+  if (isImageAttachment(file.type)) {
+    return {
+      id: `${file.name}-${Date.now()}`,
+      type: "image",
+      name: file.name,
+      contentType: file.type,
+      file,
+      content: [{ type: "image", image: previewUrl }],
+      status: { type: "running", reason: "uploading", progress: 0 },
+      metadata: {
+        contentType: file.type,
+        size: file.size,
+        kind: "image",
+      },
+    } as AttachmentAwarePending;
+  }
+
+  return {
+    id: `${file.name}-${Date.now()}`,
+    type: "file",
+    name: file.name,
+    contentType: file.type || "application/octet-stream",
+    file,
+    content: [{ type: "file", data: previewUrl, mimeType: file.type || "application/octet-stream" }],
+    status: { type: "running", reason: "uploading", progress: 0 },
+    metadata: {
+      contentType: file.type || "application/octet-stream",
+      size: file.size,
+      kind: "document",
+    },
+  } as AttachmentAwarePending;
+}
+
+function buildCompleteAttachment(
+  pending: AttachmentAwarePending,
+  upload: {
+    url: string;
+    localPath: string;
+    filePath: string;
+    contentType: string;
+    size: number;
+  },
+): AttachmentAwarePending {
+  const isImage = isImageAttachment(upload.contentType || pending.contentType);
+
+  return {
+    ...pending,
+    type: isImage ? "image" : "file",
+    contentType: upload.contentType || pending.contentType,
+    content: isImage
+      ? [{ type: "image", image: upload.url }]
+      : [{ type: "file", data: upload.url, mimeType: upload.contentType || pending.contentType || "application/octet-stream" }],
+    status: { type: "requires-action" as const, reason: "composer-send" as const },
+    metadata: {
+      url: upload.url,
+      localPath: upload.localPath,
+      filePath: upload.filePath,
+      contentType: upload.contentType,
+      size: upload.size,
+      kind: isImage ? "image" : "document",
+    },
+  } as AttachmentAwarePending;
+}
+
 export const ChatProvider: FC<ChatProviderProps> = ({
   children,
   sessionId,
@@ -709,26 +834,12 @@ export const ChatProvider: FC<ChatProviderProps> = ({
   const tErrors = useTranslations("errors");
   const attachmentAdapter: AttachmentAdapter = useMemo(
     () => ({
-      accept: "image/*",
+      accept: CHAT_ATTACHMENT_ACCEPT,
 
       async *add({ file }): AsyncGenerator<PendingAttachment, void> {
-        const id = `${file.name}-${Date.now()}`;
-        const localPreviewUrl = URL.createObjectURL(file);
-
-        yield {
-          id,
-          type: "image",
-          name: file.name,
-          contentType: file.type,
-          file,
-          content: [
-            {
-              type: "image",
-              image: localPreviewUrl,
-            },
-          ],
-          status: { type: "running", reason: "uploading", progress: 0 },
-        };
+        const previewUrl = URL.createObjectURL(file);
+        const pendingAttachment = buildPendingAttachment(file, previewUrl);
+        yield pendingAttachment;
 
         const formData = new FormData();
         formData.append("file", file);
@@ -743,7 +854,7 @@ export const ChatProvider: FC<ChatProviderProps> = ({
         });
 
         if (!response.ok) {
-          URL.revokeObjectURL(localPreviewUrl);
+          URL.revokeObjectURL(previewUrl);
           throw new Error(tAssistant("uploadError"));
         }
 
@@ -760,31 +871,8 @@ export const ChatProvider: FC<ChatProviderProps> = ({
           });
         }
 
-        URL.revokeObjectURL(localPreviewUrl);
-
-        const completeAttachment = {
-          id,
-          type: "image" as const,
-          name: file.name,
-          contentType: file.type,
-          file,
-          content: [
-            {
-              type: "image" as const,
-              image: data.url,
-            },
-          ],
-          status: { type: "requires-action" as const, reason: "composer-send" as const },
-          metadata: {
-            url: data.url,
-            localPath: data.localPath,
-            filePath: data.filePath,
-            contentType: data.contentType,
-            size: data.size,
-            kind: "image",
-          },
-        } as AttachmentAwarePending;
-        yield completeAttachment;
+        URL.revokeObjectURL(previewUrl);
+        yield buildCompleteAttachment(pendingAttachment, data);
       },
 
       async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
@@ -805,7 +893,7 @@ export const ChatProvider: FC<ChatProviderProps> = ({
       },
 
       async remove(): Promise<void> {
-        // No cleanup needed - could delete from S3 if desired
+        // No cleanup needed - could delete from storage if desired
       },
     }),
     [sessionId, tAssistant]

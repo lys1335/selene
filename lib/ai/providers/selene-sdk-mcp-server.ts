@@ -226,6 +226,7 @@ export function createSeleneSdkMcpServer(
     sessionId: ctx.sessionId,
     userId: ctx.userId,
     characterId: ctx.characterId ?? undefined,
+    onExecuteCommandProgress: ctx.onExecuteCommandProgress,
   };
 
   const useDeferredMode = ctx.toolLoadingMode === "deferred";

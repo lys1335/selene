@@ -20,7 +20,12 @@ import { validateCommand, validateExecutionDirectory } from "./validator";
 import { commandLogger } from "./logger";
 import { saveTerminalLog } from "./log-manager";
 import { isEBADFError, spawnWithFileCapture } from "@/lib/spawn-utils";
-import type { ExecuteOptions, ExecuteResult, BackgroundProcessInfo } from "./types";
+import type {
+    ExecuteOptions,
+    ExecuteResult,
+    BackgroundProcessInfo,
+    ExecuteCommandProgressUpdate,
+} from "./types";
 import {
     getBundledRuntimeInfo,
     buildSafeEnvironment,
@@ -38,6 +43,7 @@ import {
     buildExecuteSearchMetadata,
 } from "./executor-rtk";
 import { runEBADFFallback } from "./executor-ebadf";
+import { nowISO } from "@/lib/utils/timestamp";
 
 // EBADF helpers imported from @/lib/spawn-utils
 // Re-export for backwards compatibility with tests
@@ -346,11 +352,18 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
         maxOutputSize = DEFAULT_MAX_OUTPUT_SIZE,
         forceDirectExecution = false,
         fallbackReasonForDirectExecution,
+        toolCallId,
+        onProgress,
     } = options;
 
     const timeout = resolveTimeout(command, options.timeout);
     const context = { characterId };
     const startTime = Date.now();
+    const startedAt = nowISO();
+    const fullCommand = [command, ...args].join(" ").trim();
+    const runningMessage = fullCommand ? `Running ${fullCommand}...` : "Running command...";
+    const completedMessage = fullCommand ? `Completed ${fullCommand}` : "Command completed";
+    const failedMessage = fullCommand ? `Failed ${fullCommand}` : "Command failed";
 
     // Log execution attempt
     commandLogger.logExecutionStart(command, args, cwd, context);
@@ -384,6 +397,21 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
         let killed = false;
         let timeoutId: NodeJS.Timeout | null = null;
         let child: ChildProcess;
+
+        const emitProgress = (overrides: Partial<ExecuteCommandProgressUpdate> = {}) => {
+            onProgress?.({
+                toolCallId,
+                command,
+                args,
+                cwd,
+                stdout,
+                stderr,
+                status: "running",
+                startedAt,
+                message: runningMessage,
+                ...overrides,
+            });
+        };
 
         const runtime = getBundledRuntimeInfo();
         const baseEnv = buildSafeEnvironment(runtime) as NodeJS.ProcessEnv;
@@ -442,38 +470,64 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                 }
             }, timeout);
 
+            emitProgress({ message: runningMessage });
+            
             // Capture stdout
             child.stdout?.on("data", (chunk: Buffer) => {
                 const data = chunk.toString();
                 outputSize += data.length;
-
+            
                 if (outputSize > maxOutputSize) {
                     if (!killed) {
                         killed = true;
                         child.kill("SIGTERM");
                         stderr += "\n[Output size limit exceeded]";
+                        emitProgress({
+                            stderr,
+                            status: "error",
+                            message: failedMessage,
+                            error: "Process terminated due to timeout or output limit",
+                        });
                     }
                 } else {
                     stdout += data;
+                    emitProgress({
+                        stdout,
+                        chunkStream: "stdout",
+                        chunkText: data,
+                        message: runningMessage,
+                    });
                 }
             });
-
+            
             // Capture stderr
             child.stderr?.on("data", (chunk: Buffer) => {
                 const data = chunk.toString();
                 outputSize += data.length;
-
+            
                 if (outputSize > maxOutputSize) {
                     if (!killed) {
                         killed = true;
                         child.kill("SIGTERM");
                         stderr += "\n[Output size limit exceeded]";
+                        emitProgress({
+                            stderr,
+                            status: "error",
+                            message: failedMessage,
+                            error: "Process terminated due to timeout or output limit",
+                        });
                     }
                 } else {
                     stderr += data;
+                    emitProgress({
+                        stderr,
+                        chunkStream: "stderr",
+                        chunkText: data,
+                        message: runningMessage,
+                    });
                 }
             });
-
+            
             // Handle completion
             child.on("close", (code, signal) => {
                 if (timeoutId) clearTimeout(timeoutId);
@@ -514,7 +568,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                     return;
                 }
 
-                resolve({
+                const finalResult: ExecuteResult = {
                     success: !killed && code === 0,
                     stdout: stdout.trim(),
                     stderr: stderr.trim(),
@@ -522,6 +576,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                     signal: signal,
                     error: killed ? "Process terminated due to timeout or output limit" : undefined,
                     executionTime,
+                    startedAt,
                     logId,
                     isTruncated: false,
                     searchMetadata: fallbackReason
@@ -533,7 +588,21 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                             fallbackReason,
                         })
                         : searchMetadata,
+                };
+
+                emitProgress({
+                    stdout: finalResult.stdout,
+                    stderr: finalResult.stderr,
+                    status: finalResult.success ? "success" : "error",
+                    executionTime,
+                    exitCode: code,
+                    error: finalResult.error,
+                    logId,
+                    isTruncated: false,
+                    message: finalResult.success ? completedMessage : failedMessage,
                 });
+
+                resolve(finalResult);
             });
 
             // Handle spawn errors — including EBADF fallback
@@ -589,7 +658,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                     return;
                 }
 
-                resolve({
+                const failedResult: ExecuteResult = {
                     success: false,
                     stdout: stdout.trim(),
                     stderr: stderr.trim(),
@@ -597,6 +666,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                     signal: null,
                     error: errorMessage,
                     executionTime,
+                    startedAt,
                     searchMetadata: fallbackReason
                         ? buildExecuteSearchMetadata({
                             originalCommand: command,
@@ -606,7 +676,18 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                             fallbackReason,
                         })
                         : searchMetadata,
+                };
+
+                emitProgress({
+                    stdout: failedResult.stdout,
+                    stderr: failedResult.stderr,
+                    status: "error",
+                    executionTime,
+                    error: errorMessage,
+                    message: failedMessage,
                 });
+
+                resolve(failedResult);
             });
         } catch (error) {
             if (timeoutId) clearTimeout(timeoutId);
@@ -646,7 +727,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                 return;
             }
 
-            resolve({
+            const failedResult: ExecuteResult = {
                 success: false,
                 stdout: "",
                 stderr: "",
@@ -654,6 +735,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                 signal: null,
                 error: errorMessage,
                 executionTime,
+                startedAt,
                 searchMetadata: fallbackReason
                     ? buildExecuteSearchMetadata({
                         originalCommand: command,
@@ -663,7 +745,16 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                         fallbackReason,
                     })
                     : searchMetadata,
+            };
+
+            emitProgress({
+                status: "error",
+                executionTime,
+                error: errorMessage,
+                message: failedMessage,
             });
+
+            resolve(failedResult);
         }
     });
 }

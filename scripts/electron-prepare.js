@@ -443,6 +443,17 @@ if (fs.existsSync(applyPatchLauncherSrc) && fs.existsSync(applyPatchRuntimeSrc))
     console.warn('  Warning: apply_patch shim sources missing, skipping apply_patch bundling');
 }
 
+// 12b. Ensure the bundled ripgrep binary remains executable in packaged builds.
+console.log('Ensuring bundled ripgrep binary is executable...');
+const ripgrepBinDir = path.join(standaloneDir, 'node_modules', '@vscode', 'ripgrep', 'bin');
+const ripgrepBinary = path.join(ripgrepBinDir, process.platform === 'win32' ? 'rg.exe' : 'rg');
+if (fs.existsSync(ripgrepBinary)) {
+    ensureExecutable(ripgrepBinary);
+    console.log(`  Bundled ripgrep binary ready at ${ripgrepBinary}`);
+} else {
+    console.warn(`  Warning: bundled ripgrep binary missing at ${ripgrepBinary}`);
+}
+
 // 13. Bundle ffmpeg static binary for audio conversion (whisper.cpp preprocessing)
 console.log('Bundling ffmpeg static binary...');
 try {

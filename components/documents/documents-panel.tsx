@@ -17,6 +17,11 @@ import {
 } from "lucide-react";
 import { useTranslations, useFormatter } from "next-intl";
 import { resilientFetch, resilientPost, resilientDelete } from "@/lib/utils/resilient-fetch";
+import {
+  DOCUMENT_UPLOAD_ACCEPT,
+  DOCUMENT_SUPPORT_LABELS,
+  getDocumentTypeLabel,
+} from "@/lib/documents/file-types";
 
 export interface AgentDocument {
   id: string;
@@ -34,13 +39,6 @@ interface DocumentsPanelProps {
   agentName?: string;
 }
 
-const FILE_TYPE_LABELS: Record<string, string> = {
-  "application/pdf": "pdf",
-  "text/plain": "txt",
-  "text/markdown": "md",
-  "text/html": "html",
-};
-
 export function DocumentsPanel({ agentId }: DocumentsPanelProps) {
   const [documents, setDocuments] = useState<AgentDocument[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -50,7 +48,6 @@ export function DocumentsPanel({ agentId }: DocumentsPanelProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const t = useTranslations("documents");
-  const tc = useTranslations("common");
   const formatter = useFormatter();
 
   const formatFileSize = (bytes: number | null | undefined): string => {
@@ -158,9 +155,8 @@ export function DocumentsPanel({ agentId }: DocumentsPanelProps) {
     await fetchDocuments();
   };
 
-  const getFileTypeLabel = (contentType: string): string => {
-    const key = FILE_TYPE_LABELS[contentType];
-    return key ? t(`type.${key}`) : contentType.split("/")[1]?.toUpperCase() || "FILE";
+  const getFileTypeLabel = (contentType: string, filename?: string): string => {
+    return getDocumentTypeLabel(contentType, filename);
   };
 
   return (
@@ -213,13 +209,13 @@ export function DocumentsPanel({ agentId }: DocumentsPanelProps) {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.txt,.md,.markdown,.html,.htm"
+            accept={DOCUMENT_UPLOAD_ACCEPT}
             multiple
             className="hidden"
             onChange={(e) => handleUpload(e.target.files)}
           />
 
-          <div className="shrink-0">
+          <div className="shrink-0 space-y-2">
             <Button
               variant="outline"
               size="sm"
@@ -245,6 +241,9 @@ export function DocumentsPanel({ agentId }: DocumentsPanelProps) {
                 </>
               )}
             </Button>
+            <p className="px-1 text-[11px] font-mono text-terminal-muted/80">
+              {t("supportedFormats", { formats: DOCUMENT_SUPPORT_LABELS.join(", ") })}
+            </p>
           </div>
 
           {error && (
@@ -284,7 +283,7 @@ export function DocumentsPanel({ agentId }: DocumentsPanelProps) {
                       </p>
                       <div className="flex items-center gap-2 text-xs text-terminal-muted/70 font-mono mt-1">
                         <span className="px-1.5 py-0.5 bg-terminal-dark/10 rounded text-[10px] font-medium">
-                          {getFileTypeLabel(doc.contentType)}
+                          {getFileTypeLabel(doc.contentType, doc.originalFilename)}
                         </span>
                         {doc.sizeBytes && <span>{formatFileSize(doc.sizeBytes)}</span>}
                         <span className="flex items-center gap-0.5">

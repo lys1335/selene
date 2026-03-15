@@ -109,6 +109,11 @@ export interface ToolFactoryOptions {
 
   /** Character appearance description */
   characterAppearanceDescription?: string;
+
+  /** Live executeCommand progress hook forwarded by request-scoped runtimes. */
+  onExecuteCommandProgress?: import("@/lib/command-execution/types").ExecuteCommandProgressUpdate extends infer T
+    ? (update: T) => void
+    : never;
 }
 
 /**
@@ -146,6 +151,9 @@ export interface ToolContext {
   /** Character context (optional) */
   characterAvatarUrl?: string;
   characterAppearanceDescription?: string;
+
+  /** Live executeCommand progress hook forwarded by request-scoped runtimes. */
+  onExecuteCommandProgress?: (update: import("@/lib/command-execution/types").ExecuteCommandProgressUpdate) => void;
 
   /** Which tools to include (overrides deferred loading) */
   includeTools?: string[];

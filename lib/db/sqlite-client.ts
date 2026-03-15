@@ -34,6 +34,7 @@ const globalForDb = globalThis as unknown as {
   sqlite: Database.Database | undefined;
   db: BetterSQLite3Database<typeof schema> | undefined;
   schemaVersion?: number;
+  didLogSqliteOpen?: boolean;
 };
 
 const SCHEMA_VERSION = 4;
@@ -47,7 +48,10 @@ function createConnection(): { sqlite: Database.Database; db: BetterSQLite3Datab
     mkdirSync(dbDir, { recursive: true });
   }
 
-  console.log("[SQLite] Opening database at:", dbPath);
+  if (!globalForDb.didLogSqliteOpen) {
+    console.log("[SQLite] Opening database at:", dbPath);
+    globalForDb.didLogSqliteOpen = true;
+  }
 
   const sqlite = new Database(dbPath);
 

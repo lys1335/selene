@@ -4,6 +4,27 @@
  * TypeScript interfaces for the command execution module.
  */
 
+export type ExecuteCommandLiveStatus = "running" | "success" | "error";
+
+export interface ExecuteCommandProgressUpdate {
+  toolCallId?: string;
+  command: string;
+  args: string[];
+  cwd: string;
+  stdout: string;
+  stderr: string;
+  status: ExecuteCommandLiveStatus;
+  startedAt: string;
+  executionTime?: number;
+  exitCode?: number | null;
+  error?: string;
+  message?: string;
+  logId?: string;
+  isTruncated?: boolean;
+  chunkStream?: "stdout" | "stderr";
+  chunkText?: string;
+}
+
 /**
  * Options for executing a command
  */
@@ -26,6 +47,10 @@ export interface ExecuteOptions {
   forceDirectExecution?: boolean;
   /** Internal use: preserve fallback reason when forcing direct execution */
   fallbackReasonForDirectExecution?: ExecuteSearchMetadata["fallbackReason"];
+  /** Tool call identifier used for live command progress projections. */
+  toolCallId?: string;
+  /** Live progress callback for streaming command output into the UI. */
+  onProgress?: (update: ExecuteCommandProgressUpdate) => void;
 }
 
 /**
@@ -65,6 +90,8 @@ export interface ExecuteResult {
   error?: string;
   /** Execution time in milliseconds */
   executionTime?: number;
+  /** Timestamp captured when the command started. */
+  startedAt?: string;
   /** Log ID for persistent storage */
   logId?: string;
   /** Whether the output was truncated in context */
@@ -93,6 +120,8 @@ export interface ExecuteCommandToolOptions {
   sessionId: string;
   /** Character/agent ID for folder access */
   characterId?: string | null;
+  /** Live command progress callback used while a foreground command is running. */
+  onProgress?: (update: ExecuteCommandProgressUpdate) => void;
 }
 
 /**
@@ -129,6 +158,8 @@ export interface ExecuteCommandToolResult {
   exitCode?: number | null;
   /** Execution time in milliseconds */
   executionTime?: number;
+  /** Timestamp captured when the command started. */
+  startedAt?: string;
   /** User-friendly message */
   message?: string;
   /** Error details */

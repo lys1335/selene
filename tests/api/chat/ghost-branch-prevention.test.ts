@@ -28,6 +28,8 @@ import {
   convertDBMessagesToUIMessages,
   countVisibleConversationMessages,
 } from "@/lib/messages/converter";
+import { createSyncStreamingMessage } from "@/app/api/chat/streaming-progress";
+import type { StreamingMessageState } from "@/app/api/chat/streaming-state";
 
 describe("Ghost Branch Prevention", () => {
   const TEST_USER_ID = "test-ghost-branch";
@@ -493,5 +495,75 @@ describe("Ghost Branch Prevention", () => {
     expect(uiMessages).toHaveLength(2);
     expect(uiMessages[0].role).toBe("user");
     expect(uiMessages[1].role).toBe("assistant");
+  });
+
+  it("creates a distinct post-injection assistant row after background progress already persisted the pre-split row", async () => {
+    const session = await createSession({ title: "Ghost Branch - Rotated Assistant Id", userId: TEST_USER_ID });
+    if (!session) throw new Error("Failed to create session");
+
+    await createMessage({
+      sessionId: session.id,
+      role: "user",
+      content: [{ type: "text", text: "Research auth" }],
+      orderingIndex: await nextOrderingIndex(session.id),
+    });
+
+    let assistantMessageId = crypto.randomUUID();
+    const streamingState: StreamingMessageState = {
+      parts: [{ type: "text", text: "Pre-injection assistant segment" }],
+      toolCallParts: new Map(),
+      loggedIncompleteToolCalls: new Set(),
+      lastBroadcastAt: 0,
+      lastBroadcastSignature: "",
+      pendingBroadcast: false,
+      isCreating: false,
+    };
+
+    const syncStreamingMessage = createSyncStreamingMessage({
+      sessionId: session.id,
+      userId: TEST_USER_ID,
+      eventCharacterId: "character-test",
+      scheduledRunId: null,
+      scheduledTaskId: null,
+      scheduledTaskName: null,
+      getAgentRunId: () => "run-test",
+      streamingState,
+      getAssistantMessageId: () => assistantMessageId,
+    });
+
+    await syncStreamingMessage(true);
+
+    const preSplitId = streamingState.messageId;
+    expect(preSplitId).toBe(assistantMessageId);
+
+    await createMessage({
+      sessionId: session.id,
+      role: "user",
+      content: [{ type: "text", text: "Queued follow-up" }],
+      orderingIndex: await nextOrderingIndex(session.id),
+      metadata: { livePromptInjected: true },
+    });
+
+    streamingState.messageId = undefined;
+    streamingState.parts = [{ type: "text", text: "Post-injection assistant segment" }];
+    streamingState.toolCallParts = new Map();
+    streamingState.loggedIncompleteToolCalls = new Set();
+    streamingState.lastBroadcastAt = 0;
+    streamingState.lastBroadcastSignature = "";
+    streamingState.pendingBroadcast = false;
+    streamingState.isCreating = false;
+    assistantMessageId = crypto.randomUUID();
+
+    await syncStreamingMessage(true);
+
+    const persisted = await getMessages(session.id);
+    const assistants = persisted.filter((message) => message.role === "assistant");
+
+    expect(assistants).toHaveLength(2);
+    expect(assistants[0]?.id).toBe(preSplitId);
+    expect(assistants[1]?.id).toBe(assistantMessageId);
+    expect((assistants[1]?.content as Array<{ type: string; text?: string }>)[0]?.text).toBe(
+      "Post-injection assistant segment"
+    );
   });
 });

@@ -306,6 +306,7 @@ class ToolRegistry {
           characterId: context.characterId,
           characterAvatarUrl: context.characterAvatarUrl,
           characterAppearanceDescription: context.characterAppearanceDescription,
+          onExecuteCommandProgress: context.onExecuteCommandProgress,
         });
       } catch (error) {
         console.error(`[ToolRegistry] Failed to create tool "${name}":`, error);

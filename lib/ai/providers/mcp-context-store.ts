@@ -107,6 +107,11 @@ export interface SeleneMcpContext {
   onRichOutput?: (toolCallId: string, toolName: string, output: unknown) => void;
 
   /**
+   * Callback fired when executeCommand emits incremental stdout/stderr while running.
+   */
+  onExecuteCommandProgress?: (update: import("@/lib/command-execution/types").ExecuteCommandProgressUpdate) => void;
+
+  /**
    * Bridge for resolving real Claude Agent SDK tool outputs (tool_use_result)
    * back into Vercel AI SDK tool execution lifecycle.
    */

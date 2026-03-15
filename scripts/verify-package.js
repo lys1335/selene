@@ -100,6 +100,10 @@ const requiredPaths = [
     : 'standalone/node_modules/.bin/node',
   'standalone/node_modules/npm/bin/npm-cli.js',
   'standalone/node_modules/npm/bin/npx-cli.js',
+  'standalone/node_modules/@vscode/ripgrep/lib/index.js',
+  (platform === 'win32' || platform === 'win')
+    ? 'standalone/node_modules/@vscode/ripgrep/bin/rg.exe'
+    : 'standalone/node_modules/@vscode/ripgrep/bin/rg',
 ];
 
 // RTK bundle is optional at runtime (experimental), but warn if absent in package.

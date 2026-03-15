@@ -12,6 +12,15 @@ export interface DBTextContentPart extends ContextProvenance {
 export interface DBImageContentPart extends ContextProvenance {
   type: "image";
   image: string;
+  filename?: string;
+  mediaType?: string;
+}
+
+export interface DBFileContentPart extends ContextProvenance {
+  type: "file";
+  url: string;
+  filename?: string;
+  mediaType?: string;
 }
 
 export interface DBToolCallPart extends ContextProvenance {
@@ -43,6 +52,7 @@ export interface DBToolResultPart extends ContextProvenance {
 export type DBContentPart =
   | DBTextContentPart
   | DBImageContentPart
+  | DBFileContentPart
   | DBToolCallPart
   | DBToolResultPart;
 
@@ -151,7 +161,7 @@ function buildScopedFallbackResults(
 // Using tool-* format ensures the correct toolName extraction via type.replace("tool-", "").
 type SimplePart =
   | { type: "text"; text: string }
-  | { type: "file"; mediaType: string; url: string }
+  | { type: "file"; mediaType: string; url: string; filename?: string }
   | {
       type: `tool-${string}`;
       toolCallId: string;
@@ -184,6 +194,37 @@ interface BuildUIPartsOptions {
   fallbackResults?: Map<string, ToolResultInfo>;
   preserveFallbackOrphans?: boolean;
   stripInternalToolLeakText?: boolean;
+}
+
+type PersistedAttachmentMetadata = {
+  name?: string;
+  contentType?: string;
+  url?: string;
+};
+
+function collectAttachmentMetadataFromContent(content: DBContentPart[]): PersistedAttachmentMetadata[] {
+  const seen = new Set<string>();
+  const attachments: PersistedAttachmentMetadata[] = [];
+
+  for (const part of content) {
+    if (part.type !== "image" && part.type !== "file") {
+      continue;
+    }
+
+    const url = part.type === "image" ? part.image : part.url;
+    if (typeof url !== "string" || url.length === 0 || seen.has(url)) {
+      continue;
+    }
+
+    seen.add(url);
+    attachments.push({
+      url,
+      name: part.filename,
+      contentType: part.mediaType,
+    });
+  }
+
+  return attachments;
 }
 
 function buildUIPartsFromDBContent(
@@ -239,8 +280,16 @@ function buildUIPartsFromDBContent(
     } else if (part.type === "image" && part.image) {
       parts.push({
         type: "file",
-        mediaType: "image/jpeg",
+        mediaType: part.mediaType || "image/jpeg",
         url: part.image,
+        ...(part.filename ? { filename: part.filename } : {}),
+      });
+    } else if (part.type === "file" && part.url) {
+      parts.push({
+        type: "file",
+        mediaType: part.mediaType || "application/octet-stream",
+        url: part.url,
+        ...(part.filename ? { filename: part.filename } : {}),
       });
     } else if (part.type === "tool-call") {
       if (renderedToolCallIds.has(part.toolCallId)) {
@@ -392,7 +441,11 @@ export function convertDBMessageToUIMessage(dbMessage: DBMessage): UIMessage | n
 
   // Build metadata for assistant-ui format
   // assistant-ui expects custom data in metadata.custom
-  const dbMeta = dbMessage.metadata as { usage?: Record<string, unknown>; cache?: Record<string, unknown> } | undefined;
+  const dbMeta = dbMessage.metadata as {
+    usage?: Record<string, unknown>;
+    cache?: Record<string, unknown>;
+    custom?: Record<string, unknown>;
+  } | undefined;
   const customMetadata: Record<string, unknown> = {};
 
   // Pass through usage from database metadata
@@ -406,6 +459,15 @@ export function convertDBMessageToUIMessage(dbMessage: DBMessage): UIMessage | n
   // Also include tokenCount for convenience
   if (dbMessage.tokenCount) {
     customMetadata.tokenCount = dbMessage.tokenCount;
+  }
+  const existingAttachments = Array.isArray(dbMeta?.custom?.attachments)
+    ? dbMeta?.custom?.attachments
+    : [];
+  const fallbackAttachments = collectAttachmentMetadataFromContent(content);
+  const attachments =
+    existingAttachments.length > 0 ? existingAttachments : fallbackAttachments;
+  if (attachments.length > 0) {
+    customMetadata.attachments = attachments;
   }
 
   return {
@@ -514,7 +576,11 @@ export function convertDBMessagesToUIMessages(dbMessages: DBMessage[]): UIMessag
     }
 
     // Build metadata for assistant-ui format
-    const dbMeta = dbMsg.metadata as { usage?: Record<string, unknown>; cache?: Record<string, unknown> } | undefined;
+    const dbMeta = dbMsg.metadata as {
+      usage?: Record<string, unknown>;
+      cache?: Record<string, unknown>;
+      custom?: Record<string, unknown>;
+    } | undefined;
     const customMetadata: Record<string, unknown> = {};
 
     if (dbMeta?.usage) {
@@ -525,6 +591,15 @@ export function convertDBMessagesToUIMessages(dbMessages: DBMessage[]): UIMessag
     }
     if (dbMsg.tokenCount) {
       customMetadata.tokenCount = dbMsg.tokenCount;
+    }
+    const existingAttachments = Array.isArray(dbMeta?.custom?.attachments)
+      ? dbMeta?.custom?.attachments
+      : [];
+    const fallbackAttachments = collectAttachmentMetadataFromContent(content);
+    const attachments =
+      existingAttachments.length > 0 ? existingAttachments : fallbackAttachments;
+    if (attachments.length > 0) {
+      customMetadata.attachments = attachments;
     }
 
     result.push({
@@ -541,7 +616,8 @@ export function convertDBMessagesToUIMessages(dbMessages: DBMessage[]): UIMessag
 // ThreadMessageLike content part types (what runtime.thread.reset() expects)
 type ThreadContentPart =
   | { type: "text"; text: string }
-  | { type: "image"; image: string }
+  | { type: "image"; image: string; filename?: string; mediaType?: string }
+  | { type: "file"; url: string; filename?: string; mediaType?: string }
   | { type: "tool-call"; toolCallId: string; toolName: string; args: any; result?: any };
 
 interface ThreadMessageLike {
@@ -563,8 +639,13 @@ function convertUIMessageToThreadMessageLike(msg: UIMessage): ThreadMessageLike 
     if (part.type === "text" && "text" in part) {
       content.push({ type: "text", text: part.text });
     } else if (part.type === "file" && "url" in part) {
-      // File parts (images) need to be converted to image content
-      content.push({ type: "image", image: part.url });
+      // Preserve original attachment metadata so rehydrated user messages stay byte-for-byte stable.
+      content.push({
+        type: "file",
+        url: part.url,
+        ...(typeof part.mediaType === "string" ? { mediaType: part.mediaType } : {}),
+        ...(typeof part.filename === "string" ? { filename: part.filename } : {}),
+      });
     } else if (part.type === "dynamic-tool" && "toolName" in part) {
       // Dynamic tool parts need to be converted to tool-call with result
       const toolPart = part as { toolName: string; toolCallId: string; input: unknown; output: unknown };

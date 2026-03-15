@@ -893,6 +893,7 @@
     "title": "Knowledge Base",
     "add": "Add Documents",
     "empty": "No documents uploaded",
+    "supportedFormats": "Supports {formats}",
     "status": {
       "processing": "Processing...",
       "failed": "Failed"
@@ -909,7 +910,14 @@
       "pdf": "PDF",
       "txt": "TXT",
       "md": "MD",
-      "html": "HTML"
+      "html": "HTML",
+      "csv": "CSV",
+      "docx": "DOCX",
+      "pptx": "PPTX",
+      "xlsx": "XLSX",
+      "vtt": "VTT",
+      "xml": "XML",
+      "audio": "AUDIO"
     },
     "units": {
       "bytes": "B",
@@ -937,11 +945,11 @@
       "initializing": "Initializing...",
       "imagePasted": "Image pasted from clipboard",
       "pasteError": "Failed to paste image",
-      "filesDropped": "{count, plural, one {# image} other {# images}} attached",
-      "dropError": "Failed to attach images",
-      "dropHint": "Drop images here",
-      "dropHintSubtext": "Release to attach",
-      "onlyImagesSupported": "Only image files are supported",
+      "filesDropped": "{count, plural, one {# attachment} other {# attachments}} attached",
+      "dropError": "Failed to attach files",
+      "dropHint": "Drop files here",
+      "dropHintSubtext": "Supports images, audio, PDF, DOCX, PPTX, XLSX, VTT, JATS XML, Markdown, HTML, CSV, and TXT",
+      "unsupportedAttachment": "That file type is not supported for attachments.",
       "fileTooLarge": "File is too large ({size}MB). Maximum: {max}MB",
       "someFilesTooLarge": "{count, plural, one {# file is} other {# files are}} too large. Maximum: {max}MB",
       "attachmentsDisabledResearch": "Attachments are not available in Deep Research mode",
@@ -978,7 +986,7 @@
       "disable": "Disable Deep Research"
     },
     "tooltips": {
-      "addImage": "Add image",
+      "addAttachment": "Add attachment",
       "sendMessage": "Send message",
       "queueMessage": "Queue message",
       "stopResponse": "Stop response",
@@ -1904,7 +1912,7 @@
       "uploading": "Uploading...",
       "clickToUpload": "Click to upload",
       "orDragFiles": "or drag files here",
-      "supportedFormats": "Supports PDF, TXT, Markdown, HTML",
+      "supportedFormats": "Supports {formats}",
       "uploadedDocuments": "Uploaded Documents",
       "confirmDelete": "Confirm?",
       "skipHint": "You can skip this step and add documents later",

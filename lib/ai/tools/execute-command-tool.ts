@@ -5,7 +5,7 @@
  * Follows the same patterns as ripgrep/tool.ts - runs directly on the server.
  */
 
-import { tool, jsonSchema } from "ai";
+import { tool, jsonSchema, type ToolExecutionOptions } from "ai";
 import { logToolEvent } from "@/lib/ai/tool-registry";
 import fs from "fs/promises";
 import path from "path";
@@ -24,7 +24,17 @@ import type {
     ExecuteCommandToolOptions,
     ExecuteCommandInput,
     ExecuteCommandToolResult,
+    ExecuteCommandProgressUpdate,
 } from "@/lib/command-execution/types";
+
+function extractToolCallId(options?: ToolExecutionOptions): string {
+    if (!options || typeof options !== "object") return "";
+    return typeof options.toolCallId === "string" ? options.toolCallId : "";
+}
+
+function toIsoTimestamp(timestamp: number): string {
+    return new Date(timestamp).toISOString();
+}
 
 function isPythonExecutable(command: string): boolean {
     const normalized = command.trim().replace(/^["']|["']$/g, "").toLowerCase();
@@ -205,7 +215,7 @@ const executeCommandSchema = jsonSchema<ExecuteCommandInput & { logId?: string }
  * Create the executeCommand AI tool
  */
 export function createExecuteCommandTool(options: ExecuteCommandToolOptions) {
-    const { characterId, sessionId } = options;
+    const { characterId, sessionId, onProgress } = options;
 
     return tool({
         description: `Execute shell commands safely within synced directories. Supports foreground and background execution.
@@ -247,8 +257,17 @@ The tool returns immediately with a processId. Poll with processId to check stat
         inputSchema: executeCommandSchema,
 
         execute: async (
-            input: ExecuteCommandInput & { logId?: string }
+            input: ExecuteCommandInput & { logId?: string },
+            toolCallOptions?: ToolExecutionOptions,
         ): Promise<ExecuteCommandToolResult> => {
+            const toolCallId = extractToolCallId(toolCallOptions);
+            const forwardProgress = (update: ExecuteCommandProgressUpdate) => {
+                onProgress?.({
+                    ...update,
+                    toolCallId: update.toolCallId ?? toolCallId,
+                });
+            };
+
             // Validate characterId
             if (!characterId) {
                 return {
@@ -292,6 +311,7 @@ The tool returns immediately with a processId. Poll with processId to check stat
                         processId: info.id,
                         stdout: info.stdout,
                         stderr: info.stderr,
+                        startedAt: toIsoTimestamp(info.startedAt),
                         message: `Process '${info.command} ${info.args.join(" ")}' still running (${elapsed}s elapsed).`,
                     };
                 }
@@ -302,6 +322,7 @@ The tool returns immediately with a processId. Poll with processId to check stat
                     stderr: info.stderr,
                     exitCode: info.exitCode,
                     executionTime: Date.now() - info.startedAt,
+                    startedAt: toIsoTimestamp(info.startedAt),
                     message: `Process finished after ${elapsed}s with exit code ${info.exitCode}.`,
                     logId: info.logId,
                 };
@@ -480,6 +501,7 @@ The tool returns immediately with a processId. Poll with processId to check stat
                     stderr: result.stderr,
                     exitCode: result.exitCode,
                     executionTime: result.executionTime,
+                    startedAt: result.startedAt,
                     error: result.error,
                     logId: result.logId,
                     isTruncated: result.isTruncated,

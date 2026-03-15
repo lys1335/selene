@@ -30,10 +30,17 @@ export interface IndexFileResult {
 function getContentTypeFromExtension(ext: string): string {
   const types: Record<string, string> = {
     md: "text/markdown",
+    markdown: "text/markdown",
     txt: "text/plain",
     pdf: "application/pdf",
     html: "text/html",
     htm: "text/html",
+    csv: "text/csv",
+    vtt: "text/vtt",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    xml: "text/xml",
     json: "application/json",
     js: "text/javascript",
     ts: "text/typescript",
@@ -41,7 +48,6 @@ function getContentTypeFromExtension(ext: string): string {
     jsx: "text/javascript",
     py: "text/x-python",
     css: "text/css",
-    xml: "text/xml",
   };
   return types[ext.toLowerCase()] || "text/plain";
 }

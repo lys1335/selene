@@ -32,6 +32,7 @@ import {
     getMessagesSignature,
     resolveCurrentSessionTabData,
     resolveSessionSwitchCharacterId,
+    shouldBypassLivePromptForegroundDeferral,
     shouldDeferLivePromptForegroundReconciliation,
     shouldSkipEnsureCurrentSessionOpen,
     shouldApplySessionScopedAsyncResult,
@@ -783,6 +784,7 @@ export default function ChatInterface({
     const reloadDebounceRef = useRef<NodeJS.Timeout | null>(null);
     const loadSessionsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const loadSessionsAbortRef = useRef<AbortController | null>(null);
+    const lastDetectedRunIdRef = useRef<string | null>(null);
 
     /** Debounced loadSessions — collapses rapid-fire task:started/task:completed
      *  events into a single fetch, preventing HTTP connection exhaustion when 5+
@@ -825,7 +827,7 @@ export default function ChatInterface({
 
     const reloadSessionMessages = useCallback(async (
         targetSessionId: string,
-        options?: { force?: boolean }
+        options?: { force?: boolean; progressAssistantMessageId?: string | null }
     ) => {
         const requestId = ++reloadRequestIdRef.current;
         const sessionPayload = await sm.fetchSessionMessages(targetSessionId);
@@ -844,9 +846,15 @@ export default function ChatInterface({
         // live thread. Once the DB contains an extra visible turn (e.g. final
         // assistant completion), apply it immediately so injected turns cannot roll
         // the UI back to the pre-injection state.
+        const shouldBypassDeferral = shouldBypassLivePromptForegroundDeferral({
+            liveThreadMessages: liveThreadMessagesRef.current,
+            persistedUiMessages: uiMessages,
+            progressAssistantMessageId: options?.progressAssistantMessageId,
+        });
         if (
             bg.isRunActiveRef.current &&
             !options?.force &&
+            !shouldBypassDeferral &&
             shouldDeferLivePromptForegroundReconciliation({
                 hasInjectedMessages,
                 persistedConversationMessageCount: conversationalMessageCount,
@@ -948,22 +956,44 @@ export default function ChatInterface({
             const shouldShowBackgroundRun = Boolean(activeForegroundRunId || deepResearchRunId);
 
             if (trackedRunId) {
-                console.log("[Background Processing] Detected active run:", trackedRunId, {
-                    hasInteractiveWait: data.hasInteractiveWait,
-                    shouldResumeBackgroundRun: data.shouldResumeBackgroundRun,
-                });
-                bg.setIsProcessingInBackground(shouldShowBackgroundRun);
-                bg.setProcessingRunId(trackedRunId);
-                bg.setIsZombieRun(false);
+                const isSameTrackedRun =
+                    bg.processingRunId === trackedRunId &&
+                    bg.isProcessingInBackground === shouldShowBackgroundRun &&
+                    bg.isZombieRun === false;
+
+                if (lastDetectedRunIdRef.current !== trackedRunId) {
+                    console.log(
+                        "[Background Processing] Detected active run:",
+                        trackedRunId,
+                        JSON.stringify({
+                            hasInteractiveWait: data.hasInteractiveWait,
+                            shouldResumeBackgroundRun: data.shouldResumeBackgroundRun,
+                        }),
+                    );
+                    lastDetectedRunIdRef.current = trackedRunId;
+                }
+
+                if (!isSameTrackedRun) {
+                    bg.setIsProcessingInBackground(shouldShowBackgroundRun);
+                    bg.setProcessingRunId(trackedRunId);
+                    bg.setIsZombieRun(false);
+                }
+
                 if (resumedForegroundRunId || deepResearchRunId) {
                     bg.startPollingForCompletion(trackedRunId);
                 } else if (bg.pollingIntervalRef.current) {
                     clearInterval(bg.pollingIntervalRef.current);
                     bg.pollingIntervalRef.current = null;
+                    bg.activePollingRunIdRef.current = null;
                 }
-                void reloadSessionMessages(targetSessionId, { force: true });
+
+                if (!isSameTrackedRun) {
+                    void reloadSessionMessages(targetSessionId, { force: true });
+                }
                 return;
             }
+
+            lastDetectedRunIdRef.current = null;
 
             if (activeDelegationTaskForSession?.runId) {
                 const delegationRunId = activeDelegationTaskForSession.runId;
@@ -1000,14 +1030,7 @@ export default function ChatInterface({
                 bg.pollingIntervalRef.current = null;
             }
         };
-    }, [
-        activeDelegationTaskForSession,
-        bg,
-        clearScheduledBanner,
-        clearTerminalRunUi,
-        reloadSessionMessages,
-        sessionId,
-    ]);
+    }, [sessionId]);
 
     useEffect(() => {
         if (!bg.processingRunId || !sessionId) return;
@@ -1325,7 +1348,13 @@ export default function ChatInterface({
             const now = Date.now();
             if (now - lastProgressTimeRef.current < PROGRESS_THROTTLE_MS) return;
             lastProgressTimeRef.current = now;
-            void reloadSessionMessages(sessionId, { force: true });
+            void reloadSessionMessages(sessionId, {
+                force: true,
+                progressAssistantMessageId:
+                    detail.eventType === "task:progress"
+                        ? detail.assistantMessageId
+                        : undefined,
+            });
         };
         window.addEventListener("background-task-progress", handleTaskProgress);
         return () => window.removeEventListener("background-task-progress", handleTaskProgress);

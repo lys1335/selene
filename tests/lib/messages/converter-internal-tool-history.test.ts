@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { convertDBMessagesToUIMessages } from "@/lib/messages/converter";
+import { convertDBMessagesToUIMessages, convertToThreadMessageLike } from "@/lib/messages/converter";
 import { isInternalToolHistoryLeakText } from "@/lib/messages/internal-tool-history";
 
 describe("converter internal tool history guard", () => {
@@ -97,6 +97,90 @@ describe("converter internal tool history guard", () => {
     );
     expect(textParts).toHaveLength(1);
     expect(textParts[0]?.text).toBe("");
+  });
+
+  it("preserves attachment filenames across DB to UI and thread rehydration", () => {
+    const now = new Date().toISOString();
+    const filename = "Screenshot 2026-02-10 at 11.05.48\u202fAM (1).png";
+
+    const uiMessages = convertDBMessagesToUIMessages([
+      {
+        id: "u-attachment",
+        role: "user",
+        content: [
+          {
+            type: "file",
+            url: "/api/media/sessions/sess-1/uploads/screenshot.png",
+            filename,
+            mediaType: "image/png",
+          },
+        ],
+        createdAt: now,
+        orderingIndex: 1,
+      },
+    ] as any);
+
+    expect(uiMessages).toHaveLength(1);
+    const filePart = (uiMessages[0]?.parts ?? []).find(
+      (part): part is { type: "file"; url: string; filename?: string; mediaType?: string } => part.type === "file"
+    );
+    expect(filePart?.filename).toBe(filename);
+    expect(filePart?.mediaType).toBe("image/png");
+
+    const threadMessages = convertToThreadMessageLike(uiMessages as any);
+    expect(threadMessages).toHaveLength(1);
+    expect(threadMessages[0]?.content).toEqual([
+      {
+        type: "file",
+        url: "/api/media/sessions/sess-1/uploads/screenshot.png",
+        filename,
+        mediaType: "image/png",
+      },
+    ]);
+  });
+
+  it("preserves persisted attachment metadata on rehydrated UI messages", () => {
+    const now = new Date().toISOString();
+
+    const uiMessages = convertDBMessagesToUIMessages([
+      {
+        id: "u-meta",
+        role: "user",
+        content: [
+          {
+            type: "image",
+            image: "/api/media/sessions/sess-1/uploads/mockup.png",
+            filename: "mockup.png",
+            mediaType: "image/png",
+          },
+        ],
+        metadata: {
+          custom: {
+            attachments: [
+              {
+                name: "mockup.png",
+                contentType: "image/png",
+                url: "/api/media/sessions/sess-1/uploads/mockup.png",
+                localPath: "sessions/sess-1/uploads/mockup.png",
+                filePath: "/tmp/sessions/sess-1/uploads/mockup.png",
+                kind: "image",
+              },
+            ],
+          },
+        },
+        createdAt: now,
+        orderingIndex: 1,
+      },
+    ] as any);
+
+    expect((uiMessages[0]?.metadata as any)?.custom?.attachments).toEqual([
+      expect.objectContaining({
+        url: "/api/media/sessions/sess-1/uploads/mockup.png",
+        localPath: "sessions/sess-1/uploads/mockup.png",
+        filePath: "/tmp/sessions/sess-1/uploads/mockup.png",
+        kind: "image",
+      }),
+    ]);
   });
 
 });

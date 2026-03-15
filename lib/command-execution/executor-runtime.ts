@@ -44,6 +44,7 @@ export type BundledRuntimeInfo = {
     isProductionBuild: boolean;
     nodeBinDir: string | null;
     toolsBinDir: string | null;
+    ripgrepBinDir: string | null;
     bundledBinDirs: string[];
     bundledNodePath: string | null;
     bundledNpmCliPath: string | null;
@@ -60,6 +61,9 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
     const resourcesPath = getResourcesPath();
     const nodeBinDir = resourcesPath ? join(resourcesPath, "standalone", "node_modules", ".bin") : null;
     const toolsBinDir = resourcesPath ? join(resourcesPath, "standalone", "tools", "bin") : null;
+    const ripgrepBinDir = resourcesPath
+        ? join(resourcesPath, "standalone", "node_modules", "@vscode", "ripgrep", "bin")
+        : null;
     const bundledNodePath = nodeBinDir
         ? join(nodeBinDir, process.platform === "win32" ? "node.exe" : "node")
         : null;
@@ -70,7 +74,8 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
         ? join(resourcesPath, "standalone", "node_modules", "npm", "bin", "npx-cli.js")
         : null;
 
-    const bundledCandidates = [nodeBinDir, toolsBinDir].filter((candidate): candidate is string => Boolean(candidate));
+    // Reuse the existing vscode-ripgrep payload so shell `rg` works without bundling a duplicate binary.
+    const bundledCandidates = [nodeBinDir, toolsBinDir, ripgrepBinDir].filter((candidate): candidate is string => Boolean(candidate));
     const bundledBinDirs = bundledCandidates.filter((candidate) => existsSync(candidate));
 
     return {
@@ -78,6 +83,7 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
         isProductionBuild: !!resourcesPath && process.env.ELECTRON_IS_DEV !== "1" && process.env.NODE_ENV !== "development",
         nodeBinDir,
         toolsBinDir,
+        ripgrepBinDir,
         bundledBinDirs,
         bundledNodePath: bundledNodePath && existsSync(bundledNodePath) ? bundledNodePath : null,
         bundledNpmCliPath: bundledNpmCliPath && existsSync(bundledNpmCliPath) ? bundledNpmCliPath : null,
@@ -132,7 +138,7 @@ export function buildSafeEnvironment(runtime: BundledRuntimeInfo): Record<string
         ...baseEnv,
         ...tmpOverrides,
         PATH: pathValue,
-        TERM: baseEnv.TERM || "xterm-256color",
+        TERM: baseEnv.TERM && baseEnv.TERM !== "dumb" ? baseEnv.TERM : "xterm-256color",
         HOME: baseEnv.HOME || baseEnv.USERPROFILE,
         USER: baseEnv.USER || baseEnv.USERNAME,
         ELECTRON_RESOURCES_PATH: process.env.ELECTRON_RESOURCES_PATH || runtime.resourcesPath || undefined,
@@ -239,6 +245,7 @@ export function buildNotFoundDiagnostic(
         `resourcesPath: ${runtime.resourcesPath ?? "<none>"}`,
         `bundled node bin dir: ${runtime.nodeBinDir ?? "<none>"} (exists=${runtime.nodeBinDir ? existsSync(runtime.nodeBinDir) : false})`,
         `bundled tools bin dir: ${runtime.toolsBinDir ?? "<none>"} (exists=${runtime.toolsBinDir ? existsSync(runtime.toolsBinDir) : false})`,
+        `bundled ripgrep bin dir: ${runtime.ripgrepBinDir ?? "<none>"} (exists=${runtime.ripgrepBinDir ? existsSync(runtime.ripgrepBinDir) : false})`,
         `bundled node binary: ${runtime.bundledNodePath ?? "<missing>"}`,
         `bundled npm cli: ${runtime.bundledNpmCliPath ?? "<missing>"}`,
         `bundled npx cli: ${runtime.bundledNpxCliPath ?? "<missing>"}`,
