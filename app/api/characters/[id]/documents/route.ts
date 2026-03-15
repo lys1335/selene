@@ -5,7 +5,7 @@ import { requireAuth } from "@/lib/auth/local-auth";
 import { loadSettings } from "@/lib/settings/settings-manager";
 import { getOrCreateLocalUser, getAgentDocumentById, listAgentDocumentsForCharacter, createAgentDocument, createAgentDocumentChunks, deleteAgentDocument, deleteAgentDocumentChunksByDocumentId, updateAgentDocument } from "@/lib/db/queries";
 import { getCharacter } from "@/lib/characters/queries";
-import { saveDocumentFile } from "@/lib/storage/local-storage";
+import { deleteLocalFile, saveDocumentFile } from "@/lib/storage/local-storage";
 import { extractTextFromDocument } from "@/lib/documents/parser";
 import { chunkText } from "@/lib/documents/chunking";
 import { indexAgentDocumentEmbeddings } from "@/lib/documents/embeddings";
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   }
 }
 
-// POST - Upload and index a new document for an agent (PDF/text/Markdown/HTML)
+// POST - Upload and index a new document for an agent
 export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
     const userId = await requireAuth(req);
@@ -151,8 +151,26 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     // Persist document file under a stable, agent-scoped path
     const stored = await saveDocumentFile(buffer, dbUser.id, characterId, file.name);
 
-    // Extract normalized text content and any structural metadata (e.g. page count)
-    const parsed = await extractTextFromDocument(buffer, file.type || "application/octet-stream", file.name);
+    let parsed;
+    try {
+      // Extract normalized text content and any structural metadata (e.g. page count)
+      parsed = await extractTextFromDocument(buffer, file.type || "application/octet-stream", file.name);
+    } catch (error) {
+      deleteLocalFile(stored.localPath);
+
+      if (error instanceof DocumentProcessingError) {
+        return NextResponse.json(
+          {
+            error: error.message,
+            errorCode: error.code,
+            suggestedAction: error.suggestedAction,
+          },
+          { status: 400 }
+        );
+      }
+
+      throw error;
+    }
 
     const tags = parseTags(parsedMetadata.data.tags) ?? [];
 

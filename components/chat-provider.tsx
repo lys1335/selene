@@ -204,7 +204,7 @@ function useDynamicChatTransport<T extends AssistantChatTransport<UIMessage>>(tr
   );
 }
 
-function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
+export function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
   return messages.map((msg) => {
     if (!msg.parts || !Array.isArray(msg.parts)) return msg;
 
@@ -239,10 +239,24 @@ function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
         seenToolCalls.add(toolCallId);
 
         if (
+          part.state === "input-streaming" &&
+          part.output === undefined &&
+          part.result === undefined &&
+          !(part as { active?: boolean }).active
+        ) {
+          if (!loggedSanitizerToolCallIds.has(key)) {
+            loggedSanitizerToolCallIds.add(key);
+            console.warn("[ChatProvider] Removing dangling input-streaming tool part:", toolCallId);
+          }
+          return false;
+        }
+
+        if (
           part.state === "input-available" &&
           part.output === undefined &&
           part.result === undefined &&
-          !toolCallsWithOutput.has(toolCallId)
+          !toolCallsWithOutput.has(toolCallId) &&
+          !(part as { active?: boolean }).active
         ) {
           if (!loggedSanitizerToolCallIds.has(key)) {
             loggedSanitizerToolCallIds.add(key);
@@ -312,10 +326,30 @@ type CustomToCreateMessageFunction = <UI_MESSAGE extends UIMessage = UIMessage>(
   message: AppendMessage,
 ) => CreateUIMessage<UI_MESSAGE>;
 
-const toCreateMessageWithAttachmentMetadata: CustomToCreateMessageFunction = <
+export const toCreateMessageWithAttachmentMetadata: CustomToCreateMessageFunction = <
   UI_MESSAGE extends UIMessage = UIMessage,
 >(message: AppendMessage): CreateUIMessage<UI_MESSAGE> => {
-  const inputParts = [
+  const attachmentDetailsByUrl = new Map<
+    string,
+    { filename?: string; contentType?: string }
+  >();
+  for (const attachment of message.attachments ?? []) {
+    const contentPart = attachment.content[0] as
+      | { type?: string; image?: string; data?: string }
+      | undefined;
+    const url = contentPart?.type === "image"
+      ? contentPart.image
+      : contentPart?.type === "file"
+        ? contentPart.data
+        : undefined;
+    if (!url) continue;
+    attachmentDetailsByUrl.set(url, {
+      filename: attachment.name,
+      contentType: attachment.contentType,
+    });
+  }
+
+  const rawInputParts = [
     ...message.content.filter((part) => part.type !== "file"),
     ...(message.attachments?.flatMap((attachment) =>
       attachment.content.map((contentPart) => ({
@@ -324,27 +358,60 @@ const toCreateMessageWithAttachmentMetadata: CustomToCreateMessageFunction = <
       })),
     ) ?? []),
   ];
+  const seenStructuredParts = new Set<string>();
+  const inputParts = rawInputParts.filter((part) => {
+    if (part.type === "text") {
+      return true;
+    }
+
+    if (part.type === "image" || part.type === "file") {
+      const assetUrl = part.type === "image" ? part.image : part.data;
+      const mediaType =
+        part.type === "image"
+          ? ("contentType" in part && typeof part.contentType === "string" ? part.contentType : "image/png")
+          : part.mimeType;
+      const key = `asset:${assetUrl}:${mediaType ?? ""}`;
+      if (seenStructuredParts.has(key)) {
+        return false;
+      }
+      seenStructuredParts.add(key);
+      return true;
+    }
+
+    return true;
+  });
 
   const parts = inputParts.map((part) => {
     switch (part.type) {
       case "text":
         return { type: "text" as const, text: part.text };
       case "image":
+        {
+          const attachmentDetails = attachmentDetailsByUrl.get(part.image);
         return {
           type: "file" as const,
           url: part.image,
-          ...(part.filename && { filename: part.filename }),
-          mediaType: "contentType" in part && typeof part.contentType === "string"
-            ? part.contentType
-            : "image/png",
+          ...((part.filename || attachmentDetails?.filename) && {
+            filename: part.filename || attachmentDetails?.filename,
+          }),
+          mediaType:
+            ("contentType" in part && typeof part.contentType === "string"
+              ? part.contentType
+              : attachmentDetails?.contentType) || "image/png",
         };
+        }
       case "file":
+        {
+          const attachmentDetails = attachmentDetailsByUrl.get(part.data);
         return {
           type: "file" as const,
           url: part.data,
-          mediaType: part.mimeType,
-          ...(part.filename && { filename: part.filename }),
+          mediaType: part.mimeType || attachmentDetails?.contentType || "application/octet-stream",
+          ...((part.filename || attachmentDetails?.filename) && {
+            filename: part.filename || attachmentDetails?.filename,
+          }),
         };
+        }
       default:
         throw new Error(`Unsupported part type: ${part.type}`);
     }

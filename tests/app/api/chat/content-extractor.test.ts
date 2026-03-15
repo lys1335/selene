@@ -1,7 +1,39 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
 import { extractContent } from "@/app/api/chat/content-extractor";
+import { saveSettings, loadSettings, type AppSettings } from "@/lib/settings/settings-manager";
+
+const MEDIA_ROOT = process.env.LOCAL_DATA_PATH
+  ? path.join(process.env.LOCAL_DATA_PATH, "media")
+  : path.join(process.cwd(), ".local-data", "media");
+const FIXTURE_DIR = path.join(process.cwd(), "tests", "fixtures", "documents");
+
+function readFixture(name: string): Buffer {
+  return readFileSync(path.join(FIXTURE_DIR, name));
+}
+
+function writeMediaFixture(relativePath: string, fixtureName: string): string {
+  const fullPath = path.join(MEDIA_ROOT, relativePath);
+  mkdirSync(path.dirname(fullPath), { recursive: true });
+  writeFileSync(fullPath, readFixture(fixtureName));
+  return fullPath;
+}
 
 describe("extractContent attachment persistence", () => {
+  let originalSettings: AppSettings;
+  let originalPath: string | undefined;
+
+  beforeEach(() => {
+    originalSettings = JSON.parse(JSON.stringify(loadSettings())) as AppSettings;
+    originalPath = process.env.PATH;
+  });
+
+  afterEach(() => {
+    process.env.PATH = originalPath;
+    saveSettings(originalSettings);
+  });
   it("preserves image parts as machine-usable references for stored history", async () => {
     const result = await extractContent({
       role: "user",
@@ -95,6 +127,72 @@ describe("extractContent attachment persistence", () => {
     });
 
     expect(result).toEqual([
+      {
+        type: "image",
+        image: "/api/media/sessions/sess-1/uploads/mockup.png",
+      },
+    ]);
+  });
+
+  it("prefers structured parts over raw string content when both are present", async () => {
+    const result = await extractContent(
+      {
+        role: "user",
+        content: `data:image/png;base64,${"A".repeat(6000)}`,
+        parts: [
+          {
+            type: "text",
+            text: "whats in the image",
+          },
+          {
+            type: "file",
+            url: "/api/media/sessions/sess-1/uploads/mockup.png",
+            mediaType: "image/png",
+            filename: "mockup.png",
+          },
+        ],
+      },
+      false,
+      false,
+      "sess-structured-wins",
+    );
+
+    expect(result).toEqual([
+      {
+        type: "text",
+        text: "whats in the image",
+      },
+      {
+        type: "image",
+        image: "/api/media/sessions/sess-1/uploads/mockup.png",
+      },
+    ]);
+  });
+
+  it("falls back to string content when attachments exist but no text part survives", async () => {
+    const result = await extractContent(
+      {
+        role: "user",
+        content: "what's in this?",
+        parts: [
+          {
+            type: "file",
+            url: "/api/media/sessions/sess-1/uploads/mockup.png",
+            mediaType: "image/png",
+            filename: "mockup.png",
+          },
+        ],
+      },
+      false,
+      false,
+      "sess-string-fallback",
+    );
+
+    expect(result).toEqual([
+      {
+        type: "text",
+        text: "what's in this?",
+      },
       {
         type: "image",
         image: "/api/media/sessions/sess-1/uploads/mockup.png",
@@ -200,5 +298,95 @@ describe("extractContent attachment persistence", () => {
     );
 
     expect(urlOnly).toBe("[Attachment: url-only.png | url: /api/media/sessions/sess-1/uploads/url-only.png]");
+  });
+
+  it("extracts DOCX attachments into chat-ready text", async () => {
+    const relativePath = "docs-tests/chat/sample.docx";
+    const fullPath = writeMediaFixture(relativePath, "sample.docx");
+
+    const result = await extractContent(
+      {
+        role: "user",
+        experimental_attachments: [
+          {
+            name: "sample.docx",
+            contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            url: `/api/media/${relativePath}`,
+            filePath: fullPath,
+          },
+        ],
+      },
+      true,
+      false,
+      "sess-docx",
+    );
+
+    expect(result).toBeTypeOf("string");
+    const text = result as string;
+    expect(text).toContain("[Attachment: sample.docx | filePath:");
+    expect(text).toContain("[Attachment content: sample.docx]");
+    expect(text).toContain("Demonstration of DOCX support in calibre");
+  }, 90_000);
+
+  it("extracts VTT attachments into chat-ready text", async () => {
+    const relativePath = "docs-tests/chat/sample.vtt";
+    const fullPath = writeMediaFixture(relativePath, "sample.vtt");
+
+    const result = await extractContent(
+      {
+        role: "user",
+        experimental_attachments: [
+          {
+            name: "sample.vtt",
+            contentType: "text/vtt",
+            url: `/api/media/${relativePath}`,
+            filePath: fullPath,
+          },
+        ],
+      },
+      true,
+      false,
+      "sess-vtt",
+    );
+
+    expect(result).toBeTypeOf("string");
+    const text = result as string;
+    expect(text).toContain("[Attachment content: sample.vtt]");
+    expect(text).toContain("Hello from the Selene VTT fixture.");
+  }, 90_000);
+
+  it("extracts audio attachments into transcript text", async () => {
+    const relativePath = "docs-tests/chat/sample.wav";
+    const fullPath = writeMediaFixture(relativePath, "sample.wav");
+
+    process.env.PATH = `/opt/homebrew/bin:${originalPath ?? ""}`;
+    saveSettings({
+      ...originalSettings,
+      sttEnabled: true,
+      sttProvider: "local",
+      sttLocalModel: "ggml-small.en",
+    });
+
+    const result = await extractContent(
+      {
+        role: "user",
+        experimental_attachments: [
+          {
+            name: "sample.wav",
+            contentType: "audio/wav",
+            url: `/api/media/${relativePath}`,
+            filePath: fullPath,
+          },
+        ],
+      },
+      true,
+      false,
+      "sess-audio",
+    );
+
+    expect(result).toBeTypeOf("string");
+    const text = result as string;
+    expect(text).toContain("[Audio transcript: sample.wav]");
+    expect(text).toContain("[Attachment: sample.wav | filePath:");
   });
 });

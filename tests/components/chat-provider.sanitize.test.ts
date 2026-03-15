@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { sanitizeMessagesForInit } from "@/components/chat-provider";
+import {
+  sanitizeMessagesForInit,
+  toCreateMessageWithAttachmentMetadata,
+} from "@/components/chat-provider";
 
 describe("sanitizeMessagesForInit", () => {
   it("keeps active tool calls that are explicitly marked as streaming-active", () => {
@@ -106,5 +109,47 @@ describe("sanitizeMessagesForInit", () => {
       data: "Browser session opened. Navigated to: https://example.com",
       pageUrl: "https://example.com",
     });
+  });
+
+  it("deduplicates attachment-backed image parts when building a UI message", () => {
+    const uiMessage = toCreateMessageWithAttachmentMetadata({
+      role: "user",
+      content: [
+        { type: "text", text: "whats in the image" },
+        { type: "image", image: "/api/media/sessions/sess-1/uploads/mockup.png" },
+      ],
+      attachments: [
+        {
+          id: "attachment-1",
+          type: "image",
+          name: "mockup.png",
+          contentType: "image/png",
+          content: [{ type: "image", image: "/api/media/sessions/sess-1/uploads/mockup.png" }],
+          status: { type: "complete" },
+          metadata: {
+            url: "/api/media/sessions/sess-1/uploads/mockup.png",
+            contentType: "image/png",
+            kind: "image",
+          },
+        },
+      ],
+    } as any);
+
+    expect(uiMessage.parts).toEqual([
+      { type: "text", text: "whats in the image" },
+      {
+        type: "file",
+        url: "/api/media/sessions/sess-1/uploads/mockup.png",
+        filename: "mockup.png",
+        mediaType: "image/png",
+      },
+    ]);
+    expect((uiMessage.metadata as any)?.custom?.attachments).toEqual([
+      expect.objectContaining({
+        url: "/api/media/sessions/sess-1/uploads/mockup.png",
+        contentType: "image/png",
+        kind: "image",
+      }),
+    ]);
   });
 });

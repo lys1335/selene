@@ -8,6 +8,7 @@ import { TerminalPrompt } from "@/components/ui/terminal-prompt";
 import { useReducedMotion } from "../hooks/use-reduced-motion";
 import { useTranslations } from "next-intl";
 import { resilientFetch, resilientDelete } from "@/lib/utils/resilient-fetch";
+import { DOCUMENT_UPLOAD_ACCEPT, DOCUMENT_SUPPORT_LABELS } from "@/lib/documents/file-types";
 
 export interface UploadedDocument {
   id: string;
@@ -186,7 +187,7 @@ export function KnowledgeBasePage({
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept=".pdf,.txt,.md,.html,.htm"
+                  accept={DOCUMENT_UPLOAD_ACCEPT}
                   onChange={(e) => handleFileSelect(e.target.files)}
                   className="hidden"
                 />
@@ -204,7 +205,7 @@ export function KnowledgeBasePage({
                   )}
                 </div>
                 <div className="text-xs font-mono text-terminal-dark/50 mt-2">
-                  {t("supportedFormats")}
+                  {t("supportedFormats", { formats: DOCUMENT_SUPPORT_LABELS.join(", ") })}
                 </div>
               </div>
 

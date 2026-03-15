@@ -185,6 +185,63 @@ function sanitizeAssistantMessageContent(item: CodexInputItem): CodexInputItem |
     : { ...item, content: cleanedParts };
 }
 
+function getImagePartUrl(part: unknown): string | null {
+  if (!part || typeof part !== "object") return null;
+  const candidate = part as Record<string, unknown>;
+  return toTrimmedString(candidate.image_url)
+    ?? toTrimmedString(candidate.image)
+    ?? toTrimmedString(candidate.url)
+    ?? toTrimmedString(candidate.file_url)
+    ?? toTrimmedString(candidate.file_data);
+}
+
+function isValidCodexImageUrl(url: string): boolean {
+  return /^data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\s]+$/.test(url);
+}
+
+function sanitizeInvalidImageMessageContent(item: CodexInputItem): CodexInputItem | null {
+  if (item.type !== "message" || !Array.isArray(item.content)) {
+    return item;
+  }
+
+  let removedInvalidImage = false;
+  const cleanedParts = item.content.filter((part) => {
+    if (!isImageLikeContentPart(part)) {
+      return true;
+    }
+
+    const imageUrl = getImagePartUrl(part);
+    if (!imageUrl) {
+      return true;
+    }
+
+    if (isValidCodexImageUrl(imageUrl)) {
+      return true;
+    }
+
+    removedInvalidImage = true;
+    return false;
+  });
+
+  if (!removedInvalidImage) {
+    return item;
+  }
+
+  console.warn("[CODEX] Dropping invalid image payload from request history", {
+    role: item.role,
+    removedParts: item.content.length - cleanedParts.length,
+  });
+
+  if (cleanedParts.length === 0) {
+    return null;
+  }
+
+  return {
+    ...item,
+    content: cleanedParts,
+  };
+}
+
 /**
  * Extract nested tool-call parts from an assistant message's content array
  * and return them as top-level function_call items.
@@ -288,6 +345,8 @@ export function filterCodexInput(
 
     const sanitized = sanitizeAssistantMessageContent(item);
     if (!sanitized) continue;
+    const imageSanitized = sanitizeInvalidImageMessageContent(sanitized);
+    if (!imageSanitized) continue;
 
     // NOTE: We intentionally do NOT extract nested tool-call parts from
     // assistant message content arrays. The old extractNestedToolCalls()
@@ -296,7 +355,7 @@ export function filterCodexInput(
     // outputs. The model saw those errors as real failures and retried
     // the same tool calls → infinite loop. Nested tool-call parts stay
     // inside assistant content where they are harmless context.
-    normalized.push(sanitized);
+    normalized.push(imageSanitized);
   }
 
   return normalized;

@@ -416,9 +416,18 @@ export async function extractContent(
   convertUserImagesToBase64 = false,
   sessionId?: string,
 ): Promise<string | ModelContentPart[]> {
-  const directContent = getStringContent(msg.content, sessionId);
-  if (directContent) {
-    return directContent;
+  const hasStructuredParts = Array.isArray(msg.parts) && msg.parts.length > 0;
+  const hasMetadataAttachments = Array.isArray(msg.metadata?.custom?.attachments)
+    && msg.metadata.custom.attachments.length > 0;
+  const hasExperimentalAttachments = Array.isArray(msg.experimental_attachments)
+    && msg.experimental_attachments.length > 0;
+  const hasStructuredContent =
+    hasStructuredParts || hasMetadataAttachments || hasExperimentalAttachments;
+  if (!hasStructuredContent) {
+    const directContent = getStringContent(msg.content, sessionId);
+    if (directContent) {
+      return directContent;
+    }
   }
 
   const isUserMessage = msg.role === "user";
@@ -436,9 +445,11 @@ export async function extractContent(
     );
 
     const contentParts: ModelContentPart[] = [];
+    let hasExplicitTextPart = false;
 
     for (const part of msg.parts) {
       if (part.type === "text" && part.text?.trim()) {
+        hasExplicitTextPart = true;
         appendTextPartIfPresent(contentParts, buildTextPart(part.text, msg.role, sessionId));
         continue;
       }
@@ -626,6 +637,14 @@ export async function extractContent(
             output: toModelToolResultOutput(normalizedOutput),
           });
         }
+      }
+    }
+
+    if (!hasExplicitTextPart) {
+      const directContent = getStringContent(msg.content, sessionId);
+      const trimmedDirectContent = directContent.trim();
+      if (trimmedDirectContent) {
+        contentParts.unshift({ type: "text", text: trimmedDirectContent });
       }
     }
 

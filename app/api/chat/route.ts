@@ -472,6 +472,10 @@ export async function POST(req: Request) {
       // Strip [PASTE_CONTENT:N:M]...[/PASTE_CONTENT:N] delimiter tags but keep the pasted content.
       // This ensures full content is preserved in DB for reload, without tag clutter in the UI.
       const messageForDB = stripPasteDelimitersFromMessage(lastMessage);
+      const persistedAttachments = [
+        ...((lastMessage.metadata?.custom?.attachments ?? []).filter((attachment): attachment is NonNullable<typeof attachment> => !!attachment)),
+        ...((lastMessage.experimental_attachments ?? []).filter((attachment): attachment is NonNullable<typeof attachment> => !!attachment)),
+      ];
       const extractedContent = await extractContent(messageForDB);
       const normalizedContent: unknown[] = Array.isArray(extractedContent)
         ? extractedContent
@@ -485,7 +489,13 @@ export async function POST(req: Request) {
         role: 'user',
         content: normalizedContent,
         orderingIndex: userMessageIndex,
-        metadata: {},
+        metadata: persistedAttachments.length > 0
+          ? {
+              custom: {
+                attachments: persistedAttachments,
+              },
+            }
+          : {},
       });
       let savedUserMessageId = result?.id;
 

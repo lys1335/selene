@@ -158,6 +158,31 @@ describe("codex-input-utils", () => {
     const topLevelCalls = filtered!.filter((item) => item.type === "function_call");
     expect(topLevelCalls).toHaveLength(0);
   });
+
+  it("drops invalid image payloads from message history before Codex transform", () => {
+    const input: CodexInputItem[] = [
+      {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "input_text", text: "what is this?" },
+          { type: "input_image", image_url: "[Base64 image data removed - use image URL instead]" },
+        ],
+      },
+    ];
+
+    const filtered = filterCodexInput(input);
+
+    expect(filtered).toEqual([
+      {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "input_text", text: "what is this?" },
+        ],
+      },
+    ]);
+  });
 });
 
 describe("truncateCodexInput", () => {

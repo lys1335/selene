@@ -25,6 +25,7 @@ import {
   FileSpreadsheetIcon,
   PresentationIcon,
   Music4Icon,
+  XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -107,14 +108,78 @@ function mcpAwareToolMap(map: Record<string, FC<any>>): Record<string, FC<any>> 
   });
 }
 
-function getAttachmentImageUrl(attachment: {
-  content?: Array<{ type?: string; image?: string }>;
+export function getAttachmentImageUrl(attachment: {
+  contentType?: string;
+  content?: Array<{ type?: string; image?: string; url?: string; mimeType?: string; filename?: string }>;
 }): string | undefined {
   const imageContent = attachment.content?.find(
     (content): content is { type: "image"; image: string } =>
       content.type === "image" && typeof content.image === "string",
   );
-  return imageContent?.image;
+  if (imageContent?.image) {
+    return imageContent.image;
+  }
+
+  const imageFileContent = attachment.content?.find(
+    (content): content is { type: "file"; url: string; mimeType?: string } =>
+      content.type === "file"
+      && typeof content.url === "string"
+      && (
+        (typeof content.mimeType === "string" && content.mimeType.startsWith("image/"))
+        || attachment.contentType?.startsWith("image/") === true
+      ),
+  );
+
+  return imageFileContent?.url;
+}
+
+function getFilenameFromUrl(value?: string): string | undefined {
+  if (!value) return undefined;
+  const withoutQuery = value.split("?")[0]?.split("#")[0];
+  const filename = withoutQuery?.split("/").pop();
+  if (!filename || filename.length === 0) {
+    return undefined;
+  }
+  try {
+    return decodeURIComponent(filename);
+  } catch {
+    return filename;
+  }
+}
+
+function isGenericAttachmentName(name?: string): boolean {
+  if (!name) return true;
+  const normalized = name.trim().toLowerCase();
+  return normalized.length === 0
+    || normalized === "file"
+    || normalized === "attachment"
+    || normalized === "image";
+}
+
+export function getAttachmentDisplayName(attachment: {
+  name?: string;
+  content?: Array<{
+    type?: string;
+    image?: string;
+    url?: string;
+    filename?: string;
+  }>;
+}): string {
+  if (!isGenericAttachmentName(attachment.name)) {
+    return attachment.name!.trim();
+  }
+
+  for (const content of attachment.content ?? []) {
+    if (typeof content.filename === "string" && content.filename.trim().length > 0) {
+      return content.filename.trim();
+    }
+    const derivedName = getFilenameFromUrl(content.type === "image" ? content.image : content.url);
+    if (derivedName) {
+      return derivedName;
+    }
+  }
+
+  return attachment.name?.trim() || "Attachment";
 }
 
 function getAttachmentMediaType(attachment: {
@@ -124,6 +189,10 @@ function getAttachmentMediaType(attachment: {
   return attachment.contentType
     || attachment.content?.find((content) => typeof content.mimeType === "string")?.mimeType
     || "application/octet-stream";
+}
+
+function getAttachmentExtension(name?: string): string {
+  return name?.split(".").pop()?.toUpperCase() || "FILE";
 }
 
 function getAttachmentIcon(mediaType: string) {
@@ -139,56 +208,108 @@ function getAttachmentIcon(mediaType: string) {
   return FileTextIcon;
 }
 
-function renderAttachmentTile(
+function formatAttachmentMeta(params: {
+  mediaType: string;
+  name?: string;
+}): string {
+  if (params.mediaType.startsWith("image/")) {
+    return "Image attachment";
+  }
+  if (params.mediaType.startsWith("audio/")) {
+    return "Audio attachment";
+  }
+
+  return `${getAttachmentExtension(params.name)} document`;
+}
+
+function ComposerAttachmentChip({
+  attachment,
+  showRemove,
+}: {
   attachment: {
     name?: string;
     contentType?: string;
-    content?: Array<{ type?: string; image?: string; mimeType?: string }>;
-    status?: { type?: string };
-  },
-  sizeClass: string,
-) {
+    content?: Array<{ type?: string; image?: string; url?: string; mimeType?: string; filename?: string }>;
+    status?: { type?: string; reason?: string };
+  };
+  showRemove?: boolean;
+}) {
+  const isUploading = attachment.status?.type === "running";
+  const displayName = getAttachmentDisplayName(attachment);
+  const extension = getAttachmentExtension(displayName);
+
+  return (
+    <div
+      className={cn(
+        "group flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors",
+        isUploading
+          ? "border-amber-500/30 bg-amber-50/80 text-amber-900"
+          : "border-border/50 bg-card text-foreground hover:bg-accent/50"
+      )}
+    >
+      <span className="text-xs font-mono uppercase text-muted-foreground">{extension}</span>
+      <span className="max-w-[12ch] truncate text-sm" title={displayName}>
+        {displayName}
+      </span>
+      {isUploading ? (
+        <Loader2Icon className="size-3.5 animate-spin text-amber-600" />
+      ) : showRemove ? (
+        <AttachmentPrimitive.Remove className="ml-0.5 rounded-sm p-0.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive">
+          <XIcon className="size-3.5" />
+        </AttachmentPrimitive.Remove>
+      ) : null}
+    </div>
+  );
+}
+
+function MessageAttachmentCard({
+  attachment,
+}: {
+  attachment: {
+    name?: string;
+    contentType?: string;
+    content?: Array<{ type?: string; image?: string; url?: string; mimeType?: string; filename?: string }>;
+  };
+}) {
   const imageUrl = getAttachmentImageUrl(attachment);
   const mediaType = getAttachmentMediaType(attachment);
   const Icon = getAttachmentIcon(mediaType);
-  const extension = attachment.name?.split(".").pop()?.toUpperCase() || "FILE";
-
-  if (imageUrl) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={imageUrl}
-        alt={attachment.name}
-        className={`${sizeClass} object-cover`}
-      />
-    );
-  }
+  const displayName = getAttachmentDisplayName(attachment);
+  const metaLabel = formatAttachmentMeta({ mediaType, name: displayName });
 
   return (
-    <div className={`${sizeClass} flex flex-col items-center justify-center gap-1 px-2 text-terminal-muted`}>
-      <Icon className="size-5" />
-      <span className="max-w-full truncate text-[10px] font-semibold tracking-wide">
-        {extension}
-      </span>
+    <div className="flex max-w-xs flex-col gap-1.5 rounded-lg border border-border/50 bg-card p-3">
+      <div className="flex items-start gap-2">
+        {imageUrl ? (
+          <div className="size-10 shrink-0 overflow-hidden rounded-lg border border-border/50 bg-muted/50">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl} alt={displayName} className="size-full object-cover" />
+          </div>
+        ) : (
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-border/50 bg-muted/50 text-muted-foreground">
+            <Icon className="size-5" />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-foreground" title={displayName}>
+            {displayName}
+          </div>
+          <div className="text-xs text-muted-foreground">{metaLabel}</div>
+        </div>
+      </div>
     </div>
   );
 }
 
 export const ComposerAttachment: FC = () => {
-  const attachment = useThreadComposerAttachment((a) => a);
-  const isUploading = attachment.status?.type === "running";
+  const attachment = useThreadComposerAttachment((a: { id: string; name?: string; contentType?: string; content?: Array<{ type?: string; image?: string; mimeType?: string }>; status?: { type?: string; reason?: string } }) => a);
 
   return (
-    <AttachmentPrimitive.Root className="relative flex size-16 items-center justify-center rounded-lg bg-terminal-cream shadow-sm overflow-hidden">
-      {renderAttachmentTile(attachment, "size-full")}
-      {isUploading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-terminal-cream/80">
-          <div className="size-4 animate-spin rounded-full border-2 border-terminal-green border-t-transparent" />
-        </div>
-      )}
-      <AttachmentPrimitive.Remove className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-terminal-cream shadow-sm text-xs font-mono hover:bg-red-50 hover:text-red-600">
-        ×
-      </AttachmentPrimitive.Remove>
+    <AttachmentPrimitive.Root>
+      <ComposerAttachmentChip
+        attachment={attachment}
+        showRemove={attachment.status?.type !== "running"}
+      />
     </AttachmentPrimitive.Root>
   );
 };
@@ -222,11 +343,11 @@ export const UserMessage: FC = () => {
 };
 
 export const UserAttachment: FC = () => {
-  const attachment = useMessageAttachment((a) => a);
+  const attachment = useMessageAttachment((a: { id: string; name?: string; contentType?: string; content?: Array<{ type?: string; image?: string; mimeType?: string }> }) => a);
 
   return (
-    <AttachmentPrimitive.Root className="relative flex size-20 items-center justify-center rounded-lg bg-terminal-cream shadow-sm overflow-hidden">
-      {renderAttachmentTile(attachment, "size-full")}
+    <AttachmentPrimitive.Root>
+      <MessageAttachmentCard attachment={attachment} />
     </AttachmentPrimitive.Root>
   );
 };

@@ -213,7 +213,7 @@ export const ComposerActionBar: FC<ComposerActionBarProps> = ({
           </ComposerPrimitive.AddAttachment>
         </TooltipTrigger>
         <TooltipContent className="bg-terminal-dark text-terminal-cream font-mono text-xs">
-          {t("tooltips.addImage")}
+          {t("tooltips.addAttachment")}
         </TooltipContent>
       </Tooltip>
 

@@ -1,4 +1,4 @@
-export const DOCUMENT_UPLOAD_ACCEPT = [
+export const DOCUMENT_UPLOAD_EXTENSIONS = [
   ".pdf",
   ".docx",
   ".pptx",
@@ -11,13 +11,34 @@ export const DOCUMENT_UPLOAD_ACCEPT = [
   ".txt",
   ".vtt",
   ".xml",
-].join(",");
+] as const;
+
+export const DOCUMENT_UPLOAD_ACCEPT = DOCUMENT_UPLOAD_EXTENSIONS.join(",");
 
 export const CHAT_ATTACHMENT_ACCEPT = [
   "image/*",
   DOCUMENT_UPLOAD_ACCEPT,
   "audio/*",
 ].join(",");
+
+export const DOCUMENT_SUPPORT_LABELS = [
+  "PDF",
+  "DOCX",
+  "PPTX",
+  "XLSX",
+  "Markdown",
+  "HTML",
+  "CSV",
+  "TXT",
+  "VTT",
+  "JATS XML",
+] as const;
+
+export const CHAT_ATTACHMENT_SUPPORT_LABELS = [
+  ...DOCUMENT_SUPPORT_LABELS,
+  "audio attachments",
+  "images",
+] as const;
 
 export const UNSUPPORTED_ATTACHMENT_EXTENSION_HINTS: Record<string, string> = {
   ".xls": "Legacy Excel .xls is not supported yet. Save the workbook as .xlsx and try again.",

@@ -1,0 +1,7 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:02.000
+Hello from the Selene VTT fixture.
+
+00:00:02.000 --> 00:00:04.000
+It validates subtitle extraction.

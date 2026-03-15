@@ -132,7 +132,7 @@ export function buildSafeEnvironment(runtime: BundledRuntimeInfo): Record<string
         ...baseEnv,
         ...tmpOverrides,
         PATH: pathValue,
-        TERM: baseEnv.TERM || "xterm-256color",
+        TERM: baseEnv.TERM && baseEnv.TERM !== "dumb" ? baseEnv.TERM : "xterm-256color",
         HOME: baseEnv.HOME || baseEnv.USERPROFILE,
         USER: baseEnv.USER || baseEnv.USERNAME,
         ELECTRON_RESOURCES_PATH: process.env.ELECTRON_RESOURCES_PATH || runtime.resourcesPath || undefined,
