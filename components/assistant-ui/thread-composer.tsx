@@ -53,6 +53,9 @@ import { useGlobalVoiceHotkey } from "@/lib/hooks/use-global-hotkey";
 import { getElectronAPI } from "@/lib/electron/types";
 import { useScreenCapture } from "@/lib/hooks/use-screen-capture";
 import { useUnifiedCapture } from "@/lib/hooks/use-unified-capture";
+import { useCaptureSession } from "@/lib/hooks/use-capture-session";
+import { UnifiedCaptureOverlay } from "./unified-capture-overlay";
+import { AutoSendCountdown } from "./auto-send-countdown";
 import {
   TiptapEditor,
   contentPartsToComposerText,
@@ -93,6 +96,8 @@ export const Composer: FC<{
   screenCaptureShortcut?: string;
   quickCaptureEnabled?: boolean;
   quickCaptureHotkey?: string;
+  quickCaptureAutoSend?: boolean;
+  quickCaptureAutoSendDelay?: number;
   onCancelBackgroundRun?: () => void;
   isCancellingBackgroundRun?: boolean;
   canCancelBackgroundRun?: boolean;
@@ -118,6 +123,8 @@ export const Composer: FC<{
   screenCaptureShortcut = "CommandOrControl+Shift+S",
   quickCaptureEnabled = true,
   quickCaptureHotkey: _quickCaptureHotkey = "CommandOrControl+Shift+A",
+  quickCaptureAutoSend = false,
+  quickCaptureAutoSendDelay = 3,
   onCancelBackgroundRun,
   isCancellingBackgroundRun = false,
   canCancelBackgroundRun = false,
@@ -401,6 +408,16 @@ export const Composer: FC<{
     onCaptured: handleAttachCapturedScreen,
   });
 
+  // Capture session coordinator — manages the lifecycle:
+  // capturing → recording → transcribing → reviewing → (auto-send)
+  const captureSession = useCaptureSession({
+    isRecordingVoice,
+    isTranscribingVoice,
+    autoSendEnabled: quickCaptureAutoSend,
+    autoSendDelay: quickCaptureAutoSendDelay,
+    onSend: () => { void handleSubmit(); },
+  });
+
   // Unified capture hook: listens for Cmd+Shift+A events from Electron,
   // attaches screenshot and triggers voice recording in one action.
   // Gated on its own setting + API — independent of standalone screenCapture.
@@ -408,6 +425,7 @@ export const Composer: FC<{
     enabled: quickCaptureEnabled && Boolean(electronAPI?.unifiedCapture),
     onScreenshotCaptured: handleAttachCapturedScreen,
     onStartVoice: () => { void handleVoiceInput(); },
+    onSessionStarted: captureSession.startSession,
     isDeepResearchMode,
   });
 
@@ -1148,12 +1166,43 @@ export const Composer: FC<{
 
 {/* Reward suggestion is shown as inline ghost text in the textarea */}
 
-        {isRecordingVoice && (
-          <VoiceWaveform
-            isRecording={isRecordingVoice}
-            analyserNode={analyserNode}
-            className="border-b border-terminal-dark/10"
-          />
+        {/* Unified capture overlay — replaces standalone waveform during unified sessions */}
+        {captureSession.isUnifiedSession && captureSession.phase !== "idle" ? (
+          <>
+            <UnifiedCaptureOverlay
+              phase={captureSession.phase}
+              screenshotUrl={captureSession.screenshotUrl}
+              isRecording={isRecordingVoice}
+              analyserNode={analyserNode}
+              onCancel={() => {
+                captureSession.cancelSession();
+                if (isRecordingVoice) handleVoiceStop();
+              }}
+              onStopRecording={handleVoiceStop}
+              className="border-b border-terminal-dark/10"
+            />
+            {captureSession.phase === "reviewing" && captureSession.countdownRemaining > 0 && (
+              <AutoSendCountdown
+                remaining={captureSession.countdownRemaining}
+                total={quickCaptureAutoSendDelay}
+                onCancel={captureSession.cancelAutoSend}
+                onSendNow={() => {
+                  captureSession.cancelAutoSend();
+                  void handleSubmit();
+                }}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {isRecordingVoice && (
+              <VoiceWaveform
+                isRecording={isRecordingVoice}
+                analyserNode={analyserNode}
+                className="border-b border-terminal-dark/10"
+              />
+            )}
+          </>
         )}
 
         {!isRecordingVoice && !isTranscribingVoice && sttEnabled && voiceActionsEnabled && inputValue.trim().length > 0 && (
@@ -1167,8 +1216,8 @@ export const Composer: FC<{
           />
         )}
 
-        {/* I7: Transcribing state indicator */}
-        {isTranscribingVoice && (
+        {/* I7: Transcribing state indicator — only shown outside unified sessions */}
+        {!captureSession.isUnifiedSession && isTranscribingVoice && (
           <div className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-terminal-muted border-b border-terminal-dark/10">
             <Loader2Icon className="size-3 animate-spin flex-shrink-0" />
             <span>Transcribing...</span>
@@ -1271,6 +1320,9 @@ export const Composer: FC<{
                 onChange={(e) => {
                   setInputValue(e.target.value);
                   updateCursorPosition(e.target.selectionStart ?? 0, e.target.selectionEnd ?? e.target.selectionStart ?? 0);
+                  if (captureSession.countdownRemaining > 0) {
+                    captureSession.cancelAutoSend();
+                  }
                   if (enhancedContext || enhancementInfo) clearEnhancement();
                 }}
                 onSelect={(e) => {

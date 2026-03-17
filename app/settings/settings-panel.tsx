@@ -746,6 +746,68 @@ export function SettingsPanel({
               {t("voice.screen.captureHint")}
             </div>
           </SettingsPanelCard>
+
+          <SettingsPanelCard
+            title={t("voice.quickCapture.title")}
+            description={t("voice.quickCapture.description")}
+          >
+            <SettingsToggleRow
+              id="quickCaptureEnabled"
+              label={t("voice.quickCapture.enableLabel")}
+              description={t("voice.quickCapture.enableDesc")}
+              checked={formState.quickCaptureEnabled}
+              onChange={(checked) => updateField("quickCaptureEnabled", checked)}
+            />
+
+            <SettingsField
+              label={t("voice.quickCapture.hotkeyLabel")}
+              htmlFor="quickCaptureHotkey"
+              helperText={t("voice.quickCapture.hotkeyHelper")}
+              className="max-w-md"
+            >
+              <input
+                id="quickCaptureHotkey"
+                type="text"
+                value={formState.quickCaptureHotkey}
+                onChange={(e) => updateField("quickCaptureHotkey", e.target.value)}
+                placeholder="CommandOrControl+Shift+A"
+                className={settingsInputClassName}
+              />
+            </SettingsField>
+
+            <SettingsToggleRow
+              id="quickCaptureAutoSend"
+              label={t("voice.quickCapture.autoSendLabel")}
+              description={t("voice.quickCapture.autoSendDesc")}
+              checked={formState.quickCaptureAutoSend}
+              onChange={(checked) => updateField("quickCaptureAutoSend", checked)}
+            />
+
+            {formState.quickCaptureAutoSend && (
+              <SettingsField
+                label={t("voice.quickCapture.autoSendDelayLabel")}
+                htmlFor="quickCaptureAutoSendDelay"
+                helperText={t("voice.quickCapture.autoSendDelayHelper")}
+                className="max-w-md"
+              >
+                <select
+                  id="quickCaptureAutoSendDelay"
+                  value={formState.quickCaptureAutoSendDelay}
+                  onChange={(e) => updateField("quickCaptureAutoSendDelay", Number(e.target.value))}
+                  className={settingsInputClassName}
+                >
+                  <option value={2}>2 seconds</option>
+                  <option value={3}>3 seconds</option>
+                  <option value={5}>5 seconds</option>
+                  <option value={10}>10 seconds</option>
+                </select>
+              </SettingsField>
+            )}
+
+            <div className="rounded-xl border border-terminal-border/55 bg-terminal-bg/5 px-3.5 py-3 font-mono text-xs leading-relaxed text-terminal-muted dark:border-terminal-border/90 dark:bg-terminal-cream-dark/45">
+              {t("voice.quickCapture.hint")}
+            </div>
+          </SettingsPanelCard>
         </div>
       </div>
     );

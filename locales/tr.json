@@ -2534,6 +2534,19 @@
         "shortcutPlaceholder": "CommandOrControl+Shift+S",
         "captureHint": "Tetiklendiginde Selene imlecin bulundugu ekrani yakalar, pencereyi one getirir ve goruntuyu mevcut taslaga ekler."
       },
+      "quickCapture": {
+        "title": "Hizli yakalama (ses + ekran)",
+        "description": "Tek kisayol ekrani yakalar ve ayni anda ses kaydini baslatir.",
+        "enableLabel": "Birlesik yakalamayi etkinlestir",
+        "enableDesc": "Ekrani yakalayip aninda ses kaydini baslatan global kisayol kaydeder.",
+        "hotkeyLabel": "Birlesik yakalama kisayolu",
+        "hotkeyHelper": "Electron globalShortcut formati, ornek: CommandOrControl+Shift+A",
+        "autoSendLabel": "Sesten sonra otomatik gonder",
+        "autoSendDesc": "Ses transkripsiyonu tamamlandiktan sonra mesaji otomatik gonderir (iptal etmek icin geri sayim ile).",
+        "autoSendDelayLabel": "Otomatik gonderme gecikmesi",
+        "autoSendDelayHelper": "Otomatik gondermeden once beklenecek sure. Geri sayim sirasinda iptal edebilirsiniz.",
+        "hint": "Herhangi bir uygulamadan kisayola basin → ekran yakalandi + ses kaydi baslar → sorunuzu soyeyin → transkripsiyon eklenir → mesaj gonderilir (veya otomatik gonderme kapali ise once inceleyin)."
+      },
       "dictionary": {
         "title": "Kisisel sozluk",
         "description": "Isim, teknik terim ve kisaltma ekleyerek tanimayi iyilestirin.",

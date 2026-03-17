@@ -2698,6 +2698,19 @@
         "shortcutPlaceholder": "CommandOrControl+Shift+S",
         "captureHint": "When triggered, Selene captures the display under your cursor, brings the window forward, and attaches the screenshot to the current draft."
       },
+      "quickCapture": {
+        "title": "Quick capture (voice + screen)",
+        "description": "One shortcut captures your screen and starts voice recording simultaneously.",
+        "enableLabel": "Enable unified capture",
+        "enableDesc": "Registers a global shortcut that captures your screen and immediately starts voice recording.",
+        "hotkeyLabel": "Unified capture shortcut",
+        "hotkeyHelper": "Electron globalShortcut format, e.g. CommandOrControl+Shift+A",
+        "autoSendLabel": "Auto-send after voice",
+        "autoSendDesc": "Automatically sends the message after voice transcription completes (with a countdown to cancel).",
+        "autoSendDelayLabel": "Auto-send delay",
+        "autoSendDelayHelper": "Seconds to wait before auto-sending. You can cancel during the countdown.",
+        "hint": "Press the shortcut from any app → screen captured + voice recording starts → speak your question → transcription inserted → message sent (or review first if auto-send is off)."
+      },
       "dictionary": {
         "title": "Personal dictionary",
         "description": "Words and names to bias local transcription.",

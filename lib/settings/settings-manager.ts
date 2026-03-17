@@ -237,6 +237,10 @@ export interface AppSettings {
     voiceHotkey?: string;
     screenCaptureEnabled?: boolean;
     screenCaptureShortcut?: string;
+    quickCaptureEnabled?: boolean;
+    quickCaptureHotkey?: string;
+    quickCaptureAutoSend?: boolean;
+    quickCaptureAutoSendDelay?: number;
     customDictionary?: string[];
     voiceHistoryEnabled?: boolean;
     voiceHistoryLimit?: number;
@@ -370,6 +374,10 @@ const DEFAULT_SETTINGS: AppSettings = {
     voiceHotkey: "CommandOrControl+Shift+Space",
     screenCaptureEnabled: true,
     screenCaptureShortcut: "CommandOrControl+Shift+S",
+    quickCaptureEnabled: true,
+    quickCaptureHotkey: "CommandOrControl+Shift+A",
+    quickCaptureAutoSend: false,
+    quickCaptureAutoSendDelay: 3,
     customDictionary: [],
     voiceHistoryEnabled: true,
     voiceHistoryLimit: 200,

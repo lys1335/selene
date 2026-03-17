@@ -558,6 +558,13 @@ export default function SettingsPage() {
           console.warn("[Settings] Failed to apply screen capture shortcut:", shortcutError);
         }
       }
+      if (electron?.unifiedCapture) {
+        try {
+          await electron.unifiedCapture.registerFromSettings();
+        } catch (shortcutError) {
+          console.warn("[Settings] Failed to apply unified capture shortcut:", shortcutError);
+        }
+      }
 
       toast.success(t("save.savedToast"));
       await loadSettings(); // Reload to get masked keys

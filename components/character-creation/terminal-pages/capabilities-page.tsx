@@ -139,6 +139,7 @@ export function CapabilitiesPage({
     flux2Klein9bEnabled: boolean;
     localGrepEnabled: boolean;
     devWorkspaceEnabled: boolean;
+    screenCaptureEnabled: boolean;
   }>({
     syncedFolders: false,
     embeddings: false,
@@ -150,7 +151,10 @@ export function CapabilitiesPage({
     flux2Klein9bEnabled: false,
     localGrepEnabled: true,
     devWorkspaceEnabled: false,
+    screenCaptureEnabled: true,
   });
+
+  type CapabilityDependencyKey = keyof typeof dependencyStatus;
 
   // Check dependencies on mount
   useEffect(() => {
@@ -190,6 +194,7 @@ export function CapabilitiesPage({
           flux2Klein9bEnabled: settingsData.flux2Klein9bEnabled === true,
           localGrepEnabled: settingsData.localGrepEnabled !== false,
           devWorkspaceEnabled: settingsData.devWorkspaceEnabled === true,
+          screenCaptureEnabled: settingsData.screenCaptureEnabled !== false,
         }));
       } catch {
         // Settings fetch failed — only update syncedFolders if we got a valid count

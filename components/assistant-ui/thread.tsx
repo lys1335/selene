@@ -96,6 +96,8 @@ export const Thread: FC<ThreadProps> = ({
     screenCaptureShortcut: "CommandOrControl+Shift+S",
     quickCaptureEnabled: true,
     quickCaptureHotkey: "CommandOrControl+Shift+A",
+    quickCaptureAutoSend: false,
+    quickCaptureAutoSendDelay: 3,
   });
   const [toolDisplayMode, setToolDisplayMode] = useState<ToolDisplayMode>("compact");
   const [devWorkspaceEnabled, setDevWorkspaceEnabled] = useState(false);
@@ -120,6 +122,8 @@ export const Thread: FC<ThreadProps> = ({
         screenCaptureShortcut?: string;
         quickCaptureEnabled?: boolean;
         quickCaptureHotkey?: string;
+        quickCaptureAutoSend?: boolean;
+        quickCaptureAutoSendDelay?: number;
         toolDisplayMode?: ToolDisplayMode;
         devWorkspaceEnabled?: boolean;
       }>("/api/settings", {
@@ -152,6 +156,8 @@ export const Thread: FC<ThreadProps> = ({
           typeof data.quickCaptureHotkey === "string" && data.quickCaptureHotkey.trim().length > 0
             ? data.quickCaptureHotkey.trim()
             : "CommandOrControl+Shift+A",
+        quickCaptureAutoSend: data.quickCaptureAutoSend === true,
+        quickCaptureAutoSendDelay: typeof data.quickCaptureAutoSendDelay === "number" ? data.quickCaptureAutoSendDelay : 3,
       });
       setToolDisplayMode(data.toolDisplayMode === "detailed" ? "detailed" : "compact");
       setDevWorkspaceEnabled(data.devWorkspaceEnabled === true);
@@ -417,6 +423,8 @@ export const Thread: FC<ThreadProps> = ({
               screenCaptureShortcut={voiceUiSettings.screenCaptureShortcut}
               quickCaptureEnabled={voiceUiSettings.quickCaptureEnabled}
               quickCaptureHotkey={voiceUiSettings.quickCaptureHotkey}
+              quickCaptureAutoSend={voiceUiSettings.quickCaptureAutoSend}
+              quickCaptureAutoSendDelay={voiceUiSettings.quickCaptureAutoSendDelay}
               onCancelBackgroundRun={onCancelBackgroundRun}
               isCancellingBackgroundRun={isCancellingBackgroundRun}
               canCancelBackgroundRun={canCancelBackgroundRun}

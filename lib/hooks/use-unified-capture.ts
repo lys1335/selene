@@ -18,9 +18,10 @@ export function useUnifiedCapture(options: {
   enabled?: boolean;
   onScreenshotCaptured: (file: File) => Promise<void>;
   onStartVoice: () => void;
+  onSessionStarted?: (screenshotUrl: string | undefined) => void;
   isDeepResearchMode?: boolean;
 }) {
-  const { enabled = true, onScreenshotCaptured, onStartVoice, isDeepResearchMode = false } = options;
+  const { enabled = true, onScreenshotCaptured, onStartVoice, onSessionStarted, isDeepResearchMode = false } = options;
   const processingRef = useRef(false);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -38,6 +39,9 @@ export function useUnifiedCapture(options: {
     (payload: UnifiedCaptureTriggerPayload) => {
       if (!enabled || processingRef.current) return;
       processingRef.current = true;
+
+      // Notify capture session coordinator that a unified session started
+      onSessionStarted?.(payload.screenshot?.url);
 
       // Voice starts IMMEDIATELY — never blocked by screenshot fetch/attachment.
       // Small delay only to let the window finish focusing.
@@ -90,7 +94,7 @@ export function useUnifiedCapture(options: {
         processingRef.current = false;
       });
     },
-    [enabled, onScreenshotCaptured, onStartVoice, isDeepResearchMode]
+    [enabled, onScreenshotCaptured, onStartVoice, onSessionStarted, isDeepResearchMode]
   );
 
   useEffect(() => {
