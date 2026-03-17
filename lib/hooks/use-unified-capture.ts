@@ -22,12 +22,14 @@ export type CaptureEventMetadata = {
 
 export function useUnifiedCapture(options: {
   enabled?: boolean;
+  /** When true (another session already active), ignore incoming shortcut triggers */
+  isSessionActive?: boolean;
   onScreenshotCaptured: (file: File) => Promise<void>;
   onStartVoice: () => void;
   onSessionStarted?: (screenshotUrl: string | undefined, metadata?: CaptureEventMetadata) => void;
   isDeepResearchMode?: boolean;
 }) {
-  const { enabled = true, onScreenshotCaptured, onStartVoice, onSessionStarted, isDeepResearchMode = false } = options;
+  const { enabled = true, isSessionActive = false, onScreenshotCaptured, onStartVoice, onSessionStarted, isDeepResearchMode = false } = options;
   const processingRef = useRef(false);
   const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -43,7 +45,8 @@ export function useUnifiedCapture(options: {
 
   const handleTriggered = useCallback(
     (payload: UnifiedCaptureTriggerPayload) => {
-      if (!enabled || processingRef.current) return;
+      // Ignore if another unified session is already active or a trigger is being processed
+      if (!enabled || processingRef.current || isSessionActive) return;
       processingRef.current = true;
 
       try {
@@ -109,7 +112,7 @@ export function useUnifiedCapture(options: {
         processingRef.current = false;
       }
     },
-    [enabled, onScreenshotCaptured, onStartVoice, onSessionStarted, isDeepResearchMode]
+    [enabled, isSessionActive, onScreenshotCaptured, onStartVoice, onSessionStarted, isDeepResearchMode]
   );
 
   useEffect(() => {

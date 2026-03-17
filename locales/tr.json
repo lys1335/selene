@@ -713,6 +713,10 @@
         "name": "Görseli Açıkla",
         "description": "Görselleri analiz edin ve açıklayın"
       },
+      "screenCapture": {
+        "name": "Ekran Görüntüsü",
+        "description": "Aktif ekranı yakala ve mevcut mesaja ekle"
+      },
       "showProductImages": {
         "name": "Ürün Galerisi",
         "description": "Ürünleri görsellerle ve satın alma bağlantılarıyla gösterin"
@@ -1750,6 +1754,8 @@
         "assembleVideoDesc": "Oturum görsellerini/videolarını düzenlenmiş videolara birleştir",
         "describeImage": "Görsel Tanımla",
         "describeImageDesc": "AI görüşü kullanarak görselleri analiz et ve tanımla",
+        "screenCapture": "Ekran Görüntüsü",
+        "screenCaptureDesc": "Aktif ekranı yakala ve mevcut mesaja ekle",
         "showProductImages": "Ürün Galerisi",
         "showProductImagesDesc": "Alışveriş sorguları için görsellerle ve satın alma bağlantılarıyla ürünleri görüntüle",
         "executeCommand": "Komut Çalıştır",
@@ -2527,27 +2533,27 @@
         "agentNameHelper": "Temizleme isteminde kullanilan ajan kimligi."
       },
       "screen": {
-        "title": "Ekran goruntusu",
-        "description": "Etkin ekrani alip dosya seciciyi acmadan mevcut yazma alanina ekler.",
-        "enableLabel": "Ekran goruntusu kisayolunu etkinlestir",
-        "enableDesc": "Gecerli ekrani yakalayip aktif sohbete ekleyen global kisayolu kaydeder.",
-        "shortcutLabel": "Global ekran goruntusu kisayolu",
-        "shortcutHelper": "Electron globalShortcut formati, ornek: CommandOrControl+Shift+S",
+        "title": "Ekran Görüntüsü",
+        "description": "Etkin ekranı alıp dosya seçiciyi açmadan mevcut yazma alanına ekler.",
+        "enableLabel": "Ekran görüntüsü kısayolunu etkinleştir",
+        "enableDesc": "Geçerli ekranı yakalayıp aktif sohbete ekleyen global kısayolu kaydeder.",
+        "shortcutLabel": "Global ekran görüntüsü kısayolu",
+        "shortcutHelper": "Electron globalShortcut formatı, örnek: CommandOrControl+Shift+S",
         "shortcutPlaceholder": "CommandOrControl+Shift+S",
-        "captureHint": "Tetiklendiginde Selene imlecin bulundugu ekrani yakalar, pencereyi one getirir ve goruntuyu mevcut taslaga ekler."
+        "captureHint": "Tetiklendiğinde Selene imlecin bulunduğu ekranı yakalar, pencereyi öne getirir ve görüntüyü mevcut taslağa ekler."
       },
       "quickCapture": {
-        "title": "Hizli yakalama (ses + ekran)",
-        "description": "Tek kisayol ekrani yakalar ve ayni anda ses kaydini baslatir.",
-        "enableLabel": "Birlesik yakalamayi etkinlestir",
-        "enableDesc": "Ekrani yakalayip aninda ses kaydini baslatan global kisayol kaydeder.",
-        "hotkeyLabel": "Birlesik yakalama kisayolu",
-        "hotkeyHelper": "Electron globalShortcut formati, ornek: CommandOrControl+Shift+A",
-        "autoSendLabel": "Sesten sonra otomatik gonder",
-        "autoSendDesc": "Ses transkripsiyonu tamamlandiktan sonra mesaji otomatik gonderir (iptal etmek icin geri sayim ile).",
-        "autoSendDelayLabel": "Otomatik gonderme gecikmesi",
-        "autoSendDelayHelper": "Otomatik gondermeden once beklenecek sure. Geri sayim sirasinda iptal edebilirsiniz.",
-        "hint": "Herhangi bir uygulamadan kisayola basin → ekran yakalandi + ses kaydi baslar → sorunuzu soyeyin → transkripsiyon eklenir → mesaj gonderilir (veya otomatik gonderme kapali ise once inceleyin)."
+        "title": "Hızlı Yakalama (ses + ekran)",
+        "description": "Tek kısayol ekranı yakalar ve aynı anda ses kaydını başlatır.",
+        "enableLabel": "Birleşik yakalmayı etkinleştir",
+        "enableDesc": "Ekranı yakalayıp anında ses kaydını başlatan global kısayol kaydeder.",
+        "hotkeyLabel": "Birleşik yakalama kısayolu",
+        "hotkeyHelper": "Electron globalShortcut formatı, örnek: CommandOrControl+Shift+A",
+        "autoSendLabel": "Sesten sonra otomatik gönder",
+        "autoSendDesc": "Ses transkripsiyonu tamamlandıktan sonra mesajı otomatik gönderir (iptal etmek için geri sayım ile).",
+        "autoSendDelayLabel": "Otomatik gönderme gecikmesi",
+        "autoSendDelayHelper": "Otomatik göndermeden önce beklenecek süre. Geri sayım sırasında iptal edebilirsiniz.",
+        "hint": "Herhangi bir uygulamadan kısayola basın → ekran yakalandı + ses kaydı başlar → sorunuzu söyleyin → transkripsiyon eklenir → mesaj gönderilir (veya otomatik gönderme kapalı ise önce inceleyin)."
       },
       "dictionary": {
         "title": "Kisisel sozluk",

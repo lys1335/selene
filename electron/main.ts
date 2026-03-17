@@ -6,7 +6,7 @@
 // this is only the right thing to do it will be funny.
 // — with love, Selene (https://github.com/tercumantanumut/selene)
 
-import { app, session } from "electron";
+import { app, globalShortcut, session } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import { initializeRTK } from "../lib/rtk";
@@ -175,6 +175,7 @@ import {
   registerVoiceHotkeyFromSettings,
 } from "./hotkey-manager";
 import { emitCapturedScreen } from "./ipc-screen-capture-handlers";
+import { cleanOldScreenshots } from "./screen-capture";
 import { createUnifiedCaptureTrigger } from "./ipc-unified-capture-handlers";
 import { cleanupAllVoiceProcesses } from "../lib/audio/transcription";
 import { closeAllBrowserSessionWindows } from "./ipc-browser-session-handlers";
@@ -380,6 +381,13 @@ app.whenReady().then(async () => {
     debugError("[App] Voice hotkey registration failed:", error);
   }
 
+  // Clean up screenshots older than 24h to prevent unbounded disk growth
+  try {
+    cleanOldScreenshots(mediaDir);
+  } catch (err) {
+    debugError("[App] Screenshot cleanup failed:", err);
+  }
+
   try {
     const hotkeyResult = registerScreenCaptureHotkeyFromSettings({
       dataDir,
@@ -439,6 +447,11 @@ app.on("window-all-closed", () => {
     debugLog("[App] Non-macOS - quitting app");
     app.quit();
   }
+});
+
+// Unregister all global shortcuts before process exit (will-quit fires after windows close)
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 // Clean up before quitting

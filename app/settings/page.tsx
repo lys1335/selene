@@ -551,6 +551,13 @@ export default function SettingsPage() {
       setChatWorkspaceMode(formState.chatWorkspaceMode);
 
       const electron = getElectronAPI();
+      if (electron?.voiceHotkey) {
+        try {
+          await electron.voiceHotkey.registerFromSettings();
+        } catch (shortcutError) {
+          console.warn("[Settings] Failed to apply voice hotkey:", shortcutError);
+        }
+      }
       if (electron?.screenCapture) {
         try {
           await electron.screenCapture.registerFromSettings();

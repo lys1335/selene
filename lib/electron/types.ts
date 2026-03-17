@@ -142,6 +142,14 @@ export interface ElectronUnifiedCaptureAPI {
   clear: () => Promise<{ success: boolean }>;
 }
 
+export interface ElectronVoiceHotkeyAPI {
+  onTriggered: (callback: () => void) => (() => void) | undefined;
+  register: (accelerator: string) => Promise<{ success: boolean; accelerator: string; error?: string }>;
+  registerFromSettings: () => Promise<{ success: boolean; accelerator: string; error?: string }>;
+  getRegistered: () => Promise<{ accelerator: string }>;
+  clear: () => Promise<{ success: boolean }>;
+}
+
 export interface ElectronAPI {
   platform: NodeJS.Platform;
   isElectron: boolean;
@@ -152,6 +160,7 @@ export interface ElectronAPI {
   model: ElectronModelAPI;
   logs?: ElectronLogsAPI;
   browserSession?: ElectronBrowserSessionAPI;
+  voiceHotkey?: ElectronVoiceHotkeyAPI;
   screenCapture?: ElectronScreenCaptureAPI;
   unifiedCapture?: ElectronUnifiedCaptureAPI;
 }

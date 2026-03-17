@@ -721,6 +721,10 @@
         "name": "Describe Image",
         "description": "Analyze and describe images"
       },
+      "screenCapture": {
+        "name": "Screen Capture",
+        "description": "Capture the active display and attach it to the current message"
+      },
       "showProductImages": {
         "name": "Product Gallery",
         "description": "Display products with images and purchase links"
@@ -1749,6 +1753,8 @@
         "assembleVideoDesc": "Assemble session images/videos into edited videos",
         "describeImage": "Describe Image",
         "describeImageDesc": "Analyze and describe images using AI vision",
+        "screenCapture": "Screen Capture",
+        "screenCaptureDesc": "Capture the active display and attach it to the current message",
         "showProductImages": "Product Gallery",
         "showProductImagesDesc": "Display products with images and purchase links for shopping queries",
         "executeCommand": "Execute Command",

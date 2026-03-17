@@ -424,6 +424,8 @@ export const Composer: FC<{
   // Gated on its own setting + API — independent of standalone screenCapture.
   useUnifiedCapture({
     enabled: quickCaptureEnabled && Boolean(electronAPI?.unifiedCapture),
+    // Block a new unified session if one is already active (prevents state overwrite)
+    isSessionActive: captureSession.isUnifiedSession,
     onScreenshotCaptured: handleAttachCapturedScreen,
     onStartVoice: () => { void handleVoiceInput(); },
     onSessionStarted: captureSession.startSession,
@@ -654,6 +656,7 @@ export const Composer: FC<{
         }
         tiptapRef.current?.clear();
         clearTiptapDraft();
+        if (captureSession.isUnifiedSession) captureSession.endSession();
         return;
       }
 
@@ -675,6 +678,7 @@ export const Composer: FC<{
         if (attachmentCount > 0) {
           threadRuntime.composer.clearAttachments();
         }
+        if (captureSession.isUnifiedSession) captureSession.endSession();
         return;
       }
 
@@ -685,6 +689,24 @@ export const Composer: FC<{
       if (composerAttachments.length !== rawComposerAttachments.length) {
         toast.error("Wait for attachments to finish uploading before sending.");
         return;
+      }
+
+      // Prepend screen capture context if metadata is available from a unified session
+      let finalComposerText = composerText;
+      if (captureSession.isUnifiedSession && captureSession.metadata) {
+        const meta = captureSession.metadata;
+        const contextParts: string[] = [];
+        if (meta.activeAppName && meta.activeWindowTitle) {
+          contextParts.push(`[Screen Context: ${meta.activeAppName} — ${meta.activeWindowTitle}]`);
+        } else if (meta.activeWindowTitle) {
+          contextParts.push(`[Screen Context: ${meta.activeWindowTitle}]`);
+        }
+        if (meta.browserUrl) {
+          contextParts.push(`[URL: ${meta.browserUrl}]`);
+        }
+        if (contextParts.length > 0) {
+          finalComposerText = contextParts.join("\n") + "\n\n" + finalComposerText;
+        }
       }
 
       const inlineAttachments = inlineImageParts.map((part, index) => ({
@@ -706,7 +728,7 @@ export const Composer: FC<{
 
       threadRuntime.append({
         role: "user",
-        content: composerText ? [{ type: "text", text: composerText }] : [],
+        content: finalComposerText ? [{ type: "text", text: finalComposerText }] : [],
         attachments: [...composerAttachments, ...inlineAttachments],
       });
 
@@ -716,9 +738,12 @@ export const Composer: FC<{
       if (composerAttachments.length > 0) {
         threadRuntime.composer.clearAttachments();
       }
+      // End unified capture session after send (don't clear attachments — already sent)
+      if (captureSession.isUnifiedSession) captureSession.endSession();
     },
     [
       attachmentCount,
+      captureSession,
       clearEnhancement,
       clearTiptapDraft,
       deepResearch,
@@ -777,7 +802,7 @@ export const Composer: FC<{
         captureSession.cancelAutoSend();
       }
     },
-    [setTiptapDraft],
+    [setTiptapDraft, captureSession],
   );
 
   const handleClearTiptapDraft = useCallback(() => {

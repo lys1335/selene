@@ -52,17 +52,19 @@ async function collectMacOSMetadata(): Promise<Partial<ScreenCaptureMetadata>> {
   if (result.activeAppName) {
     const browserName = result.activeAppName;
     const knownBrowsers = ["Google Chrome", "Safari", "Arc", "Firefox", "Microsoft Edge", "Brave Browser", "Vivaldi", "Opera"];
-    if (knownBrowsers.some((b) => browserName.includes(b))) {
+    // Use the matched allowlist entry (not the raw OS value) to prevent AppleScript injection
+    const matchedBrowser = knownBrowsers.find((b) => browserName.includes(b));
+    if (matchedBrowser) {
       try {
         let urlScript: string;
-        if (browserName.includes("Safari")) {
+        if (matchedBrowser === "Safari") {
           urlScript = `tell application "Safari" to return URL of front document`;
-        } else if (browserName.includes("Firefox")) {
+        } else if (matchedBrowser === "Firefox") {
           // Firefox doesn't support AppleScript URL access — skip
           urlScript = "";
         } else {
-          // Chromium-based browsers
-          urlScript = `tell application "${browserName}" to return URL of active tab of front window`;
+          // Chromium-based browsers — use the allowlisted name, never the raw OS value
+          urlScript = `tell application "${matchedBrowser}" to return URL of active tab of front window`;
         }
         if (urlScript) {
           const url = await execPromise(`osascript -e '${urlScript.replace(/'/g, "'\\''")}'`);
@@ -135,12 +137,22 @@ export async function collectMetadata(options?: {
 
   let platformMeta: Partial<ScreenCaptureMetadata> = {};
 
+  // Aggregate timeout prevents blocking the unified capture pipeline for more than 2s
+  // (worst case: two sequential 3s AppleScript calls = 6s without this guard)
+  const AGGREGATE_TIMEOUT_MS = 2000;
+
   try {
-    if (process.platform === "darwin") {
-      platformMeta = await collectMacOSMetadata();
-    } else if (process.platform === "win32") {
-      platformMeta = await collectWindowsMetadata();
-    }
+    const platformPromise = process.platform === "darwin"
+      ? collectMacOSMetadata()
+      : process.platform === "win32"
+        ? collectWindowsMetadata()
+        : Promise.resolve({});
+
+    const timeoutPromise = new Promise<Partial<ScreenCaptureMetadata>>((resolve) => {
+      setTimeout(() => resolve({}), AGGREGATE_TIMEOUT_MS);
+    });
+
+    platformMeta = await Promise.race([platformPromise, timeoutPromise]);
     // Linux: no metadata collection for now — can add xdotool later
   } catch (error) {
     debugError("[MetadataCollector] Platform metadata collection failed:", error);

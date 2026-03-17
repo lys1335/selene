@@ -41,7 +41,12 @@ export async function emitCapturedScreen(ctx: IpcHandlerContext) {
   return result;
 }
 
+let screenCaptureHandlersRegistered = false;
+
 export function registerScreenCaptureHandlers(ctx: IpcHandlerContext): void {
+  if (screenCaptureHandlersRegistered) return;
+  screenCaptureHandlersRegistered = true;
+
   ipcMain.handle("screen-capture:capture", async () => {
     return captureDisplay({ mediaDir: ctx.mediaDir });
   });

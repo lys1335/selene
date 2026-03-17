@@ -33,6 +33,34 @@ function ensureScreenshotsDir(mediaDir: string): string {
   return screenshotsDir;
 }
 
+const SCREENSHOT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Delete screenshot files older than SCREENSHOT_TTL_MS.
+ * Call once at app startup to prevent unbounded disk growth.
+ */
+export function cleanOldScreenshots(mediaDir: string): void {
+  const screenshotsDir = path.join(mediaDir, "screenshots");
+  if (!fs.existsSync(screenshotsDir)) return;
+  try {
+    const now = Date.now();
+    for (const file of fs.readdirSync(screenshotsDir)) {
+      if (!file.endsWith(".png")) continue;
+      const fullPath = path.join(screenshotsDir, file);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (now - stat.mtimeMs > SCREENSHOT_TTL_MS) {
+          fs.unlinkSync(fullPath);
+        }
+      } catch {
+        // Non-fatal: file may have been deleted concurrently
+      }
+    }
+  } catch (err) {
+    console.warn("[screen-capture] cleanOldScreenshots failed:", err);
+  }
+}
+
 function buildCaptureError(permissionStatus: ScreenCapturePermissionStatus, fallback: string): ScreenCaptureResult {
   if (permissionStatus === "denied" || permissionStatus === "restricted") {
     return {

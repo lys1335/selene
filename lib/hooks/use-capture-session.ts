@@ -43,6 +43,8 @@ export function useCaptureSession(options: {
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stores the brief 200ms post-send cleanup timer so it can be cancelled on unmount
+  const cleanupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSendRef = useRef(onSend);
   onSendRef.current = onSend;
 
@@ -55,22 +57,20 @@ export function useCaptureSession(options: {
     setSendAfterTranscription(false);
   }, []);
 
-  // Screenshot attached — transition capturing → recording if voice is active
-  const onScreenshotAttached = useCallback((url: string) => {
-    setScreenshotUrl(url);
-  }, []);
-
   // Safety timeout: if stuck in "capturing" for >5s (mic failed, screenshot hung),
   // auto-cancel to prevent permanent overlay
   useEffect(() => {
     if (phase === "capturing" && isUnifiedSession) {
       stuckTimerRef.current = setTimeout(() => {
+        stuckTimerRef.current = null;
         console.warn("[useCaptureSession] Stuck in capturing phase for 5s, auto-cancelling");
         setPhase("idle");
         setIsUnifiedSession(false);
         setScreenshotUrl(null);
         setMetadata(null);
         setSendAfterTranscription(false);
+        // Clear any screenshot that may have been attached before the hang
+        onClearAttachments?.();
       }, 5000);
       return () => {
         if (stuckTimerRef.current) {
@@ -79,7 +79,7 @@ export function useCaptureSession(options: {
         }
       };
     }
-  }, [phase, isUnifiedSession]);
+  }, [phase, isUnifiedSession, onClearAttachments]);
 
   // Observe voice state transitions during a unified session
   useEffect(() => {
@@ -100,7 +100,8 @@ export function useCaptureSession(options: {
         setPhase("sending");
         setSendAfterTranscription(false);
         onSendRef.current();
-        setTimeout(() => {
+        cleanupTimerRef.current = setTimeout(() => {
+          cleanupTimerRef.current = null;
           setPhase("idle");
           setIsUnifiedSession(false);
           setScreenshotUrl(null);
@@ -135,10 +136,12 @@ export function useCaptureSession(options: {
     }, 1000);
 
     autoSendTimerRef.current = setTimeout(() => {
+      autoSendTimerRef.current = null;
       setPhase("sending");
       onSendRef.current();
-      // Reset after brief delay
-      setTimeout(() => {
+      // Reset after brief delay — stored in ref so it can be cancelled on unmount
+      cleanupTimerRef.current = setTimeout(() => {
+        cleanupTimerRef.current = null;
         setPhase("idle");
         setIsUnifiedSession(false);
         setScreenshotUrl(null);
@@ -204,6 +207,7 @@ export function useCaptureSession(options: {
       if (countdownRef.current) clearInterval(countdownRef.current);
       if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current);
       if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
+      if (cleanupTimerRef.current) clearTimeout(cleanupTimerRef.current);
     };
   }, []);
 
@@ -214,7 +218,6 @@ export function useCaptureSession(options: {
     countdownRemaining,
     metadata,
     startSession,
-    onScreenshotAttached,
     cancelSession,
     cancelAutoSend,
     stopAndSend,
