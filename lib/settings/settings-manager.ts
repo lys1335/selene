@@ -241,6 +241,10 @@ export interface AppSettings {
     quickCaptureHotkey?: string;
     quickCaptureAutoSend?: boolean;
     quickCaptureAutoSendDelay?: number;
+    screenCaptureExcludedApps?: string;
+    screenCaptureRetention?: "session" | "day" | "week" | "forever";
+    screenCapturePreviewBeforeSend?: boolean;
+    screenCaptureOnboardingSeen?: boolean;
     customDictionary?: string[];
     voiceHistoryEnabled?: boolean;
     voiceHistoryLimit?: number;
@@ -378,6 +382,10 @@ const DEFAULT_SETTINGS: AppSettings = {
     quickCaptureHotkey: "CommandOrControl+Shift+A",
     quickCaptureAutoSend: false,
     quickCaptureAutoSendDelay: 3,
+    screenCaptureExcludedApps: "1Password, Keychain Access, System Preferences",
+    screenCaptureRetention: "session",
+    screenCapturePreviewBeforeSend: true,
+    screenCaptureOnboardingSeen: false,
     customDictionary: [],
     voiceHistoryEnabled: true,
     voiceHistoryLimit: 200,

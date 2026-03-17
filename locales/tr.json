@@ -2555,6 +2555,21 @@
         "autoSendDelayHelper": "Otomatik göndermeden önce beklenecek süre. Geri sayım sırasında iptal edebilirsiniz.",
         "hint": "Herhangi bir uygulamadan kısayola basın → ekran yakalandı + ses kaydı başlar → sorunuzu söyleyin → transkripsiyon eklenir → mesaj gönderilir (veya otomatik gönderme kapalı ise önce inceleyin)."
       },
+      "privacy": {
+        "title": "Ekran görüntüsü gizliliği",
+        "description": "Yakalamadan hariç tutulacak uygulamaları ve ekran görüntülerinin ne kadar süre saklanacağını ayarlayın.",
+        "excludedAppsLabel": "Hariç tutulan uygulamalar",
+        "excludedAppsHelper": "Bu uygulamalar hiçbir zaman yakalanmaz (virgülle ayrılmış)",
+        "retentionLabel": "Ekran görüntülerini sakla",
+        "retentionHelper": "Yakalanan ekran görüntülerinin diskte ne kadar süre tutulacağı",
+        "retentionSession": "Oturum bitene kadar",
+        "retentionDay": "24 saat",
+        "retentionWeek": "1 hafta",
+        "retentionForever": "Sonsuza kadar sakla",
+        "clearBtn": "Tüm ekran görüntülerini sil",
+        "clearingBtn": "Siliniyor...",
+        "clearSuccess": "{count} ekran görüntüsü silindi"
+      },
       "dictionary": {
         "title": "Kisisel sozluk",
         "description": "Isim, teknik terim ve kisaltma ekleyerek tanimayi iyilestirin.",

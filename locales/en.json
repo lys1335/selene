@@ -2719,6 +2719,21 @@
         "autoSendDelayHelper": "Seconds to wait before auto-sending. You can cancel during the countdown.",
         "hint": "Press the shortcut from any app → screen captured + voice recording starts → speak your question → transcription inserted → message sent (or review first if auto-send is off)."
       },
+      "privacy": {
+        "title": "Screenshot privacy",
+        "description": "Control which apps are excluded from capture and how long screenshots are kept.",
+        "excludedAppsLabel": "Excluded apps",
+        "excludedAppsHelper": "These apps will never be captured (comma-separated)",
+        "retentionLabel": "Keep screenshots",
+        "retentionHelper": "How long captured screenshots are stored on disk",
+        "retentionSession": "Until session ends",
+        "retentionDay": "24 hours",
+        "retentionWeek": "1 week",
+        "retentionForever": "Keep forever",
+        "clearBtn": "Clear all screenshots",
+        "clearingBtn": "Clearing...",
+        "clearSuccess": "Deleted {count} screenshot(s)"
+      },
       "dictionary": {
         "title": "Personal dictionary",
         "description": "Words and names to bias local transcription.",

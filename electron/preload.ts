@@ -285,6 +285,26 @@ const electronAPI = {
     },
   },
 
+  // Permission management
+  permissions: {
+    check: (): Promise<{
+      screen: "granted" | "denied" | "not-determined" | "restricted" | "unavailable";
+      microphone: "granted" | "denied" | "not-determined" | "restricted" | "unavailable";
+      accessibility: "granted" | "denied" | "not-determined" | "restricted" | "unavailable";
+    }> => {
+      return ipcRenderer.invoke("permission:check");
+    },
+    requestScreen: (): Promise<void> => {
+      return ipcRenderer.invoke("permission:request-screen");
+    },
+    requestMic: (): Promise<boolean> => {
+      return ipcRenderer.invoke("permission:request-mic");
+    },
+    requestAccessibility: (): Promise<boolean> => {
+      return ipcRenderer.invoke("permission:request-accessibility");
+    },
+  },
+
   // ComfyUI local backend operations
   comfyui: {
     checkStatus: (backendPath?: string): Promise<{
@@ -521,6 +541,10 @@ const electronAPI = {
         "unified-capture:registerFromSettings",
         "unified-capture:getRegistered",
         "unified-capture:clear",
+        "permission:check",
+        "permission:request-screen",
+        "permission:request-mic",
+        "permission:request-accessibility",
         "browser-session:open",
         "browser-session:close",
         "browser-session:is-open",

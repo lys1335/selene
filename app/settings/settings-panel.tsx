@@ -26,6 +26,7 @@ import { MemorySection } from "./memory-section";
 import { ApiKeysSection } from "./api-keys-section";
 import { ModelsSection } from "./models-section";
 import { LocalEmbeddingModelSelector } from "./embedding-model-selector";
+import { ShortcutRecorder } from "@/components/settings/shortcut-recorder";
 
 export interface SettingsPanelProps {
   section: SettingsSection;
@@ -157,6 +158,50 @@ export function ClaudeCodeAuthFlow({
           {loading ? (t("verifying") || "Verifying...") : (t("submitCode") || "Submit Code")}
         </button>
       </div>
+    </div>
+  );
+}
+
+function ClearScreenshotsButton() {
+  const t = useTranslations("settings");
+  const [clearing, setClearing] = useState(false);
+  const [cleared, setCleared] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleClear = async () => {
+    setClearing(true);
+    setCleared(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/screenshots/clear", { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { deleted: number };
+      setCleared(data.deleted);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear screenshots");
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={handleClear}
+        disabled={clearing}
+        className="rounded border border-terminal-border/60 bg-terminal-bg/10 px-3 py-1.5 font-mono text-xs text-terminal-muted hover:border-red-500/60 hover:text-red-400 disabled:opacity-50 dark:border-terminal-border/80 dark:bg-terminal-cream/5"
+      >
+        {clearing ? t("voice.privacy.clearingBtn") : t("voice.privacy.clearBtn")}
+      </button>
+      {cleared !== null && (
+        <span className="font-mono text-xs text-terminal-green">
+          {t("voice.privacy.clearSuccess", { count: cleared })}
+        </span>
+      )}
+      {error !== null && (
+        <span className="font-mono text-xs text-red-400">{error}</span>
+      )}
     </div>
   );
 }
@@ -731,14 +776,10 @@ export function SettingsPanel({
               helperText={t("voice.screen.shortcutHelper")}
               className="max-w-md"
             >
-              <input
+              <ShortcutRecorder
                 id="screenCaptureShortcut"
-                type="text"
                 value={formState.screenCaptureShortcut}
-                onChange={(e) => updateField("screenCaptureShortcut", e.target.value)}
-                placeholder={t("voice.screen.shortcutPlaceholder")}
-                aria-describedby="screenCaptureShortcut-help"
-                className={settingsInputClassName}
+                onChange={(v) => updateField("screenCaptureShortcut", v)}
               />
             </SettingsField>
 
@@ -765,13 +806,10 @@ export function SettingsPanel({
               helperText={t("voice.quickCapture.hotkeyHelper")}
               className="max-w-md"
             >
-              <input
+              <ShortcutRecorder
                 id="quickCaptureHotkey"
-                type="text"
                 value={formState.quickCaptureHotkey}
-                onChange={(e) => updateField("quickCaptureHotkey", e.target.value)}
-                placeholder="CommandOrControl+Shift+A"
-                className={settingsInputClassName}
+                onChange={(v) => updateField("quickCaptureHotkey", v)}
               />
             </SettingsField>
 
@@ -807,6 +845,46 @@ export function SettingsPanel({
             <div className="rounded-xl border border-terminal-border/55 bg-terminal-bg/5 px-3.5 py-3 font-mono text-xs leading-relaxed text-terminal-muted dark:border-terminal-border/90 dark:bg-terminal-cream-dark/45">
               {t("voice.quickCapture.hint")}
             </div>
+          </SettingsPanelCard>
+
+          <SettingsPanelCard
+            title={t("voice.privacy.title")}
+            description={t("voice.privacy.description")}
+          >
+            <SettingsField
+              label={t("voice.privacy.excludedAppsLabel")}
+              htmlFor="screenCaptureExcludedApps"
+              helperText={t("voice.privacy.excludedAppsHelper")}
+            >
+              <textarea
+                id="screenCaptureExcludedApps"
+                rows={2}
+                value={formState.screenCaptureExcludedApps}
+                onChange={(e) => updateField("screenCaptureExcludedApps", e.target.value)}
+                className={settingsInputClassName + " resize-none"}
+              />
+            </SettingsField>
+
+            <SettingsField
+              label={t("voice.privacy.retentionLabel")}
+              htmlFor="screenCaptureRetention"
+              helperText={t("voice.privacy.retentionHelper")}
+              className="max-w-md"
+            >
+              <select
+                id="screenCaptureRetention"
+                value={formState.screenCaptureRetention}
+                onChange={(e) => updateField("screenCaptureRetention", e.target.value as FormState["screenCaptureRetention"])}
+                className={settingsInputClassName}
+              >
+                <option value="session">{t("voice.privacy.retentionSession")}</option>
+                <option value="day">{t("voice.privacy.retentionDay")}</option>
+                <option value="week">{t("voice.privacy.retentionWeek")}</option>
+                <option value="forever">{t("voice.privacy.retentionForever")}</option>
+              </select>
+            </SettingsField>
+
+            <ClearScreenshotsButton />
           </SettingsPanelCard>
         </div>
       </div>

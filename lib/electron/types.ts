@@ -150,6 +150,26 @@ export interface ElectronVoiceHotkeyAPI {
   clear: () => Promise<{ success: boolean }>;
 }
 
+export type PermissionStatus =
+  | "granted"
+  | "denied"
+  | "not-determined"
+  | "restricted"
+  | "unavailable";
+
+export interface PermissionCheckResult {
+  screen: PermissionStatus;
+  microphone: PermissionStatus;
+  accessibility: PermissionStatus;
+}
+
+export interface ElectronPermissionsAPI {
+  check: () => Promise<PermissionCheckResult>;
+  requestScreen: () => Promise<void>;
+  requestMic: () => Promise<boolean>;
+  requestAccessibility: () => Promise<boolean>;
+}
+
 export interface ElectronAPI {
   platform: NodeJS.Platform;
   isElectron: boolean;
@@ -163,6 +183,7 @@ export interface ElectronAPI {
   voiceHotkey?: ElectronVoiceHotkeyAPI;
   screenCapture?: ElectronScreenCaptureAPI;
   unifiedCapture?: ElectronUnifiedCaptureAPI;
+  permissions?: ElectronPermissionsAPI;
 }
 
 /**

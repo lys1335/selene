@@ -80,6 +80,10 @@ export interface AppSettings {
   quickCaptureHotkey?: string;
   quickCaptureAutoSend?: boolean;
   quickCaptureAutoSendDelay?: number;
+  screenCaptureExcludedApps?: string;
+  screenCaptureRetention?: "session" | "day" | "week" | "forever";
+  screenCapturePreviewBeforeSend?: boolean;
+  screenCaptureOnboardingSeen?: boolean;
 }
 
 export type SettingsSection = "api-keys" | "models" | "vector-search" | "comfyui" | "preferences" | "memory" | "mcp" | "plugins" | "voice";
@@ -193,6 +197,10 @@ export interface FormState {
   quickCaptureHotkey: string;
   quickCaptureAutoSend: boolean;
   quickCaptureAutoSendDelay: number;
+  screenCaptureExcludedApps: string;
+  screenCaptureRetention: "session" | "day" | "week" | "forever";
+  screenCapturePreviewBeforeSend: boolean;
+  screenCaptureOnboardingSeen: boolean;
   customDictionary: string[];
   voiceHistoryEnabled: boolean;
   voiceHistoryLimit: number;
@@ -308,6 +316,10 @@ export const DEFAULT_FORM_STATE: FormState = {
   quickCaptureHotkey: "CommandOrControl+Shift+A",
   quickCaptureAutoSend: false,
   quickCaptureAutoSendDelay: 3,
+  screenCaptureExcludedApps: "1Password, Keychain Access, System Preferences",
+  screenCaptureRetention: "session",
+  screenCapturePreviewBeforeSend: true,
+  screenCaptureOnboardingSeen: false,
   customDictionary: [],
   voiceHistoryEnabled: true,
   voiceHistoryLimit: 200,
@@ -425,6 +437,10 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     quickCaptureHotkey: data.quickCaptureHotkey ?? "CommandOrControl+Shift+A",
     quickCaptureAutoSend: data.quickCaptureAutoSend ?? false,
     quickCaptureAutoSendDelay: data.quickCaptureAutoSendDelay ?? 3,
+    screenCaptureExcludedApps: data.screenCaptureExcludedApps ?? "1Password, Keychain Access, System Preferences",
+    screenCaptureRetention: data.screenCaptureRetention ?? "session",
+    screenCapturePreviewBeforeSend: data.screenCapturePreviewBeforeSend ?? true,
+    screenCaptureOnboardingSeen: data.screenCaptureOnboardingSeen ?? false,
     customDictionary: Array.isArray(data.customDictionary) ? data.customDictionary : [],
     voiceHistoryEnabled: data.voiceHistoryEnabled ?? true,
     voiceHistoryLimit: data.voiceHistoryLimit ?? 200,
