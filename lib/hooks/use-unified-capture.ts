@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { getElectronAPI, type UnifiedCaptureTriggerPayload } from "@/lib/electron/types";
+import { getElectronAPI, type UnifiedCaptureTriggerPayload, UNIFIED_CAPTURE_DEBOUNCE_MARKER } from "@/lib/electron/types";
 import { optimizeScreenshot } from "@/lib/voice-screen/image-optimization";
 
 /**
@@ -97,7 +97,7 @@ export function useUnifiedCapture(options: {
               toast.error(message);
             }
           } else if (payload.screenshotError) {
-            if (payload.screenshotError !== "Debounced — too rapid") {
+            if (!payload.screenshotError?.includes(UNIFIED_CAPTURE_DEBOUNCE_MARKER)) {
               toast.warning(payload.screenshotError);
             }
           } else if (isDeepResearchMode && payload.screenshot) {

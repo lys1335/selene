@@ -3,6 +3,12 @@
  * This allows type-safe access to Electron functionality from the renderer process.
  */
 
+/**
+ * Shared error marker for debounced captures. Used in both Electron main and renderer
+ * to suppress toast notifications for rapid successive shortcut presses.
+ */
+export const UNIFIED_CAPTURE_DEBOUNCE_MARKER = "debounced";
+
 export interface ElectronWindowAPI {
   minimize: () => void;
   maximize: () => void;

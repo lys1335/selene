@@ -10,6 +10,7 @@ import {
   clearUnifiedCaptureHotkey,
 } from "./hotkey-manager";
 import { debugLog, debugError } from "./debug-logger";
+import { UNIFIED_CAPTURE_DEBOUNCE_MARKER } from "../lib/electron/types";
 import { loadSettings } from "../lib/settings/settings-manager";
 
 export interface UnifiedCaptureTriggerPayload {
@@ -44,7 +45,7 @@ async function executeUnifiedCapture(
       mode,
       startVoice: false,
       traceId,
-      screenshotError: "Debounced — too rapid",
+      screenshotError: UNIFIED_CAPTURE_DEBOUNCE_MARKER,
     };
   }
   lastTriggerTime = now;
@@ -144,7 +145,9 @@ async function executeUnifiedCapture(
  */
 export function createUnifiedCaptureTrigger(ctx: IpcHandlerContext): () => void {
   return () => {
-    void executeUnifiedCapture(ctx, "voice+screen");
+    void executeUnifiedCapture(ctx, "voice+screen").catch((err) => {
+      debugError("[UnifiedCapture] Unexpected error in hotkey trigger:", err);
+    });
   };
 }
 

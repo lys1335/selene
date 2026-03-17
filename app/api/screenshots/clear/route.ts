@@ -12,10 +12,13 @@ export async function DELETE() {
     try {
       const entries = await fs.readdir(screenshotsDir, { withFileTypes: true });
       for (const entry of entries) {
+        // Only delete known screenshot files — never recurse into unexpected subdirectories
+        if (!entry.isFile() || !/\.(png|jpg|jpeg|webp)$/i.test(entry.name)) {
+          continue;
+        }
         const fullPath = path.join(screenshotsDir, entry.name);
         try {
-          // Use recursive rm to handle both files and any sub-directories
-          await fs.rm(fullPath, { recursive: true, force: true });
+          await fs.unlink(fullPath);
           deleted++;
         } catch {
           // Non-fatal: file may be locked or already removed

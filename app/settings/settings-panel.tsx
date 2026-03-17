@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { KeyIcon } from "lucide-react";
 import { CustomWorkflowsManager, LocalModelsManager } from "@/components/comfyui";
@@ -56,7 +56,8 @@ function PermissionStatusBanner() {
   const [perms, setPerms] = useState<PermissionCheckResult | null>(null);
   const [checking, setChecking] = useState(false);
 
-  const check = async () => {
+  // useCallback so we can safely list `check` in the useEffect dependency array
+  const check = useCallback(async () => {
     const api = getElectronAPI();
     if (!api?.permissions) return;
     setChecking(true);
@@ -66,9 +67,9 @@ function PermissionStatusBanner() {
     } finally {
       setChecking(false);
     }
-  };
+  }, []); // getElectronAPI returns a stable window-level object
 
-  useEffect(() => { void check(); }, []);
+  useEffect(() => { void check(); }, [check]);
 
   const api = getElectronAPI();
   if (!api?.permissions) return null;
