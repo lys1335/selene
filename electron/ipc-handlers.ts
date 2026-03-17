@@ -15,6 +15,7 @@ import { registerFileHandlers } from "./ipc-file-handlers";
 import { registerVoiceHotkeyHandlers } from "./ipc-voice-hotkey-handlers";
 import { registerBrowserSessionHandlers } from "./ipc-browser-session-handlers";
 import { registerScreenCaptureHandlers } from "./ipc-screen-capture-handlers";
+import { registerUnifiedCaptureHandlers } from "./ipc-unified-capture-handlers";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -165,6 +166,7 @@ export function setupIpcHandlers(ctx: IpcHandlerContext): void {
   registerModelHandlers(ctx);
   registerVoiceHotkeyHandlers(ctx);
   registerScreenCaptureHandlers(ctx);
+  registerUnifiedCaptureHandlers(ctx);
   registerComfyUIHandlers(ctx);
   registerFlux2Handlers(ctx);
   registerBrowserSessionHandlers(ctx);

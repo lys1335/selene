@@ -1,0 +1,106 @@
+"use client";
+
+import { useCallback, useEffect, useRef } from "react";
+import { toast } from "sonner";
+import { getElectronAPI, type UnifiedCaptureTriggerPayload } from "@/lib/electron/types";
+
+/**
+ * Hook that listens for unified capture events from the Electron main process.
+ *
+ * When the unified shortcut fires (Cmd+Shift+A), this hook:
+ * 1. Triggers voice recording start (immediately, never blocked by screenshot)
+ * 2. Attaches the screenshot to the active composer (async, in parallel)
+ *
+ * Voice recording never depends on screenshot success — if capture fails,
+ * voice still starts. If mic fails, screenshot still attaches.
+ */
+export function useUnifiedCapture(options: {
+  enabled?: boolean;
+  onScreenshotCaptured: (file: File) => Promise<void>;
+  onStartVoice: () => void;
+  isDeepResearchMode?: boolean;
+}) {
+  const { enabled = true, onScreenshotCaptured, onStartVoice, isDeepResearchMode = false } = options;
+  const processingRef = useRef(false);
+  const voiceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clean up pending voice timer on unmount
+  useEffect(() => {
+    return () => {
+      if (voiceTimerRef.current) {
+        clearTimeout(voiceTimerRef.current);
+        voiceTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleTriggered = useCallback(
+    (payload: UnifiedCaptureTriggerPayload) => {
+      if (!enabled || processingRef.current) return;
+      processingRef.current = true;
+
+      // Voice starts IMMEDIATELY — never blocked by screenshot fetch/attachment.
+      // Small delay only to let the window finish focusing.
+      if (payload.startVoice) {
+        if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
+        voiceTimerRef.current = setTimeout(() => {
+          voiceTimerRef.current = null;
+          onStartVoice();
+        }, 150);
+      }
+
+      // Screenshot attachment runs in parallel — errors are non-fatal
+      const attachScreenshot = async () => {
+        if (payload.screenshot?.url && !isDeepResearchMode) {
+          try {
+            const response = await fetch(payload.screenshot.url);
+            if (!response.ok) {
+              throw new Error(`Failed to read screenshot (${response.status})`);
+            }
+            const blob = await response.blob();
+            const fileName = payload.screenshot.filePath.split("/").pop() || `capture-${payload.traceId}.png`;
+            const file = new File([blob], fileName, {
+              type: blob.type || "image/png",
+              lastModified: Date.now(),
+            });
+            await onScreenshotCaptured(file);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Failed to attach screenshot";
+            toast.error(message);
+          }
+        } else if (payload.screenshotError) {
+          if (payload.screenshotError !== "Debounced — too rapid") {
+            toast.warning(payload.screenshotError);
+          }
+        } else if (isDeepResearchMode && payload.screenshot) {
+          toast.warning("Screen capture is not available in Deep Research mode");
+        }
+
+        // Show metadata context in a subtle toast if available
+        if (payload.metadata?.activeWindowTitle) {
+          const context = payload.metadata.activeAppName
+            ? `${payload.metadata.activeAppName}: ${payload.metadata.activeWindowTitle}`
+            : payload.metadata.activeWindowTitle;
+          const truncated = context.length > 80 ? context.slice(0, 77) + "..." : context;
+          toast.info(`Captured: ${truncated}`, { duration: 2000 });
+        }
+      };
+
+      void attachScreenshot().finally(() => {
+        processingRef.current = false;
+      });
+    },
+    [enabled, onScreenshotCaptured, onStartVoice, isDeepResearchMode]
+  );
+
+  useEffect(() => {
+    const electron = getElectronAPI();
+    if (!electron?.unifiedCapture || !enabled) {
+      return;
+    }
+
+    return electron.unifiedCapture.onTriggered((payload) => {
+      handleTriggered(payload);
+    });
+  }, [enabled, handleTriggered]);
+}

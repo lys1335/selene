@@ -111,6 +111,37 @@ export interface ElectronScreenCaptureAPI {
   checkPermission: () => Promise<{ status: ScreenCaptureResult["permissionStatus"] }>;
 }
 
+export interface ScreenCaptureMetadata {
+  capturedAt: string;
+  activeWindowTitle?: string;
+  activeAppName?: string;
+  activeUrl?: string;
+  displayIndex?: number;
+  originalResolution?: { width: number; height: number };
+  captureMode: "fullscreen" | "active-window" | "region" | "display";
+}
+
+export interface UnifiedCaptureTriggerPayload {
+  mode: "voice+screen" | "voice-only" | "screen-only";
+  screenshot?: {
+    url: string;
+    filePath: string;
+  };
+  metadata?: ScreenCaptureMetadata;
+  startVoice: boolean;
+  screenshotError?: string;
+  traceId: string;
+}
+
+export interface ElectronUnifiedCaptureAPI {
+  onTriggered: (callback: (payload: UnifiedCaptureTriggerPayload) => void) => (() => void) | undefined;
+  trigger: (mode?: "voice+screen" | "voice-only" | "screen-only") => Promise<UnifiedCaptureTriggerPayload>;
+  register: (accelerator: string, enabled?: boolean) => Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }>;
+  registerFromSettings: () => Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }>;
+  getRegistered: () => Promise<{ accelerator: string }>;
+  clear: () => Promise<{ success: boolean }>;
+}
+
 export interface ElectronAPI {
   platform: NodeJS.Platform;
   isElectron: boolean;
@@ -122,6 +153,7 @@ export interface ElectronAPI {
   logs?: ElectronLogsAPI;
   browserSession?: ElectronBrowserSessionAPI;
   screenCapture?: ElectronScreenCaptureAPI;
+  unifiedCapture?: ElectronUnifiedCaptureAPI;
 }
 
 /**

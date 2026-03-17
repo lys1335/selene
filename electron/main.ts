@@ -171,9 +171,11 @@ import { startH2Proxy, stopH2Proxy } from "./h2-proxy";
 import { setupIpcHandlers, setupEmbeddingModelPaths } from "./ipc-handlers";
 import {
   registerScreenCaptureHotkeyFromSettings,
+  registerUnifiedCaptureHotkeyFromSettings,
   registerVoiceHotkeyFromSettings,
 } from "./hotkey-manager";
 import { captureDisplay } from "./screen-capture";
+import { createUnifiedCaptureTrigger } from "./ipc-unified-capture-handlers";
 import { cleanupAllVoiceProcesses } from "../lib/audio/transcription";
 import { closeAllBrowserSessionWindows } from "./ipc-browser-session-handlers";
 
@@ -394,6 +396,31 @@ app.whenReady().then(async () => {
     debugLog(`[App] Screen capture hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);
   } catch (error) {
     debugError("[App] Screen capture hotkey registration failed:", error);
+  }
+
+  // Register unified capture hotkey (voice + screen) from user settings.
+  // Uses the shared executeUnifiedCapture pipeline (debounce, metadata, focus, emit).
+  try {
+    const unifiedTrigger = createUnifiedCaptureTrigger({
+      mainWindow: () => {
+        const { mainWindow } = require("./window-manager") as typeof import("./window-manager");
+        return mainWindow;
+      },
+      isDev,
+      dataDir,
+      mediaDir,
+      userDataPath,
+      userModelsDir,
+      prodServerPort: PROD_SERVER_PORT,
+      prodUseHttps: useH2,
+    });
+    const hotkeyResult = registerUnifiedCaptureHotkeyFromSettings({
+      dataDir,
+      onTrigger: unifiedTrigger,
+    });
+    debugLog(`[App] Unified capture hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);
+  } catch (error) {
+    debugError("[App] Unified capture hotkey registration failed:", error);
   }
 
   // On macOS, re-create window when dock icon is clicked and main window is gone.

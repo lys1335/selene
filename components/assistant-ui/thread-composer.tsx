@@ -52,6 +52,7 @@ import { VoiceActions } from "@/components/voice/voice-actions";
 import { useGlobalVoiceHotkey } from "@/lib/hooks/use-global-hotkey";
 import { getElectronAPI } from "@/lib/electron/types";
 import { useScreenCapture } from "@/lib/hooks/use-screen-capture";
+import { useUnifiedCapture } from "@/lib/hooks/use-unified-capture";
 import {
   TiptapEditor,
   contentPartsToComposerText,
@@ -90,6 +91,8 @@ export const Composer: FC<{
   voiceHotkey?: string;
   screenCaptureEnabled?: boolean;
   screenCaptureShortcut?: string;
+  quickCaptureEnabled?: boolean;
+  quickCaptureHotkey?: string;
   onCancelBackgroundRun?: () => void;
   isCancellingBackgroundRun?: boolean;
   canCancelBackgroundRun?: boolean;
@@ -113,6 +116,8 @@ export const Composer: FC<{
   voiceHotkey = "CommandOrControl+Shift+Space",
   screenCaptureEnabled = false,
   screenCaptureShortcut = "CommandOrControl+Shift+S",
+  quickCaptureEnabled = true,
+  quickCaptureHotkey: _quickCaptureHotkey = "CommandOrControl+Shift+A",
   onCancelBackgroundRun,
   isCancellingBackgroundRun = false,
   canCancelBackgroundRun = false,
@@ -394,6 +399,16 @@ export const Composer: FC<{
   const { captureNow, isCapturing } = useScreenCapture({
     enabled: isScreenCaptureAvailable,
     onCaptured: handleAttachCapturedScreen,
+  });
+
+  // Unified capture hook: listens for Cmd+Shift+A events from Electron,
+  // attaches screenshot and triggers voice recording in one action.
+  // Gated on its own setting + API — independent of standalone screenCapture.
+  useUnifiedCapture({
+    enabled: quickCaptureEnabled && Boolean(electronAPI?.unifiedCapture),
+    onScreenshotCaptured: handleAttachCapturedScreen,
+    onStartVoice: () => { void handleVoiceInput(); },
+    isDeepResearchMode,
   });
 
   // Keyboard shortcuts to focus the composer: "/" or Cmd/Ctrl+L

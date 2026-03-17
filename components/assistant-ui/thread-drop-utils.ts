@@ -15,6 +15,8 @@ export interface VoiceUiSettings {
   voiceHotkey: string;
   screenCaptureEnabled: boolean;
   screenCaptureShortcut: string;
+  quickCaptureEnabled: boolean;
+  quickCaptureHotkey: string;
 }
 
 export interface ComfyWorkflowImportPreview {

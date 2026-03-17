@@ -94,6 +94,8 @@ export const Thread: FC<ThreadProps> = ({
     voiceHotkey: "CommandOrControl+Shift+Space",
     screenCaptureEnabled: true,
     screenCaptureShortcut: "CommandOrControl+Shift+S",
+    quickCaptureEnabled: true,
+    quickCaptureHotkey: "CommandOrControl+Shift+A",
   });
   const [toolDisplayMode, setToolDisplayMode] = useState<ToolDisplayMode>("compact");
   const [devWorkspaceEnabled, setDevWorkspaceEnabled] = useState(false);
@@ -116,6 +118,8 @@ export const Thread: FC<ThreadProps> = ({
         voiceHotkey?: string;
         screenCaptureEnabled?: boolean;
         screenCaptureShortcut?: string;
+        quickCaptureEnabled?: boolean;
+        quickCaptureHotkey?: string;
         toolDisplayMode?: ToolDisplayMode;
         devWorkspaceEnabled?: boolean;
       }>("/api/settings", {
@@ -143,6 +147,11 @@ export const Thread: FC<ThreadProps> = ({
           typeof data.screenCaptureShortcut === "string" && data.screenCaptureShortcut.trim().length > 0
             ? data.screenCaptureShortcut.trim()
             : "CommandOrControl+Shift+S",
+        quickCaptureEnabled: data.quickCaptureEnabled !== false,
+        quickCaptureHotkey:
+          typeof data.quickCaptureHotkey === "string" && data.quickCaptureHotkey.trim().length > 0
+            ? data.quickCaptureHotkey.trim()
+            : "CommandOrControl+Shift+A",
       });
       setToolDisplayMode(data.toolDisplayMode === "detailed" ? "detailed" : "compact");
       setDevWorkspaceEnabled(data.devWorkspaceEnabled === true);
@@ -406,6 +415,8 @@ export const Thread: FC<ThreadProps> = ({
               voiceHotkey={voiceUiSettings.voiceHotkey}
               screenCaptureEnabled={voiceUiSettings.screenCaptureEnabled}
               screenCaptureShortcut={voiceUiSettings.screenCaptureShortcut}
+              quickCaptureEnabled={voiceUiSettings.quickCaptureEnabled}
+              quickCaptureHotkey={voiceUiSettings.quickCaptureHotkey}
               onCancelBackgroundRun={onCancelBackgroundRun}
               isCancellingBackgroundRun={isCancellingBackgroundRun}
               canCancelBackgroundRun={canCancelBackgroundRun}

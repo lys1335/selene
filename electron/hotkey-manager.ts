@@ -6,7 +6,9 @@ import { DEFAULT_SCREEN_CAPTURE_HOTKEY } from "./screen-capture";
 
 const DEFAULT_VOICE_HOTKEY = "CommandOrControl+Shift+Space";
 
-type HotkeyKind = "voice" | "screenCapture";
+const DEFAULT_UNIFIED_CAPTURE_HOTKEY = "CommandOrControl+Shift+A";
+
+type HotkeyKind = "voice" | "screenCapture" | "unifiedCapture";
 
 interface HotkeyRegistrationResult {
   success: boolean;
@@ -175,4 +177,49 @@ export function getRegisteredScreenCaptureHotkey(): string {
 
 export function clearScreenCaptureHotkey(): void {
   unregisterHotkey("screenCapture", "ScreenCapture");
+}
+
+// ---------------------------------------------------------------------------
+// Unified Capture (voice + screen) hotkey
+// ---------------------------------------------------------------------------
+
+export function registerUnifiedCaptureHotkey(options: {
+  accelerator: string;
+  enabled?: boolean;
+  onTrigger: () => void;
+}): HotkeyRegistrationResult {
+  return registerHotkey({
+    kind: "unifiedCapture",
+    accelerator: options.accelerator,
+    fallbackAccelerator: DEFAULT_UNIFIED_CAPTURE_HOTKEY,
+    label: "UnifiedCapture",
+    enabled: options.enabled,
+    onTrigger: options.onTrigger,
+  });
+}
+
+export function registerUnifiedCaptureHotkeyFromSettings(options: {
+  dataDir: string;
+  onTrigger: () => void;
+}): HotkeyRegistrationResult {
+  const settings = readSettings(options.dataDir);
+  const enabled = settings.quickCaptureEnabled !== false;
+  const accelerator =
+    typeof settings.quickCaptureHotkey === "string" && settings.quickCaptureHotkey.trim().length > 0
+      ? settings.quickCaptureHotkey.trim()
+      : DEFAULT_UNIFIED_CAPTURE_HOTKEY;
+
+  return registerUnifiedCaptureHotkey({
+    accelerator,
+    enabled,
+    onTrigger: options.onTrigger,
+  });
+}
+
+export function getRegisteredUnifiedCaptureHotkey(): string {
+  return registeredHotkeys.get("unifiedCapture") || DEFAULT_UNIFIED_CAPTURE_HOTKEY;
+}
+
+export function clearUnifiedCaptureHotkey(): void {
+  unregisterHotkey("unifiedCapture", "UnifiedCapture");
 }
