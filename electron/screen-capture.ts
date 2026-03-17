@@ -61,6 +61,28 @@ export function cleanOldScreenshots(mediaDir: string): void {
   }
 }
 
+export function cleanScreenshotsByRetention(mediaDir: string, retention: "session" | "day" | "week" | "forever"): void {
+  if (retention === "forever") return;
+  const ttlMs = retention === "session" ? 0 : retention === "day" ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
+  const screenshotsDir = path.join(mediaDir, "screenshots");
+  if (!fs.existsSync(screenshotsDir)) return;
+  try {
+    const now = Date.now();
+    for (const file of fs.readdirSync(screenshotsDir)) {
+      if (!file.endsWith(".png")) continue;
+      const fullPath = path.join(screenshotsDir, file);
+      try {
+        const stat = fs.statSync(fullPath);
+        if (now - stat.mtimeMs > ttlMs) {
+          fs.unlinkSync(fullPath);
+        }
+      } catch { /* non-fatal */ }
+    }
+  } catch (err) {
+    console.warn("[screen-capture] cleanScreenshotsByRetention failed:", err);
+  }
+}
+
 function buildCaptureError(permissionStatus: ScreenCapturePermissionStatus, fallback: string): ScreenCaptureResult {
   if (permissionStatus === "denied" || permissionStatus === "restricted") {
     return {

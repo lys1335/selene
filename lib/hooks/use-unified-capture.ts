@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { getElectronAPI, type UnifiedCaptureTriggerPayload } from "@/lib/electron/types";
+import { optimizeScreenshot } from "@/lib/voice-screen/image-optimization";
 
 /**
  * Hook that listens for unified capture events from the Electron main process.
@@ -71,14 +72,23 @@ export function useUnifiedCapture(options: {
         const attachScreenshot = async () => {
           if (payload.screenshot?.url && !isDeepResearchMode) {
             try {
-              const response = await fetch(payload.screenshot.url);
-              if (!response.ok) {
-                throw new Error(`Failed to read screenshot (${response.status})`);
+              let blob: Blob;
+              try {
+                blob = await optimizeScreenshot(payload.screenshot.url);
+              } catch {
+                // Fallback to original if optimization fails
+                const response = await fetch(payload.screenshot.url);
+                if (!response.ok) {
+                  throw new Error(`Failed to read screenshot (${response.status})`);
+                }
+                blob = await response.blob();
               }
-              const blob = await response.blob();
-              const fileName = payload.screenshot.filePath.split("/").pop() || `capture-${payload.traceId}.png`;
+              const rawName = payload.screenshot.filePath.split("/").pop() || `capture-${payload.traceId}`;
+              const baseName = rawName.replace(/\.[^.]+$/, "");
+              const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
+              const fileName = `${baseName}.${ext}`;
               const file = new File([blob], fileName, {
-                type: blob.type || "image/png",
+                type: blob.type || "image/jpeg",
                 lastModified: Date.now(),
               });
               await onScreenshotCaptured(file);

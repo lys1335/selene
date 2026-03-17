@@ -175,7 +175,8 @@ import {
   registerVoiceHotkeyFromSettings,
 } from "./hotkey-manager";
 import { emitCapturedScreen } from "./ipc-screen-capture-handlers";
-import { cleanOldScreenshots } from "./screen-capture";
+import { cleanScreenshotsByRetention } from "./screen-capture";
+import { loadSettings } from "../lib/settings/settings-manager";
 import { createUnifiedCaptureTrigger } from "./ipc-unified-capture-handlers";
 import { cleanupAllVoiceProcesses } from "../lib/audio/transcription";
 import { closeAllBrowserSessionWindows } from "./ipc-browser-session-handlers";
@@ -381,9 +382,10 @@ app.whenReady().then(async () => {
     debugError("[App] Voice hotkey registration failed:", error);
   }
 
-  // Clean up screenshots older than 24h to prevent unbounded disk growth
+  // Clean up screenshots based on configured retention policy
   try {
-    cleanOldScreenshots(mediaDir);
+    const captureSettings = loadSettings();
+    cleanScreenshotsByRetention(mediaDir, captureSettings.screenCaptureRetention ?? "session");
   } catch (err) {
     debugError("[App] Screenshot cleanup failed:", err);
   }

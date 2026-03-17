@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getElectronAPI, type ScreenCaptureResult } from "@/lib/electron/types";
+import { optimizeScreenshot } from "@/lib/voice-screen/image-optimization";
 
 function buildScreenCaptureFile(result: ScreenCaptureResult): File | null {
   if (!result.success || !result.imageUrl) {
@@ -40,14 +41,23 @@ export function useScreenCapture(options: {
       }
 
       try {
-        const response = await fetch(result.imageUrl);
-        if (!response.ok) {
-          throw new Error(`Failed to read screenshot (${response.status})`);
+        let blob: Blob;
+        try {
+          blob = await optimizeScreenshot(result.imageUrl);
+        } catch {
+          // Fallback to original if optimization fails
+          const response = await fetch(result.imageUrl);
+          if (!response.ok) {
+            throw new Error(`Failed to read screenshot (${response.status})`);
+          }
+          blob = await response.blob();
         }
 
-        const blob = await response.blob();
-        const hydratedFile = new File([blob], file.name, {
-          type: blob.type || "image/png",
+        const baseName = file.name.replace(/\.[^.]+$/, "");
+        const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
+        const fileName = `${baseName}.${ext}`;
+        const hydratedFile = new File([blob], fileName, {
+          type: blob.type || "image/jpeg",
           lastModified: Date.now(),
         });
 

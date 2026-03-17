@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { KeyIcon } from "lucide-react";
 import { CustomWorkflowsManager, LocalModelsManager } from "@/components/comfyui";
@@ -27,6 +27,7 @@ import { ApiKeysSection } from "./api-keys-section";
 import { ModelsSection } from "./models-section";
 import { LocalEmbeddingModelSelector } from "./embedding-model-selector";
 import { ShortcutRecorder } from "@/components/settings/shortcut-recorder";
+import { getElectronAPI, type PermissionCheckResult } from "@/lib/electron/types";
 
 export interface SettingsPanelProps {
   section: SettingsSection;
@@ -49,6 +50,68 @@ export interface SettingsPanelProps {
   onClaudeCodePasteSubmit: (code: string) => void;
   onClaudeCodePasteCancel: () => void;
   onClaudeCodeAuthComplete: () => void;
+}
+
+function PermissionStatusBanner() {
+  const [perms, setPerms] = useState<PermissionCheckResult | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const check = async () => {
+    const api = getElectronAPI();
+    if (!api?.permissions) return;
+    setChecking(true);
+    try {
+      const result = await api.permissions.check();
+      setPerms(result);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  useEffect(() => { void check(); }, []);
+
+  const api = getElectronAPI();
+  if (!api?.permissions) return null;
+
+  const badge = (label: string, status: string | undefined) => {
+    const ok = status === "granted";
+    return (
+      <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium ${ok ? "bg-terminal-green/15 text-terminal-green" : "bg-red-500/15 text-red-400"}`}>
+        {label}: {ok ? "✓" : "✗"}
+      </span>
+    );
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-terminal-border/50 bg-terminal-bg/10 px-3 py-2">
+      {perms ? (
+        <>
+          {badge("Screen", perms.screen)}
+          {badge("Mic", perms.microphone)}
+          {badge("Shortcuts", perms.accessibility)}
+          {perms.screen !== "granted" && (
+            <button
+              type="button"
+              onClick={() => void api.permissions!.requestScreen()}
+              className="ml-1 font-mono text-[10px] text-terminal-link underline underline-offset-2 hover:text-terminal-link/80"
+            >
+              Grant access
+            </button>
+          )}
+        </>
+      ) : (
+        <span className="font-mono text-[10px] text-terminal-muted">{checking ? "Checking permissions…" : "Permission status unavailable"}</span>
+      )}
+      <button
+        type="button"
+        onClick={() => void check()}
+        disabled={checking}
+        className="ml-auto font-mono text-[10px] text-terminal-muted underline underline-offset-2 hover:text-terminal-dim disabled:opacity-50"
+      >
+        {checking ? "Checking…" : "Check permissions"}
+      </button>
+    </div>
+  );
 }
 
 export function ClaudeCodeAuthFlow({
@@ -762,6 +825,8 @@ export function SettingsPanel({
             title={t("voice.screen.title")}
             description={t("voice.screen.description")}
           >
+            <PermissionStatusBanner />
+
             <SettingsToggleRow
               id="screenCaptureEnabled"
               label={t("voice.screen.enableLabel")}

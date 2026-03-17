@@ -10,6 +10,7 @@ import {
   clearUnifiedCaptureHotkey,
 } from "./hotkey-manager";
 import { debugLog, debugError } from "./debug-logger";
+import { loadSettings } from "../lib/settings/settings-manager";
 
 export interface UnifiedCaptureTriggerPayload {
   mode: "voice+screen" | "voice-only" | "screen-only";
@@ -47,6 +48,29 @@ async function executeUnifiedCapture(
     };
   }
   lastTriggerTime = now;
+
+  // Check app exclusion list
+  const settings = loadSettings();
+  const excludedApps = (settings.screenCaptureExcludedApps ?? "")
+    .split(",")
+    .map((a: string) => a.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (excludedApps.length > 0 && (mode === "voice+screen" || mode === "screen-only")) {
+    try {
+      const meta = await collectMetadata({ displayIndex: 0, resolution: { width: 0, height: 0 } });
+      if (meta.activeAppName) {
+        const appName = meta.activeAppName.toLowerCase();
+        const isExcluded = excludedApps.some((excluded: string) => appName.includes(excluded) || excluded.includes(appName));
+        if (isExcluded) {
+          debugLog(`[UnifiedCapture:${traceId}] Blocked — excluded app: ${meta.activeAppName}`);
+          return { mode, startVoice: false, traceId, screenshotError: `Screen capture blocked for: ${meta.activeAppName}` };
+        }
+      }
+    } catch {
+      // If metadata fails, proceed normally (don't block capture)
+    }
+  }
 
   debugLog(`[UnifiedCapture:${traceId}] Triggered mode=${mode}`);
 
