@@ -20,7 +20,7 @@ function normalizeEnabled(value: unknown): boolean {
   return value !== false;
 }
 
-async function emitCapturedScreen(ctx: IpcHandlerContext) {
+export async function emitCapturedScreen(ctx: IpcHandlerContext) {
   const result = await captureDisplay({ mediaDir: ctx.mediaDir });
   const win = ctx.mainWindow();
   if (!win || win.isDestroyed()) {

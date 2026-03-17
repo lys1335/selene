@@ -593,6 +593,10 @@ export const Composer: FC<{
         updateCursorPosition(0);
         clearEnhancement();
         if (hasAttachments) threadRuntime.composer.clearAttachments();
+        // End unified capture session after queuing (metadata consumed, no attachment clear)
+        if (captureSession.isUnifiedSession) {
+          captureSession.endSession();
+        }
       } else {
         threadRuntime.composer.setText(expandedMessage);
         threadRuntime.composer.send();
@@ -618,6 +622,7 @@ export const Composer: FC<{
       clearEnhancement,
       lastTranscriptRef,
       wasAiEnhancedRef,
+      captureSession,
     ]
   );
 

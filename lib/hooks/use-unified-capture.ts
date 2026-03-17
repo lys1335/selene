@@ -46,63 +46,68 @@ export function useUnifiedCapture(options: {
       if (!enabled || processingRef.current) return;
       processingRef.current = true;
 
-      // Notify capture session coordinator that a unified session started, with metadata
-      onSessionStarted?.(payload.screenshot?.url, payload.metadata ? {
-        activeWindowTitle: payload.metadata.activeWindowTitle,
-        activeAppName: payload.metadata.activeAppName,
-        browserUrl: payload.metadata.activeUrl,
-      } : undefined);
+      try {
+        // Notify capture session coordinator that a unified session started, with metadata
+        onSessionStarted?.(payload.screenshot?.url, payload.metadata ? {
+          activeWindowTitle: payload.metadata.activeWindowTitle,
+          activeAppName: payload.metadata.activeAppName,
+          browserUrl: payload.metadata.activeUrl,
+        } : undefined);
 
-      // Voice starts IMMEDIATELY — never blocked by screenshot fetch/attachment.
-      // Small delay only to let the window finish focusing.
-      if (payload.startVoice) {
-        if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
-        voiceTimerRef.current = setTimeout(() => {
-          voiceTimerRef.current = null;
-          onStartVoice();
-        }, 150);
-      }
+        // Voice starts IMMEDIATELY — never blocked by screenshot fetch/attachment.
+        // Small delay only to let the window finish focusing.
+        if (payload.startVoice) {
+          if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
+          voiceTimerRef.current = setTimeout(() => {
+            voiceTimerRef.current = null;
+            onStartVoice();
+          }, 150);
+        }
 
-      // Screenshot attachment runs in parallel — errors are non-fatal
-      const attachScreenshot = async () => {
-        if (payload.screenshot?.url && !isDeepResearchMode) {
-          try {
-            const response = await fetch(payload.screenshot.url);
-            if (!response.ok) {
-              throw new Error(`Failed to read screenshot (${response.status})`);
+        // Screenshot attachment runs in parallel — errors are non-fatal
+        const attachScreenshot = async () => {
+          if (payload.screenshot?.url && !isDeepResearchMode) {
+            try {
+              const response = await fetch(payload.screenshot.url);
+              if (!response.ok) {
+                throw new Error(`Failed to read screenshot (${response.status})`);
+              }
+              const blob = await response.blob();
+              const fileName = payload.screenshot.filePath.split("/").pop() || `capture-${payload.traceId}.png`;
+              const file = new File([blob], fileName, {
+                type: blob.type || "image/png",
+                lastModified: Date.now(),
+              });
+              await onScreenshotCaptured(file);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "Failed to attach screenshot";
+              toast.error(message);
             }
-            const blob = await response.blob();
-            const fileName = payload.screenshot.filePath.split("/").pop() || `capture-${payload.traceId}.png`;
-            const file = new File([blob], fileName, {
-              type: blob.type || "image/png",
-              lastModified: Date.now(),
-            });
-            await onScreenshotCaptured(file);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : "Failed to attach screenshot";
-            toast.error(message);
+          } else if (payload.screenshotError) {
+            if (payload.screenshotError !== "Debounced — too rapid") {
+              toast.warning(payload.screenshotError);
+            }
+          } else if (isDeepResearchMode && payload.screenshot) {
+            toast.warning("Screen capture is not available in Deep Research mode");
           }
-        } else if (payload.screenshotError) {
-          if (payload.screenshotError !== "Debounced — too rapid") {
-            toast.warning(payload.screenshotError);
+
+          // Show metadata context in a subtle toast if available
+          if (payload.metadata?.activeWindowTitle) {
+            const context = payload.metadata.activeAppName
+              ? `${payload.metadata.activeAppName}: ${payload.metadata.activeWindowTitle}`
+              : payload.metadata.activeWindowTitle;
+            const truncated = context.length > 80 ? context.slice(0, 77) + "..." : context;
+            toast.info(`Captured: ${truncated}`, { duration: 2000 });
           }
-        } else if (isDeepResearchMode && payload.screenshot) {
-          toast.warning("Screen capture is not available in Deep Research mode");
-        }
+        };
 
-        // Show metadata context in a subtle toast if available
-        if (payload.metadata?.activeWindowTitle) {
-          const context = payload.metadata.activeAppName
-            ? `${payload.metadata.activeAppName}: ${payload.metadata.activeWindowTitle}`
-            : payload.metadata.activeWindowTitle;
-          const truncated = context.length > 80 ? context.slice(0, 77) + "..." : context;
-          toast.info(`Captured: ${truncated}`, { duration: 2000 });
-        }
-      };
-
-      void attachScreenshot().finally(() => {
+        void attachScreenshot().finally(() => {
+          processingRef.current = false;
+        });
+      } catch {
+        // Ensure processingRef is always released if synchronous setup throws
         processingRef.current = false;
-      });
+      }
     },
     [enabled, onScreenshotCaptured, onStartVoice, onSessionStarted, isDeepResearchMode]
   );

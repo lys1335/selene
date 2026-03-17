@@ -174,7 +174,7 @@ import {
   registerUnifiedCaptureHotkeyFromSettings,
   registerVoiceHotkeyFromSettings,
 } from "./hotkey-manager";
-import { captureDisplay } from "./screen-capture";
+import { emitCapturedScreen } from "./ipc-screen-capture-handlers";
 import { createUnifiedCaptureTrigger } from "./ipc-unified-capture-handlers";
 import { cleanupAllVoiceProcesses } from "../lib/audio/transcription";
 import { closeAllBrowserSessionWindows } from "./ipc-browser-session-handlers";
@@ -349,25 +349,19 @@ app.whenReady().then(async () => {
   });
   debugLog("[App] Main window created");
 
-  const emitCapturedScreen = async () => {
-    try {
-      const result = await captureDisplay({ mediaDir });
+  // Shared IPC context for hotkey callbacks that need to capture + focus window
+  const captureCtx = {
+    mainWindow: () => {
       const { mainWindow } = require("./window-manager") as typeof import("./window-manager");
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        return;
-      }
-
-      mainWindow.webContents.send("screen-capture:captured", result);
-      if (mainWindow.isMinimized()) {
-        mainWindow.restore();
-      }
-      if (!mainWindow.isVisible()) {
-        mainWindow.show();
-      }
-      mainWindow.focus();
-    } catch (error) {
-      debugError("[App] Screen capture callback failed:", error);
-    }
+      return mainWindow;
+    },
+    isDev,
+    dataDir,
+    mediaDir,
+    userDataPath,
+    userModelsDir,
+    prodServerPort: PROD_SERVER_PORT,
+    prodUseHttps: useH2,
   };
 
   // Register global voice hotkey from user settings
@@ -390,7 +384,7 @@ app.whenReady().then(async () => {
     const hotkeyResult = registerScreenCaptureHotkeyFromSettings({
       dataDir,
       onTrigger: () => {
-        void emitCapturedScreen();
+        void emitCapturedScreen(captureCtx);
       },
     });
     debugLog(`[App] Screen capture hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);
@@ -401,19 +395,7 @@ app.whenReady().then(async () => {
   // Register unified capture hotkey (voice + screen) from user settings.
   // Uses the shared executeUnifiedCapture pipeline (debounce, metadata, focus, emit).
   try {
-    const unifiedTrigger = createUnifiedCaptureTrigger({
-      mainWindow: () => {
-        const { mainWindow } = require("./window-manager") as typeof import("./window-manager");
-        return mainWindow;
-      },
-      isDev,
-      dataDir,
-      mediaDir,
-      userDataPath,
-      userModelsDir,
-      prodServerPort: PROD_SERVER_PORT,
-      prodUseHttps: useH2,
-    });
+    const unifiedTrigger = createUnifiedCaptureTrigger(captureCtx);
     const hotkeyResult = registerUnifiedCaptureHotkeyFromSettings({
       dataDir,
       onTrigger: unifiedTrigger,

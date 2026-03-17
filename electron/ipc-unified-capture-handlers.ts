@@ -27,6 +27,9 @@ export interface UnifiedCaptureTriggerPayload {
 let lastTriggerTime = 0;
 const DEBOUNCE_MS = 500;
 
+// Guard against double-registration on dev hot-reload
+let handlersRegistered = false;
+
 async function executeUnifiedCapture(
   ctx: IpcHandlerContext,
   mode: "voice+screen" | "voice-only" | "screen-only"
@@ -122,6 +125,12 @@ export function createUnifiedCaptureTrigger(ctx: IpcHandlerContext): () => void 
 }
 
 export function registerUnifiedCaptureHandlers(ctx: IpcHandlerContext): void {
+  if (handlersRegistered) {
+    debugLog("[UnifiedCapture] Handlers already registered — skipping duplicate registration");
+    return;
+  }
+  handlersRegistered = true;
+
   // Manual trigger from renderer UI
   ipcMain.handle("unified-capture:trigger", async (_event, mode?: unknown) => {
     const captureMode = (typeof mode === "string" && ["voice+screen", "voice-only", "screen-only"].includes(mode))
