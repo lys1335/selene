@@ -7,21 +7,22 @@ const SHELL_RESOLVE_TIMEOUT_MS = 3000;
 
 /**
  * Env vars that should be stripped from the captured shell environment.
- * These are Electron/Selene internals that confuse child Node.js processes.
+ * These are Electron/Selene internals that can confuse child Node.js processes.
  */
 const BLOCKED_ENV_KEYS = new Set([
     "ELECTRON_RUN_AS_NODE",
     "ELECTRON_NO_ATTACH_CONSOLE",
     "ELECTRON_ENABLE_LOGGING",
+    "SELENE_PRODUCTION_BUILD",
     "NEXT_RUNTIME",
     "NEXT_DEPLOYMENT_ID",
-    "SELENE_PRODUCTION_BUILD",
+    "PORT",
 ]);
 
 /**
- * Prefix patterns stripped during parsing. Any env var starting with these
- * is internal to the running Next.js/Selene instance and should not appear
- * in the captured shell environment.
+ * Prefix patterns stripped during shell-env capture. Any env var starting with
+ * these belongs to the running Next.js host process and must not be inherited
+ * by user-facing child commands.
  */
 const BLOCKED_ENV_PREFIXES = ["__NEXT_"];
 
@@ -115,7 +116,7 @@ function resolveShellEnvironmentOnce(): Record<string, string> {
 
     // Start the login shell with a clean env so Electron/Next.js vars
     // don't leak into the captured environment.
-    const bootstrapEnv = getMinimalShellBootstrapEnv() as NodeJS.ProcessEnv;
+    const bootstrapEnv = getMinimalShellBootstrapEnv();
 
     // First try: normal spawnSync with pipes (works in dev, fails in Electron prod)
     for (const shellPath of getCandidateShells()) {

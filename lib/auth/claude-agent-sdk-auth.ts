@@ -3,6 +3,7 @@ import { query as claudeAgentQuery } from "@anthropic-ai/claude-agent-sdk";
 import { isElectronProduction } from "@/lib/utils/environment";
 import { getNodeBinary } from "@/lib/auth/claude-login-process";
 import { getResolvedShellEnvironment } from "@/lib/shell-env/resolver";
+import { sanitizeEnvironment } from "@/lib/command-execution/executor-runtime";
 
 const DEFAULT_CLAUDE_AGENT_MODEL = "claude-sonnet-4-5-20250929";
 
@@ -28,7 +29,7 @@ export function getSdkExecutableConfig(): {
   // Always strip CLAUDECODE to prevent "cannot be launched inside another
   // Claude Code session" errors when the server inherits the env from a
   // Claude Code terminal session or similar wrapper.
-  const env: Record<string, string | undefined> = { ...process.env };
+  const env: Record<string, string | undefined> = sanitizeEnvironment({ ...process.env });
   delete env.CLAUDECODE;
   // The settings manager may inject ANTHROPIC_API_KEY into process.env (e.g.
   // a stale placeholder like "123"). The SDK must use its own OAuth flow, so
