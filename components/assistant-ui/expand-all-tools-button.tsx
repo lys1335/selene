@@ -15,11 +15,16 @@ export const ExpandAllToolsButton: FC = () => {
   const ctx = useToolExpansion();
   const t = useTranslations("assistantUi.tools");
 
-  // Keyboard shortcut: Shift+E toggles all tool details even while the composer is focused.
+  // Keyboard shortcut: Shift+E toggles all tool details, but only when NOT typing in an input.
   useEffect(() => {
     if (!ctx) return;
     const handler = (e: KeyboardEvent) => {
       if (e.shiftKey && e.key.toLowerCase() === "e" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const el = document.activeElement as HTMLElement | null;
+        if (el) {
+          const tag = el.tagName;
+          if (tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable) return;
+        }
         e.preventDefault();
         ctx.toggleAll();
       }

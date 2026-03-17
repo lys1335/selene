@@ -44,7 +44,6 @@ import { ComposerAttachment } from "./thread-message-components";
 import { ComposerActionBar } from "./composer-action-bar";
 import {
   useVoiceRecording,
-  usePastedTexts,
   usePromptEnhancement,
 } from "./composer-hooks";
 import { buildTranscriptInsertion } from "./voice-transcript-utils";
@@ -197,16 +196,6 @@ export const Composer: FC<{
     [setSelection]
   );
 
-  // Pasted text state
-  const {
-    pastedTexts,
-    pasteCounterRef,
-    addPastedText,
-    removePastedText,
-    clearPastedTexts,
-    expandPlaceholders,
-  } = usePastedTexts();
-
   const { character } = useCharacter();
   const isRunning = useThread((t) => t.isRunning);
   const threadRuntime = useThreadRuntime();
@@ -260,7 +249,6 @@ export const Composer: FC<{
     characterId: character?.id,
     sessionId,
     recentMessages,
-    expandInput: expandPlaceholders,
   });
   const [rewardSuggestion, setRewardSuggestion] = useState<RewardSuggestion | null>(null);
   const [showRewardSuggestion, setShowRewardSuggestion] = useState(false);
@@ -481,8 +469,7 @@ export const Composer: FC<{
       lastTranscriptRef.current = null;
       wasAiEnhancedRef.current = false;
 
-      const messageToSend = enhancedContext || inputValue.trim();
-      const expandedMessage = expandPlaceholders(messageToSend);
+      const expandedMessage = enhancedContext || inputValue.trim();
 
       if (isQueueBlocked) {
         if (hasText) {
@@ -529,21 +516,13 @@ export const Composer: FC<{
         clearDraft();
         updateCursorPosition(0);
         clearEnhancement();
-        clearPastedTexts();
         if (hasAttachments) threadRuntime.composer.clearAttachments();
       } else {
-        // Strip [PASTE_CONTENT:N:M]...[/PASTE_CONTENT:N] delimiter tags for clean display.
-        // Content is preserved inline; the API sanitizer handles truncation if needed.
-        const cleanMessage = expandedMessage.replace(
-          /\[PASTE_CONTENT:\d+:\d+\]\n([\s\S]*?)\n\[\/PASTE_CONTENT:\d+\]/g,
-          (_m: string, content: string) => content
-        );
-        threadRuntime.composer.setText(cleanMessage);
+        threadRuntime.composer.setText(expandedMessage);
         threadRuntime.composer.send();
         clearDraft();
         updateCursorPosition(0);
         clearEnhancement();
-        clearPastedTexts();
       }
     },
     [
@@ -554,11 +533,9 @@ export const Composer: FC<{
       isDeepResearchMode,
       deepResearch,
       enhancedContext,
-      expandPlaceholders,
       clearDraft,
       updateCursorPosition,
       clearEnhancement,
-      clearPastedTexts,
       lastTranscriptRef,
       wasAiEnhancedRef,
     ]
@@ -798,25 +775,21 @@ export const Composer: FC<{
         }
       }
 
-      const LARGE_PASTE_LINE_THRESHOLD = 5;
-      const LARGE_PASTE_CHAR_THRESHOLD = 300;
+      // Auto-wrap multi-line pastes in code fences for clean display in chat bubbles.
       const pastedText = e.clipboardData.getData("text/plain");
-      if (pastedText) {
-        const lines = pastedText.split("\n");
-        if (lines.length >= LARGE_PASTE_LINE_THRESHOLD || pastedText.length >= LARGE_PASTE_CHAR_THRESHOLD) {
+      if (pastedText && pastedText.includes("\n")) {
+        const nonEmptyLines = pastedText.split("\n").filter((l) => l.trim() !== "");
+        if (nonEmptyLines.length >= 2) {
           e.preventDefault();
-          const lineCount = lines.length;
-          const nextIndex = pasteCounterRef.current + 1;
-          const placeholder = `[Pasted text #${nextIndex} +${lineCount} lines]`;
+          const fenced = "```\n" + pastedText.trimEnd() + "\n```";
           const start = inputRef.current?.selectionStart ?? inputValue.length;
           const end = inputRef.current?.selectionEnd ?? start;
-          setInputValue((v) => v.slice(0, start) + placeholder + v.slice(end));
-          addPastedText({ text: pastedText, lineCount, placeholder });
+          setInputValue((v) => v.slice(0, start) + fenced + v.slice(end));
           return;
         }
       }
     },
-    [threadRuntime, t, inputValue, pasteCounterRef, addPastedText]
+    [threadRuntime, t, inputValue]
   );
 
   const removeFromQueue = useCallback((id: string) => {
@@ -1135,25 +1108,6 @@ export const Composer: FC<{
 
 {/* Reward suggestion is shown as inline ghost text in the textarea */}
 
-        {pastedTexts.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-2 pb-1">
-            {pastedTexts.map((item) => (
-              <div key={item.index} className="flex items-center gap-1.5 rounded-md border border-terminal-border bg-terminal-dark/5 px-2 py-1 text-xs font-mono text-terminal-muted">
-                <span className="text-terminal-dark/50 select-none">📋</span>
-                <span>{t("composer.pastedTextChip", { n: item.index, lines: item.lineCount })}</span>
-                <button
-                  type="button"
-                  onClick={() => removePastedText(item.index, setInputValue)}
-                  className="ml-0.5 leading-none hover:text-red-500 transition-colors"
-                  aria-label={t("composer.removePastedText")}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
         {isRecordingVoice && (
           <VoiceWaveform
             isRecording={isRecordingVoice}
@@ -1162,13 +1116,12 @@ export const Composer: FC<{
           />
         )}
 
-        {!isRecordingVoice && !isTranscribingVoice && (sttEnabled || pastedTexts.length > 0) && voiceActionsEnabled && inputValue.trim().length > 0 && (
+        {!isRecordingVoice && !isTranscribingVoice && sttEnabled && voiceActionsEnabled && inputValue.trim().length > 0 && (
           <VoiceActions
-            text={expandPlaceholders(inputValue)}
+            text={inputValue}
             sessionId={sessionId}
             onResult={(text) => {
               setInputValue(text);
-              clearPastedTexts();
             }}
             className="px-3 py-1.5 border-b border-terminal-dark/10"
           />
