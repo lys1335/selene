@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import type { SettingsSection, FormState } from "./settings-types";
 import { DEFAULT_FORM_STATE, buildFormStateFromData } from "./settings-types";
 import { SettingsPanel } from "./settings-panel";
+import { getElectronAPI } from "@/lib/electron/types";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -548,6 +549,16 @@ export default function SettingsPage() {
       saveResetTimeoutRef.current = setTimeout(() => setSaved(false), 2000);
       setTheme(formState.theme);
       setChatWorkspaceMode(formState.chatWorkspaceMode);
+
+      const electron = getElectronAPI();
+      if (electron?.screenCapture) {
+        try {
+          await electron.screenCapture.registerFromSettings();
+        } catch (shortcutError) {
+          console.warn("[Settings] Failed to apply screen capture shortcut:", shortcutError);
+        }
+      }
+
       toast.success(t("save.savedToast"));
       await loadSettings(); // Reload to get masked keys
     } catch (err) {

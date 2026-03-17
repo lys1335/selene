@@ -235,6 +235,8 @@ export interface AppSettings {
     parakeetAutoStart?: boolean;
     parakeetServerPort?: number;
     voiceHotkey?: string;
+    screenCaptureEnabled?: boolean;
+    screenCaptureShortcut?: string;
     customDictionary?: string[];
     voiceHistoryEnabled?: boolean;
     voiceHistoryLimit?: number;
@@ -366,6 +368,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     parakeetModel: "parakeet-tdt-0.6b-v3",
     parakeetAutoStart: true,
     voiceHotkey: "CommandOrControl+Shift+Space",
+    screenCaptureEnabled: true,
+    screenCaptureShortcut: "CommandOrControl+Shift+S",
     customDictionary: [],
     voiceHistoryEnabled: true,
     voiceHistoryLimit: 200,

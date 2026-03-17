@@ -74,6 +74,8 @@ export interface AppSettings {
     accountId?: string;
     expiresAt?: number;
   };
+  screenCaptureEnabled?: boolean;
+  screenCaptureShortcut?: string;
 }
 
 export type SettingsSection = "api-keys" | "models" | "vector-search" | "comfyui" | "preferences" | "memory" | "mcp" | "plugins" | "voice";
@@ -181,6 +183,8 @@ export interface FormState {
   parakeetAutoStart: boolean;
   parakeetServerPort: number;
   voiceHotkey: string;
+  screenCaptureEnabled: boolean;
+  screenCaptureShortcut: string;
   customDictionary: string[];
   voiceHistoryEnabled: boolean;
   voiceHistoryLimit: number;
@@ -290,6 +294,8 @@ export const DEFAULT_FORM_STATE: FormState = {
   parakeetAutoStart: true,
   parakeetServerPort: 0,
   voiceHotkey: "CommandOrControl+Shift+Space",
+  screenCaptureEnabled: true,
+  screenCaptureShortcut: "CommandOrControl+Shift+S",
   customDictionary: [],
   voiceHistoryEnabled: true,
   voiceHistoryLimit: 200,
@@ -401,6 +407,8 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     parakeetAutoStart: data.parakeetAutoStart ?? true,
     parakeetServerPort: data.parakeetServerPort ?? 0,
     voiceHotkey: data.voiceHotkey ?? "CommandOrControl+Shift+Space",
+    screenCaptureEnabled: data.screenCaptureEnabled ?? true,
+    screenCaptureShortcut: data.screenCaptureShortcut ?? "CommandOrControl+Shift+S",
     customDictionary: Array.isArray(data.customDictionary) ? data.customDictionary : [],
     voiceHistoryEnabled: data.voiceHistoryEnabled ?? true,
     voiceHistoryLimit: data.voiceHistoryLimit ?? 200,

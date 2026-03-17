@@ -169,7 +169,11 @@ import {
 import { ensureLocalCerts } from "./certs";
 import { startH2Proxy, stopH2Proxy } from "./h2-proxy";
 import { setupIpcHandlers, setupEmbeddingModelPaths } from "./ipc-handlers";
-import { registerVoiceHotkeyFromSettings } from "./hotkey-manager";
+import {
+  registerScreenCaptureHotkeyFromSettings,
+  registerVoiceHotkeyFromSettings,
+} from "./hotkey-manager";
+import { captureDisplay } from "./screen-capture";
 import { cleanupAllVoiceProcesses } from "../lib/audio/transcription";
 import { closeAllBrowserSessionWindows } from "./ipc-browser-session-handlers";
 
@@ -343,6 +347,27 @@ app.whenReady().then(async () => {
   });
   debugLog("[App] Main window created");
 
+  const emitCapturedScreen = async () => {
+    try {
+      const result = await captureDisplay({ mediaDir });
+      const { mainWindow } = require("./window-manager") as typeof import("./window-manager");
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        return;
+      }
+
+      mainWindow.webContents.send("screen-capture:captured", result);
+      if (mainWindow.isMinimized()) {
+        mainWindow.restore();
+      }
+      if (!mainWindow.isVisible()) {
+        mainWindow.show();
+      }
+      mainWindow.focus();
+    } catch (error) {
+      debugError("[App] Screen capture callback failed:", error);
+    }
+  };
+
   // Register global voice hotkey from user settings
   try {
     const hotkeyResult = registerVoiceHotkeyFromSettings({
@@ -357,6 +382,18 @@ app.whenReady().then(async () => {
     debugLog(`[App] Voice hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);
   } catch (error) {
     debugError("[App] Voice hotkey registration failed:", error);
+  }
+
+  try {
+    const hotkeyResult = registerScreenCaptureHotkeyFromSettings({
+      dataDir,
+      onTrigger: () => {
+        void emitCapturedScreen();
+      },
+    });
+    debugLog(`[App] Screen capture hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);
+  } catch (error) {
+    debugError("[App] Screen capture hotkey registration failed:", error);
   }
 
   // On macOS, re-create window when dock icon is clicked and main window is gone.

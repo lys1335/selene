@@ -1000,7 +1000,9 @@
       "voiceInput": "Sesle yaz",
       "voiceInputHold": "Kaydetmek için basılı tut",
       "stopVoiceInput": "Kaydı durdur",
-      "transcribingAudio": "Ses yazıya dönüştürülüyor..."
+      "transcribingAudio": "Ses yazıya dönüştürülüyor...",
+      "captureScreen": "Ekran goruntusu al",
+      "captureScreenShortcut": "Ekran goruntusu al ({shortcut})"
     },
     "prevBranch": "Önceki dal",
     "nextBranch": "Sonraki dal",
@@ -2521,6 +2523,16 @@
         "agentNameLabel": "Duzeltme ajan adi",
         "agentNameDesc": "İşlem sonrası istem personası tarafından kullanılır.",
         "agentNameHelper": "Temizleme isteminde kullanilan ajan kimligi."
+      },
+      "screen": {
+        "title": "Ekran goruntusu",
+        "description": "Etkin ekrani alip dosya seciciyi acmadan mevcut yazma alanina ekler.",
+        "enableLabel": "Ekran goruntusu kisayolunu etkinlestir",
+        "enableDesc": "Gecerli ekrani yakalayip aktif sohbete ekleyen global kisayolu kaydeder.",
+        "shortcutLabel": "Global ekran goruntusu kisayolu",
+        "shortcutHelper": "Electron globalShortcut formati, ornek: CommandOrControl+Shift+S",
+        "shortcutPlaceholder": "CommandOrControl+Shift+S",
+        "captureHint": "Tetiklendiginde Selene imlecin bulundugu ekrani yakalar, pencereyi one getirir ve goruntuyu mevcut taslaga ekler."
       },
       "dictionary": {
         "title": "Kisisel sozluk",

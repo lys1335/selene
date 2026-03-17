@@ -50,6 +50,8 @@ import { buildTranscriptInsertion } from "./voice-transcript-utils";
 import { VoiceWaveform } from "@/components/voice/voice-waveform";
 import { VoiceActions } from "@/components/voice/voice-actions";
 import { useGlobalVoiceHotkey } from "@/lib/hooks/use-global-hotkey";
+import { getElectronAPI } from "@/lib/electron/types";
+import { useScreenCapture } from "@/lib/hooks/use-screen-capture";
 import {
   TiptapEditor,
   contentPartsToComposerText,
@@ -86,6 +88,8 @@ export const Composer: FC<{
   voiceAudioCues?: boolean;
   voiceActivationMode?: "tap" | "push";
   voiceHotkey?: string;
+  screenCaptureEnabled?: boolean;
+  screenCaptureShortcut?: string;
   onCancelBackgroundRun?: () => void;
   isCancellingBackgroundRun?: boolean;
   canCancelBackgroundRun?: boolean;
@@ -107,6 +111,8 @@ export const Composer: FC<{
   voiceAudioCues = true,
   voiceActivationMode = "tap",
   voiceHotkey = "CommandOrControl+Shift+Space",
+  screenCaptureEnabled = false,
+  screenCaptureShortcut = "CommandOrControl+Shift+S",
   onCancelBackgroundRun,
   isCancellingBackgroundRun = false,
   canCancelBackgroundRun = false,
@@ -207,6 +213,8 @@ export const Composer: FC<{
   const deepResearch = useOptionalDeepResearch();
   const isDeepResearchMode = deepResearch?.isDeepResearchMode ?? false;
   const isDeepResearchActive = deepResearch?.isActive ?? false;
+  const electronAPI = useMemo(() => getElectronAPI(), []);
+  const isScreenCaptureAvailable = screenCaptureEnabled && Boolean(electronAPI?.screenCapture);
   const isDeepResearchLoading = deepResearch?.isLoading ?? false;
   const isDeepResearchBackgroundPolling = deepResearch?.isBackgroundPolling ?? false;
   const isOperationRunning = isRunning || isDeepResearchLoading || isDeepResearchBackgroundPolling;
@@ -369,6 +377,23 @@ export const Composer: FC<{
     enabled: sttEnabled,
     onTrigger: () => { void handleVoiceInput(); },
     hotkey: voiceHotkey,
+  });
+
+  const handleAttachCapturedScreen = useCallback(
+    async (file: File) => {
+      await threadRuntime.composer.addAttachment(file);
+      if (isEditorMode && tiptapRef.current) {
+        tiptapRef.current.focus();
+        return;
+      }
+      inputRef.current?.focus();
+    },
+    [isEditorMode, threadRuntime]
+  );
+
+  const { captureNow, isCapturing } = useScreenCapture({
+    enabled: isScreenCaptureAvailable,
+    onCaptured: handleAttachCapturedScreen,
   });
 
   // Keyboard shortcuts to focus the composer: "/" or Cmd/Ctrl+L
@@ -1200,6 +1225,12 @@ export const Composer: FC<{
                 onVoiceStop={handleVoiceStop}
                 inputHasText={tiptapRef.current?.hasContent() ?? false}
                 attachmentCount={attachmentCount}
+                screenCaptureEnabled={isScreenCaptureAvailable}
+                screenCaptureShortcut={screenCaptureShortcut}
+                onScreenCapture={() => {
+                  void captureNow();
+                }}
+                screenCaptureBusy={isCapturing}
                 showEnhanceButton={false}
                 isEnhancing={false}
                 enhancedContext={null}
@@ -1281,6 +1312,12 @@ export const Composer: FC<{
               onVoiceStop={handleVoiceStop}
               inputHasText={inputValue.trim().length > 2}
               attachmentCount={attachmentCount}
+              screenCaptureEnabled={isScreenCaptureAvailable}
+              screenCaptureShortcut={screenCaptureShortcut}
+              onScreenCapture={() => {
+                void captureNow();
+              }}
+              screenCaptureBusy={isCapturing}
               showEnhanceButton={!!(character?.id && character.id !== "default")}
               isEnhancing={isEnhancing}
               enhancedContext={enhancedContext}

@@ -146,6 +146,8 @@ export async function PUT(request: NextRequest) {
       parakeetAutoStart: body.parakeetAutoStart !== undefined ? body.parakeetAutoStart : currentSettings.parakeetAutoStart,
       parakeetServerPort: body.parakeetServerPort !== undefined ? body.parakeetServerPort : currentSettings.parakeetServerPort,
       voiceHotkey: body.voiceHotkey !== undefined ? body.voiceHotkey : currentSettings.voiceHotkey,
+      screenCaptureEnabled: body.screenCaptureEnabled !== undefined ? body.screenCaptureEnabled : currentSettings.screenCaptureEnabled,
+      screenCaptureShortcut: body.screenCaptureShortcut !== undefined ? body.screenCaptureShortcut : currentSettings.screenCaptureShortcut,
       customDictionary: Array.isArray(body.customDictionary) ? body.customDictionary : (currentSettings.customDictionary ?? []),
       voiceHistoryEnabled: body.voiceHistoryEnabled !== undefined ? body.voiceHistoryEnabled : currentSettings.voiceHistoryEnabled,
       voiceHistoryLimit: body.voiceHistoryLimit !== undefined ? body.voiceHistoryLimit : currentSettings.voiceHistoryLimit,

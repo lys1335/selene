@@ -997,7 +997,9 @@
       "voiceInput": "Voice input",
       "voiceInputHold": "Hold to record",
       "stopVoiceInput": "Stop recording",
-      "transcribingAudio": "Transcribing audio..."
+      "transcribingAudio": "Transcribing audio...",
+      "captureScreen": "Capture screen",
+      "captureScreenShortcut": "Capture screen ({shortcut})"
     },
     "prevBranch": "Previous branch",
     "nextBranch": "Next branch",
@@ -2685,6 +2687,16 @@
         "hotkeyLabel": "Global dictation hotkey",
         "hotkeyDesc": "Works app-wide in Electron builds.",
         "hotkeyPlaceholder": "CommandOrControl+Shift+Space"
+      },
+      "screen": {
+        "title": "Screen capture",
+        "description": "Grab the active display and attach it to the current composer without opening the file picker.",
+        "enableLabel": "Enable screenshot shortcut",
+        "enableDesc": "Registers a global shortcut that captures your current display and attaches it to the active chat.",
+        "shortcutLabel": "Global screenshot shortcut",
+        "shortcutHelper": "Uses Electron globalShortcut format, for example: CommandOrControl+Shift+S",
+        "shortcutPlaceholder": "CommandOrControl+Shift+S",
+        "captureHint": "When triggered, Selene captures the display under your cursor, brings the window forward, and attaches the screenshot to the current draft."
       },
       "dictionary": {
         "title": "Personal dictionary",

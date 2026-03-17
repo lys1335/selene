@@ -91,6 +91,26 @@ export interface ElectronLogsAPI {
   removeListeners: () => void;
 }
 
+export interface ScreenCaptureResult {
+  success: boolean;
+  imageUrl?: string;
+  relativePath?: string;
+  width?: number;
+  height?: number;
+  error?: string;
+  permissionStatus: "granted" | "denied" | "restricted" | "not-determined" | "unknown";
+}
+
+export interface ElectronScreenCaptureAPI {
+  onCaptured: (callback: (result: ScreenCaptureResult) => void) => (() => void) | undefined;
+  capture: () => Promise<ScreenCaptureResult>;
+  register: (accelerator: string, enabled?: boolean) => Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }>;
+  registerFromSettings: () => Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }>;
+  getRegistered: () => Promise<{ accelerator: string }>;
+  clear: () => Promise<{ success: boolean }>;
+  checkPermission: () => Promise<{ status: ScreenCaptureResult["permissionStatus"] }>;
+}
+
 export interface ElectronAPI {
   platform: NodeJS.Platform;
   isElectron: boolean;
@@ -101,6 +121,7 @@ export interface ElectronAPI {
   model: ElectronModelAPI;
   logs?: ElectronLogsAPI;
   browserSession?: ElectronBrowserSessionAPI;
+  screenCapture?: ElectronScreenCaptureAPI;
 }
 
 /**

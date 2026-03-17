@@ -712,6 +712,40 @@ export function SettingsPanel({
               </div>
             )}
           </SettingsPanelCard>
+
+          <SettingsPanelCard
+            title={t("voice.screen.title")}
+            description={t("voice.screen.description")}
+          >
+            <SettingsToggleRow
+              id="screenCaptureEnabled"
+              label={t("voice.screen.enableLabel")}
+              description={t("voice.screen.enableDesc")}
+              checked={formState.screenCaptureEnabled}
+              onChange={(checked) => updateField("screenCaptureEnabled", checked)}
+            />
+
+            <SettingsField
+              label={t("voice.screen.shortcutLabel")}
+              htmlFor="screenCaptureShortcut"
+              helperText={t("voice.screen.shortcutHelper")}
+              className="max-w-md"
+            >
+              <input
+                id="screenCaptureShortcut"
+                type="text"
+                value={formState.screenCaptureShortcut}
+                onChange={(e) => updateField("screenCaptureShortcut", e.target.value)}
+                placeholder={t("voice.screen.shortcutPlaceholder")}
+                aria-describedby="screenCaptureShortcut-help"
+                className={settingsInputClassName}
+              />
+            </SettingsField>
+
+            <div className="rounded-xl border border-terminal-border/55 bg-terminal-bg/5 px-3.5 py-3 font-mono text-xs leading-relaxed text-terminal-muted dark:border-terminal-border/90 dark:bg-terminal-cream-dark/45">
+              {t("voice.screen.captureHint")}
+            </div>
+          </SettingsPanelCard>
         </div>
       </div>
     );

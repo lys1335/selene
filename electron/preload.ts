@@ -192,6 +192,58 @@ const electronAPI = {
     },
   },
 
+  screenCapture: {
+    onCaptured: (callback: (result: {
+      success: boolean;
+      imageUrl?: string;
+      relativePath?: string;
+      width?: number;
+      height?: number;
+      error?: string;
+      permissionStatus: "granted" | "denied" | "restricted" | "not-determined" | "unknown";
+    }) => void): (() => void) | undefined => {
+      const handler = (_event: Electron.IpcRendererEvent, result: {
+        success: boolean;
+        imageUrl?: string;
+        relativePath?: string;
+        width?: number;
+        height?: number;
+        error?: string;
+        permissionStatus: "granted" | "denied" | "restricted" | "not-determined" | "unknown";
+      }) => callback(result);
+      ipcRenderer.on("screen-capture:captured", handler);
+      return () => {
+        ipcRenderer.removeListener("screen-capture:captured", handler);
+      };
+    },
+    capture: (): Promise<{
+      success: boolean;
+      imageUrl?: string;
+      relativePath?: string;
+      width?: number;
+      height?: number;
+      error?: string;
+      permissionStatus: "granted" | "denied" | "restricted" | "not-determined" | "unknown";
+    }> => {
+      return ipcRenderer.invoke("screen-capture:capture");
+    },
+    register: (accelerator: string, enabled = true): Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }> => {
+      return ipcRenderer.invoke("screen-capture:register", accelerator, enabled);
+    },
+    registerFromSettings: (): Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }> => {
+      return ipcRenderer.invoke("screen-capture:registerFromSettings");
+    },
+    getRegistered: (): Promise<{ accelerator: string }> => {
+      return ipcRenderer.invoke("screen-capture:getRegistered");
+    },
+    clear: (): Promise<{ success: boolean }> => {
+      return ipcRenderer.invoke("screen-capture:clear");
+    },
+    checkPermission: (): Promise<{ status: "granted" | "denied" | "restricted" | "not-determined" | "unknown" }> => {
+      return ipcRenderer.invoke("screen-capture:check-permission");
+    },
+  },
+
   // ComfyUI local backend operations
   comfyui: {
     checkStatus: (backendPath?: string): Promise<{
@@ -417,6 +469,12 @@ const electronAPI = {
         "voice-hotkey:registerFromSettings",
         "voice-hotkey:getRegistered",
         "voice-hotkey:clear",
+        "screen-capture:capture",
+        "screen-capture:register",
+        "screen-capture:registerFromSettings",
+        "screen-capture:getRegistered",
+        "screen-capture:clear",
+        "screen-capture:check-permission",
         "browser-session:open",
         "browser-session:close",
         "browser-session:is-open",
@@ -429,13 +487,13 @@ const electronAPI = {
     },
     on: (channel: string, callback: (...args: unknown[]) => void): void => {
       // Whitelist of allowed channels
-      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered"];
+      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured"];
       if (validChannels.includes(channel)) {
         ipcRenderer.on(channel, (_event, ...args) => callback(...args));
       }
     },
     removeAllListeners: (channel: string): void => {
-      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered"];
+      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured"];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeAllListeners(channel);
       }
