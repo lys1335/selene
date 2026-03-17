@@ -20,6 +20,11 @@ const ALWAYS_BLOCKED_ENV_KEYS = new Set([
     "ELECTRON_NO_ATTACH_CONSOLE",
     "ELECTRON_ENABLE_LOGGING",
     "SELENE_PRODUCTION_BUILD",
+    // Next.js runtime vars that are specific to the running Selene instance.
+    // NEXT_RUNTIME is set at build time; NEXT_DEPLOYMENT_ID is Vercel-specific.
+    // Both are internal and should never reach user commands.
+    "NEXT_RUNTIME",
+    "NEXT_DEPLOYMENT_ID",
 ]);
 
 /**
@@ -37,11 +42,16 @@ const PROCESS_ENV_FALLBACK_BLOCKED_KEYS = new Set([
 
 /**
  * Prefix patterns for env vars that should never leak to child processes.
- * __NEXT_PRIVATE_* vars are internal to the running Next.js instance —
- * leaking them causes child Next.js processes (e.g. in synced project folders)
- * to use the wrong project root, turbopack config, or React bundle.
+ * All __NEXT_* vars are internal to the running Next.js instance — they
+ * control standalone config, processed env markers, React bundle paths, etc.
+ * Leaking them causes child Next.js processes to use Selene's config instead
+ * of their own, which crashes with path resolution errors.
+ *
+ * Note: We intentionally DON'T block NEXT_PUBLIC_* (no double underscore)
+ * because those are user-facing env vars. However, NEXT_RUNTIME and
+ * NEXT_DEPLOYMENT_ID are handled by ALWAYS_BLOCKED_ENV_KEYS above.
  */
-const BLOCKED_ENV_PREFIXES = ["__NEXT_PRIVATE_"];
+const BLOCKED_ENV_PREFIXES = ["__NEXT_"];
 
 function sanitizeEnvironment(
     env: Record<string, string | undefined>,

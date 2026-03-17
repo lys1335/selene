@@ -166,16 +166,33 @@ describe("buildSafeEnvironment", () => {
         expect(env.ELECTRON_ENABLE_LOGGING).toBeUndefined();
     });
 
-    it("strips __NEXT_PRIVATE_* vars regardless of source", () => {
+    it("strips all __NEXT_* vars regardless of source", () => {
         vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
             __NEXT_PRIVATE_STANDALONE_CONFIG: "/some/path",
+            __NEXT_PROCESSED_ENV: "true",
+            __NEXT_PRIVATE_ORIGIN: "http://localhost:3457",
             SAFE_KEY: "ok",
         });
 
         const env = buildSafeEnvironment(baseRuntime);
 
         expect(env.__NEXT_PRIVATE_STANDALONE_CONFIG).toBeUndefined();
+        expect(env.__NEXT_PROCESSED_ENV).toBeUndefined();
+        expect(env.__NEXT_PRIVATE_ORIGIN).toBeUndefined();
         expect(env.SAFE_KEY).toBe("ok");
+    });
+
+    it("strips NEXT_RUNTIME and NEXT_DEPLOYMENT_ID from always-blocked list", () => {
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
+            NEXT_RUNTIME: "nodejs",
+            NEXT_DEPLOYMENT_ID: "abc123",
+            PATH: "/usr/bin",
+        });
+
+        const env = buildSafeEnvironment(baseRuntime);
+
+        expect(env.NEXT_RUNTIME).toBeUndefined();
+        expect(env.NEXT_DEPLOYMENT_ID).toBeUndefined();
     });
 
     it("always injects ELECTRON_RESOURCES_PATH from process.env", () => {
