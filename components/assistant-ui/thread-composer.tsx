@@ -416,6 +416,7 @@ export const Composer: FC<{
     autoSendEnabled: quickCaptureAutoSend,
     autoSendDelay: quickCaptureAutoSendDelay,
     onSend: () => { void handleSubmit(); },
+    onClearAttachments: () => { threadRuntime.composer.clearAttachments(); },
   });
 
   // Unified capture hook: listens for Cmd+Shift+A events from Electron,
@@ -527,7 +528,24 @@ export const Composer: FC<{
       lastTranscriptRef.current = null;
       wasAiEnhancedRef.current = false;
 
-      const expandedMessage = enhancedContext || inputValue.trim();
+      let expandedMessage = enhancedContext || inputValue.trim();
+
+      // Prepend screen capture context if metadata is available from a unified session
+      if (captureSession.isUnifiedSession && captureSession.metadata) {
+        const meta = captureSession.metadata;
+        const contextParts: string[] = [];
+        if (meta.activeAppName && meta.activeWindowTitle) {
+          contextParts.push(`[Screen Context: ${meta.activeAppName} — ${meta.activeWindowTitle}]`);
+        } else if (meta.activeWindowTitle) {
+          contextParts.push(`[Screen Context: ${meta.activeWindowTitle}]`);
+        }
+        if (meta.browserUrl) {
+          contextParts.push(`[URL: ${meta.browserUrl}]`);
+        }
+        if (contextParts.length > 0) {
+          expandedMessage = contextParts.join("\n") + "\n\n" + expandedMessage;
+        }
+      }
 
       if (isQueueBlocked) {
         if (hasText) {
@@ -581,6 +599,10 @@ export const Composer: FC<{
         clearDraft();
         updateCursorPosition(0);
         clearEnhancement();
+        // Reset unified capture session state after sending (metadata consumed, don't clear attachments — already sent)
+        if (captureSession.isUnifiedSession) {
+          captureSession.endSession();
+        }
       }
     },
     [
@@ -745,6 +767,10 @@ export const Composer: FC<{
   const handleTiptapDraftChange = useCallback(
     (nextDraft: JSONContent | null) => {
       setTiptapDraft(nextDraft);
+      // Cancel auto-send countdown when user edits in Tiptap (matches textarea behavior)
+      if (captureSession.countdownRemaining > 0) {
+        captureSession.cancelAutoSend();
+      }
     },
     [setTiptapDraft],
   );
@@ -1178,7 +1204,10 @@ export const Composer: FC<{
                 captureSession.cancelSession();
                 if (isRecordingVoice) handleVoiceStop();
               }}
-              onStopRecording={handleVoiceStop}
+              onStopRecording={() => {
+                captureSession.stopAndSend();
+                handleVoiceStop();
+              }}
               className="border-b border-terminal-dark/10"
             />
             {captureSession.phase === "reviewing" && captureSession.countdownRemaining > 0 && (

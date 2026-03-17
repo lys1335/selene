@@ -14,11 +14,17 @@ import { getElectronAPI, type UnifiedCaptureTriggerPayload } from "@/lib/electro
  * Voice recording never depends on screenshot success — if capture fails,
  * voice still starts. If mic fails, screenshot still attaches.
  */
+export type CaptureEventMetadata = {
+  activeWindowTitle?: string;
+  activeAppName?: string;
+  browserUrl?: string;
+};
+
 export function useUnifiedCapture(options: {
   enabled?: boolean;
   onScreenshotCaptured: (file: File) => Promise<void>;
   onStartVoice: () => void;
-  onSessionStarted?: (screenshotUrl: string | undefined) => void;
+  onSessionStarted?: (screenshotUrl: string | undefined, metadata?: CaptureEventMetadata) => void;
   isDeepResearchMode?: boolean;
 }) {
   const { enabled = true, onScreenshotCaptured, onStartVoice, onSessionStarted, isDeepResearchMode = false } = options;
@@ -40,8 +46,12 @@ export function useUnifiedCapture(options: {
       if (!enabled || processingRef.current) return;
       processingRef.current = true;
 
-      // Notify capture session coordinator that a unified session started
-      onSessionStarted?.(payload.screenshot?.url);
+      // Notify capture session coordinator that a unified session started, with metadata
+      onSessionStarted?.(payload.screenshot?.url, payload.metadata ? {
+        activeWindowTitle: payload.metadata.activeWindowTitle,
+        activeAppName: payload.metadata.activeAppName,
+        browserUrl: payload.metadata.activeUrl,
+      } : undefined);
 
       // Voice starts IMMEDIATELY — never blocked by screenshot fetch/attachment.
       // Small delay only to let the window finish focusing.

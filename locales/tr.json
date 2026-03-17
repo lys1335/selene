@@ -648,7 +648,8 @@
         "flux2Klein4bEnabled": "FLUX.2 Klein 4B etkin olmalı",
         "flux2Klein9bEnabled": "FLUX.2 Klein 9B etkin olmalı",
         "localGrepEnabled": "Yerel Grep etkin olmalı",
-        "devWorkspaceEnabled": "Geliştirici Çalışma Alanı etkin olmalı"
+        "devWorkspaceEnabled": "Geliştirici Çalışma Alanı etkin olmalı",
+        "screenCaptureEnabled": "Ekran Görüntüsü Yakalama etkin olmalı"
       }
     },
     "tools": {
@@ -1840,7 +1841,8 @@
         "flux2Klein4bEnabled": "FLUX.2 Klein 4B etkin olmalı",
         "flux2Klein9bEnabled": "FLUX.2 Klein 9B etkin olmalı",
         "localGrepEnabled": "Yerel Grep etkin olmalı",
-        "devWorkspaceEnabled": "Geliştirici Çalışma Alanı etkin olmalı"
+        "devWorkspaceEnabled": "Geliştirici Çalışma Alanı etkin olmalı",
+        "screenCaptureEnabled": "Ekran Görüntüsü Yakalama etkin olmalı"
       }
     },
     "style": {

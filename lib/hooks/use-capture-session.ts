@@ -10,6 +10,12 @@ export type CapturePhase =
   | "reviewing"     // Text ready, optional auto-send countdown
   | "sending";      // Brief state while message sends
 
+export type ScreenCaptureMetadata = {
+  activeWindowTitle?: string;
+  activeAppName?: string;
+  browserUrl?: string;
+};
+
 /**
  * Higher-level coordinator for unified voice+screen capture sessions.
  *
@@ -24,29 +30,56 @@ export function useCaptureSession(options: {
   autoSendEnabled: boolean;
   autoSendDelay: number; // seconds
   onSend: () => void;
+  onClearAttachments?: () => void;
 }) {
-  const { isRecordingVoice, isTranscribingVoice, autoSendEnabled, autoSendDelay, onSend } = options;
+  const { isRecordingVoice, isTranscribingVoice, autoSendEnabled, autoSendDelay, onSend, onClearAttachments } = options;
 
   const [phase, setPhase] = useState<CapturePhase>("idle");
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [isUnifiedSession, setIsUnifiedSession] = useState(false);
   const [countdownRemaining, setCountdownRemaining] = useState(0);
+  const [sendAfterTranscription, setSendAfterTranscription] = useState(false);
+  const [metadata, setMetadata] = useState<ScreenCaptureMetadata | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onSendRef = useRef(onSend);
   onSendRef.current = onSend;
 
   // Start a unified capture session (called from useUnifiedCapture's onSessionStarted)
-  const startSession = useCallback((imageUrl?: string) => {
+  const startSession = useCallback((imageUrl?: string, captureMetadata?: ScreenCaptureMetadata) => {
     setIsUnifiedSession(true);
     setScreenshotUrl(imageUrl || null);
+    setMetadata(captureMetadata || null);
     setPhase("capturing");
+    setSendAfterTranscription(false);
   }, []);
 
   // Screenshot attached — transition capturing → recording if voice is active
   const onScreenshotAttached = useCallback((url: string) => {
     setScreenshotUrl(url);
   }, []);
+
+  // Safety timeout: if stuck in "capturing" for >5s (mic failed, screenshot hung),
+  // auto-cancel to prevent permanent overlay
+  useEffect(() => {
+    if (phase === "capturing" && isUnifiedSession) {
+      stuckTimerRef.current = setTimeout(() => {
+        console.warn("[useCaptureSession] Stuck in capturing phase for 5s, auto-cancelling");
+        setPhase("idle");
+        setIsUnifiedSession(false);
+        setScreenshotUrl(null);
+        setMetadata(null);
+        setSendAfterTranscription(false);
+      }, 5000);
+      return () => {
+        if (stuckTimerRef.current) {
+          clearTimeout(stuckTimerRef.current);
+          stuckTimerRef.current = null;
+        }
+      };
+    }
+  }, [phase, isUnifiedSession]);
 
   // Observe voice state transitions during a unified session
   useEffect(() => {
@@ -62,9 +95,22 @@ export function useCaptureSession(options: {
       (phase === "recording" || phase === "transcribing")
     ) {
       // Transcription complete — move to reviewing
-      setPhase("reviewing");
+      // If sendAfterTranscription flag is set (Stop & Send was clicked), send immediately
+      if (sendAfterTranscription) {
+        setPhase("sending");
+        setSendAfterTranscription(false);
+        onSendRef.current();
+        setTimeout(() => {
+          setPhase("idle");
+          setIsUnifiedSession(false);
+          setScreenshotUrl(null);
+          setMetadata(null);
+        }, 200);
+      } else {
+        setPhase("reviewing");
+      }
     }
-  }, [isRecordingVoice, isTranscribingVoice, phase, isUnifiedSession]);
+  }, [isRecordingVoice, isTranscribingVoice, phase, isUnifiedSession, sendAfterTranscription]);
 
   // Auto-send countdown in reviewing phase
   useEffect(() => {
@@ -96,6 +142,7 @@ export function useCaptureSession(options: {
         setPhase("idle");
         setIsUnifiedSession(false);
         setScreenshotUrl(null);
+        setMetadata(null);
       }, 200);
     }, delay * 1000);
 
@@ -105,14 +152,37 @@ export function useCaptureSession(options: {
     };
   }, [phase, autoSendEnabled, autoSendDelay, isUnifiedSession]);
 
-  // Cancel the entire session
+  // Cancel the entire session — also clears screenshot attachment from composer
   const cancelSession = useCallback(() => {
     setPhase("idle");
     setIsUnifiedSession(false);
     setScreenshotUrl(null);
+    setMetadata(null);
     setCountdownRemaining(0);
+    setSendAfterTranscription(false);
     if (countdownRef.current) clearInterval(countdownRef.current);
     if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current);
+    if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
+    // Clear the screenshot attachment that was added to the composer
+    onClearAttachments?.();
+  }, [onClearAttachments]);
+
+  // Stop recording and send as soon as transcription completes
+  const stopAndSend = useCallback(() => {
+    setSendAfterTranscription(true);
+  }, []);
+
+  // End session without clearing attachments (used after successful send)
+  const endSession = useCallback(() => {
+    setPhase("idle");
+    setIsUnifiedSession(false);
+    setScreenshotUrl(null);
+    setMetadata(null);
+    setCountdownRemaining(0);
+    setSendAfterTranscription(false);
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current);
+    if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
   }, []);
 
   // Cancel just the auto-send countdown (e.g. user started editing text)
@@ -133,6 +203,7 @@ export function useCaptureSession(options: {
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
       if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current);
+      if (stuckTimerRef.current) clearTimeout(stuckTimerRef.current);
     };
   }, []);
 
@@ -141,9 +212,12 @@ export function useCaptureSession(options: {
     screenshotUrl,
     isUnifiedSession,
     countdownRemaining,
+    metadata,
     startSession,
     onScreenshotAttached,
     cancelSession,
     cancelAutoSend,
+    stopAndSend,
+    endSession,
   };
 }
