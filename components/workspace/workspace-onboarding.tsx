@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from "@/components/ui/dialog";
 import {
   GitBranchIcon,
@@ -159,6 +160,9 @@ export function WorkspaceOnboarding({ open, onComplete }: WorkspaceOnboardingPro
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleSkip()}>
       <DialogContent className="sm:max-w-[440px] p-0 overflow-hidden border-terminal-border bg-terminal-cream">
+        <DialogTitle className="sr-only">
+          Workspace onboarding
+        </DialogTitle>
         {/* Progress dots */}
         <div className="flex items-center justify-center gap-1.5 pt-5">
           {STEPS.map((_, i) => (

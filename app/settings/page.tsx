@@ -648,16 +648,6 @@ export default function SettingsPage() {
     { id: "memory" as const, label: t("nav.memory"), icon: BrainIcon },
   ];
 
-  if (loading) {
-    return (
-      <Shell>
-        <div className="flex h-full items-center justify-center">
-          <Loader2Icon className="size-8 animate-spin text-terminal-green" />
-        </div>
-      </Shell>
-    );
-  }
-
   const handleOnboardingComplete = useCallback((result: {
     screenCaptureShortcut: string;
     quickCaptureHotkey: string;
@@ -674,6 +664,16 @@ export default function SettingsPage() {
       screenCaptureOnboardingSeen: true,
     }));
   }, []);
+
+  if (loading) {
+    return (
+      <Shell>
+        <div className="flex h-full items-center justify-center">
+          <Loader2Icon className="size-8 animate-spin text-terminal-green" />
+        </div>
+      </Shell>
+    );
+  }
 
   return (
     <Shell>

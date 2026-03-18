@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
@@ -18,6 +19,14 @@ function exists(targetPath) {
   return fs.existsSync(targetPath);
 }
 
+function makeTempDir(prefix) {
+  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+}
+
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 function run(command, args, options = {}) {
   return execFileSync(command, args, {
     stdio: options.capture ? ['ignore', 'pipe', 'pipe'] : 'inherit',
@@ -25,12 +34,59 @@ function run(command, args, options = {}) {
   });
 }
 
+function removeDirWithRetry(targetPath, maxAttempts = 10) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      fs.rmSync(targetPath, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (error && error.code === 'EBUSY' && attempt < maxAttempts) {
+        sleep(200);
+        continue;
+      }
+      if (error && error.code === 'EBUSY') {
+        console.warn(`Skipping cleanup for busy temporary directory: ${targetPath}`);
+        return;
+      }
+      throw error;
+    }
+  }
+}
+
+function isMountedPath(targetPath) {
+  const output = run('hdiutil', ['info'], { capture: true });
+  return output
+    .split('\n')
+    .some((line) => line.trimStart().startsWith('mount-point') && line.split(':').slice(1).join(':').trim() === targetPath);
+}
+
 function detachIfMounted(volumePath) {
-  if (!exists(volumePath)) return;
+  if (!exists(volumePath) || !isMountedPath(volumePath)) return;
   try {
     run('hdiutil', ['detach', volumePath]);
-  } catch {
-    run('hdiutil', ['detach', '-force', volumePath]);
+  } catch (error) {
+    if (!isMountedPath(volumePath)) {
+      return;
+    }
+
+    const message = String(error && error.message ? error.message : error);
+    if (message.includes('No such file or directory')) {
+      return;
+    }
+
+    try {
+      run('hdiutil', ['detach', '-force', volumePath]);
+    } catch (forceError) {
+      if (!isMountedPath(volumePath)) {
+        return;
+      }
+
+      const forceMessage = String(forceError && forceError.message ? forceError.message : forceError);
+      if (forceMessage.includes('No such file or directory')) {
+        return;
+      }
+      throw forceError;
+    }
   }
 }
 
@@ -87,10 +143,28 @@ function detachImageIfMounted(targetDmgPath) {
   }
 }
 
-function attachDmg(targetDmgPath, mountPath) {
-  const output = run('hdiutil', ['attach', '-nobrowse', '-readonly', '-mountpoint', mountPath, targetDmgPath], {
+function attachDmgAtMountPath(targetDmgPath, mountPath) {
+  return run('hdiutil', ['attach', '-nobrowse', '-readonly', '-mountpoint', mountPath, targetDmgPath], {
     capture: true,
   });
+}
+
+function attachDmg(targetDmgPath, mountPath) {
+  let output;
+
+  try {
+    output = attachDmgAtMountPath(targetDmgPath, mountPath);
+  } catch (error) {
+    const message = String(error && error.message ? error.message : error);
+    const stderr = String(error && error.stderr ? error.stderr : '');
+    if (!message.includes('Resource busy') && !stderr.includes('Resource busy')) {
+      throw error;
+    }
+
+    detachImageIfMounted(targetDmgPath);
+    output = attachDmgAtMountPath(targetDmgPath, mountPath);
+  }
+
   if (!output.includes(mountPath)) {
     throw new Error(`Unable to mount ${path.basename(targetDmgPath)} at ${mountPath}`);
   }
@@ -99,7 +173,7 @@ function attachDmg(targetDmgPath, mountPath) {
 
 function dmgContainsApp(targetDmgPath) {
   if (!exists(targetDmgPath)) return false;
-  const tempDir = fs.mkdtempSync(path.join(distDir, '__dmg-check-'));
+  const tempDir = makeTempDir('selene-dmg-check-');
   const mountPath = path.join(tempDir, 'mnt');
   fs.mkdirSync(mountPath, { recursive: true });
 
@@ -108,7 +182,7 @@ function dmgContainsApp(targetDmgPath) {
     return exists(path.join(mountPath, appName));
   } finally {
     detachIfMounted(mountPath);
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    removeDirWithRetry(tempDir);
   }
 }
 
@@ -157,45 +231,34 @@ function createRecoveryDmg(dmgPath, appPath) {
   }
 
   const dmgName = path.basename(dmgPath);
-  const tempDir = path.join(distDir, '__dmg-recovery__');
+  const tempDir = makeTempDir('selene-dmg-recovery-');
   const stagingDmg = path.join(tempDir, 'Selene-staging.dmg');
   const finalDmg = path.join(tempDir, dmgName);
   const mountPath = path.join(tempDir, 'mnt');
-  const sourceDir = path.join(tempDir, 'source');
 
   detachImageIfMounted(dmgPath);
-  fs.rmSync(tempDir, { recursive: true, force: true });
-  fs.mkdirSync(tempDir, { recursive: true });
-  fs.mkdirSync(sourceDir, { recursive: true });
-
-  run('ditto', [appPath, path.join(sourceDir, appName)]);
-
   const appSizeKb = Number(run('du', ['-sk', appPath], { capture: true }).trim().split(/\s+/)[0]);
   const imageSizeMb = Math.ceil((appSizeKb * 1.2) / 1024) + 256;
 
-  run('hdiutil', [
-    'create',
-    '-srcfolder',
-    sourceDir,
-    '-volname',
-    volumeName,
-    '-fs',
-    'HFS+',
-    '-format',
-    'UDRW',
-    '-size',
-    `${imageSizeMb}m`,
-    stagingDmg,
-  ]);
-
-  fs.mkdirSync(mountPath, { recursive: true });
-  ensureMountedStaging(stagingDmg, mountPath);
-
   try {
+    run('hdiutil', [
+      'create',
+      '-type',
+      'UDIF',
+      '-volname',
+      volumeName,
+      '-fs',
+      'HFS+',
+      '-size',
+      `${imageSizeMb}m`,
+      stagingDmg,
+    ]);
+
+    fs.mkdirSync(mountPath, { recursive: true });
+    ensureMountedStaging(stagingDmg, mountPath);
+
     const mountedAppPath = path.join(mountPath, appName);
-    if (!exists(mountedAppPath)) {
-      throw new Error(`Mounted staging DMG is missing ${appName}`);
-    }
+    run('ditto', [appPath, mountedAppPath]);
 
     const applicationsLink = path.join(mountPath, 'Applications');
     if (!exists(applicationsLink)) {
@@ -211,14 +274,15 @@ function createRecoveryDmg(dmgPath, appPath) {
     if (exists(iconSource)) {
       fs.copyFileSync(iconSource, path.join(mountPath, iconName));
     }
+
+    detachIfMounted(mountPath);
+
+    run('hdiutil', ['convert', stagingDmg, '-format', 'UDZO', '-imagekey', 'zlib-level=9', '-o', finalDmg]);
+    fs.copyFileSync(finalDmg, dmgPath);
   } finally {
     detachIfMounted(mountPath);
+    removeDirWithRetry(tempDir);
   }
-
-  run('hdiutil', ['convert', stagingDmg, '-format', 'UDZO', '-imagekey', 'zlib-level=9', '-o', finalDmg]);
-
-  fs.copyFileSync(finalDmg, dmgPath);
-  fs.rmSync(tempDir, { recursive: true, force: true });
 }
 
 function updateLatestMacYaml(dmgPath) {
