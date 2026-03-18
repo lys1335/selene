@@ -8,6 +8,7 @@ import { getCodexModels } from "@/lib/auth/codex-models";
 import { getClaudeCodeModels } from "@/lib/auth/claudecode-models";
 import { getKimiModels } from "@/lib/auth/kimi-models";
 import { getMiniMaxModels } from "@/lib/auth/minimax-models";
+import { getBlackBoxModels } from "@/lib/auth/blackboxai-models";
 import type { FormState } from "./settings-types";
 
 const ANTIGRAVITY_MODELS = getAntigravityModels();
@@ -15,6 +16,7 @@ const CODEX_MODELS = getCodexModels();
 const CLAUDECODE_MODELS = getClaudeCodeModels();
 const KIMI_MODELS = getKimiModels();
 const MINIMAX_MODELS = getMiniMaxModels();
+const BLACKBOX_MODELS = getBlackBoxModels();
 
 interface ModelsSectionProps {
   formState: FormState;
@@ -31,6 +33,7 @@ function ModelSelect({
   claudecodeDefault,
   kimiDefault,
   minimaxDefault,
+  blackboxaiDefault,
   anthropicPlaceholder,
   ollamaPlaceholder,
   openrouterPlaceholder,
@@ -46,6 +49,7 @@ function ModelSelect({
   claudecodeDefault: string;
   kimiDefault: string;
   minimaxDefault: string;
+  blackboxaiDefault: string;
   anthropicPlaceholder: string;
   ollamaPlaceholder: string;
   openrouterPlaceholder: string;
@@ -105,6 +109,16 @@ function ModelSelect({
             <option key={model.id} value={model.id}>{model.name}</option>
           ))}
         </select>
+      ) : formState.llmProvider === "blackboxai" ? (
+        <select
+          value={formState[fieldKey] || blackboxaiDefault}
+          onChange={(e) => updateField(fieldKey, e.target.value)}
+          className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+        >
+          {BLACKBOX_MODELS.map((model) => (
+            <option key={model.id} value={model.id}>{model.name}</option>
+          ))}
+        </select>
       ) : (
         <input
           type="text"
@@ -134,6 +148,7 @@ const PROVIDER_MODEL_SETS: Partial<Record<FormState["llmProvider"], Set<string>>
   claudecode: new Set(CLAUDECODE_MODELS.map((m) => m.id)),
   kimi: new Set(KIMI_MODELS.map((m) => m.id)),
   minimax: new Set(MINIMAX_MODELS.map((m) => m.id)),
+  blackboxai: new Set(BLACKBOX_MODELS.map((m) => m.id)),
 };
 
 const MODEL_FIELDS = ["chatModel", "researchModel", "visionModel", "utilityModel"] as const;
@@ -194,6 +209,7 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           claudecodeDefault="claude-sonnet-4-5-20250929"
           kimiDefault="kimi-k2.5"
           minimaxDefault="MiniMax-M2.1"
+          blackboxaiDefault="qwen3-coder"
           anthropicPlaceholder="claude-sonnet-4-5-20250929"
           ollamaPlaceholder="llama3.1:8b"
           openrouterPlaceholder="x-ai/grok-4.1-fast"
@@ -211,6 +227,7 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           claudecodeDefault="claude-opus-4-6"
           kimiDefault="kimi-k2-thinking"
           minimaxDefault="MiniMax-M2.1"
+          blackboxaiDefault="claude-sonnet-4.6"
           anthropicPlaceholder="claude-sonnet-4-5-20250929"
           ollamaPlaceholder="llama3.1:8b"
           openrouterPlaceholder="x-ai/grok-4.1-fast"
@@ -228,6 +245,7 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           claudecodeDefault="claude-sonnet-4-5-20250929"
           kimiDefault="kimi-k2.5"
           minimaxDefault="MiniMax-M2.1"
+          blackboxaiDefault="qwen3-vl-32b"
           anthropicPlaceholder="claude-sonnet-4-5-20250929"
           ollamaPlaceholder="llama3.1:8b"
           openrouterPlaceholder="google/gemini-2.0-flash-001"
@@ -245,6 +263,7 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           claudecodeDefault="claude-haiku-4-5-20251001"
           kimiDefault="kimi-k2-turbo-preview"
           minimaxDefault="MiniMax-M2.1-lightning"
+          blackboxaiDefault="blackbox-search"
           anthropicPlaceholder="claude-haiku-4-5-20251001"
           ollamaPlaceholder="llama3.1:8b"
           openrouterPlaceholder="google/gemini-2.0-flash-lite-001"

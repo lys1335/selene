@@ -2036,6 +2036,7 @@
       "openrouter": "OpenRouter",
       "kimi": "Moonshot Kimi",
       "minimax": "MiniMax",
+      "blackboxai": "BlackBox AI",
       "ollama": "Ollama (local)",
       "keysTitle": "Provider keys",
       "auth": {
@@ -2089,6 +2090,11 @@
           "label": "MiniMax API Key",
           "placeholder": "eyJ...",
           "helper": "Get your key from the MiniMax platform."
+        },
+        "blackboxai": {
+          "label": "BlackBox AI API Key",
+          "placeholder": "sk-...",
+          "helper": "Get your key from the BlackBox AI platform."
         },
         "webSearchProvider": {
           "label": "Web search source",

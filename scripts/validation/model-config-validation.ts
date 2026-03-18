@@ -23,6 +23,8 @@ type LLMProvider =
   | "antigravity"
   | "codex"
   | "kimi"
+  | "minimax"
+  | "blackboxai"
   | "ollama"
   | "claudecode";
 
@@ -41,6 +43,8 @@ const MODEL_PREFIXES: Record<LLMProvider, string[]> = {
   claudecode: ["claude-opus-4", "claude-sonnet-4", "claude-haiku-4"],
   codex: ["gpt-5", "codex"],
   kimi: ["kimi-", "moonshot-"],
+  minimax: ["minimax-"],
+  blackboxai: ["blackbox-", "qwen3-", "blackboxai/"],
   antigravity: [],
   ollama: [],
   openrouter: [],

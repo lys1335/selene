@@ -5,11 +5,12 @@ import {
 } from "@/lib/chat/workspace-mode";
 
 export interface AppSettings {
-  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode";
+  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai";
   anthropicApiKey?: string;
   openrouterApiKey?: string;
   kimiApiKey?: string;
   minimaxApiKey?: string;
+  blackboxaiApiKey?: string;
   openaiApiKey?: string;
   ollamaBaseUrl?: string;
   tavilyApiKey?: string;
@@ -79,11 +80,12 @@ export interface AppSettings {
 export type SettingsSection = "api-keys" | "models" | "vector-search" | "comfyui" | "preferences" | "memory" | "mcp" | "plugins" | "voice";
 
 export interface FormState {
-  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode";
+  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai";
   anthropicApiKey: string;
   openrouterApiKey: string;
   kimiApiKey: string;
   minimaxApiKey: string;
+  blackboxaiApiKey: string;
   openaiApiKey: string;
   ollamaBaseUrl: string;
   tavilyApiKey: string;
@@ -201,6 +203,7 @@ export const DEFAULT_FORM_STATE: FormState = {
   openrouterApiKey: "",
   kimiApiKey: "",
   minimaxApiKey: "",
+  blackboxaiApiKey: "",
   openaiApiKey: "",
   ollamaBaseUrl: "http://localhost:11434/v1",
   tavilyApiKey: "",
@@ -312,6 +315,7 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     openrouterApiKey: data.openrouterApiKey || "",
     kimiApiKey: data.kimiApiKey || "",
     minimaxApiKey: data.minimaxApiKey || "",
+    blackboxaiApiKey: data.blackboxaiApiKey || "",
     openaiApiKey: data.openaiApiKey || "",
     ollamaBaseUrl: data.ollamaBaseUrl || "http://localhost:11434/v1",
     tavilyApiKey: data.tavilyApiKey || "",

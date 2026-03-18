@@ -35,6 +35,7 @@ const MODEL_PREFIXES: Record<LLMProvider, string[]> = {
   codex: ["gpt-5", "codex"],
   kimi: ["kimi-", "moonshot-"],
   minimax: ["minimax-"],
+  blackboxai: ["blackbox-", "qwen3-", "blackboxai/"],
   antigravity: [], // uses exact match
   ollama: [],      // accepts any model name
   openrouter: [],  // accepts anything
@@ -103,6 +104,12 @@ export function isModelCompatibleWithProvider(
     return MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p));
   }
 
+  // BlackBox AI: blackbox-*, qwen3-*, blackboxai/* prefixed
+  if (provider === "blackboxai") {
+    if (lowerModel.includes("/")) return true; // accepts routed models like blackboxai/anthropic/claude-sonnet-4.6
+    return MODEL_PREFIXES.blackboxai.some((p) => lowerModel.startsWith(p));
+  }
+
   // Ollama: accepts any model name
   if (provider === "ollama") return true;
 
@@ -114,7 +121,8 @@ export function isModelCompatibleWithProvider(
       ANTIGRAVITY_EXACT_MODELS.has(lowerModel) ||
       MODEL_PREFIXES.codex.some((p) => lowerModel.startsWith(p)) ||
       MODEL_PREFIXES.kimi.some((p) => lowerModel.startsWith(p)) ||
-      MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p))
+      MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p)) ||
+      MODEL_PREFIXES.blackboxai.some((p) => lowerModel.startsWith(p))
     ) {
       return false;
     }

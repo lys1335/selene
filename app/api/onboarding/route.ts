@@ -15,9 +15,11 @@ const VALID_LLM_PROVIDERS = new Set([
     "kimi",
     "ollama",
     "claudecode",
+    "minimax",
+    "blackboxai",
 ] as const);
 
-function isValidLlmProvider(provider: unknown): provider is "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "ollama" | "claudecode" {
+function isValidLlmProvider(provider: unknown): provider is "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "ollama" | "claudecode" | "minimax" | "blackboxai" {
     return typeof provider === "string" && VALID_LLM_PROVIDERS.has(provider as never);
 }
 

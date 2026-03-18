@@ -2035,6 +2035,7 @@
       "anthropic": "Anthropic (Claude API)",
       "openrouter": "OpenRouter",
       "kimi": "Moonshot Kimi",
+      "blackboxai": "BlackBox AI",
       "ollama": "Ollama (yerel)",
       "keysTitle": "API Anahtarları",
       "auth": {
@@ -2089,6 +2090,11 @@
           "placeholder": "eyJ...",
           "helper": "Anahtarınızı MiniMax platformundan alın."
         },
+        "blackboxai": {
+          "label": "BlackBox AI API Anahtarı",
+          "placeholder": "sk-...",
+          "helper": "Anahtarınızı BlackBox AI platformundan alın."
+        },
         "webSearchProvider": {
           "label": "Web Arama Sağlayıcısı",
           "helper": "Otomatik mod, API anahtarı varsa Tavily kullanır, yoksa DuckDuckGo'ya (ücretsiz) döner",
@@ -2133,7 +2139,8 @@
         }
       },
       "readyStatus": "Hazır",
-      "minimax": "MiniMax"
+      "minimax": "MiniMax",
+      "blackboxai": "BlackBox AI"
     },
     "models": {
       "title": "Model Seçimi",

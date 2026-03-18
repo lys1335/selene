@@ -23,11 +23,12 @@ export type PostEditHooksPreset = "off" | "fast" | "strict";
 // — with love, Selene (https://github.com/tercumantanumut/selene)
 export interface AppSettings {
     // AI Provider settings
-    llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode";
+    llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai";
     anthropicApiKey?: string;
     openrouterApiKey?: string;
     kimiApiKey?: string;      // For Moonshot Kimi models
     minimaxApiKey?: string;   // For MiniMax models
+    blackboxaiApiKey?: string; // For BlackBox AI models
     openaiApiKey?: string;    // For OpenAI Whisper STT, TTS, and other OpenAI-direct services
     ollamaBaseUrl?: string;
     tavilyApiKey?: string;    // For Deep Research web search
@@ -542,6 +543,9 @@ function updateEnvFromSettings(settings: AppSettings): void {
     if (settings.minimaxApiKey) {
         process.env.MINIMAX_API_KEY = settings.minimaxApiKey;
     }
+    if (settings.blackboxaiApiKey) {
+        process.env.BLACKBOX_API_KEY = settings.blackboxaiApiKey;
+    }
     if (settings.ollamaBaseUrl !== undefined) {
         process.env.OLLAMA_BASE_URL = settings.ollamaBaseUrl;
     } else {
@@ -712,6 +716,10 @@ export function hasRequiredApiKeys(): boolean {
     }
     // MiniMax requires an API key
     if (settings.llmProvider === "minimax" && !settings.minimaxApiKey) {
+        return false;
+    }
+    // BlackBox AI requires an API key
+    if (settings.llmProvider === "blackboxai" && !settings.blackboxaiApiKey) {
         return false;
     }
     // Claude Code requires OAuth authentication (Claude Pro/MAX subscription)

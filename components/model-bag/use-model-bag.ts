@@ -31,6 +31,7 @@ interface SettingsData {
   claudecodeAuth?: { isAuthenticated?: boolean };
   kimiApiKey?: string;
   minimaxApiKey?: string;
+  blackboxaiApiKey?: string;
   llmProvider: LLMProvider;
   chatModel?: string;
   researchModel?: string;
@@ -46,6 +47,7 @@ const ALL_PROVIDERS: LLMProvider[] = [
   "claudecode",
   "kimi",
   "minimax",
+  "blackboxai",
   "ollama",
 ];
 
@@ -84,6 +86,7 @@ export function useModelBag() {
       claudecode: !!data.claudecodeAuth?.isAuthenticated,
       kimi: !!data.kimiApiKey,
       minimax: !!data.minimaxApiKey,
+      blackboxai: !!data.blackboxaiApiKey,
       ollama: true,
     };
 

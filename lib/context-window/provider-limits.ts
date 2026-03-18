@@ -90,6 +90,7 @@ export const PROVIDER_DEFAULT_LIMITS: Record<LLMProvider, number> = {
   codex: 400000, // Mixed provider; keep legacy-safe default and override GPT-5.4 explicitly
   kimi: 128000, // Kimi K2 models range 128K-256K
   minimax: 80000, // MiniMax M2.1 models with 80K context
+  blackboxai: 128000, // BlackBox AI default context
   ollama: 32000, // Local models typically have smaller context
 };
 

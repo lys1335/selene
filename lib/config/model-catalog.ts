@@ -12,6 +12,7 @@ import { getCodexModels, normalizeCodexModel } from "@/lib/auth/codex-models";
 import { getClaudeCodeModels } from "@/lib/auth/claudecode-models";
 import { getKimiModels } from "@/lib/auth/kimi-models";
 import { getMiniMaxModels } from "@/lib/auth/minimax-models";
+import { getBlackBoxModels } from "@/lib/auth/blackboxai-models";
 import type {
   LLMProvider,
   ModelItem,
@@ -192,6 +193,7 @@ const DEFAULT_MODELS: Record<LLMProvider, string> = {
   claudecode: "claude-sonnet-4-6",
   kimi: "kimi-k2.5",
   minimax: "MiniMax-M2.1",
+  blackboxai: "qwen3-coder",
   ollama: "llama3.1:8b",
 };
 
@@ -287,6 +289,7 @@ export function buildModelCatalog(
     { provider: "claudecode", models: getClaudeCodeModels() },
     { provider: "kimi", models: getKimiModels() },
     { provider: "minimax", models: getMiniMaxModels() },
+    { provider: "blackboxai", models: getBlackBoxModels() },
     { provider: "openrouter", models: openrouterModels },
     // ollama is free-text — handled separately in UI
   ];

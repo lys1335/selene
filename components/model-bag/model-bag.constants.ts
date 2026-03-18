@@ -66,6 +66,13 @@ export const PROVIDER_THEME: Record<
     iconEmoji: "",
     authType: "api-key",
   },
+  blackboxai: {
+    accentColor: "border-emerald-500",
+    bgColor: "bg-emerald-500/5",
+    badgeColor: "bg-emerald-500/20",
+    iconEmoji: "",
+    authType: "api-key",
+  },
   ollama: {
     accentColor: "border-gray-500",
     bgColor: "bg-gray-500/5",
@@ -84,6 +91,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<LLMProvider, string> = {
   claudecode: "Claude Code",
   kimi: "Moonshot Kimi",
   minimax: "MiniMax",
+  blackboxai: "BlackBox AI",
   ollama: "Ollama",
 };
 
