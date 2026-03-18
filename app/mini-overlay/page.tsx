@@ -67,24 +67,32 @@ function MiniOverlayContent() {
     api?.ipc?.send("mini-overlay:phase-update", pipeline.phase);
   }, [pipeline.phase]);
 
-  // Listen for overlay:reset — cancel any active pipeline and start a fresh recording
+  // Listen for overlay:toggle-recording — same shortcut toggles behavior:
+  // If currently recording → stop and proceed to transcribe/AI/TTS
+  // If idle/done/error → start a fresh recording
   useEffect(() => {
     const api = getElectronAPI();
     if (!api?.ipc?.on) return;
-    const handleReset = () => {
-      if (doneTimerRef.current) {
-        clearTimeout(doneTimerRef.current);
-        doneTimerRef.current = null;
+    const handleToggle = () => {
+      if (pipeline.phase === "recording") {
+        // Second press: stop recording → pipeline proceeds to transcribing
+        pipeline.stopRecording();
+      } else if (pipeline.phase === "idle" || pipeline.phase === "done" || pipeline.phase === "error") {
+        // Start a fresh recording
+        if (doneTimerRef.current) {
+          clearTimeout(doneTimerRef.current);
+          doneTimerRef.current = null;
+        }
+        pipeline.cancel();
+        setTimeout(() => {
+          pipeline.startRecording();
+        }, 100);
       }
-      pipeline.cancel();
-      // Brief delay so cancel state settles before starting the new recording
-      setTimeout(() => {
-        pipeline.startRecording();
-      }, 100);
+      // During transcribing/thinking/speaking — ignore the shortcut (pipeline is working)
     };
-    api.ipc.on("overlay:reset", handleReset);
+    api.ipc.on("overlay:toggle-recording", handleToggle);
     return () => {
-      api?.ipc?.removeAllListeners?.("overlay:reset");
+      api?.ipc?.removeAllListeners?.("overlay:toggle-recording");
     };
   }, [pipeline]);
 
@@ -110,10 +118,7 @@ function MiniOverlayContent() {
   const isActivePipeline = pipeline.phase !== "idle" && pipeline.phase !== "done" && pipeline.phase !== "error";
 
   return (
-    <div
-      className="flex items-start justify-center w-full h-full"
-      onClick={pipeline.phase === "recording" ? handleStopRecording : undefined}
-    >
+    <div className="flex items-start justify-center w-full h-full">
       <RecordingPill
         phase={pipeline.phase}
         transcript={pipeline.transcript}
@@ -122,6 +127,7 @@ function MiniOverlayContent() {
         analyserNode={pipeline.analyserNode}
         onCancel={handleCancel}
         onClose={handleClose}
+        onStopRecording={handleStopRecording}
         agentPicker={
           !agentLoading && agents.length > 0 ? (
             <AgentPicker

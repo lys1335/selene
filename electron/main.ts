@@ -441,8 +441,10 @@ app.whenReady().then(async () => {
           : `${useH2 ? "https" : "http"}://localhost:${PROD_SERVER_PORT}`;
         const overlay = getOverlay();
         if (overlay && !overlay.isDestroyed() && overlay.isVisible()) {
-          // Overlay already showing — send reset signal for new recording
-          overlay.webContents.send("overlay:reset");
+          // Overlay already showing — toggle recording:
+          // If recording → stop and proceed to transcribe/AI/TTS
+          // If idle/done/error → start a fresh recording
+          overlay.webContents.send("overlay:toggle-recording");
         } else {
           showOverlay({
             baseUrl,

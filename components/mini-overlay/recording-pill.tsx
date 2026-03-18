@@ -1,6 +1,6 @@
 "use client";
 import { useRef, useEffect, useState } from "react";
-import { X, Mic, Brain, Volume2, Check, AlertCircle, Loader2 } from "lucide-react";
+import { X, Mic, Brain, Volume2, Check, AlertCircle, Loader2, ArrowUp } from "lucide-react";
 import type { MiniOverlayPhase } from "@/lib/electron/types";
 import type { ReactNode } from "react";
 
@@ -12,6 +12,8 @@ interface RecordingPillProps {
   analyserNode?: AnalyserNode | null;
   onCancel: () => void;
   onClose: () => void;
+  /** Called when the user clicks the Send button during recording. */
+  onStopRecording?: () => void;
   /** Optional slot rendered at the top of the pill, above the phase content. */
   agentPicker?: ReactNode;
   /** Optional slot rendered at the bottom of the pill, below the cancel button. */
@@ -26,6 +28,7 @@ export function RecordingPill({
   analyserNode,
   onCancel,
   onClose,
+  onStopRecording,
   agentPicker,
   modeToggle,
 }: RecordingPillProps) {
@@ -91,6 +94,22 @@ export function RecordingPill({
               height={40}
               className="block"
             />
+            {/* Send button — stops recording and proceeds to AI pipeline */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onStopRecording?.();
+              }}
+              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+              style={{
+                // @ts-ignore
+                WebkitAppRegion: "no-drag",
+              }}
+            >
+              <ArrowUp className="h-3 w-3" />
+              Send
+              <kbd className="ml-1 text-[10px] opacity-70">⌘⇧A</kbd>
+            </button>
           </div>
         );
 

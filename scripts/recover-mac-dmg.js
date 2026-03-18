@@ -19,12 +19,30 @@ function exists(targetPath) {
   return fs.existsSync(targetPath);
 }
 
+function canonicalPath(targetPath) {
+  if (!targetPath) return targetPath;
+
+  try {
+    return fs.realpathSync.native(targetPath);
+  } catch {
+    return path.resolve(targetPath);
+  }
+}
+
 function makeTempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
 
 function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function waitFor(check, { attempts = 20, delayMs = 200 } = {}) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    if (check()) return true;
+    if (attempt < attempts) sleep(delayMs);
+  }
+  return check();
 }
 
 function run(command, args, options = {}) {
@@ -54,10 +72,15 @@ function removeDirWithRetry(targetPath, maxAttempts = 10) {
 }
 
 function isMountedPath(targetPath) {
+  const canonicalTargetPath = canonicalPath(targetPath);
   const output = run('hdiutil', ['info'], { capture: true });
   return output
     .split('\n')
-    .some((line) => line.trimStart().startsWith('mount-point') && line.split(':').slice(1).join(':').trim() === targetPath);
+    .some((line) => {
+      if (!line.trimStart().startsWith('mount-point')) return false;
+      const mountedPath = line.split(':').slice(1).join(':').trim();
+      return canonicalPath(mountedPath) === canonicalTargetPath;
+    });
 }
 
 function detachIfMounted(volumePath) {
@@ -88,6 +111,8 @@ function detachIfMounted(volumePath) {
       throw forceError;
     }
   }
+
+  waitFor(() => !isMountedPath(volumePath));
 }
 
 function attachedDevicesForImage(targetDmgPath) {
@@ -141,6 +166,8 @@ function detachImageIfMounted(targetDmgPath) {
       }
     }
   }
+
+  waitFor(() => attachedDevicesForImage(targetDmgPath).length === 0);
 }
 
 function attachDmgAtMountPath(targetDmgPath, mountPath) {
@@ -276,11 +303,13 @@ function createRecoveryDmg(dmgPath, appPath) {
     }
 
     detachIfMounted(mountPath);
+    detachImageIfMounted(stagingDmg);
 
     run('hdiutil', ['convert', stagingDmg, '-format', 'UDZO', '-imagekey', 'zlib-level=9', '-o', finalDmg]);
     fs.copyFileSync(finalDmg, dmgPath);
   } finally {
     detachIfMounted(mountPath);
+    detachImageIfMounted(stagingDmg);
     removeDirWithRetry(tempDir);
   }
 }
