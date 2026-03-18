@@ -179,6 +179,152 @@ export const MODEL_METADATA: Record<
     tier: "standard",
     capabilities: { vision: false, contextWindow: "80K", speed: "standard" },
   },
+
+  // BlackBox AI — key models with context/capability metadata
+  "anthropic/claude-sonnet-4.5": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "200K", speed: "standard" },
+  },
+  "anthropic/claude-opus-4.5": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "200K", speed: "slow" },
+  },
+  "anthropic/claude-opus-4.6": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "200K", speed: "slow" },
+  },
+  "anthropic/claude-sonnet-4.6": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "200K", speed: "standard" },
+  },
+  "openai/gpt-5.4": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "400K", speed: "standard" },
+  },
+  "openai/gpt-5.4-pro": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "400K", speed: "slow" },
+  },
+  "openai/gpt-5.2-codex": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "400K", speed: "standard" },
+  },
+  "openai/gpt-5.2": {
+    tier: "standard",
+    capabilities: { vision: true, thinking: true, contextWindow: "400K", speed: "standard" },
+  },
+  "openai/gpt-5.1": {
+    tier: "standard",
+    capabilities: { vision: true, thinking: true, contextWindow: "400K", speed: "standard" },
+  },
+  "openai/gpt-5.1-codex": {
+    tier: "standard",
+    capabilities: { vision: true, thinking: true, contextWindow: "400K", speed: "standard" },
+  },
+  "openai/codex-mini": {
+    tier: "utility",
+    capabilities: { vision: false, contextWindow: "200K", speed: "fast" },
+  },
+  "openai/gpt-4.1": {
+    tier: "standard",
+    capabilities: { vision: true, contextWindow: "1M", speed: "standard" },
+  },
+  "openai/gpt-4.1-mini": {
+    tier: "utility",
+    capabilities: { vision: true, contextWindow: "1M", speed: "fast" },
+  },
+  "openai/gpt-4o": {
+    tier: "standard",
+    capabilities: { vision: true, contextWindow: "128K", speed: "standard" },
+  },
+  "openai/gpt-4o-mini": {
+    tier: "utility",
+    capabilities: { vision: true, contextWindow: "128K", speed: "fast" },
+  },
+  "openai/o3": {
+    tier: "flagship",
+    capabilities: { vision: false, thinking: true, contextWindow: "200K", speed: "slow" },
+  },
+  "openai/o3-pro": {
+    tier: "flagship",
+    capabilities: { vision: false, thinking: true, contextWindow: "200K", speed: "slow" },
+  },
+  "openai/o4-mini": {
+    tier: "standard",
+    capabilities: { vision: false, thinking: true, contextWindow: "200K", speed: "standard" },
+  },
+  "google/gemini-3-pro-preview": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "standard" },
+  },
+  "google/gemini-2.5-pro": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "standard" },
+  },
+  "google/gemini-2.5-flash": {
+    tier: "standard",
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "fast" },
+  },
+  "google/gemini-2.0-flash-001": {
+    tier: "utility",
+    capabilities: { vision: true, contextWindow: "1M", speed: "fast" },
+  },
+  "deepseek/deepseek-r1": {
+    tier: "flagship",
+    capabilities: { vision: false, thinking: true, contextWindow: "128K", speed: "standard" },
+  },
+  "deepseek/deepseek-chat": {
+    tier: "standard",
+    capabilities: { vision: false, contextWindow: "164K", speed: "fast" },
+  },
+  "deepseek/deepseek-r1-0528": {
+    tier: "flagship",
+    capabilities: { vision: false, thinking: true, contextWindow: "128K", speed: "standard" },
+  },
+  "meta-llama/llama-4-maverick": {
+    tier: "standard",
+    capabilities: { vision: true, contextWindow: "1M", speed: "standard" },
+  },
+  "meta-llama/llama-4-scout": {
+    tier: "standard",
+    capabilities: { vision: true, contextWindow: "1M", speed: "fast" },
+  },
+  "x-ai/grok-3": {
+    tier: "flagship",
+    capabilities: { vision: false, contextWindow: "131K", speed: "standard" },
+  },
+  "x-ai/grok-3-mini": {
+    tier: "standard",
+    capabilities: { vision: false, contextWindow: "131K", speed: "fast" },
+  },
+  "mistralai/mistral-large": {
+    tier: "flagship",
+    capabilities: { vision: false, contextWindow: "128K", speed: "standard" },
+  },
+  "mistralai/codestral-2501": {
+    tier: "standard",
+    capabilities: { vision: false, contextWindow: "262K", speed: "standard" },
+  },
+  "qwen/qwen3-235b-a22b": {
+    tier: "flagship",
+    capabilities: { vision: false, thinking: true, contextWindow: "41K", speed: "standard" },
+  },
+  "qwen/qwq-32b": {
+    tier: "standard",
+    capabilities: { vision: false, thinking: true, contextWindow: "131K", speed: "standard" },
+  },
+  "blackbox-search": {
+    tier: "utility",
+    capabilities: { vision: false, contextWindow: "1M", speed: "fast" },
+  },
+  "perplexity/sonar-pro": {
+    tier: "standard",
+    capabilities: { vision: false, contextWindow: "200K", speed: "standard" },
+  },
+  "cohere/command-a": {
+    tier: "standard",
+    capabilities: { vision: false, contextWindow: "256K", speed: "standard" },
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -193,7 +339,7 @@ const DEFAULT_MODELS: Record<LLMProvider, string> = {
   claudecode: "claude-sonnet-4-6",
   kimi: "kimi-k2.5",
   minimax: "MiniMax-M2.1",
-  blackboxai: "qwen3-coder",
+  blackboxai: "anthropic/claude-sonnet-4.5",
   ollama: "llama3.1:8b",
 };
 

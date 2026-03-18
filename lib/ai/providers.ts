@@ -71,7 +71,7 @@ import {
   getBlackBoxApiKey,
   invalidateBlackBoxClient,
 } from "@/lib/ai/providers/blackboxai-client";
-import { BLACKBOX_MODEL_IDS } from "@/lib/auth/blackboxai-models";
+import { BLACKBOX_ALL_MODEL_IDS } from "@/lib/auth/blackboxai-models";
 
 // Re-export embedding helpers so callers don't need to change their imports
 export {
@@ -110,7 +110,7 @@ const CODEX_MODEL_ID_SET = new Set(CODEX_MODEL_IDS.map((m) => m.toLowerCase()));
 const KIMI_MODEL_ID_SET = new Set(KIMI_MODEL_IDS.map((m) => m.toLowerCase()));
 const CLAUDECODE_MODEL_ID_SET = new Set(CLAUDECODE_MODEL_IDS.map((m) => m.toLowerCase()));
 const MINIMAX_MODEL_ID_SET = new Set(MINIMAX_MODEL_IDS.map((m) => m.toLowerCase()));
-const BLACKBOX_MODEL_ID_SET = new Set(BLACKBOX_MODEL_IDS.map((m) => m.toLowerCase()));
+const BLACKBOX_MODEL_ID_SET = new Set(BLACKBOX_ALL_MODEL_IDS.map((m) => m.toLowerCase()));
 
 // Default models for each provider
 export const DEFAULT_MODELS: Record<LLMProvider, string> = {
@@ -121,7 +121,7 @@ export const DEFAULT_MODELS: Record<LLMProvider, string> = {
   claudecode: "claude-sonnet-4-6", // Via Claude Pro/MAX OAuth
   kimi: "kimi-k2.5", // Moonshot Kimi K2.5 with 256K context
   minimax: "MiniMax-M2.1", // MiniMax flagship with 80K context
-  blackboxai: "qwen3-coder",
+  blackboxai: "anthropic/claude-sonnet-4.5",
   ollama: "llama3.1:8b",
 };
 
@@ -318,8 +318,7 @@ function isBlackBoxModel(modelId: string): boolean {
   return (
     BLACKBOX_MODEL_ID_SET.has(lowerModel) ||
     lowerModel.startsWith("blackbox-") ||
-    lowerModel.startsWith("blackboxai/") ||
-    lowerModel.startsWith("qwen3-")
+    lowerModel.startsWith("blackboxai/")
   );
 }
 
@@ -688,7 +687,9 @@ export function getLanguageModelForProvider(
       if (!apiKey) {
         throw new Error("BLACKBOX_API_KEY environment variable is not configured");
       }
-      return getBlackBoxClient()(model);
+      // BlackBox AI API requires the blackboxai/ prefix on all model IDs
+      const bbModel = model.startsWith("blackboxai/") ? model : `blackboxai/${model}`;
+      return getBlackBoxClient()(bbModel);
     }
 
     case "openrouter": {
@@ -753,7 +754,8 @@ export function getModelByName(modelId: string): LanguageModel {
     const apiKey = getBlackBoxApiKey();
     if (apiKey) {
       console.log(`[PROVIDERS] Using BlackBox AI for model: ${modelId}`);
-      return getBlackBoxClient()(modelId);
+      const bbModel = modelId.startsWith("blackboxai/") ? modelId : `blackboxai/${modelId}`;
+      return getBlackBoxClient()(bbModel);
     }
     // Fall through to OpenRouter if no BlackBox key
   }

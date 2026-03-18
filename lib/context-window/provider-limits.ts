@@ -253,6 +253,141 @@ export const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>>
     criticalThreshold: 0.80,
     hardLimit: 0.90,
   },
+
+  // BlackBox AI models — key context window configs
+  "anthropic/claude-sonnet-4.5": {
+    maxTokens: 200000,
+    supportsStreaming: true,
+  },
+  "anthropic/claude-opus-4.5": {
+    maxTokens: 200000,
+    supportsStreaming: true,
+  },
+  "anthropic/claude-opus-4.6": {
+    maxTokens: 200000,
+    supportsStreaming: true,
+  },
+  "anthropic/claude-sonnet-4.6": {
+    maxTokens: 200000,
+    supportsStreaming: true,
+  },
+  "openai/gpt-5.4": {
+    maxTokens: 400000,
+    supportsStreaming: true,
+  },
+  "openai/gpt-5.4-pro": {
+    maxTokens: 400000,
+    supportsStreaming: true,
+  },
+  "openai/gpt-5.2-codex": {
+    maxTokens: 400000,
+    supportsStreaming: true,
+  },
+  "openai/gpt-5.2": {
+    maxTokens: 400000,
+    supportsStreaming: true,
+  },
+  "openai/gpt-5.1": {
+    maxTokens: 400000,
+    supportsStreaming: true,
+  },
+  "openai/gpt-5.1-codex": {
+    maxTokens: 400000,
+    supportsStreaming: true,
+  },
+  "openai/codex-mini": {
+    maxTokens: 200000,
+    supportsStreaming: true,
+  },
+  "openai/gpt-4.1": {
+    maxTokens: 1047576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  "openai/gpt-4.1-mini": {
+    maxTokens: 1047576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  "openai/gpt-4o": {
+    maxTokens: 128000,
+    supportsStreaming: true,
+  },
+  "openai/gpt-4o-mini": {
+    maxTokens: 128000,
+    supportsStreaming: true,
+  },
+  "openai/o3": {
+    maxTokens: 200000,
+    supportsStreaming: true,
+  },
+  "openai/o3-pro": {
+    maxTokens: 200000,
+    supportsStreaming: true,
+  },
+  "openai/o4-mini": {
+    maxTokens: 200000,
+    supportsStreaming: true,
+  },
+  "google/gemini-3-pro-preview": {
+    maxTokens: 1048576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  "google/gemini-2.5-pro": {
+    maxTokens: 1048576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  "google/gemini-2.5-flash": {
+    maxTokens: 1048576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  "deepseek/deepseek-r1": {
+    maxTokens: 128000,
+    supportsStreaming: true,
+  },
+  "deepseek/deepseek-chat": {
+    maxTokens: 163840,
+    supportsStreaming: true,
+  },
+  "meta-llama/llama-4-maverick": {
+    maxTokens: 1048576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  "x-ai/grok-3": {
+    maxTokens: 131072,
+    supportsStreaming: true,
+  },
+  "mistralai/mistral-large": {
+    maxTokens: 128000,
+    supportsStreaming: true,
+  },
+  "mistralai/codestral-2501": {
+    maxTokens: 262144,
+    supportsStreaming: true,
+  },
+  "blackbox-search": {
+    maxTokens: 1048576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
 };
 
 // ---------------------------------------------------------------------------
