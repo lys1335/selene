@@ -468,6 +468,67 @@ export const Composer: FC<{
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isEditorMode]);
 
+  // Overlay compose-inject: receive transcript + optional screenshot from the
+  // mini-overlay (via OverlaySyncBridge → custom window event) and inject them
+  // into the main window composer.
+  useEffect(() => {
+    const handleOverlayInject = (e: Event) => {
+      const payload = (e as CustomEvent<{ transcript: string; screenshotUrl?: string }>).detail;
+      if (!payload) return;
+
+      const { transcript, screenshotUrl } = payload;
+
+      // Inject transcript text
+      if (transcript) {
+        if (isEditorMode && tiptapRef.current) {
+          tiptapRef.current.insertVoiceTranscript(transcript);
+        } else {
+          const textarea = inputRef.current;
+          const insertion = buildTranscriptInsertion({
+            currentValue: inputValue,
+            transcript,
+            selectionStart: textarea?.selectionStart ?? null,
+            selectionEnd: textarea?.selectionEnd ?? null,
+          });
+          if (insertion) {
+            setInputValue(insertion.nextValue);
+          } else {
+            setInputValue((prev) => {
+              if (!prev.trim()) return transcript;
+              return `${prev}${prev.endsWith(" ") ? "" : " "}${transcript}`;
+            });
+          }
+        }
+      }
+
+      // Fetch and attach screenshot if provided
+      if (screenshotUrl) {
+        void (async () => {
+          try {
+            const response = await fetch(screenshotUrl);
+            if (!response.ok) return;
+            const blob = await response.blob();
+            const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
+            const file = new File([blob], `overlay-capture.${ext}`, { type: blob.type, lastModified: Date.now() });
+            await handleAttachCapturedScreen(file);
+          } catch {
+            // Non-fatal: screenshot attachment is best-effort
+          }
+        })();
+      } else {
+        // No screenshot — just focus the composer
+        if (isEditorMode && tiptapRef.current) {
+          tiptapRef.current.focus();
+        } else {
+          inputRef.current?.focus();
+        }
+      }
+    };
+
+    window.addEventListener("overlay:compose-inject", handleOverlayInject);
+    return () => window.removeEventListener("overlay:compose-inject", handleOverlayInject);
+  }, [isEditorMode, inputValue, setInputValue, handleAttachCapturedScreen]);
+
   // Process queued messages when AI finishes
   useEffect(() => {
     if (isAwaitingRunStart.current && isRunning) {

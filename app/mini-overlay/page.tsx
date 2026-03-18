@@ -128,6 +128,7 @@ function MiniOverlayContent() {
         onCancel={handleCancel}
         onClose={handleClose}
         onStopRecording={handleStopRecording}
+        screenshotUrl={screenshotUrl}
         agentPicker={
           !agentLoading && agents.length > 0 ? (
             <AgentPicker

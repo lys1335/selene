@@ -20,28 +20,38 @@ export function ModeToggle({ mode, onChange, disabled }: ModeToggleProps) {
         disabled={disabled}
         onClick={() => onChange("direct")}
         className={[
-          "px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors",
+          "flex flex-col items-center px-2.5 py-1 rounded-md font-medium transition-colors",
           mode === "direct"
-            ? "bg-primary text-primary-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
+            ? "bg-primary text-primary-foreground shadow-sm text-sm"
+            : "text-muted-foreground hover:text-foreground text-xs",
           disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
         ].join(" ")}
       >
         Direct
+        {mode === "direct" && (
+          <span className="text-[10px] font-normal opacity-70 leading-tight mt-0.5">
+            Voice → AI → Speak
+          </span>
+        )}
       </button>
       <button
         type="button"
         disabled={disabled}
         onClick={() => onChange("compose")}
         className={[
-          "px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors",
+          "flex flex-col items-center px-2.5 py-1 rounded-md font-medium transition-colors",
           mode === "compose"
-            ? "bg-primary text-primary-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
+            ? "bg-primary text-primary-foreground shadow-sm text-sm"
+            : "text-muted-foreground hover:text-foreground text-xs",
           disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
         ].join(" ")}
       >
         Compose
+        {mode === "compose" && (
+          <span className="text-[10px] font-normal opacity-70 leading-tight mt-0.5">
+            Voice → Chat window
+          </span>
+        )}
       </button>
     </div>
   );

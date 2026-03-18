@@ -18,6 +18,8 @@ interface RecordingPillProps {
   agentPicker?: ReactNode;
   /** Optional slot rendered at the bottom of the pill, below the cancel button. */
   modeToggle?: ReactNode;
+  /** Screenshot context for the current session — shown as a small thumbnail. */
+  screenshotUrl?: string;
 }
 
 export function RecordingPill({
@@ -31,6 +33,7 @@ export function RecordingPill({
   onStopRecording,
   agentPicker,
   modeToggle,
+  screenshotUrl,
 }: RecordingPillProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [resolvedPrimaryColor, setResolvedPrimaryColor] = useState("#6366f1");
@@ -187,18 +190,32 @@ export function RecordingPill({
         WebkitAppRegion: "drag",
       }}
     >
-      {/* Close button */}
-      <button
-        onClick={onClose}
-        className="absolute top-2 right-2 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors z-10"
+      {/* Screenshot thumbnail + close button (top-right cluster) */}
+      <div
+        className="absolute top-2 right-2 flex items-center gap-1.5 z-10"
         style={{
           // @ts-ignore
           WebkitAppRegion: "no-drag",
         }}
-        aria-label="Close"
       >
-        <X className="h-3.5 w-3.5" />
-      </button>
+        {screenshotUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={screenshotUrl}
+            alt="Screenshot context"
+            width={32}
+            height={32}
+            className="w-8 h-8 rounded object-cover border border-border/40 shrink-0"
+          />
+        )}
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          aria-label="Close"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
 
       {/* Agent picker slot — shown above phase content when provided */}
       {agentPicker && (
