@@ -116,7 +116,7 @@ function resolveShellEnvironmentOnce(): Record<string, string> {
 
     // Start the login shell with a clean env so Electron/Next.js vars
     // don't leak into the captured environment.
-    const bootstrapEnv = getMinimalShellBootstrapEnv();
+    const bootstrapEnv = getMinimalShellBootstrapEnv() as NodeJS.ProcessEnv;
 
     // First try: normal spawnSync with pipes (works in dev, fails in Electron prod)
     for (const shellPath of getCandidateShells()) {

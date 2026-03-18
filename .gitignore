@@ -107,6 +107,8 @@ logs/
 *.rdb
 *.aof
 appendonlydir/
+blackboxai-docs.md
+scripts/scrape-blackbox-docs.mjs
 
 # Docker volumes (runtime data)
 **/volumes/redis/
