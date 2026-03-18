@@ -162,10 +162,8 @@ export function RecordingPill({
 
   return (
     <div
-      className="relative flex flex-col items-center rounded-2xl shadow-2xl backdrop-blur-xl bg-background/95 border border-border/50 overflow-hidden"
+      className="relative flex flex-col items-center overflow-hidden w-full h-full"
       style={{
-        width: 460,
-        minHeight: 80,
         // @ts-ignore
         WebkitAppRegion: "drag",
       }}

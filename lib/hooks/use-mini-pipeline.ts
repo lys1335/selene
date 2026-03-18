@@ -373,10 +373,8 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
   useEffect(() => {
     if (!autoStart || hasAutoStartedRef.current) return;
     hasAutoStartedRef.current = true;
-    const timer = setTimeout(() => {
-      startRecording();
-    }, 200);
-    return () => clearTimeout(timer);
+    // Start immediately — no delay. The user expects instant visual feedback.
+    startRecording();
   }, [autoStart, startRecording]);
 
   // Cleanup on unmount

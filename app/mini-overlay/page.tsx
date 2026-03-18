@@ -111,7 +111,7 @@ function MiniOverlayContent() {
 
   return (
     <div
-      className="flex items-start justify-center pt-4 w-full h-full"
+      className="flex items-start justify-center w-full h-full"
       onClick={pipeline.phase === "recording" ? handleStopRecording : undefined}
     >
       <RecordingPill

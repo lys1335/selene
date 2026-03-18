@@ -64,18 +64,21 @@ function createOverlayWindow(opts: ShowOverlayOptions): BrowserWindow {
 
   const win = new BrowserWindow({
     width: 480,
-    height: 160,
+    height: 280,
     frame: false,
-    transparent: true,
+    transparent: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
     show: false,
-    // macOS: use "panel" for floating behavior
+    roundedCorners: true,
+    // macOS: use "panel" for floating behavior with native vibrancy
     ...(isMac
       ? {
           type: "panel" as const,
           hasShadow: true,
+          vibrancy: "popover" as const,
+          visualEffectState: "active" as const,
         }
       : {}),
     webPreferences: {
@@ -89,7 +92,7 @@ function createOverlayWindow(opts: ShowOverlayOptions): BrowserWindow {
   // Position: top center of the primary display, 80 px from the top edge
   const { workArea } = screen.getPrimaryDisplay();
   const x = Math.round(workArea.x + (workArea.width - 480) / 2);
-  const y = workArea.y + 80;
+  const y = workArea.y + 60;
   win.setPosition(x, y);
 
   win.once("ready-to-show", () => {
