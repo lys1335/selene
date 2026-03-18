@@ -127,6 +127,7 @@ export async function showOverlay(opts: ShowOverlayOptions): Promise<void> {
   G.__miniOverlayLoadPromise = (async () => {
     try {
       let win = getOverlayWindow();
+      const isReused = !!win;
       if (!win) {
         debugLog("[MiniOverlay] Creating new overlay window");
         win = createOverlayWindow(opts);
@@ -138,6 +139,14 @@ export async function showOverlay(opts: ShowOverlayOptions): Promise<void> {
       const url = buildOverlayUrl(opts);
       debugLog("[MiniOverlay] Loading URL:", url);
       await win.loadURL(url);
+
+      // For reused windows, ready-to-show does not fire again after loadURL —
+      // explicitly show and focus to ensure the hidden window becomes visible.
+      if (isReused && !win.isDestroyed()) {
+        win.show();
+        win.focus();
+        debugLog("[MiniOverlay] Reused window shown and focused after loadURL");
+      }
     } catch (err) {
       debugError("[MiniOverlay] Failed to show overlay:", err);
       throw err;

@@ -486,13 +486,15 @@ app.whenReady().then(async () => {
 // Quit when all windows are closed (except on macOS)
 app.on("window-all-closed", () => {
   debugLog("[App] window-all-closed event");
-  stopH2Proxy();
-  stopNextServer();
-  flushDebugLog();
   if (process.platform !== "darwin") {
+    // On non-macOS, all windows closing means the user is done — stop servers and quit.
+    stopH2Proxy();
+    stopNextServer();
+    flushDebugLog();
     debugLog("[App] Non-macOS - quitting app");
     app.quit();
   }
+  // On macOS: app stays alive in tray / mini overlay — servers must keep running.
 });
 
 // Unregister all global shortcuts before process exit (will-quit fires after windows close)

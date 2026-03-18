@@ -164,7 +164,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         let transcriptText = "";
         try {
           const formData = new FormData();
-          formData.append("audio", blob, "recording.webm");
+          formData.append("file", blob, "recording.webm");
           const transcribeRes = await fetch("/api/voice/transcribe", {
             method: "POST",
             body: formData,
