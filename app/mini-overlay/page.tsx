@@ -2,14 +2,26 @@
 import { Suspense, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMiniPipeline } from "@/lib/hooks/use-mini-pipeline";
+import { useOverlayAgentPicker } from "@/lib/hooks/use-overlay-agent-picker";
+import { useOverlayMode } from "@/lib/hooks/use-overlay-mode";
 import { RecordingPill } from "@/components/mini-overlay/recording-pill";
+import { AgentPicker } from "@/components/mini-overlay/agent-picker";
+import { ModeToggle } from "@/components/mini-overlay/mode-toggle";
 import { getElectronAPI } from "@/lib/electron/types";
 
 function MiniOverlayContent() {
   const searchParams = useSearchParams();
-  const sessionId = searchParams.get("sessionId") ?? undefined;
-  const characterId = searchParams.get("characterId") ?? undefined;
+  // URL params are treated as override/fallback — agent picker takes precedence when available
+  const sessionIdParam = searchParams.get("sessionId") ?? undefined;
+  const characterIdParam = searchParams.get("characterId") ?? undefined;
   const screenshotUrl = searchParams.get("screenshotUrl") ?? undefined;
+
+  const { agents, selectedAgent, selectAgent, loading: agentLoading } = useOverlayAgentPicker();
+  const { mode, setMode } = useOverlayMode();
+
+  // Resolve the effective characterId and sessionId from the picker or URL params
+  const characterId = selectedAgent?.id ?? characterIdParam;
+  const sessionId = selectedAgent?.lastSessionId ?? sessionIdParam;
   const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cleanup timer on unmount
@@ -34,12 +46,19 @@ function MiniOverlayContent() {
     }, 1500);
   }, []);
 
+  const handleComposeReady = useCallback((payload: { transcript: string; screenshotUrl?: string; characterId?: string; sessionId?: string }) => {
+    const api = getElectronAPI();
+    api?.ipc?.invoke("mini-overlay:compose-ready", payload).catch(() => {});
+  }, []);
+
   const pipeline = useMiniPipeline({
     sessionId,
     characterId,
     screenshotUrl,
     autoStart: true,
+    mode,
     onDone: handleDone,
+    onComposeReady: handleComposeReady,
   });
 
   // Report phase to main process
@@ -47,6 +66,27 @@ function MiniOverlayContent() {
     const api = getElectronAPI();
     api?.ipc?.send("mini-overlay:phase-update", pipeline.phase);
   }, [pipeline.phase]);
+
+  // Listen for overlay:reset — cancel any active pipeline and start a fresh recording
+  useEffect(() => {
+    const api = getElectronAPI();
+    if (!api?.ipc?.on) return;
+    const handleReset = () => {
+      if (doneTimerRef.current) {
+        clearTimeout(doneTimerRef.current);
+        doneTimerRef.current = null;
+      }
+      pipeline.cancel();
+      // Brief delay so cancel state settles before starting the new recording
+      setTimeout(() => {
+        pipeline.startRecording();
+      }, 100);
+    };
+    api.ipc.on("overlay:reset", handleReset);
+    return () => {
+      api?.ipc?.removeAllListeners?.("overlay:reset");
+    };
+  }, [pipeline]);
 
   const handleCancel = useCallback(() => {
     pipeline.cancel();
@@ -67,6 +107,8 @@ function MiniOverlayContent() {
     }
   }, [pipeline.phase, pipeline.stopRecording]);
 
+  const isActivePipeline = pipeline.phase !== "idle" && pipeline.phase !== "done" && pipeline.phase !== "error";
+
   return (
     <div
       className="flex items-start justify-center pt-4 w-full h-full"
@@ -80,6 +122,22 @@ function MiniOverlayContent() {
         analyserNode={pipeline.analyserNode}
         onCancel={handleCancel}
         onClose={handleClose}
+        agentPicker={
+          !agentLoading && agents.length > 0 ? (
+            <AgentPicker
+              agents={agents}
+              selectedAgent={selectedAgent}
+              onSelectAgent={selectAgent}
+            />
+          ) : null
+        }
+        modeToggle={
+          <ModeToggle
+            mode={mode}
+            onChange={setMode}
+            disabled={isActivePipeline}
+          />
+        }
       />
     </div>
   );

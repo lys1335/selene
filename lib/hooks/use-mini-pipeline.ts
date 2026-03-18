@@ -11,8 +11,10 @@ interface UseMiniPipelineOptions {
   characterId?: string;
   screenshotUrl?: string;
   autoStart?: boolean;
+  mode?: "direct" | "compose";
   onDone?: () => void;
   onError?: (error: string) => void;
+  onComposeReady?: (payload: { transcript: string; screenshotUrl?: string; characterId?: string; sessionId?: string }) => void;
 }
 
 interface UseMiniPipelineReturn {
@@ -27,7 +29,7 @@ interface UseMiniPipelineReturn {
 }
 
 export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelineReturn {
-  const { sessionId, characterId, screenshotUrl, autoStart, onDone, onError } = options;
+  const { sessionId, characterId, screenshotUrl, autoStart, mode = "direct", onDone, onError, onComposeReady } = options;
 
   const [phase, setPhase] = useState<MiniPipelinePhase>("idle");
   const [transcript, setTranscript] = useState("");
@@ -184,6 +186,27 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
         if (cancelledRef.current) return;
         setTranscript(transcriptText);
+
+        // --- Compose mode: skip chat + TTS, hand off to composer ---
+        if (mode === "compose") {
+          setPhase("compose-pending");
+          onComposeReady?.({
+            transcript: transcriptText,
+            screenshotUrl,
+            characterId,
+            sessionId,
+          });
+          if (cancelledRef.current) return;
+          setPhase("done");
+          doneTimerRef.current = setTimeout(() => {
+            doneTimerRef.current = null;
+            if (!cancelledRef.current) {
+              onDone?.();
+            }
+          }, 1000);
+          return;
+        }
+
         setPhase("thinking");
 
         // --- Chat ---
@@ -250,6 +273,15 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
         if (cancelledRef.current) return;
         setResponse(accumulated);
+
+        // Notify main window that a message was sent via the overlay
+        try {
+          const electronAPI = (window as any).electronAPI;
+          if (electronAPI?.ipc?.send) {
+            electronAPI.ipc.send("mini-overlay:message-sent", { sessionId, characterId });
+          }
+        } catch {}
+
         setPhase("speaking");
 
         // --- TTS ---
@@ -310,7 +342,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       setPhase("error");
       onError?.(msg);
     }
-  }, [sessionId, characterId, screenshotUrl, onDone, onError]);
+  }, [sessionId, characterId, screenshotUrl, mode, onDone, onError, onComposeReady]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {

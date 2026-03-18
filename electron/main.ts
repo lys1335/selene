@@ -181,7 +181,7 @@ import { createUnifiedCaptureTrigger } from "./ipc-unified-capture-handlers";
 import { cleanupAllVoiceProcesses } from "../lib/audio/transcription";
 import { closeAllBrowserSessionWindows } from "./ipc-browser-session-handlers";
 import { initTray, destroyTray } from "./tray-manager";
-import { showOverlay, destroyMiniOverlay } from "./mini-overlay-window";
+import { showOverlay, destroyMiniOverlay, getOverlay } from "./mini-overlay-window";
 
 // ---------------------------------------------------------------------------
 // Initialize debug log
@@ -429,25 +429,24 @@ app.whenReady().then(async () => {
     debugError("[App] Screen capture hotkey registration failed:", error);
   }
 
-  // Register unified capture hotkey (voice + screen) with mini overlay routing.
-  // When main window is visible: use composer flow. When hidden: use mini overlay.
+  // Register unified capture hotkey (voice + screen) — always routes to mini overlay.
+  // If the overlay is already visible, send a reset signal to start a new recording.
+  // If it is hidden or not yet created, create and show it.
   try {
-    const unifiedTrigger = createUnifiedCaptureTrigger(captureCtx);
     const hotkeyResult = registerUnifiedCaptureHotkeyFromSettings({
       dataDir,
       onTrigger: () => {
-        const { mainWindow: mw } = require("./window-manager") as typeof import("./window-manager");
-        if (mw && !mw.isDestroyed() && mw.isVisible() && !mw.isMinimized()) {
-          // Main window is visible — use existing unified capture (attaches to composer)
-          unifiedTrigger();
+        const baseUrl = isDev
+          ? (process.env.ELECTRON_DEV_URL || devProxyUrl)
+          : `${useH2 ? "https" : "http"}://localhost:${PROD_SERVER_PORT}`;
+        const overlay = getOverlay();
+        if (overlay && !overlay.isDestroyed() && overlay.isVisible()) {
+          // Overlay already showing — send reset signal for new recording
+          overlay.webContents.send("overlay:reset");
         } else {
-          // Main window hidden/closed — launch mini overlay
-          const baseUrl = isDev
-            ? (process.env.ELECTRON_DEV_URL || devProxyUrl)
-            : `${useH2 ? "https" : "http"}://localhost:${PROD_SERVER_PORT}`;
           showOverlay({
             baseUrl,
-            preloadPath: path.join(__dirname, "preload.js"),
+            preloadPath: path.join(__dirname, "mini-overlay-preload.js"),
           }).catch((err: unknown) => {
             debugError("[App] Failed to show mini overlay:", err);
           });

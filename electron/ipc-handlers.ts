@@ -18,6 +18,7 @@ import { registerScreenCaptureHandlers } from "./ipc-screen-capture-handlers";
 import { registerUnifiedCaptureHandlers } from "./ipc-unified-capture-handlers";
 import { registerPermissionHandlers } from "./permission-manager";
 import { registerMiniOverlayHandlers } from "./mini-overlay-ipc-handlers";
+import { registerOverlaySessionHandlers } from "./ipc-overlay-session-handlers";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -171,6 +172,7 @@ export function setupIpcHandlers(ctx: IpcHandlerContext): void {
   registerUnifiedCaptureHandlers(ctx);
   registerPermissionHandlers(ctx);
   registerMiniOverlayHandlers(ctx);
+  registerOverlaySessionHandlers();
   registerComfyUIHandlers(ctx);
   registerFlux2Handlers(ctx);
   registerBrowserSessionHandlers(ctx);

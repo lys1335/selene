@@ -2,6 +2,7 @@
 import { useRef, useEffect, useState } from "react";
 import { X, Mic, Brain, Volume2, Check, AlertCircle, Loader2 } from "lucide-react";
 import type { MiniOverlayPhase } from "@/lib/electron/types";
+import type { ReactNode } from "react";
 
 interface RecordingPillProps {
   phase: MiniOverlayPhase;
@@ -11,6 +12,10 @@ interface RecordingPillProps {
   analyserNode?: AnalyserNode | null;
   onCancel: () => void;
   onClose: () => void;
+  /** Optional slot rendered at the top of the pill, above the phase content. */
+  agentPicker?: ReactNode;
+  /** Optional slot rendered at the bottom of the pill, below the cancel button. */
+  modeToggle?: ReactNode;
 }
 
 export function RecordingPill({
@@ -21,6 +26,8 @@ export function RecordingPill({
   analyserNode,
   onCancel,
   onClose,
+  agentPicker,
+  modeToggle,
 }: RecordingPillProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [resolvedPrimaryColor, setResolvedPrimaryColor] = useState("#6366f1");
@@ -118,6 +125,14 @@ export function RecordingPill({
           </div>
         );
 
+      case "compose-pending":
+        return (
+          <div className="flex items-center gap-2 py-2">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Opening composer...</span>
+          </div>
+        );
+
       case "done":
         return (
           <div className="flex items-center gap-2 py-2">
@@ -168,6 +183,13 @@ export function RecordingPill({
         <X className="h-3.5 w-3.5" />
       </button>
 
+      {/* Agent picker slot — shown above phase content when provided */}
+      {agentPicker && (
+        <div className="w-full flex items-center px-3 pt-2">
+          {agentPicker}
+        </div>
+      )}
+
       {/* Main content */}
       <div className="flex-1 flex items-center justify-center w-full px-10 pt-4 pb-2">
         {renderContent()}
@@ -176,7 +198,7 @@ export function RecordingPill({
       {/* Cancel button */}
       {phase !== "done" && phase !== "error" && (
         <div
-          className="pb-3"
+          className="pb-2"
           style={{
             // @ts-ignore
             WebkitAppRegion: "no-drag",
@@ -188,6 +210,19 @@ export function RecordingPill({
           >
             Cancel
           </button>
+        </div>
+      )}
+
+      {/* Mode toggle slot */}
+      {modeToggle && (
+        <div
+          className="w-full flex items-center justify-center px-3 pb-3"
+          style={{
+            // @ts-ignore
+            WebkitAppRegion: "no-drag",
+          }}
+        >
+          {modeToggle}
         </div>
       )}
     </div>

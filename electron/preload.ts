@@ -490,6 +490,7 @@ const electronAPI = {
         "logs:clear",
         "mini-overlay:close",
         "mini-overlay:phase-update",
+        "mini-overlay:message-sent",
       ];
       if (validChannels.includes(channel)) {
         ipcRenderer.send(channel, ...args);
@@ -552,6 +553,7 @@ const electronAPI = {
         "browser-session:is-open",
         "browser-session:save-recording",
         "mini-overlay:request-focus-return",
+        "mini-overlay:compose-ready",
       ];
       if (validChannels.includes(channel)) {
         return ipcRenderer.invoke(channel, ...args);
@@ -560,13 +562,13 @@ const electronAPI = {
     },
     on: (channel: string, callback: (...args: unknown[]) => void): void => {
       // Whitelist of allowed channels
-      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered"];
+      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:reset", "overlay:session-updated", "overlay:compose-inject"];
       if (validChannels.includes(channel)) {
         ipcRenderer.on(channel, (_event, ...args) => callback(...args));
       }
     },
     removeAllListeners: (channel: string): void => {
-      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered"];
+      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:reset", "overlay:session-updated", "overlay:compose-inject"];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeAllListeners(channel);
       }
