@@ -501,8 +501,9 @@ export const Composer: FC<{
         }
       }
 
-      // Fetch and attach screenshot if provided
-      if (screenshotUrl) {
+      // Fetch and attach screenshot if provided (validate scheme first)
+      const ALLOWED_SCHEMES = ["/api/", "local-media:", "http://localhost", "https://localhost"];
+      if (screenshotUrl && ALLOWED_SCHEMES.some((s) => screenshotUrl.startsWith(s))) {
         void (async () => {
           try {
             const response = await fetch(screenshotUrl);

@@ -94,7 +94,7 @@ function MiniOverlayContent() {
     return () => {
       api?.ipc?.removeAllListeners?.("overlay:toggle-recording");
     };
-  }, [pipeline]);
+  }, [pipeline.phase, pipeline.stopRecording, pipeline.cancel, pipeline.startRecording]);
 
   const handleCancel = useCallback(() => {
     pipeline.cancel();
