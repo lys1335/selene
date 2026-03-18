@@ -84,6 +84,11 @@ export interface AppSettings {
   screenCaptureRetention?: "session" | "day" | "week" | "forever";
   screenCapturePreviewBeforeSend?: boolean;
   screenCaptureOnboardingSeen?: boolean;
+  // Mini Overlay settings
+  miniOverlayDefaultMode?: "direct" | "compose";
+  miniOverlayAutoCloseAfterSpeak?: boolean;
+  miniOverlayKeepAppFocusedOnCompose?: boolean;
+  miniOverlayShowScreenPreview?: boolean;
 }
 
 export type SettingsSection = "api-keys" | "models" | "vector-search" | "comfyui" | "preferences" | "memory" | "mcp" | "plugins" | "voice";
@@ -213,6 +218,11 @@ export interface FormState {
   voiceActionFormalTone: "auto" | "business" | "casual";
   voiceActionTranslationStyle: "natural" | "literal";
   voiceActionSummarizeLength: "short" | "medium" | "long";
+  // Mini Overlay settings
+  miniOverlayDefaultMode: "direct" | "compose";
+  miniOverlayAutoCloseAfterSpeak: boolean;
+  miniOverlayKeepAppFocusedOnCompose: boolean;
+  miniOverlayShowScreenPreview: boolean;
 }
 
 export const DEFAULT_FORM_STATE: FormState = {
@@ -332,6 +342,10 @@ export const DEFAULT_FORM_STATE: FormState = {
   voiceActionFormalTone: "auto",
   voiceActionTranslationStyle: "natural",
   voiceActionSummarizeLength: "medium",
+  miniOverlayDefaultMode: "direct",
+  miniOverlayAutoCloseAfterSpeak: false,
+  miniOverlayKeepAppFocusedOnCompose: true,
+  miniOverlayShowScreenPreview: true,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -453,5 +467,9 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     voiceActionFormalTone: data.voiceActionFormalTone ?? "auto",
     voiceActionTranslationStyle: data.voiceActionTranslationStyle ?? "natural",
     voiceActionSummarizeLength: data.voiceActionSummarizeLength ?? "medium",
+    miniOverlayDefaultMode: data.miniOverlayDefaultMode === "compose" ? "compose" : "direct",
+    miniOverlayAutoCloseAfterSpeak: data.miniOverlayAutoCloseAfterSpeak ?? false,
+    miniOverlayKeepAppFocusedOnCompose: data.miniOverlayKeepAppFocusedOnCompose ?? true,
+    miniOverlayShowScreenPreview: data.miniOverlayShowScreenPreview ?? true,
   };
 }

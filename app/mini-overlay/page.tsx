@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useCallback, useRef } from "react";
+import { Suspense, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMiniPipeline } from "@/lib/hooks/use-mini-pipeline";
 import { useOverlayAgentPicker } from "@/lib/hooks/use-overlay-agent-picker";
@@ -17,47 +17,37 @@ function MiniOverlayContent() {
   const screenshotUrl = searchParams.get("screenshotUrl") ?? undefined;
 
   const { agents, selectedAgent, selectAgent, loading: agentLoading } = useOverlayAgentPicker();
-  const { mode, setMode } = useOverlayMode();
+  const { mode, setMode, voicePostProcessing, autoCloseAfterSpeak, showScreenPreview } = useOverlayMode();
 
   // Resolve the effective characterId and sessionId from the picker or URL params
   const characterId = selectedAgent?.id ?? characterIdParam;
   const sessionId = selectedAgent?.lastSessionId ?? sessionIdParam;
-  const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Cleanup timer on unmount
-  useEffect(() => {
-    return () => {
-      if (doneTimerRef.current) {
-        clearTimeout(doneTimerRef.current);
-        doneTimerRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleDone = useCallback(() => {
-    const api = getElectronAPI();
-    // Return focus to previous app, then close overlay after a brief delay
-    doneTimerRef.current = setTimeout(async () => {
-      doneTimerRef.current = null;
+  // ---------------------------------------------------------------------------
+  // Compose handoff — invoked when pipeline.confirmCompose() fires onComposeReady
+  // ---------------------------------------------------------------------------
+  const handleComposeReady = useCallback(
+    async (payload: { transcript: string; screenshotUrl?: string; characterId?: string; sessionId?: string }) => {
+      const api = getElectronAPI();
       try {
-        await api?.ipc?.invoke("mini-overlay:request-focus-return");
+        await api?.ipc?.invoke("mini-overlay:compose-ready", payload);
       } catch {}
-      api?.ipc?.send("mini-overlay:close");
-    }, 1500);
-  }, []);
+      // Close the overlay after successful handoff to the main app
+      api?.ipc?.send("mini-overlay:dismiss");
+    },
+    [],
+  );
 
-  const handleComposeReady = useCallback((payload: { transcript: string; screenshotUrl?: string; characterId?: string; sessionId?: string }) => {
-    const api = getElectronAPI();
-    api?.ipc?.invoke("mini-overlay:compose-ready", payload).catch(() => {});
-  }, []);
-
+  // ---------------------------------------------------------------------------
+  // Pipeline — voicePostProcessing enabled by default
+  // ---------------------------------------------------------------------------
   const pipeline = useMiniPipeline({
     sessionId,
     characterId,
     screenshotUrl,
     autoStart: true,
     mode,
-    onDone: handleDone,
+    voicePostProcessing,
     onComposeReady: handleComposeReady,
   });
 
@@ -67,9 +57,19 @@ function MiniOverlayContent() {
     api?.ipc?.send("mini-overlay:phase-update", pipeline.phase);
   }, [pipeline.phase]);
 
-  // Listen for overlay:toggle-recording — same shortcut toggles behavior:
-  // If currently recording → stop and proceed to transcribe/AI/TTS
-  // If idle/done/error → start a fresh recording
+  // Auto-close after speak (direct mode done) if setting is enabled
+  useEffect(() => {
+    if (pipeline.phase !== "done" || mode !== "direct" || !autoCloseAfterSpeak) return;
+    const timer = setTimeout(() => {
+      const api = getElectronAPI();
+      api?.ipc?.send("mini-overlay:dismiss");
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [pipeline.phase, mode, autoCloseAfterSpeak]);
+
+  // ---------------------------------------------------------------------------
+  // Shortcut toggle: same shortcut toggles recording behavior
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     const api = getElectronAPI();
     if (!api?.ipc?.on) return;
@@ -79,16 +79,12 @@ function MiniOverlayContent() {
         pipeline.stopRecording();
       } else if (pipeline.phase === "idle" || pipeline.phase === "done" || pipeline.phase === "error") {
         // Start a fresh recording
-        if (doneTimerRef.current) {
-          clearTimeout(doneTimerRef.current);
-          doneTimerRef.current = null;
-        }
         pipeline.cancel();
         setTimeout(() => {
           pipeline.startRecording();
         }, 100);
       }
-      // During transcribing/thinking/speaking — ignore the shortcut (pipeline is working)
+      // During transcribing/refining/thinking/speaking/compose-review/compose-pending — ignore
     };
     api.ipc.on("overlay:toggle-recording", handleToggle);
     return () => {
@@ -96,15 +92,27 @@ function MiniOverlayContent() {
     };
   }, [pipeline.phase, pipeline.stopRecording, pipeline.cancel, pipeline.startRecording]);
 
+  // ---------------------------------------------------------------------------
+  // Actions
+  // ---------------------------------------------------------------------------
+
+  /** Cancel and close the overlay entirely. */
   const handleCancel = useCallback(() => {
     pipeline.cancel();
-    if (doneTimerRef.current) {
-      clearTimeout(doneTimerRef.current);
-      doneTimerRef.current = null;
-    }
     const api = getElectronAPI();
     api?.ipc?.send("mini-overlay:close");
   }, [pipeline.cancel]);
+
+  /** Compose-review: user clicks "Open in Selene". */
+  const handleConfirmCompose = useCallback(() => {
+    pipeline.confirmCompose();
+  }, [pipeline.confirmCompose]);
+
+  /** Done phase: user clicks "Close" to dismiss overlay. */
+  const handleDismiss = useCallback(() => {
+    const api = getElectronAPI();
+    api?.ipc?.send("mini-overlay:dismiss");
+  }, []);
 
   const handleClose = handleCancel;
 
@@ -115,7 +123,12 @@ function MiniOverlayContent() {
     }
   }, [pipeline.phase, pipeline.stopRecording]);
 
-  const isActivePipeline = pipeline.phase !== "idle" && pipeline.phase !== "done" && pipeline.phase !== "error";
+  // Allow mode switching during recording — mode only matters after transcription
+  const isModeChangeBlocked =
+    pipeline.phase !== "idle" &&
+    pipeline.phase !== "done" &&
+    pipeline.phase !== "error" &&
+    pipeline.phase !== "recording";
 
   return (
     <div className="flex items-start justify-center w-full h-full">
@@ -128,7 +141,9 @@ function MiniOverlayContent() {
         onCancel={handleCancel}
         onClose={handleClose}
         onStopRecording={handleStopRecording}
-        screenshotUrl={screenshotUrl}
+        onConfirmCompose={handleConfirmCompose}
+        onDismiss={handleDismiss}
+        screenshotUrl={showScreenPreview ? screenshotUrl : undefined}
         agentPicker={
           !agentLoading && agents.length > 0 ? (
             <AgentPicker
@@ -142,7 +157,7 @@ function MiniOverlayContent() {
           <ModeToggle
             mode={mode}
             onChange={setMode}
-            disabled={isActivePipeline}
+            disabled={isModeChangeBlocked}
           />
         }
       />

@@ -46,7 +46,6 @@ export function registerOverlaySessionHandlers(): void {
 
     // Import here to avoid circular deps at module load time
     const { showAndFocusMainWindow } = await import("./window-manager");
-    const { hideOverlay } = await import("./mini-overlay-window");
 
     await showAndFocusMainWindow();
 
@@ -57,7 +56,8 @@ export function registerOverlaySessionHandlers(): void {
       mw.webContents.send("overlay:compose-inject", payload);
     }
 
-    hideOverlay();
+    // Do NOT hide the overlay here — the overlay controls its own lifecycle.
+    // It will close itself after showing a brief "Done" confirmation.
     return { success: true };
   });
 

@@ -25,9 +25,19 @@ const G = globalThis as typeof globalThis & {
 };
 
 function getOverlayWindow(): BrowserWindow | null {
-  return G.__miniOverlayWindow && !G.__miniOverlayWindow.isDestroyed()
-    ? G.__miniOverlayWindow
-    : null;
+  const win = G.__miniOverlayWindow;
+  if (!win || win.isDestroyed()) {
+    return null;
+  }
+  // A window with crashed webContents is unusable — destroy it so the next
+  // call creates a fresh one.
+  if (win.webContents.isCrashed()) {
+    debugLog("[MiniOverlay] webContents crashed — destroying stale window");
+    try { win.destroy(); } catch {}
+    setOverlayWindow(null);
+    return null;
+  }
+  return win;
 }
 
 function setOverlayWindow(win: BrowserWindow | null): void {
@@ -130,7 +140,7 @@ export async function showOverlay(opts: ShowOverlayOptions): Promise<void> {
   G.__miniOverlayLoadPromise = (async () => {
     try {
       let win = getOverlayWindow();
-      const isReused = !!win;
+      let isReused = !!win;
       if (!win) {
         debugLog("[MiniOverlay] Creating new overlay window");
         win = createOverlayWindow(opts);
@@ -141,17 +151,50 @@ export async function showOverlay(opts: ShowOverlayOptions): Promise<void> {
 
       const url = buildOverlayUrl(opts);
       debugLog("[MiniOverlay] Loading URL:", url);
-      await win.loadURL(url);
+
+      try {
+        await win.loadURL(url);
+      } catch (loadErr) {
+        // loadURL can fail if the renderer crashed, the window was destroyed
+        // during navigation, or the URL is unreachable.  If we were reusing
+        // an existing window, destroy it and create a fresh one.
+        if (isReused) {
+          debugError("[MiniOverlay] loadURL failed on reused window — recreating:", loadErr);
+          try { win.destroy(); } catch {}
+          setOverlayWindow(null);
+
+          win = createOverlayWindow(opts);
+          setOverlayWindow(win);
+          isReused = false;
+          await win.loadURL(url);  // let this throw if it fails again
+        } else {
+          throw loadErr;
+        }
+      }
+
+      // Guard: window may have been destroyed during async loadURL
+      if (win.isDestroyed()) {
+        debugLog("[MiniOverlay] Window destroyed during loadURL — aborting");
+        return;
+      }
 
       // For reused windows, ready-to-show does not fire again after loadURL —
       // explicitly show and focus to ensure the hidden window becomes visible.
-      if (isReused && !win.isDestroyed()) {
+      if (isReused) {
         win.show();
         win.focus();
         debugLog("[MiniOverlay] Reused window shown and focused after loadURL");
       }
     } catch (err) {
       debugError("[MiniOverlay] Failed to show overlay:", err);
+      // If we created a window but loadURL failed, destroy it so we don't
+      // leave a blank/broken window around.
+      const stale = getOverlayWindow();
+      if (stale) {
+        try { stale.destroy(); } catch {}
+        setOverlayWindow(null);
+        debugLog("[MiniOverlay] Destroyed window after load failure");
+      }
       throw err;
     }
   })().finally(() => {

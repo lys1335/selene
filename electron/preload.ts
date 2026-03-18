@@ -491,6 +491,7 @@ const electronAPI = {
         "mini-overlay:close",
         "mini-overlay:phase-update",
         "mini-overlay:message-sent",
+        "mini-overlay:dismiss",
       ];
       if (validChannels.includes(channel)) {
         ipcRenderer.send(channel, ...args);

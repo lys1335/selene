@@ -71,6 +71,16 @@ export function registerMiniOverlayHandlers(_ctx: IpcHandlerContext): void {
     return { success: true };
   });
 
+  // --------------------------------------------------------------------------
+  // mini-overlay:dismiss
+  // Renderer requests the overlay to be hidden without returning focus to the
+  // previously active application. Used by the "Close" button in the done phase.
+  // --------------------------------------------------------------------------
+  ipcMain.on("mini-overlay:dismiss", () => {
+    debugLog("[MiniOverlay IPC] Received dismiss request (no focus return)");
+    hideOverlay();
+  });
+
   // NOTE: mini-overlay:message-sent and mini-overlay:compose-ready are handled
   // by ipc-overlay-session-handlers.ts which correctly targets the main window
   // (not broadcast to all windows) and handles compose-mode show/focus.

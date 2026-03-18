@@ -468,6 +468,22 @@ export const Composer: FC<{
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isEditorMode]);
 
+  // Stable refs for compose-inject handler — avoids re-registering the
+  // listener on every voice/capture state change, and gives the handler
+  // access to the latest values without stale closures.
+  const handleVoiceStopRef = useRef(handleVoiceStop);
+  handleVoiceStopRef.current = handleVoiceStop;
+  const isRecordingVoiceRef = useRef(isRecordingVoice);
+  isRecordingVoiceRef.current = isRecordingVoice;
+  const isTranscribingVoiceRef = useRef(isTranscribingVoice);
+  isTranscribingVoiceRef.current = isTranscribingVoice;
+  const captureSessionRef = useRef(captureSession);
+  captureSessionRef.current = captureSession;
+
+  // Deduplication guard: ignore compose-inject events that arrive within
+  // 2 seconds of a previous one (e.g. overlay dismiss delay → double trigger).
+  const lastComposeInjectTimestampRef = useRef(0);
+
   // Overlay compose-inject: receive transcript + optional screenshot from the
   // mini-overlay (via OverlaySyncBridge → custom window event) and inject them
   // into the main window composer.
@@ -475,6 +491,27 @@ export const Composer: FC<{
     const handleOverlayInject = (e: Event) => {
       const payload = (e as CustomEvent<{ transcript: string; screenshotUrl?: string }>).detail;
       if (!payload) return;
+
+      // Dedup guard: ignore if another compose-inject arrived within the last 2s
+      const now = Date.now();
+      if (now - lastComposeInjectTimestampRef.current < 2000) {
+        console.warn("[Composer] Ignoring duplicate compose-inject event (debounce)");
+        return;
+      }
+      lastComposeInjectTimestampRef.current = now;
+
+      // If the main composer has an active voice recording or transcription,
+      // stop it immediately so the user doesn't see conflicting UI (duplicate
+      // waveforms, "Transcribing..." spinners, etc.)
+      if (isRecordingVoiceRef.current) {
+        handleVoiceStopRef.current();
+      }
+
+      // If a unified capture session is active, cancel it to avoid stale
+      // screenshot state and overlay UI conflicts.
+      if (captureSessionRef.current.isUnifiedSession) {
+        captureSessionRef.current.cancelSession();
+      }
 
       const { transcript, screenshotUrl } = payload;
 

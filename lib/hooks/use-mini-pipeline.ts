@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { type MiniOverlayPhase, getElectronAPI } from "@/lib/electron/types";
+import { refineTranscript } from "@/lib/audio/refine-transcript";
 
 // Re-export for convenience
 export type { MiniOverlayPhase };
@@ -12,7 +13,7 @@ interface UseMiniPipelineOptions {
   screenshotUrl?: string;
   autoStart?: boolean;
   mode?: "direct" | "compose";
-  onDone?: () => void;
+  voicePostProcessing?: boolean;
   onError?: (error: string) => void;
   onComposeReady?: (payload: { transcript: string; screenshotUrl?: string; characterId?: string; sessionId?: string }) => void;
 }
@@ -26,10 +27,21 @@ interface UseMiniPipelineReturn {
   startRecording: () => Promise<void>;
   stopRecording: () => void;
   cancel: () => void;
+  /** Compose mode: user confirms handoff to main app. */
+  confirmCompose: () => void;
 }
 
 export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelineReturn {
-  const { sessionId, characterId, screenshotUrl, autoStart, mode = "direct", onDone, onError, onComposeReady } = options;
+  const {
+    sessionId,
+    characterId,
+    screenshotUrl,
+    autoStart,
+    mode = "direct",
+    voicePostProcessing = true,
+    onError,
+    onComposeReady,
+  } = options;
 
   const [phase, setPhase] = useState<MiniPipelinePhase>("idle");
   const [transcript, setTranscript] = useState("");
@@ -43,6 +55,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
   const chunksRef = useRef<Blob[]>([]);
   // Separate abort controllers for each pipeline stage so cancellation is precise
   const transcribeAbortRef = useRef<AbortController | null>(null);
+  const refineAbortRef = useRef<AbortController | null>(null);
   const chatAbortRef = useRef<AbortController | null>(null);
   const ttsAbortRef = useRef<AbortController | null>(null);
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -85,6 +98,8 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     // Abort all in-flight fetches
     transcribeAbortRef.current?.abort();
     transcribeAbortRef.current = null;
+    refineAbortRef.current?.abort();
+    refineAbortRef.current = null;
     chatAbortRef.current?.abort();
     chatAbortRef.current = null;
     ttsAbortRef.current?.abort();
@@ -99,12 +114,44 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
   const cancel = useCallback(() => {
     cancelledRef.current = true;
+    // Discard any buffered audio chunks so that even if the onstop handler
+    // somehow runs past the cancelledRef guard, it produces an empty blob.
+    chunksRef.current = [];
     stopAllStreams();
     setPhase("idle");
     setTranscript("");
     setResponse("");
     setError("");
   }, [stopAllStreams]);
+
+  // -------------------------------------------------------------------------
+  // confirmCompose — called by the page when user clicks "Open in Selene"
+  // while in compose-review phase.
+  // -------------------------------------------------------------------------
+  const confirmCompose = useCallback(() => {
+    if (cancelledRef.current) return;
+    // Only allow confirmCompose from the compose-review phase
+    if (phase !== "compose-review") return;
+    setPhase("compose-pending");
+    onComposeReady?.({
+      transcript,
+      screenshotUrl,
+      characterId,
+      sessionId,
+    });
+    // Brief "compose-pending" display, then move to done.
+    // The page controls when to actually close the overlay.
+    // Clear any previous timer to prevent double-fire on rapid clicks.
+    if (doneTimerRef.current) {
+      clearTimeout(doneTimerRef.current);
+    }
+    doneTimerRef.current = setTimeout(() => {
+      doneTimerRef.current = null;
+      if (!cancelledRef.current) {
+        setPhase("done");
+      }
+    }, 500);
+  }, [phase, transcript, screenshotUrl, characterId, sessionId, onComposeReady]);
 
   const startRecording = useCallback(async () => {
     cancelledRef.current = false;
@@ -137,7 +184,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
+        if (e.data.size > 0 && !cancelledRef.current) {
           chunksRef.current.push(e.data);
         }
       };
@@ -163,7 +210,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
         // --- Transcribe ---
         transcribeAbortRef.current = new AbortController();
-        let transcriptText = "";
+        let rawTranscript = "";
         try {
           const formData = new FormData();
           formData.append("file", blob, "recording.webm");
@@ -174,7 +221,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           });
           if (!transcribeRes.ok) throw new Error(`Transcription failed: ${transcribeRes.status}`);
           const transcribeData = await transcribeRes.json();
-          transcriptText = transcribeData.transcript ?? transcribeData.text ?? "";
+          rawTranscript = transcribeData.transcript ?? transcribeData.text ?? "";
         } catch (err: unknown) {
           if (cancelledRef.current) return;
           const msg = err instanceof Error ? err.message : String(err);
@@ -185,28 +232,38 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         }
 
         if (cancelledRef.current) return;
-        setTranscript(transcriptText);
 
-        // --- Compose mode: skip chat + TTS, hand off to composer ---
+        // --- Refine (voice post-processing) ---
+        let finalTranscript = rawTranscript;
+        if (voicePostProcessing && rawTranscript.length > 0) {
+          setPhase("refining");
+          refineAbortRef.current = new AbortController();
+          try {
+            const result = await refineTranscript({
+              rawTranscript,
+              postProcessingEnabled: true,
+              signal: refineAbortRef.current.signal,
+            });
+            finalTranscript = result.finalText;
+          } catch {
+            // Refinement failed — use raw transcript
+            if (cancelledRef.current) return;
+          }
+        }
+
+        if (cancelledRef.current) return;
+        setTranscript(finalTranscript);
+
+        // --- Compose mode: pause at compose-review for user confirmation ---
         if (mode === "compose") {
-          setPhase("compose-pending");
-          onComposeReady?.({
-            transcript: transcriptText,
-            screenshotUrl,
-            characterId,
-            sessionId,
-          });
-          if (cancelledRef.current) return;
-          setPhase("done");
-          doneTimerRef.current = setTimeout(() => {
-            doneTimerRef.current = null;
-            if (!cancelledRef.current) {
-              onDone?.();
-            }
-          }, 1000);
+          setPhase("compose-review");
+          // Stop here. The user will click "Open in Selene" to trigger
+          // confirmCompose(), which calls onComposeReady and transitions
+          // to compose-pending → done.
           return;
         }
 
+        // --- Direct mode: continue to chat + TTS ---
         setPhase("thinking");
 
         // --- Resolve session (24h window) ---
@@ -234,7 +291,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
             id: resolvedSessionId,
             message: {
               role: "user",
-              content: transcriptText,
+              content: finalTranscript,
               ...(screenshotUrl
                 ? {
                     experimental_attachments: [
@@ -340,14 +397,24 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         }
 
         if (cancelledRef.current) return;
+        // Direct mode: enter done phase. The page controls close/dismiss behavior.
+        // No auto-close timer — the user or settings determine when to close.
         setPhase("done");
-        doneTimerRef.current = setTimeout(() => {
-          doneTimerRef.current = null;
-          if (!cancelledRef.current) {
-            onDone?.();
-          }
-        }, 1000);
       };
+
+      // If cancel was called while we were setting up the recorder (between
+      // getUserMedia resolving and here), bail before starting. stopAllStreams()
+      // would have found mediaRecorderRef still null, so the recorder was never
+      // stopped — we must clean it up ourselves.
+      if (cancelledRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        ac.close().catch(() => {});
+        mediaRecorderRef.current = null;
+        audioContextRef.current = null;
+        streamRef.current = null;
+        setAnalyserNode(null);
+        return;
+      }
 
       // Request data every 250ms to avoid holding entire recording in memory
       recorder.start(250);
@@ -359,7 +426,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       setPhase("error");
       onError?.(msg);
     }
-  }, [sessionId, characterId, screenshotUrl, mode, onDone, onError, onComposeReady]);
+  }, [sessionId, characterId, screenshotUrl, mode, voicePostProcessing, onError]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
@@ -394,5 +461,6 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     startRecording,
     stopRecording,
     cancel,
+    confirmCompose,
   };
 }

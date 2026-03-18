@@ -20,6 +20,10 @@ interface RecordingPillProps {
   modeToggle?: ReactNode;
   /** Screenshot context for the current session — shown as a small thumbnail. */
   screenshotUrl?: string;
+  /** Called when the user clicks "Open in Selene" in compose-review phase. */
+  onConfirmCompose?: () => void;
+  /** Called when the user clicks "Close" in done phase. */
+  onDismiss?: () => void;
 }
 
 export function RecordingPill({
@@ -34,6 +38,8 @@ export function RecordingPill({
   agentPicker,
   modeToggle,
   screenshotUrl,
+  onConfirmCompose,
+  onDismiss,
 }: RecordingPillProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [resolvedPrimaryColor, setResolvedPrimaryColor] = useState("#6366f1");
@@ -124,6 +130,14 @@ export function RecordingPill({
           </div>
         );
 
+      case "refining":
+        return (
+          <div className="flex items-center gap-2 py-2">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <span className="text-sm font-medium text-foreground">Refining...</span>
+          </div>
+        );
+
       case "thinking":
         return (
           <div className="flex items-center gap-2 py-2">
@@ -155,11 +169,65 @@ export function RecordingPill({
           </div>
         );
 
+      case "compose-review":
+        return (
+          <div className="flex flex-col items-center gap-3 py-2 px-2 w-full">
+            {transcript && (
+              <p className="text-xs text-muted-foreground text-center line-clamp-3 max-w-[380px]">
+                {transcript}
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onConfirmCompose?.();
+                }}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+                style={{
+                  // @ts-ignore
+                  WebkitAppRegion: "no-drag",
+                }}
+              >
+                Open in Selene
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCancel();
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-muted-foreground text-xs hover:text-foreground hover:bg-muted/50 transition-colors"
+                style={{
+                  // @ts-ignore
+                  WebkitAppRegion: "no-drag",
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        );
+
       case "done":
         return (
-          <div className="flex items-center gap-2 py-2">
-            <Check className="h-4 w-4 text-green-500" />
-            <span className="text-sm font-medium text-foreground">Done</span>
+          <div className="flex flex-col items-center gap-2 py-2">
+            <div className="flex items-center gap-2">
+              <Check className="h-4 w-4 text-green-500" />
+              <span className="text-sm font-medium text-foreground">Done</span>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDismiss?.();
+              }}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1 rounded-full hover:bg-muted/50"
+              style={{
+                // @ts-ignore
+                WebkitAppRegion: "no-drag",
+              }}
+            >
+              Close
+            </button>
           </div>
         );
 
@@ -230,7 +298,7 @@ export function RecordingPill({
       </div>
 
       {/* Cancel button */}
-      {phase !== "done" && phase !== "error" && (
+      {phase !== "done" && phase !== "error" && phase !== "compose-review" && (
         <div
           className="pb-2"
           style={{

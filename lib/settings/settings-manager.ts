@@ -291,6 +291,11 @@ export interface AppSettings {
     // First-visit modals
     hasSeenThemeChooser?: boolean;          // Whether user has seen the post-onboarding theme chooser
 
+    // Mini Overlay settings
+    miniOverlayDefaultMode?: "direct" | "compose";
+    miniOverlayAutoCloseAfterSpeak?: boolean;
+    miniOverlayKeepAppFocusedOnCompose?: boolean;
+    miniOverlayShowScreenPreview?: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -412,6 +417,11 @@ const DEFAULT_SETTINGS: AppSettings = {
     // Browser automation defaults
     chromiumBrowserMode: "standalone",
     chromiumUserProfilePath: "",
+    // Mini Overlay defaults
+    miniOverlayDefaultMode: "direct",
+    miniOverlayAutoCloseAfterSpeak: false,
+    miniOverlayKeepAppFocusedOnCompose: true,
+    miniOverlayShowScreenPreview: true,
 };
 
 function getSettingsPath(): string {

@@ -914,6 +914,59 @@ export function SettingsPanel({
           </SettingsPanelCard>
 
           <SettingsPanelCard
+            title="Mini Overlay"
+            description="Behavior for the floating voice overlay triggered by the global shortcut."
+          >
+            <SettingsOptionGroup
+              title="Default mode"
+              description="Which mode the overlay starts in when no preference is stored."
+            >
+              <SettingsRadioCard
+                id="miniOverlayDefaultMode-direct"
+                name="miniOverlayDefaultMode"
+                value="direct"
+                label="Direct"
+                description="Send message immediately and get a spoken response."
+                checked={formState.miniOverlayDefaultMode === "direct"}
+                onChange={() => updateField("miniOverlayDefaultMode", "direct")}
+              />
+              <SettingsRadioCard
+                id="miniOverlayDefaultMode-compose"
+                name="miniOverlayDefaultMode"
+                value="compose"
+                label="Compose"
+                description="Refine transcript, then open as a draft in Selene."
+                checked={formState.miniOverlayDefaultMode === "compose"}
+                onChange={() => updateField("miniOverlayDefaultMode", "compose")}
+              />
+            </SettingsOptionGroup>
+
+            <SettingsToggleRow
+              id="miniOverlayAutoCloseAfterSpeak"
+              label="Auto-close after response"
+              description="In Direct mode, close the overlay automatically after TTS finishes speaking."
+              checked={formState.miniOverlayAutoCloseAfterSpeak}
+              onChange={(checked) => updateField("miniOverlayAutoCloseAfterSpeak", checked)}
+            />
+
+            <SettingsToggleRow
+              id="miniOverlayShowScreenPreview"
+              label="Show screen preview"
+              description="Display a screenshot thumbnail in the overlay when a screen capture is attached."
+              checked={formState.miniOverlayShowScreenPreview}
+              onChange={(checked) => updateField("miniOverlayShowScreenPreview", checked)}
+            />
+
+            <SettingsToggleRow
+              id="miniOverlayKeepAppFocusedOnCompose"
+              label="Keep Selene focused after compose"
+              description="When handing off to Compose mode, keep Selene in the foreground instead of returning to the previous app."
+              checked={formState.miniOverlayKeepAppFocusedOnCompose}
+              onChange={(checked) => updateField("miniOverlayKeepAppFocusedOnCompose", checked)}
+            />
+          </SettingsPanelCard>
+
+          <SettingsPanelCard
             title={t("voice.privacy.title")}
             description={t("voice.privacy.description")}
           >

@@ -440,7 +440,7 @@ app.whenReady().then(async () => {
           ? (process.env.ELECTRON_DEV_URL || devProxyUrl)
           : `${useH2 ? "https" : "http"}://localhost:${PROD_SERVER_PORT}`;
         const overlay = getOverlay();
-        if (overlay && !overlay.isDestroyed() && overlay.isVisible()) {
+        if (overlay && !overlay.isDestroyed() && overlay.isVisible() && !overlay.webContents.isCrashed()) {
           // Overlay already showing — toggle recording:
           // If recording → stop and proceed to transcribe/AI/TTS
           // If idle/done/error → start a fresh recording
