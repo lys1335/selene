@@ -313,10 +313,6 @@ export const MODEL_METADATA: Record<
     tier: "standard",
     capabilities: { vision: false, thinking: true, contextWindow: "131K", speed: "standard" },
   },
-  "blackbox-search": {
-    tier: "utility",
-    capabilities: { vision: false, contextWindow: "1M", speed: "fast" },
-  },
   "perplexity/sonar-pro": {
     tier: "standard",
     capabilities: { vision: false, contextWindow: "200K", speed: "standard" },

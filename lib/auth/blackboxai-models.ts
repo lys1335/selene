@@ -463,9 +463,6 @@ export type BlackBoxModelId = (typeof BLACKBOX_ALL_MODEL_IDS)[number] | (string 
  * Users can enter any model ID from the full catalogue via custom input.
  */
 export const BLACKBOX_MODEL_IDS = [
-  // BlackBox Native
-  "blackbox-search",
-
   // Anthropic
   "anthropic/claude-sonnet-4.5",
   "anthropic/claude-opus-4.5",
@@ -569,7 +566,7 @@ export const BLACKBOX_MODEL_IDS = [
 // Default models for different roles
 export const BLACKBOX_DEFAULT_MODELS = {
   chat: "anthropic/claude-sonnet-4.5" as BlackBoxModelId,
-  utility: "blackbox-search" as BlackBoxModelId,
+  utility: "openai/gpt-4o-mini" as BlackBoxModelId,
   research: "anthropic/claude-opus-4.5" as BlackBoxModelId,
   vision: "openai/gpt-4o" as BlackBoxModelId,
   coding: "openai/gpt-5.2-codex" as BlackBoxModelId,
