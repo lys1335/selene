@@ -42,7 +42,7 @@ export const MODEL_METADATA: Record<
   // --- 4.6 / 4.5 Series ---
   "claude-opus-4-6": {
     tier: "flagship",
-    capabilities: { vision: true, thinking: true, contextWindow: "200K", speed: "standard" },
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "standard" },
   },
   "claude-sonnet-4-6": {
     tier: "flagship",

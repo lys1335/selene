@@ -118,11 +118,16 @@ export const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>>
     supportsStreaming: true,
   },
 
-  // Antigravity (Claude-based) — 200K standard context window
+  // Claude Code — Opus 4.6 has 1M context via Agent SDK
   "claude-opus-4-6": {
-    maxTokens: 200000,
+    maxTokens: 1000000,
     supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
   },
+
+  // Antigravity (Claude-based) — standard 200K context
   "claude-opus-4-6-thinking": {
     maxTokens: 200000,
     supportsStreaming: true,
