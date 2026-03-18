@@ -15,16 +15,17 @@ export const ExpandAllToolsButton: FC = () => {
   const ctx = useToolExpansion();
   const t = useTranslations("assistantUi.tools");
 
-  // Keyboard shortcut: Shift+E toggles all tool details, but only when NOT typing in an input.
+  // Keyboard shortcut: Shift+E toggles all tool details.
+  // Works from the composer (textarea / contentEditable) too — the shortcut
+  // is specific enough (shiftKey + 'e' + no meta/ctrl/alt) to not conflict
+  // with normal typing. Only skip standalone <input> fields (search boxes, etc.)
+  // where Shift+E legitimately types "E".
   useEffect(() => {
     if (!ctx) return;
     const handler = (e: KeyboardEvent) => {
       if (e.shiftKey && e.key.toLowerCase() === "e" && !e.metaKey && !e.ctrlKey && !e.altKey) {
         const el = document.activeElement as HTMLElement | null;
-        if (el) {
-          const tag = el.tagName;
-          if (tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable) return;
-        }
+        if (el?.tagName === "INPUT") return;
         e.preventDefault();
         ctx.toggleAll();
       }

@@ -1,9 +1,8 @@
 /** @vitest-environment jsdom */
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
-import { act, createElement } from "react";
+import { createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", () => ({
@@ -51,24 +50,24 @@ describe("ExpandAllToolsButton keyboard shortcut", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
 
-    await act(async () => {
+    flushSync(() => {
       root.render(createElement(Harness));
     });
   });
 
-  afterEach(async () => {
-    await act(async () => {
+  afterEach(() => {
+    flushSync(() => {
       root.unmount();
     });
     container.remove();
   });
 
-  it("toggles tool expansion when Shift+E is pressed from the focused composer", async () => {
+  it("toggles tool expansion when Shift+E is pressed from the focused composer", () => {
     const composer = container.querySelector("textarea");
     const state = container.querySelector("[data-testid='expansion-state']");
 
@@ -86,7 +85,7 @@ describe("ExpandAllToolsButton keyboard shortcut", () => {
       cancelable: true,
     });
 
-    await act(async () => {
+    flushSync(() => {
       composer?.dispatchEvent(event);
     });
 
@@ -95,7 +94,7 @@ describe("ExpandAllToolsButton keyboard shortcut", () => {
     expect(state?.getAttribute("data-counter")).toBe("1");
   });
 
-  it("does not toggle tool expansion for normal composer typing", async () => {
+  it("does not toggle tool expansion for normal composer typing", () => {
     const composer = container.querySelector("textarea");
     const state = container.querySelector("[data-testid='expansion-state']");
 
@@ -107,7 +106,7 @@ describe("ExpandAllToolsButton keyboard shortcut", () => {
       cancelable: true,
     });
 
-    await act(async () => {
+    flushSync(() => {
       composer?.dispatchEvent(event);
     });
 
