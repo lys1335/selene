@@ -175,7 +175,7 @@ import {
   registerVoiceHotkeyFromSettings,
 } from "./hotkey-manager";
 import { emitCapturedScreen } from "./ipc-screen-capture-handlers";
-import { cleanScreenshotsByRetention } from "./screen-capture";
+import { captureDisplay, cleanScreenshotsByRetention } from "./screen-capture";
 import { loadSettings } from "../lib/settings/settings-manager";
 import { createUnifiedCaptureTrigger } from "./ipc-unified-capture-handlers";
 import { cleanupAllVoiceProcesses } from "../lib/audio/transcription";
@@ -430,8 +430,9 @@ app.whenReady().then(async () => {
   }
 
   // Register unified capture hotkey (voice + screen) — always routes to mini overlay.
-  // If the overlay is already visible, send a reset signal to start a new recording.
-  // If it is hidden or not yet created, create and show it.
+  // If the overlay is already visible, send a toggle-recording signal.
+  // If hidden or not yet created, capture a screenshot FIRST, then show the overlay
+  // with the screenshot URL so the entire pipeline has the capture from the start.
   try {
     const hotkeyResult = registerUnifiedCaptureHotkeyFromSettings({
       dataDir,
@@ -446,12 +447,23 @@ app.whenReady().then(async () => {
           // If idle/done/error → start a fresh recording
           overlay.webContents.send("overlay:toggle-recording");
         } else {
-          showOverlay({
-            baseUrl,
-            preloadPath: path.join(__dirname, "preload.js"),
-          }).catch((err: unknown) => {
-            debugError("[App] Failed to show mini overlay:", err);
-          });
+          // Capture screenshot BEFORE showing overlay so the capture shows the
+          // user's actual screen, not the overlay window itself.
+          captureDisplay({ mediaDir })
+            .then((captureResult) => {
+              const screenshotUrl = captureResult.success ? captureResult.imageUrl : undefined;
+              if (!captureResult.success) {
+                debugLog("[App] Screenshot capture failed, opening overlay without screenshot:", captureResult.error);
+              }
+              return showOverlay({
+                baseUrl,
+                preloadPath: path.join(__dirname, "preload.js"),
+                screenshotUrl,
+              });
+            })
+            .catch((err: unknown) => {
+              debugError("[App] Failed to show mini overlay:", err);
+            });
         }
       },
     });

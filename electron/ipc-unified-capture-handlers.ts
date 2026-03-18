@@ -1,4 +1,5 @@
 import { ipcMain, screen } from "electron";
+import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { IpcHandlerContext } from "./ipc-handlers";
 import { captureDisplay } from "./screen-capture";
@@ -9,6 +10,7 @@ import {
   getRegisteredUnifiedCaptureHotkey,
   clearUnifiedCaptureHotkey,
 } from "./hotkey-manager";
+import { getOverlay, showOverlay } from "./mini-overlay-window";
 import { debugLog, debugError } from "./debug-logger";
 import { UNIFIED_CAPTURE_DEBOUNCE_MARKER } from "../lib/electron/types";
 import { loadSettings } from "../lib/settings/settings-manager";
@@ -141,13 +143,39 @@ async function executeUnifiedCapture(
 
 /**
  * Creates a trigger callback for the unified capture hotkey.
- * Used by both IPC handler registration and main.ts startup hotkey.
+ * Always routes to the mini overlay — captures screenshot first,
+ * then opens the overlay with the screenshot URL.
+ * If the overlay is already visible, sends a toggle-recording signal instead.
  */
 export function createUnifiedCaptureTrigger(ctx: IpcHandlerContext): () => void {
   return () => {
-    void executeUnifiedCapture(ctx, "voice+screen").catch((err) => {
-      debugError("[UnifiedCapture] Unexpected error in hotkey trigger:", err);
-    });
+    const baseUrl = ctx.isDev
+      ? (process.env.ELECTRON_DEV_URL || `http://localhost:3000`)
+      : `${ctx.prodUseHttps ? "https" : "http"}://localhost:${ctx.prodServerPort}`;
+
+    const overlay = getOverlay();
+    if (overlay && !overlay.isDestroyed() && overlay.isVisible() && !overlay.webContents.isCrashed()) {
+      // Overlay already showing — toggle recording
+      overlay.webContents.send("overlay:toggle-recording");
+      return;
+    }
+
+    // Capture screenshot BEFORE showing overlay so capture shows user's screen
+    captureDisplay({ mediaDir: ctx.mediaDir })
+      .then((captureResult) => {
+        const screenshotUrl = captureResult.success ? captureResult.imageUrl : undefined;
+        if (!captureResult.success) {
+          debugLog("[UnifiedCapture] Screenshot capture failed, opening overlay without screenshot:", captureResult.error);
+        }
+        return showOverlay({
+          baseUrl,
+          preloadPath: path.join(__dirname, "preload.js"),
+          screenshotUrl,
+        });
+      })
+      .catch((err: unknown) => {
+        debugError("[UnifiedCapture] Failed to show mini overlay:", err);
+      });
   };
 }
 

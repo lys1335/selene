@@ -419,12 +419,11 @@ export const Composer: FC<{
     onClearAttachments: () => { threadRuntime.composer.clearAttachments(); },
   });
 
-  // Unified capture hook: listens for Cmd+Shift+A events from Electron,
-  // attaches screenshot and triggers voice recording in one action.
-  // Gated on its own setting + API — independent of standalone screenCapture.
+  // Unified capture hook — DISABLED: the mini overlay now handles all
+  // Cmd+Shift+A capture flows. Keeping the hook call with enabled=false
+  // so the import and plumbing remain available if needed as fallback.
   useUnifiedCapture({
-    enabled: quickCaptureEnabled && Boolean(electronAPI?.unifiedCapture),
-    // Block a new unified session if one is already active (prevents state overwrite)
+    enabled: false,
     isSessionActive: captureSession.isUnifiedSession,
     onScreenshotCaptured: handleAttachCapturedScreen,
     onStartVoice: () => { void handleVoiceInput(); },
