@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
-import type { MiniOverlayPhase } from "@/lib/electron/types";
+import { type MiniOverlayPhase, getElectronAPI } from "@/lib/electron/types";
 
 // Re-export for convenience
 export type { MiniOverlayPhase };
@@ -209,12 +209,29 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
         setPhase("thinking");
 
+        // --- Resolve session (24h window) ---
+        let resolvedSessionId = sessionId;
+        if (characterId) {
+          try {
+            const resolveRes = await fetch("/api/overlay/resolve-session", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ characterId }),
+            });
+            if (resolveRes.ok) {
+              const resolved = await resolveRes.json();
+              resolvedSessionId = resolved.sessionId;
+            }
+          } catch {}
+        }
+        if (cancelledRef.current) return;
+
         // --- Chat ---
         chatAbortRef.current = new AbortController();
         let accumulated = "";
         try {
           const chatBody: Record<string, unknown> = {
-            id: sessionId,
+            id: resolvedSessionId,
             message: {
               role: "user",
               content: transcriptText,
@@ -276,9 +293,9 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
         // Notify main window that a message was sent via the overlay
         try {
-          const electronAPI = (window as any).electronAPI;
-          if (electronAPI?.ipc?.send) {
-            electronAPI.ipc.send("mini-overlay:message-sent", { sessionId, characterId });
+          const api = getElectronAPI();
+          if (api?.ipc?.send) {
+            api.ipc.send("mini-overlay:message-sent", { sessionId: resolvedSessionId, characterId });
           }
         } catch {}
 
@@ -350,9 +367,12 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     }
   }, []);
 
-  // autoStart
+  // autoStart — use a ref to ensure recording starts exactly once, even if
+  // startRecording's identity changes (e.g., when the agent picker resolves async)
+  const hasAutoStartedRef = useRef(false);
   useEffect(() => {
-    if (!autoStart) return;
+    if (!autoStart || hasAutoStartedRef.current) return;
+    hasAutoStartedRef.current = true;
     const timer = setTimeout(() => {
       startRecording();
     }, 200);

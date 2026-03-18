@@ -446,7 +446,7 @@ app.whenReady().then(async () => {
         } else {
           showOverlay({
             baseUrl,
-            preloadPath: path.join(__dirname, "mini-overlay-preload.js"),
+            preloadPath: path.join(__dirname, "preload.js"),
           }).catch((err: unknown) => {
             debugError("[App] Failed to show mini overlay:", err);
           });

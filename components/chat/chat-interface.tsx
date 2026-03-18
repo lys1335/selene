@@ -45,6 +45,7 @@ import { BrowserChatWorkspace } from "@/components/chat/browser-chat-workspace";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
 import { useChatWorkspaceStore } from "@/lib/stores/chat-workspace-store";
 import type { ChatWorkspaceMode } from "@/lib/chat/workspace-mode";
+import { useOverlaySyncListener } from "@/lib/hooks/use-overlay-sync-listener";
 
 interface DetectedGitFolder {
     id: string;
@@ -76,6 +77,34 @@ const ChatSetMessagesBridge: FC<{
 }> = ({ setMessagesRef }) => {
     const setMessages = useChatSetMessages();
     useEffect(() => { setMessagesRef.current = setMessages; }, [setMessages, setMessagesRef]);
+    return null;
+};
+
+/** Bridge component: lives inside ChatProvider to receive overlay events and
+ *  (1) reload messages when the overlay sends to the active session, and
+ *  (2) inject transcript+screenshot into the composer on compose mode. */
+const OverlaySyncBridge: FC<{
+    sessionId: string | undefined;
+    characterId: string;
+    setMessagesRef: MutableRefObject<((msgs: UIMessage[]) => void) | null>;
+}> = ({ sessionId, characterId, setMessagesRef }) => {
+    useOverlaySyncListener({
+        activeSessionId: sessionId,
+        onSessionUpdated: useCallback(async (sid: string) => {
+            // Reload messages from DB for the active session
+            try {
+                const result = await resilientFetch(`/api/sessions/${sid}/messages`);
+                if (result.data && setMessagesRef.current) {
+                    const msgs = (result.data as { messages?: UIMessage[] })?.messages;
+                    if (msgs) setMessagesRef.current(msgs);
+                }
+            } catch {}
+        }, [setMessagesRef]),
+        onComposeInject: useCallback((payload: { transcript: string; screenshotUrl?: string }) => {
+            // Dispatch a custom event that the composer can pick up
+            window.dispatchEvent(new CustomEvent("overlay:compose-inject", { detail: payload }));
+        }, []),
+    });
     return null;
 };
 
@@ -1546,6 +1575,7 @@ export default function ChatInterface({
                                 initialMessages={messages}
                             >
                                 <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
+                                <OverlaySyncBridge sessionId={sessionId} characterId={character.id} setMessagesRef={chatSetMessagesRef} />
                                 <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
                                 <ForegroundStreamingBridge
                                     isForegroundStreamingRef={isForegroundStreamingRef}
@@ -1700,6 +1730,7 @@ export default function ChatInterface({
                         initialMessages={messages}
                     >
                         <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
+                        <OverlaySyncBridge sessionId={sessionId} characterId={character.id} setMessagesRef={chatSetMessagesRef} />
                         <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
                         <ForegroundStreamingBridge
                             isForegroundStreamingRef={isForegroundStreamingRef}

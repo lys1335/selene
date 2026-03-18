@@ -1,13 +1,19 @@
 "use client";
 import { useState } from "react";
 
-export function useOverlayMode() {
-  const [mode, setModeState] = useState<"direct" | "compose">(() => {
-    if (typeof window === "undefined") return "direct";
-    return (localStorage.getItem("overlay:mode") as "direct" | "compose") || "direct";
-  });
+type OverlayMode = "direct" | "compose";
 
-  const setMode = (m: "direct" | "compose") => {
+function readStoredMode(): OverlayMode {
+  if (typeof window === "undefined") return "direct";
+  const stored = localStorage.getItem("overlay:mode");
+  if (stored === "direct" || stored === "compose") return stored;
+  return "direct";
+}
+
+export function useOverlayMode() {
+  const [mode, setModeState] = useState<OverlayMode>(readStoredMode);
+
+  const setMode = (m: OverlayMode) => {
     setModeState(m);
     if (typeof window !== "undefined") {
       localStorage.setItem("overlay:mode", m);
