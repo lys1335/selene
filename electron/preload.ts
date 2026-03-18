@@ -488,6 +488,8 @@ const electronAPI = {
         "logs:subscribe",
         "logs:unsubscribe",
         "logs:clear",
+        "mini-overlay:close",
+        "mini-overlay:phase-update",
       ];
       if (validChannels.includes(channel)) {
         ipcRenderer.send(channel, ...args);
@@ -549,6 +551,7 @@ const electronAPI = {
         "browser-session:close",
         "browser-session:is-open",
         "browser-session:save-recording",
+        "mini-overlay:request-focus-return",
       ];
       if (validChannels.includes(channel)) {
         return ipcRenderer.invoke(channel, ...args);

@@ -422,3 +422,10 @@ export async function handleActivate(createWindowFn: () => Promise<void>): Promi
     await createWindowFn();
   }
 }
+
+/**
+ * Check if the main window is currently visible and not minimized.
+ */
+export function isMainWindowVisible(): boolean {
+  return mainWindow !== null && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized();
+}

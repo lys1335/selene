@@ -180,6 +180,8 @@ import { loadSettings } from "../lib/settings/settings-manager";
 import { createUnifiedCaptureTrigger } from "./ipc-unified-capture-handlers";
 import { cleanupAllVoiceProcesses } from "../lib/audio/transcription";
 import { closeAllBrowserSessionWindows } from "./ipc-browser-session-handlers";
+import { initTray, destroyTray } from "./tray-manager";
+import { showOverlay, destroyMiniOverlay } from "./mini-overlay-window";
 
 // ---------------------------------------------------------------------------
 // Initialize debug log
@@ -351,6 +353,31 @@ app.whenReady().then(async () => {
   });
   debugLog("[App] Main window created");
 
+  // Initialize system tray (keeps app running when main window is closed)
+  initTray({
+    onShowMainWindow: () => {
+      const { mainWindow: mw } = require("./window-manager") as typeof import("./window-manager");
+      if (mw && !mw.isDestroyed()) {
+        mw.show();
+        mw.focus();
+      } else {
+        createWindow({
+          isDev,
+          dataDir,
+          mediaDir,
+          prodServerPort: PROD_SERVER_PORT,
+          prodUseHttps: useH2,
+          preloadPath: path.join(__dirname, "preload.js"),
+          devServerUrl: process.env.ELECTRON_DEV_URL || devProxyUrl,
+          waitForServer: waitForServerReady,
+        });
+      }
+    },
+    onQuit: () => {
+      app.quit();
+    },
+  });
+
   // Shared IPC context for hotkey callbacks that need to capture + focus window
   const captureCtx = {
     mainWindow: () => {
@@ -402,13 +429,30 @@ app.whenReady().then(async () => {
     debugError("[App] Screen capture hotkey registration failed:", error);
   }
 
-  // Register unified capture hotkey (voice + screen) from user settings.
-  // Uses the shared executeUnifiedCapture pipeline (debounce, metadata, focus, emit).
+  // Register unified capture hotkey (voice + screen) with mini overlay routing.
+  // When main window is visible: use composer flow. When hidden: use mini overlay.
   try {
     const unifiedTrigger = createUnifiedCaptureTrigger(captureCtx);
     const hotkeyResult = registerUnifiedCaptureHotkeyFromSettings({
       dataDir,
-      onTrigger: unifiedTrigger,
+      onTrigger: () => {
+        const { mainWindow: mw } = require("./window-manager") as typeof import("./window-manager");
+        if (mw && !mw.isDestroyed() && mw.isVisible() && !mw.isMinimized()) {
+          // Main window is visible — use existing unified capture (attaches to composer)
+          unifiedTrigger();
+        } else {
+          // Main window hidden/closed — launch mini overlay
+          const baseUrl = isDev
+            ? (process.env.ELECTRON_DEV_URL || devProxyUrl)
+            : `${useH2 ? "https" : "http"}://localhost:${PROD_SERVER_PORT}`;
+          showOverlay({
+            baseUrl,
+            preloadPath: path.join(__dirname, "preload.js"),
+          }).catch((err: unknown) => {
+            debugError("[App] Failed to show mini overlay:", err);
+          });
+        }
+      },
     });
     debugLog(`[App] Unified capture hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);
   } catch (error) {
@@ -460,6 +504,8 @@ app.on("will-quit", () => {
 app.on("before-quit", () => {
   debugLog("[App] before-quit event - cleaning up");
   isAppQuitting = true;
+  destroyTray();
+  destroyMiniOverlay();
   closeAllBrowserSessionWindows();
   clearServerRestartTimer();
   stopH2Proxy();

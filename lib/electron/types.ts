@@ -117,6 +117,8 @@ export interface ElectronScreenCaptureAPI {
   checkPermission: () => Promise<{ status: ScreenCaptureResult["permissionStatus"] }>;
 }
 
+export type MiniOverlayPhase = "idle" | "recording" | "transcribing" | "thinking" | "speaking" | "done" | "error";
+
 export interface ScreenCaptureMetadata {
   capturedAt: string;
   activeWindowTitle?: string;

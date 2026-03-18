@@ -2570,6 +2570,21 @@
         "clearingBtn": "Siliniyor...",
         "clearSuccess": "{count} ekran görüntüsü silindi"
       },
+      "miniOverlay": {
+        "title": "Mini pencere",
+        "description": "Ana pencereyi açmadan sesli sorularınızı yanıtlayan hafif bir yardımcı.",
+        "listening": "Dinleniyor...",
+        "transcribing": "Yazıya dönüştürülüyor...",
+        "thinking": "Düşünüyor...",
+        "speaking": "Konuşuyor...",
+        "done": "Tamam",
+        "ready": "Hazır",
+        "cancel": "İptal",
+        "clickToStop": "Kaydı durdurmak için tıklayın veya kısayolu tekrar basın",
+        "error": "Bir şeyler ters gitti",
+        "noMic": "Mikrofon erişimi reddedildi",
+        "ttsUnavailable": "Metin-konuşma yapılandırılmamış"
+      },
       "dictionary": {
         "title": "Kisisel sozluk",
         "description": "Isim, teknik terim ve kisaltma ekleyerek tanimayi iyilestirin.",

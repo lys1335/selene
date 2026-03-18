@@ -2734,6 +2734,21 @@
         "clearingBtn": "Clearing...",
         "clearSuccess": "Deleted {count} screenshot(s)"
       },
+      "miniOverlay": {
+        "title": "Mini overlay",
+        "description": "A lightweight floating assistant that handles voice queries without opening the main window.",
+        "listening": "Listening...",
+        "transcribing": "Transcribing...",
+        "thinking": "Thinking...",
+        "speaking": "Speaking...",
+        "done": "Done",
+        "ready": "Ready",
+        "cancel": "Cancel",
+        "clickToStop": "Click or press shortcut to stop recording",
+        "error": "Something went wrong",
+        "noMic": "Microphone access denied",
+        "ttsUnavailable": "Text-to-speech not configured"
+      },
       "dictionary": {
         "title": "Personal dictionary",
         "description": "Words and names to bias local transcription.",
