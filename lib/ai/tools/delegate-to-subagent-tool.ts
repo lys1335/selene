@@ -137,7 +137,7 @@ const delegateSchema = jsonSchema<DelegateToSubagentInput>({
 export function createDelegateToSubagentTool(
   options: DelegateToSubagentToolOptions,
 ) {
-  const { userId, characterId } = options;
+  const { sessionId: initiatorSessionId, userId, characterId } = options;
 
   return tool({
     description:
@@ -151,28 +151,29 @@ export function createDelegateToSubagentTool(
 
       switch (normalizedInput.action) {
         case "start":
-          return handleStartAction(normalizedInput, userId, characterId);
+          return handleStartAction(normalizedInput, userId, characterId, initiatorSessionId);
         case "observe":
-          return handleObserve(normalizedInput, characterId);
+          return handleObserve(normalizedInput, characterId, initiatorSessionId);
         case "continue":
           return handleContinue(
             {
               ...normalizedInput,
               delegationId: normalizedInput.delegationId ?? normalizedInput.resume,
             },
-            characterId
+            characterId,
+            initiatorSessionId,
           );
         case "answer":
-          return handleAnswer(normalizedInput, characterId);
+          return handleAnswer(normalizedInput, characterId, initiatorSessionId);
         case "stop":
-          return handleStop(normalizedInput, characterId);
+          return handleStop(normalizedInput, characterId, initiatorSessionId);
         case "list":
-          return handleList(characterId);
+          return handleList(characterId, initiatorSessionId);
         default:
           return {
             success: false,
             error: `Unknown action: ${normalizedInput.action}. Use start, observe, continue, answer, stop, or list.`,
-            delegations: buildDelegationsSummary(characterId),
+            delegations: buildDelegationsSummary(characterId, initiatorSessionId),
           };
       }
     },

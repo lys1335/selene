@@ -23,7 +23,8 @@ import {
 
 export async function getWorkflowResources(
   workflowId: string,
-  agentId: string
+  agentId: string,
+  initiatorSessionId?: string,
 ): Promise<WorkflowResourceContext | null> {
   const [workflowRow, memberRow, agentRow, workflowMemberRows] = await Promise.all([
     db
@@ -113,7 +114,7 @@ export async function getWorkflowResources(
     });
 
   const activeDelegations =
-    member.role === "initiator" ? getActiveDelegationsForCharacter(agentId) : [];
+    member.role === "initiator" ? getActiveDelegationsForCharacter(agentId, initiatorSessionId) : [];
 
   const promptContextInput: WorkflowPromptContextInput = {
     workflowName: workflow.name,
