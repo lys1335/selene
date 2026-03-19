@@ -22,6 +22,7 @@ function MiniOverlayContent() {
   // Resolve the effective characterId and sessionId from the picker or URL params
   const characterId = selectedAgent?.id ?? characterIdParam;
   const sessionId = selectedAgent?.lastSessionId ?? sessionIdParam;
+  const hasResolvedTarget = Boolean(characterId) && (!agentLoading || Boolean(characterIdParam));
 
   // ---------------------------------------------------------------------------
   // Additional screenshots added via Cmd+Shift+S while overlay is active
@@ -52,7 +53,7 @@ function MiniOverlayContent() {
     characterId,
     screenshotUrl,
     screenshotUrls: additionalScreenshots,
-    autoStart: true,
+    autoStart: hasResolvedTarget,
     mode,
     voicePostProcessing,
     onComposeReady: handleComposeReady,
@@ -84,6 +85,8 @@ function MiniOverlayContent() {
       if (pipeline.phase === "recording") {
         // Second press: stop recording → pipeline proceeds to transcribing
         pipeline.stopRecording();
+      } else if (!hasResolvedTarget) {
+        return;
       } else if (pipeline.phase === "idle" || pipeline.phase === "done" || pipeline.phase === "error") {
         // Start a fresh recording
         pipeline.cancel();
@@ -100,7 +103,7 @@ function MiniOverlayContent() {
     return () => {
       api?.ipc?.removeAllListeners?.("overlay:toggle-recording");
     };
-  }, [pipeline.phase, pipeline.stopRecording, pipeline.cancel, pipeline.startRecording, pipeline.confirmCompose]);
+  }, [hasResolvedTarget, pipeline.phase, pipeline.stopRecording, pipeline.cancel, pipeline.startRecording, pipeline.confirmCompose]);
 
   // ---------------------------------------------------------------------------
   // IPC listener for additional screenshots (Cmd+Shift+S while overlay is active)

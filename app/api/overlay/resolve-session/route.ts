@@ -4,14 +4,15 @@ import {
   getOrCreateLocalUser,
   getSessionByCharacterId,
   createSession,
+  getSession,
 } from "@/lib/db/queries";
 import { getCharacter } from "@/lib/characters/queries";
 import { loadSettings } from "@/lib/settings/settings-manager";
 
-const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
-
 export interface ResolveSessionRequest {
   characterId: string;
+  sessionId?: string;
+  forceNew?: boolean;
 }
 
 export interface ResolveSessionResponse {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
 
     const body = await req.json() as Partial<ResolveSessionRequest>;
-    const { characterId } = body;
+    const { characterId, sessionId, forceNew = false } = body;
 
     if (!characterId || typeof characterId !== "string") {
       return NextResponse.json({ error: "characterId is required" }, { status: 400 });
@@ -38,15 +39,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
 
-    const existingSession = await getSessionByCharacterId(dbUser.id, characterId);
+    if (!forceNew && sessionId && typeof sessionId === "string") {
+      const requestedSession = await getSession(sessionId);
+      if (
+        requestedSession &&
+        requestedSession.userId === dbUser.id &&
+        requestedSession.status === "active" &&
+        requestedSession.characterId === characterId
+      ) {
+        return NextResponse.json({
+          sessionId: requestedSession.id,
+          isNew: false,
+          title: requestedSession.title ?? `Chat with ${character.name}`,
+        } satisfies ResolveSessionResponse);
+      }
+    }
 
-    if (existingSession) {
-      const updatedAt = existingSession.updatedAt
-        ? new Date(existingSession.updatedAt).getTime()
-        : 0;
-      const age = Date.now() - updatedAt;
-
-      if (age < TWENTY_FOUR_HOURS_MS) {
+    if (!forceNew) {
+      const existingSession = await getSessionByCharacterId(dbUser.id, characterId);
+      if (existingSession) {
         return NextResponse.json({
           sessionId: existingSession.id,
           isNew: false,
@@ -55,7 +66,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Create a fresh session — either no session existed or the last one is stale
     const newSession = await createSession({
       title: `Chat with ${character.name}`,
       userId: dbUser.id,

@@ -1,11 +1,66 @@
 "use client";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { type MiniOverlayPhase, getElectronAPI } from "@/lib/electron/types";
-import { refineTranscript } from "@/lib/audio/refine-transcript";
+import {
+  createSpeechMediaRecorder,
+  transcribeRecordedSpeech,
+} from "@/lib/voice/browser-stt";
 
 // Re-export for convenience
 export type { MiniOverlayPhase };
 export type MiniPipelinePhase = MiniOverlayPhase;
+
+interface OverlaySessionUpdatePayload {
+  sessionId?: string;
+  characterId?: string;
+}
+
+function notifyOverlaySessionUpdated(payload: OverlaySessionUpdatePayload): void {
+  try {
+    const api = getElectronAPI();
+    if (api?.ipc?.send) {
+      api.ipc.send("mini-overlay:message-sent", payload);
+    }
+  } catch {}
+}
+
+function extractAssistantTextFromStreamChunk(chunk: string): string {
+  let text = "";
+
+  for (const rawLine of chunk.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    // Legacy AI SDK text stream chunks.
+    if (line.startsWith("0:")) {
+      try {
+        text += JSON.parse(line.slice(2)) as string;
+      } catch {}
+      continue;
+    }
+
+    // UI message stream SSE payloads.
+    if (!line.startsWith("data:")) continue;
+
+    const data = line.slice(5).trim();
+    if (!data || data === "[DONE]") continue;
+
+    try {
+      const parsed = JSON.parse(data) as
+        | { type?: string; delta?: string; errorText?: string }
+        | Array<{ type?: string; delta?: string; errorText?: string }>;
+      const parts = Array.isArray(parsed) ? parsed : [parsed];
+
+      for (const part of parts) {
+        if (part?.type === "text-delta" && typeof part.delta === "string") {
+          text += part.delta;
+        }
+      }
+    } catch {}
+  }
+
+  return text;
+}
 
 interface UseMiniPipelineOptions {
   sessionId?: string;
@@ -58,7 +113,6 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
   const chunksRef = useRef<Blob[]>([]);
   // Separate abort controllers for each pipeline stage so cancellation is precise
   const transcribeAbortRef = useRef<AbortController | null>(null);
-  const refineAbortRef = useRef<AbortController | null>(null);
   const chatAbortRef = useRef<AbortController | null>(null);
   const ttsAbortRef = useRef<AbortController | null>(null);
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -70,6 +124,10 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
   // Keep refs in sync so the recorder.onstop closure always sees the latest values
   useEffect(() => { modeRef.current = mode; }, [mode]);
+  const characterIdRef = useRef(characterId);
+  useEffect(() => { characterIdRef.current = characterId; }, [characterId]);
+  const sessionIdRef = useRef(sessionId);
+  useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
   const screenshotUrlsRef = useRef(screenshotUrls);
   useEffect(() => { screenshotUrlsRef.current = screenshotUrls; }, [screenshotUrls]);
 
@@ -107,8 +165,6 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     // Abort all in-flight fetches
     transcribeAbortRef.current?.abort();
     transcribeAbortRef.current = null;
-    refineAbortRef.current?.abort();
-    refineAbortRef.current = null;
     chatAbortRef.current?.abort();
     chatAbortRef.current = null;
     ttsAbortRef.current?.abort();
@@ -143,6 +199,15 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     if (phase !== "compose-review") return;
     setPhase("compose-pending");
     const currentScreenshotUrls = screenshotUrlsRef.current;
+    const currentCharacterId = characterIdRef.current;
+    const currentSessionId = sessionIdRef.current;
+    if (!currentCharacterId && !currentSessionId) {
+      const msg = "No overlay chat target selected";
+      setError(msg);
+      setPhase("error");
+      onError?.(msg);
+      return;
+    }
     const allScreenshots = [
       ...(screenshotUrl ? [screenshotUrl] : []),
       ...(currentScreenshotUrls ?? []),
@@ -151,8 +216,8 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       transcript,
       screenshotUrl: allScreenshots[0],
       screenshotUrls: allScreenshots.length > 0 ? allScreenshots : undefined,
-      characterId,
-      sessionId,
+      characterId: currentCharacterId,
+      sessionId: currentSessionId,
     });
     // Brief "compose-pending" display, then move to done.
     // The page controls when to actually close the overlay.
@@ -166,7 +231,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         setPhase("done");
       }
     }, 500);
-  }, [phase, transcript, screenshotUrl, characterId, sessionId, onComposeReady]);
+  }, [phase, transcript, screenshotUrl, onComposeReady]);
 
   const startRecording = useCallback(async () => {
     cancelledRef.current = false;
@@ -191,11 +256,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       source.connect(analyser);
       setAnalyserNode(analyser);
 
-      const mimeType = MediaRecorder.isTypeSupported("audio/webm")
-        ? "audio/webm"
-        : "audio/wav";
-
-      const recorder = new MediaRecorder(stream, { mimeType });
+      const recorder = createSpeechMediaRecorder(stream);
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
@@ -207,6 +268,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       recorder.onstop = async () => {
         if (cancelledRef.current) return;
 
+        const mimeType = recorder.mimeType || "audio/webm";
         const blob = new Blob(chunksRef.current, { type: mimeType });
         chunksRef.current = [];
 
@@ -226,17 +288,18 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         // --- Transcribe ---
         transcribeAbortRef.current = new AbortController();
         let rawTranscript = "";
+        let finalTranscript = "";
         try {
-          const formData = new FormData();
-          formData.append("file", blob, "recording.webm");
-          const transcribeRes = await fetch("/api/voice/transcribe", {
-            method: "POST",
-            body: formData,
+          const result = await transcribeRecordedSpeech({
+            audioBlob: blob,
+            mimeType,
+            postProcessingEnabled: voicePostProcessing,
             signal: transcribeAbortRef.current.signal,
+            transcriptionFailedMessage: "Transcription failed",
+            noSpeechDetectedMessage: "No speech detected",
           });
-          if (!transcribeRes.ok) throw new Error(`Transcription failed: ${transcribeRes.status}`);
-          const transcribeData = await transcribeRes.json();
-          rawTranscript = transcribeData.transcript ?? transcribeData.text ?? "";
+          rawTranscript = result.transcript;
+          finalTranscript = result.finalText;
         } catch (err: unknown) {
           if (cancelledRef.current) return;
           const msg = err instanceof Error ? err.message : String(err);
@@ -244,26 +307,6 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           setPhase("error");
           onError?.(msg);
           return;
-        }
-
-        if (cancelledRef.current) return;
-
-        // --- Refine (voice post-processing) ---
-        let finalTranscript = rawTranscript;
-        if (voicePostProcessing && rawTranscript.length > 0) {
-          setPhase("refining");
-          refineAbortRef.current = new AbortController();
-          try {
-            const result = await refineTranscript({
-              rawTranscript,
-              postProcessingEnabled: true,
-              signal: refineAbortRef.current.signal,
-            });
-            finalTranscript = result.finalText;
-          } catch {
-            // Refinement failed — use raw transcript
-            if (cancelledRef.current) return;
-          }
         }
 
         if (cancelledRef.current) return;
@@ -281,14 +324,22 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         // --- Direct mode: continue to chat + TTS ---
         setPhase("thinking");
 
-        // --- Resolve session (24h window) ---
-        let resolvedSessionId = sessionId;
-        if (characterId) {
+        // --- Resolve session (reuse existing session unless user explicitly starts a new one) ---
+        const currentCharacterId = characterIdRef.current;
+        let resolvedSessionId = sessionIdRef.current;
+        if (!currentCharacterId && !resolvedSessionId) {
+          const msg = "No overlay chat target selected";
+          setError(msg);
+          setPhase("error");
+          onError?.(msg);
+          return;
+        }
+        if (currentCharacterId) {
           try {
             const resolveRes = await fetch("/api/overlay/resolve-session", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ characterId }),
+              body: JSON.stringify({ characterId: currentCharacterId, sessionId: resolvedSessionId }),
             });
             if (resolveRes.ok) {
               const resolved = await resolveRes.json();
@@ -325,8 +376,8 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
               },
             ],
           };
-          if (characterId) {
-            chatBody.characterId = characterId;
+          if (currentCharacterId) {
+            chatBody.characterId = currentCharacterId;
           }
 
           const chatHeaders: Record<string, string> = {
@@ -335,8 +386,8 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           if (resolvedSessionId) {
             chatHeaders["X-Session-Id"] = resolvedSessionId;
           }
-          if (characterId) {
-            chatHeaders["X-Character-Id"] = characterId;
+          if (currentCharacterId) {
+            chatHeaders["X-Character-Id"] = currentCharacterId;
           }
 
           const chatRes = await fetch("/api/chat", {
@@ -354,21 +405,33 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
             throw new Error(`Chat failed: ${detail}`);
           }
 
-          const reader = chatRes.body!.getReader();
+          notifyOverlaySessionUpdated({
+            sessionId: resolvedSessionId,
+            characterId: currentCharacterId,
+          });
+
+          const reader = chatRes.body?.getReader();
+          if (!reader) {
+            throw new Error("Chat failed: empty response body");
+          }
           try {
             const decoder = new TextDecoder();
+            let buffer = "";
             while (true) {
               const { done, value } = await reader.read();
               if (done) break;
               if (cancelledRef.current) break;
-              const chunk = decoder.decode(value, { stream: true });
-              for (const line of chunk.split("\n")) {
-                if (line.startsWith("0:")) {
-                  try {
-                    accumulated += JSON.parse(line.slice(2));
-                  } catch {}
-                }
+              buffer += decoder.decode(value, { stream: true });
+              const lines = buffer.split("\n");
+              buffer = lines.pop() ?? "";
+              if (lines.length > 0) {
+                accumulated += extractAssistantTextFromStreamChunk(lines.join("\n"));
               }
+            }
+
+            buffer += decoder.decode();
+            if (buffer) {
+              accumulated += extractAssistantTextFromStreamChunk(buffer);
             }
           } finally {
             reader.releaseLock();
@@ -385,13 +448,17 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         if (cancelledRef.current) return;
         setResponse(accumulated);
 
-        // Notify main window that a message was sent via the overlay
-        try {
-          const api = getElectronAPI();
-          if (api?.ipc?.send) {
-            api.ipc.send("mini-overlay:message-sent", { sessionId: resolvedSessionId, characterId });
-          }
-        } catch {}
+        // Notify the main window even if the assistant response is empty so the
+        // persisted session still becomes visible in the app.
+        notifyOverlaySessionUpdated({
+          sessionId: resolvedSessionId,
+          characterId: currentCharacterId,
+        });
+
+        if (!accumulated.trim()) {
+          setPhase("done");
+          return;
+        }
 
         setPhase("speaking");
 
@@ -463,7 +530,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       setPhase("error");
       onError?.(msg);
     }
-  }, [sessionId, characterId, screenshotUrl, mode, voicePostProcessing, onError]);
+  }, [screenshotUrl, voicePostProcessing, onError]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {

@@ -178,6 +178,7 @@ import { emitCapturedScreen } from "./ipc-screen-capture-handlers";
 import { captureDisplay, cleanScreenshotsByRetention } from "./screen-capture";
 import { loadSettings } from "../lib/settings/settings-manager";
 import { createUnifiedCaptureTrigger } from "./ipc-unified-capture-handlers";
+import { createVoiceOverlayTrigger } from "./ipc-voice-hotkey-handlers";
 import { cleanupAllVoiceProcesses } from "../lib/audio/transcription";
 import { closeAllBrowserSessionWindows } from "./ipc-browser-session-handlers";
 import { initTray, destroyTray } from "./tray-manager";
@@ -395,14 +396,10 @@ app.whenReady().then(async () => {
 
   // Register global voice hotkey from user settings
   try {
+    const triggerVoiceOverlay = createVoiceOverlayTrigger(captureCtx);
     const hotkeyResult = registerVoiceHotkeyFromSettings({
       dataDir,
-      onTrigger: () => {
-        const { mainWindow } = require("./window-manager") as typeof import("./window-manager");
-        if (mainWindow) {
-          mainWindow.webContents.send("voice-hotkey:triggered");
-        }
-      },
+      onTrigger: triggerVoiceOverlay,
     });
     debugLog(`[App] Voice hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);
   } catch (error) {

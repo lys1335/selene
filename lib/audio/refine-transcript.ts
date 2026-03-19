@@ -18,6 +18,8 @@ export interface RefineTranscriptOptions {
   postProcessingEnabled: boolean;
   /** Optional AbortSignal to cancel the in-flight refinement request. */
   signal?: AbortSignal;
+  /** Optional callback when refinement fails and raw text is used instead. */
+  onFailure?: () => void;
 }
 
 export interface RefineTranscriptResult {
@@ -39,7 +41,7 @@ export interface RefineTranscriptResult {
 export async function refineTranscript(
   options: RefineTranscriptOptions,
 ): Promise<RefineTranscriptResult> {
-  const { rawTranscript, postProcessingEnabled, signal } = options;
+  const { rawTranscript, postProcessingEnabled, signal, onFailure } = options;
   const normalized = normalizeTranscriptText(rawTranscript);
 
   if (!postProcessingEnabled || normalized.length === 0) {
@@ -67,6 +69,7 @@ export async function refineTranscript(
     }
   } catch {
     // Refinement failed (network error, aborted, etc.) — fall back to raw text.
+    onFailure?.();
   }
 
   const result = finalizeTranscriptText({

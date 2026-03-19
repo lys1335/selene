@@ -152,6 +152,10 @@ export async function PUT(request: NextRequest) {
       quickCaptureHotkey: body.quickCaptureHotkey !== undefined ? body.quickCaptureHotkey : currentSettings.quickCaptureHotkey,
       quickCaptureAutoSend: body.quickCaptureAutoSend !== undefined ? body.quickCaptureAutoSend : currentSettings.quickCaptureAutoSend,
       quickCaptureAutoSendDelay: body.quickCaptureAutoSendDelay !== undefined ? body.quickCaptureAutoSendDelay : currentSettings.quickCaptureAutoSendDelay,
+      miniOverlayDefaultMode:
+        body.miniOverlayDefaultMode === "compose" || body.miniOverlayDefaultMode === "direct"
+          ? body.miniOverlayDefaultMode
+          : currentSettings.miniOverlayDefaultMode,
       screenCaptureExcludedApps: body.screenCaptureExcludedApps !== undefined ? body.screenCaptureExcludedApps : currentSettings.screenCaptureExcludedApps,
       screenCaptureRetention: body.screenCaptureRetention !== undefined ? body.screenCaptureRetention : currentSettings.screenCaptureRetention,
       screenCapturePreviewBeforeSend: body.screenCapturePreviewBeforeSend !== undefined ? body.screenCapturePreviewBeforeSend : currentSettings.screenCapturePreviewBeforeSend,

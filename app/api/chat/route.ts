@@ -436,12 +436,15 @@ export async function POST(req: Request) {
     }
 
     // ── Create agent run ───────────────────────────────────────────────────────
+    const resolvedCharacterId =
+      characterId || ((sessionMetadata?.characterId as string | undefined) ?? undefined);
+
     agentRun = await createAgentRun({
       sessionId,
       userId: dbUser.id,
       pipelineName: "chat",
       triggerType: isScheduledRun ? "cron" : isChannelSource ? "webhook" : "chat",
-      metadata: { characterId: characterId || null, messageCount: messages.length, taskSource: taskSource || "chat" },
+      metadata: { characterId: resolvedCharacterId || null, messageCount: messages.length, taskSource: taskSource || "chat" },
     });
     const chatAbortController = new AbortController();
     registerChatAbortController(agentRun.id, chatAbortController);
@@ -452,7 +455,7 @@ export async function POST(req: Request) {
       type: "chat",
       runId: agentRun.id,
       userId: dbUser.id,
-      characterId: characterId ?? undefined,
+      characterId: resolvedCharacterId,
       sessionId,
       status: "running",
       startedAt: nowISO(),

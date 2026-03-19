@@ -830,6 +830,24 @@ export function SettingsPanel({
 
             <div className="flex items-center justify-between gap-4">
               <div className="flex-1">
+                <div className="space-y-1">
+                  <p className="font-medium text-terminal-dark">Voice shortcut</p>
+                  <p className="text-sm text-terminal-muted">
+                    Open the voice overlay without capturing the screen.
+                  </p>
+                </div>
+              </div>
+              <div className="shrink-0 w-48">
+                <ShortcutRecorder
+                  id="voiceHotkey"
+                  value={formState.voiceHotkey}
+                  onChange={(v) => updateField("voiceHotkey", v)}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
                 <SettingsToggleRow
                   id="screenCaptureEnabled"
                   label="Screenshot shortcut"
