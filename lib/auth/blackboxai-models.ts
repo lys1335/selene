@@ -468,8 +468,6 @@ export const BLACKBOX_MODEL_IDS = [
   "anthropic/claude-opus-4.5",
   "anthropic/claude-opus-4.6",
   "anthropic/claude-sonnet-4.6",
-  "anthropic/claude-opus-4.6",
-  "anthropic/claude-sonnet-4.6",
   "anthropic/claude-3-haiku",
   "anthropic/claude-3.5-haiku",
   "anthropic/claude-3.5-sonnet",
@@ -1309,7 +1307,7 @@ export function getBlackBoxModelDisplayName(modelId: string): string {
  * Get curated BlackBox AI models with display names for UI
  */
 export function getBlackBoxModels(): Array<{ id: BlackBoxModelId; name: string }> {
-  return BLACKBOX_MODEL_IDS.map((id) => ({
+  return [...new Set(BLACKBOX_MODEL_IDS)].map((id) => ({
     id,
     name: getBlackBoxModelDisplayName(id),
   }));
