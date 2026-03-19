@@ -364,7 +364,7 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
       if (pages.length === 0) {
         return (
           <div className={TOOL_RESULT_TEXT_CLASS}>
-            {normalizedResult.message || tResults("noWebResults", { query: normalizedResult.query ?? "" })}
+            {normalizedResult.message || normalizedResult.formattedResults || tResults("noBrowseResults")}
           </div>
         );
       }
@@ -811,6 +811,7 @@ async function loadToolNameCache(): Promise<Record<string, string>> {
 export const ToolFallback: ToolCallContentPartComponent = memo(({
   toolName,
   argsText,
+  args,
   result,
 }) => {
   const t = useTranslations("assistantUi.tools");
@@ -855,15 +856,25 @@ export const ToolFallback: ToolCallContentPartComponent = memo(({
     };
   }, [canonicalToolName, toolName, t]);
 
+  // When the tool completes, prefer the parsed args object if argsText is
+  // stale (e.g. "{}" from a streaming race where the result arrives before
+  // the final args delta).
+  const effectiveArgsText = useMemo(() => {
+    if (!isRunning && (!argsText || argsText.trim() === "{}") && args && typeof args === "object" && Object.keys(args as Record<string, unknown>).length > 0) {
+      return JSON.stringify(args, null, 2);
+    }
+    return argsText;
+  }, [argsText, args, isRunning]);
+
   // Memoize formatted args
   const formattedArgs = useMemo(() => {
-    if (!argsText) return null;
+    if (!effectiveArgsText) return null;
     // Avoid repeated JSON parsing while the tool is still streaming input.
     if (isRunning || !isArgsExpanded) {
-      return formatArgsPreview(argsText);
+      return formatArgsPreview(effectiveArgsText);
     }
-    return formatArgs(argsText);
-  }, [argsText, isArgsExpanded, isRunning]);
+    return formatArgs(effectiveArgsText);
+  }, [effectiveArgsText, isArgsExpanded, isRunning]);
 
   return (
     <div className={cn(
