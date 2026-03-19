@@ -1199,6 +1199,7 @@
       "toolsFound": "{count, plural, one {Found # tool} other {Found # tools}}: {names}",
       "webSearchUnavailable": "Web search unavailable",
       "noWebResults": "No results found for \"{query}\"",
+      "noBrowseResults": "Failed to fetch the requested pages",
       "unexpectedFormat": "Unexpected tool search results format.",
       "toolsListedSuccessfully": "Tools listed successfully",
       "readFileFailed": "Failed to read file",

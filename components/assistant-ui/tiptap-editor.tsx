@@ -540,6 +540,54 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(
           class:
             "prose prose-sm max-w-none focus:outline-none min-h-[120px] max-h-[400px] overflow-y-auto px-4 py-3 font-mono text-sm text-terminal-dark",
         },
+        handleKeyDown: (view, event) => {
+          if (event.key !== "Tab") return false;
+
+          const { state } = view;
+          const { $from } = state.selection;
+
+          // Only intercept Tab inside code blocks
+          const insideCodeBlock = $from.parent.type.name === "codeBlock";
+          if (!insideCodeBlock) return false;
+
+          event.preventDefault();
+
+          if (event.shiftKey) {
+            // Shift+Tab: dedent — remove up to 2 leading spaces from current line
+            const lineStart = $from.start();
+            const textBefore = state.doc.textBetween(
+              lineStart,
+              $from.pos,
+              "\n",
+            );
+            const currentLineStart =
+              textBefore.lastIndexOf("\n") === -1
+                ? lineStart
+                : lineStart + textBefore.lastIndexOf("\n") + 1;
+            const lineText = state.doc.textBetween(
+              currentLineStart,
+              Math.min(currentLineStart + 2, $from.end()),
+            );
+            const spacesToRemove = lineText.startsWith("  ")
+              ? 2
+              : lineText.startsWith(" ")
+                ? 1
+                : 0;
+            if (spacesToRemove > 0) {
+              const tr = state.tr.delete(
+                currentLineStart,
+                currentLineStart + spacesToRemove,
+              );
+              view.dispatch(tr);
+            }
+          } else {
+            // Tab: insert 2 spaces
+            const tr = state.tr.insertText("  ", $from.pos);
+            view.dispatch(tr);
+          }
+
+          return true;
+        },
         handleDrop: (view, event, _slice, moved) => {
           if (moved) return false;
 
