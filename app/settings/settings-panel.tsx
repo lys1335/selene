@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { KeyIcon } from "lucide-react";
 import { CustomWorkflowsManager, LocalModelsManager } from "@/components/comfyui";
@@ -26,6 +26,8 @@ import { MemorySection } from "./memory-section";
 import { ApiKeysSection } from "./api-keys-section";
 import { ModelsSection } from "./models-section";
 import { LocalEmbeddingModelSelector } from "./embedding-model-selector";
+import { ShortcutRecorder } from "@/components/settings/shortcut-recorder";
+import { getElectronAPI, type PermissionCheckResult } from "@/lib/electron/types";
 
 export interface SettingsPanelProps {
   section: SettingsSection;
@@ -48,6 +50,69 @@ export interface SettingsPanelProps {
   onClaudeCodePasteSubmit: (code: string) => void;
   onClaudeCodePasteCancel: () => void;
   onClaudeCodeAuthComplete: () => void;
+}
+
+function PermissionStatusBanner() {
+  const [perms, setPerms] = useState<PermissionCheckResult | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  // useCallback so we can safely list `check` in the useEffect dependency array
+  const check = useCallback(async () => {
+    const api = getElectronAPI();
+    if (!api?.permissions) return;
+    setChecking(true);
+    try {
+      const result = await api.permissions.check();
+      setPerms(result);
+    } finally {
+      setChecking(false);
+    }
+  }, []); // getElectronAPI returns a stable window-level object
+
+  useEffect(() => { void check(); }, [check]);
+
+  const api = getElectronAPI();
+  if (!api?.permissions) return null;
+
+  const badge = (label: string, status: string | undefined) => {
+    const ok = status === "granted";
+    return (
+      <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium ${ok ? "bg-terminal-green/15 text-terminal-green" : "bg-red-500/15 text-red-400"}`}>
+        {label}: {ok ? "✓" : "✗"}
+      </span>
+    );
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-terminal-border/50 bg-terminal-bg/10 px-3 py-2">
+      {perms ? (
+        <>
+          {badge("Screen", perms.screen)}
+          {badge("Mic", perms.microphone)}
+          {badge("Shortcuts", perms.accessibility)}
+          {perms.screen !== "granted" && (
+            <button
+              type="button"
+              onClick={() => void api.permissions!.requestScreen()}
+              className="ml-1 font-mono text-[10px] text-terminal-link underline underline-offset-2 hover:text-terminal-link/80"
+            >
+              Grant access
+            </button>
+          )}
+        </>
+      ) : (
+        <span className="font-mono text-[10px] text-terminal-muted">{checking ? "Checking permissions…" : "Permission status unavailable"}</span>
+      )}
+      <button
+        type="button"
+        onClick={() => void check()}
+        disabled={checking}
+        className="ml-auto font-mono text-[10px] text-terminal-muted underline underline-offset-2 hover:text-terminal-dim disabled:opacity-50"
+      >
+        {checking ? "Checking…" : "Check permissions"}
+      </button>
+    </div>
+  );
 }
 
 export function ClaudeCodeAuthFlow({
@@ -157,6 +222,50 @@ export function ClaudeCodeAuthFlow({
           {loading ? (t("verifying") || "Verifying...") : (t("submitCode") || "Submit Code")}
         </button>
       </div>
+    </div>
+  );
+}
+
+function ClearScreenshotsButton() {
+  const t = useTranslations("settings");
+  const [clearing, setClearing] = useState(false);
+  const [cleared, setCleared] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleClear = async () => {
+    setClearing(true);
+    setCleared(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/screenshots/clear", { method: "DELETE" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json() as { deleted: number };
+      setCleared(data.deleted);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to clear screenshots");
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        onClick={handleClear}
+        disabled={clearing}
+        className="rounded border border-terminal-border/60 bg-terminal-bg/10 px-3 py-1.5 font-mono text-xs text-terminal-muted hover:border-red-500/60 hover:text-red-400 disabled:opacity-50 dark:border-terminal-border/80 dark:bg-terminal-cream/5"
+      >
+        {clearing ? t("voice.privacy.clearingBtn") : t("voice.privacy.clearBtn")}
+      </button>
+      {cleared !== null && (
+        <span className="font-mono text-xs text-terminal-green">
+          {t("voice.privacy.clearSuccess", { count: cleared })}
+        </span>
+      )}
+      {error !== null && (
+        <span className="font-mono text-xs text-red-400">{error}</span>
+      )}
     </div>
   );
 }
@@ -711,6 +820,166 @@ export function SettingsPanel({
                 {t("voice.stt.disabledHint")}
               </div>
             )}
+          </SettingsPanelCard>
+
+          <SettingsPanelCard
+            title="Shortcuts"
+            description="Global keyboard shortcuts for screen and voice capture."
+          >
+            <PermissionStatusBanner />
+
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
+                <div className="space-y-1">
+                  <p className="font-medium text-terminal-dark">Voice shortcut</p>
+                  <p className="text-sm text-terminal-muted">
+                    Open the voice overlay without capturing the screen.
+                  </p>
+                </div>
+              </div>
+              <div className="shrink-0 w-48">
+                <ShortcutRecorder
+                  id="voiceHotkey"
+                  value={formState.voiceHotkey}
+                  onChange={(v) => updateField("voiceHotkey", v)}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
+                <SettingsToggleRow
+                  id="screenCaptureEnabled"
+                  label="Screenshot shortcut"
+                  description="Capture the active display and attach it to the current chat."
+                  checked={formState.screenCaptureEnabled}
+                  onChange={(checked) => updateField("screenCaptureEnabled", checked)}
+                />
+              </div>
+              {formState.screenCaptureEnabled && (
+                <div className="shrink-0 w-48">
+                  <ShortcutRecorder
+                    id="screenCaptureShortcut"
+                    value={formState.screenCaptureShortcut}
+                    onChange={(v) => updateField("screenCaptureShortcut", v)}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
+                <SettingsToggleRow
+                  id="quickCaptureEnabled"
+                  label="Voice + screen shortcut"
+                  description="Capture screen and open the voice overlay simultaneously."
+                  checked={formState.quickCaptureEnabled}
+                  onChange={(checked) => updateField("quickCaptureEnabled", checked)}
+                />
+              </div>
+              {formState.quickCaptureEnabled && (
+                <div className="shrink-0 w-48">
+                  <ShortcutRecorder
+                    id="quickCaptureHotkey"
+                    value={formState.quickCaptureHotkey}
+                    onChange={(v) => updateField("quickCaptureHotkey", v)}
+                  />
+                </div>
+              )}
+            </div>
+          </SettingsPanelCard>
+
+          <SettingsPanelCard
+            title="Overlay"
+            description="Behavior for the floating capture overlay."
+          >
+            <SettingsOptionGroup
+              title="Default mode"
+              description="Which mode the overlay starts in."
+            >
+              <SettingsRadioCard
+                id="miniOverlayDefaultMode-direct"
+                name="miniOverlayDefaultMode"
+                value="direct"
+                label="Direct"
+                description="Send immediately and get a spoken response."
+                checked={formState.miniOverlayDefaultMode === "direct"}
+                onChange={() => updateField("miniOverlayDefaultMode", "direct")}
+              />
+              <SettingsRadioCard
+                id="miniOverlayDefaultMode-compose"
+                name="miniOverlayDefaultMode"
+                value="compose"
+                label="Compose"
+                description="Refine transcript, then open as draft."
+                checked={formState.miniOverlayDefaultMode === "compose"}
+                onChange={() => updateField("miniOverlayDefaultMode", "compose")}
+              />
+            </SettingsOptionGroup>
+
+            <SettingsToggleRow
+              id="miniOverlayAutoCloseAfterSpeak"
+              label="Auto-close after response"
+              description="Close overlay after TTS finishes in Direct mode."
+              checked={formState.miniOverlayAutoCloseAfterSpeak}
+              onChange={(checked) => updateField("miniOverlayAutoCloseAfterSpeak", checked)}
+            />
+
+            <SettingsToggleRow
+              id="miniOverlayShowScreenPreview"
+              label="Show screen preview"
+              description="Display screenshot thumbnail in the overlay."
+              checked={formState.miniOverlayShowScreenPreview}
+              onChange={(checked) => updateField("miniOverlayShowScreenPreview", checked)}
+            />
+
+            <SettingsToggleRow
+              id="miniOverlayKeepAppFocusedOnCompose"
+              label="Keep Selene focused after compose"
+              description="Keep Selene in foreground after compose handoff."
+              checked={formState.miniOverlayKeepAppFocusedOnCompose}
+              onChange={(checked) => updateField("miniOverlayKeepAppFocusedOnCompose", checked)}
+            />
+          </SettingsPanelCard>
+
+          <SettingsPanelCard
+            title={t("voice.privacy.title")}
+            description={t("voice.privacy.description")}
+          >
+            <SettingsField
+              label={t("voice.privacy.excludedAppsLabel")}
+              htmlFor="screenCaptureExcludedApps"
+              helperText={t("voice.privacy.excludedAppsHelper")}
+            >
+              <textarea
+                id="screenCaptureExcludedApps"
+                rows={2}
+                value={formState.screenCaptureExcludedApps}
+                onChange={(e) => updateField("screenCaptureExcludedApps", e.target.value)}
+                className={settingsInputClassName + " resize-none"}
+              />
+            </SettingsField>
+
+            <SettingsField
+              label={t("voice.privacy.retentionLabel")}
+              htmlFor="screenCaptureRetention"
+              helperText={t("voice.privacy.retentionHelper")}
+              className="max-w-md"
+            >
+              <select
+                id="screenCaptureRetention"
+                value={formState.screenCaptureRetention}
+                onChange={(e) => updateField("screenCaptureRetention", e.target.value as FormState["screenCaptureRetention"])}
+                className={settingsInputClassName}
+              >
+                <option value="session">{t("voice.privacy.retentionSession")}</option>
+                <option value="day">{t("voice.privacy.retentionDay")}</option>
+                <option value="week">{t("voice.privacy.retentionWeek")}</option>
+                <option value="forever">{t("voice.privacy.retentionForever")}</option>
+              </select>
+            </SettingsField>
+
+            <ClearScreenshotsButton />
           </SettingsPanelCard>
         </div>
       </div>

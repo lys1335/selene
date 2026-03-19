@@ -422,3 +422,37 @@ export async function handleActivate(createWindowFn: () => Promise<void>): Promi
     await createWindowFn();
   }
 }
+
+/**
+ * Check if the main window is currently visible and not minimized.
+ */
+export function isMainWindowVisible(): boolean {
+  return mainWindow !== null && !mainWindow.isDestroyed() && mainWindow.isVisible() && !mainWindow.isMinimized();
+}
+
+/**
+ * Get the main window reference, or null if it doesn't exist or is destroyed.
+ */
+export function getMainWindow(): BrowserWindow | null {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    return mainWindow;
+  }
+  return null;
+}
+
+/**
+ * Show, restore, and focus the main window. If the window has been destroyed
+ * (e.g. user closed it on macOS), re-create it by emitting the "activate" event.
+ */
+export async function showAndFocusMainWindow(): Promise<void> {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (!mainWindow.isVisible()) mainWindow.show();
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  } else {
+    // Re-create if destroyed (macOS: app.emit("activate") triggers recreate)
+    const { app } = await import("electron");
+    app.emit("activate");
+    await new Promise<void>((r) => setTimeout(r, 800));
+  }
+}

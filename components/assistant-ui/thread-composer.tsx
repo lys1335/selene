@@ -50,6 +50,12 @@ import { buildTranscriptInsertion } from "./voice-transcript-utils";
 import { VoiceWaveform } from "@/components/voice/voice-waveform";
 import { VoiceActions } from "@/components/voice/voice-actions";
 import { useGlobalVoiceHotkey } from "@/lib/hooks/use-global-hotkey";
+import { getElectronAPI } from "@/lib/electron/types";
+import { useScreenCapture } from "@/lib/hooks/use-screen-capture";
+import { useUnifiedCapture } from "@/lib/hooks/use-unified-capture";
+import { useCaptureSession } from "@/lib/hooks/use-capture-session";
+import { UnifiedCaptureOverlay } from "./unified-capture-overlay";
+import { AutoSendCountdown } from "./auto-send-countdown";
 import {
   TiptapEditor,
   contentPartsToComposerText,
@@ -86,6 +92,12 @@ export const Composer: FC<{
   voiceAudioCues?: boolean;
   voiceActivationMode?: "tap" | "push";
   voiceHotkey?: string;
+  screenCaptureEnabled?: boolean;
+  screenCaptureShortcut?: string;
+  quickCaptureEnabled?: boolean;
+  quickCaptureHotkey?: string;
+  quickCaptureAutoSend?: boolean;
+  quickCaptureAutoSendDelay?: number;
   onCancelBackgroundRun?: () => void;
   isCancellingBackgroundRun?: boolean;
   canCancelBackgroundRun?: boolean;
@@ -107,6 +119,12 @@ export const Composer: FC<{
   voiceAudioCues = true,
   voiceActivationMode = "tap",
   voiceHotkey = "CommandOrControl+Shift+Space",
+  screenCaptureEnabled = false,
+  screenCaptureShortcut = "CommandOrControl+Shift+S",
+  quickCaptureEnabled = true,
+  quickCaptureHotkey: _quickCaptureHotkey = "CommandOrControl+Shift+A",
+  quickCaptureAutoSend = false,
+  quickCaptureAutoSendDelay = 3,
   onCancelBackgroundRun,
   isCancellingBackgroundRun = false,
   canCancelBackgroundRun = false,
@@ -207,6 +225,8 @@ export const Composer: FC<{
   const deepResearch = useOptionalDeepResearch();
   const isDeepResearchMode = deepResearch?.isDeepResearchMode ?? false;
   const isDeepResearchActive = deepResearch?.isActive ?? false;
+  const electronAPI = useMemo(() => getElectronAPI(), []);
+  const isScreenCaptureAvailable = screenCaptureEnabled && Boolean(electronAPI?.screenCapture);
   const isDeepResearchLoading = deepResearch?.isLoading ?? false;
   const isDeepResearchBackgroundPolling = deepResearch?.isBackgroundPolling ?? false;
   const isOperationRunning = isRunning || isDeepResearchLoading || isDeepResearchBackgroundPolling;
@@ -371,6 +391,46 @@ export const Composer: FC<{
     hotkey: voiceHotkey,
   });
 
+  const handleAttachCapturedScreen = useCallback(
+    async (file: File) => {
+      await threadRuntime.composer.addAttachment(file);
+      if (isEditorMode && tiptapRef.current) {
+        tiptapRef.current.focus();
+        return;
+      }
+      inputRef.current?.focus();
+    },
+    [isEditorMode, threadRuntime]
+  );
+
+  const { captureNow, isCapturing } = useScreenCapture({
+    enabled: isScreenCaptureAvailable,
+    onCaptured: handleAttachCapturedScreen,
+  });
+
+  // Capture session coordinator — manages the lifecycle:
+  // capturing → recording → transcribing → reviewing → (auto-send)
+  const captureSession = useCaptureSession({
+    isRecordingVoice,
+    isTranscribingVoice,
+    autoSendEnabled: quickCaptureAutoSend,
+    autoSendDelay: quickCaptureAutoSendDelay,
+    onSend: () => { void handleSubmit(); },
+    onClearAttachments: () => { threadRuntime.composer.clearAttachments(); },
+  });
+
+  // Unified capture hook — DISABLED: the mini overlay now handles all
+  // Cmd+Shift+A capture flows. Keeping the hook call with enabled=false
+  // so the import and plumbing remain available if needed as fallback.
+  useUnifiedCapture({
+    enabled: false,
+    isSessionActive: captureSession.isUnifiedSession,
+    onScreenshotCaptured: handleAttachCapturedScreen,
+    onStartVoice: () => { void handleVoiceInput(); },
+    onSessionStarted: captureSession.startSession,
+    isDeepResearchMode,
+  });
+
   // Keyboard shortcuts to focus the composer: "/" or Cmd/Ctrl+L
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -406,6 +466,105 @@ export const Composer: FC<{
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isEditorMode]);
+
+  // Stable refs for compose-inject handler — avoids re-registering the
+  // listener on every voice/capture state change, and gives the handler
+  // access to the latest values without stale closures.
+  const handleVoiceStopRef = useRef(handleVoiceStop);
+  handleVoiceStopRef.current = handleVoiceStop;
+  const isRecordingVoiceRef = useRef(isRecordingVoice);
+  isRecordingVoiceRef.current = isRecordingVoice;
+  const isTranscribingVoiceRef = useRef(isTranscribingVoice);
+  isTranscribingVoiceRef.current = isTranscribingVoice;
+  const captureSessionRef = useRef(captureSession);
+  captureSessionRef.current = captureSession;
+
+  // Deduplication guard: ignore compose-inject events that arrive within
+  // 2 seconds of a previous one (e.g. overlay dismiss delay → double trigger).
+  const lastComposeInjectTimestampRef = useRef(0);
+
+  // Overlay compose-inject: receive transcript + optional screenshot from the
+  // mini-overlay (via OverlaySyncBridge → custom window event) and inject them
+  // into the main window composer.
+  useEffect(() => {
+    const handleOverlayInject = (e: Event) => {
+      const payload = (e as CustomEvent<{ transcript: string; screenshotUrl?: string }>).detail;
+      if (!payload) return;
+
+      // Dedup guard: ignore if another compose-inject arrived within the last 2s
+      const now = Date.now();
+      if (now - lastComposeInjectTimestampRef.current < 2000) {
+        console.warn("[Composer] Ignoring duplicate compose-inject event (debounce)");
+        return;
+      }
+      lastComposeInjectTimestampRef.current = now;
+
+      // If the main composer has an active voice recording or transcription,
+      // stop it immediately so the user doesn't see conflicting UI (duplicate
+      // waveforms, "Transcribing..." spinners, etc.)
+      if (isRecordingVoiceRef.current) {
+        handleVoiceStopRef.current();
+      }
+
+      // If a unified capture session is active, cancel it to avoid stale
+      // screenshot state and overlay UI conflicts.
+      if (captureSessionRef.current.isUnifiedSession) {
+        captureSessionRef.current.cancelSession();
+      }
+
+      const { transcript, screenshotUrl } = payload;
+
+      // Inject transcript text
+      if (transcript) {
+        if (isEditorMode && tiptapRef.current) {
+          tiptapRef.current.insertVoiceTranscript(transcript);
+        } else {
+          const textarea = inputRef.current;
+          const insertion = buildTranscriptInsertion({
+            currentValue: inputValue,
+            transcript,
+            selectionStart: textarea?.selectionStart ?? null,
+            selectionEnd: textarea?.selectionEnd ?? null,
+          });
+          if (insertion) {
+            setInputValue(insertion.nextValue);
+          } else {
+            setInputValue((prev) => {
+              if (!prev.trim()) return transcript;
+              return `${prev}${prev.endsWith(" ") ? "" : " "}${transcript}`;
+            });
+          }
+        }
+      }
+
+      // Fetch and attach screenshot if provided (validate scheme first)
+      const ALLOWED_SCHEMES = ["/api/", "local-media:", "http://localhost", "https://localhost"];
+      if (screenshotUrl && ALLOWED_SCHEMES.some((s) => screenshotUrl.startsWith(s))) {
+        void (async () => {
+          try {
+            const response = await fetch(screenshotUrl);
+            if (!response.ok) return;
+            const blob = await response.blob();
+            const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
+            const file = new File([blob], `overlay-capture.${ext}`, { type: blob.type, lastModified: Date.now() });
+            await handleAttachCapturedScreen(file);
+          } catch {
+            // Non-fatal: screenshot attachment is best-effort
+          }
+        })();
+      } else {
+        // No screenshot — just focus the composer
+        if (isEditorMode && tiptapRef.current) {
+          tiptapRef.current.focus();
+        } else {
+          inputRef.current?.focus();
+        }
+      }
+    };
+
+    window.addEventListener("overlay:compose-inject", handleOverlayInject);
+    return () => window.removeEventListener("overlay:compose-inject", handleOverlayInject);
+  }, [isEditorMode, inputValue, setInputValue, handleAttachCapturedScreen]);
 
   // Process queued messages when AI finishes
   useEffect(() => {
@@ -469,7 +628,24 @@ export const Composer: FC<{
       lastTranscriptRef.current = null;
       wasAiEnhancedRef.current = false;
 
-      const expandedMessage = enhancedContext || inputValue.trim();
+      let expandedMessage = enhancedContext || inputValue.trim();
+
+      // Prepend screen capture context if metadata is available from a unified session
+      if (captureSession.isUnifiedSession && captureSession.metadata) {
+        const meta = captureSession.metadata;
+        const contextParts: string[] = [];
+        if (meta.activeAppName && meta.activeWindowTitle) {
+          contextParts.push(`[Screen Context: ${meta.activeAppName} — ${meta.activeWindowTitle}]`);
+        } else if (meta.activeWindowTitle) {
+          contextParts.push(`[Screen Context: ${meta.activeWindowTitle}]`);
+        }
+        if (meta.browserUrl) {
+          contextParts.push(`[URL: ${meta.browserUrl}]`);
+        }
+        if (contextParts.length > 0) {
+          expandedMessage = contextParts.join("\n") + "\n\n" + expandedMessage;
+        }
+      }
 
       if (isQueueBlocked) {
         if (hasText) {
@@ -517,12 +693,20 @@ export const Composer: FC<{
         updateCursorPosition(0);
         clearEnhancement();
         if (hasAttachments) threadRuntime.composer.clearAttachments();
+        // End unified capture session after queuing (metadata consumed, no attachment clear)
+        if (captureSession.isUnifiedSession) {
+          captureSession.endSession();
+        }
       } else {
         threadRuntime.composer.setText(expandedMessage);
         threadRuntime.composer.send();
         clearDraft();
         updateCursorPosition(0);
         clearEnhancement();
+        // Reset unified capture session state after sending (metadata consumed, don't clear attachments — already sent)
+        if (captureSession.isUnifiedSession) {
+          captureSession.endSession();
+        }
       }
     },
     [
@@ -538,6 +722,7 @@ export const Composer: FC<{
       clearEnhancement,
       lastTranscriptRef,
       wasAiEnhancedRef,
+      captureSession,
     ]
   );
 
@@ -569,6 +754,7 @@ export const Composer: FC<{
         }
         tiptapRef.current?.clear();
         clearTiptapDraft();
+        if (captureSession.isUnifiedSession) captureSession.endSession();
         return;
       }
 
@@ -590,6 +776,7 @@ export const Composer: FC<{
         if (attachmentCount > 0) {
           threadRuntime.composer.clearAttachments();
         }
+        if (captureSession.isUnifiedSession) captureSession.endSession();
         return;
       }
 
@@ -600,6 +787,24 @@ export const Composer: FC<{
       if (composerAttachments.length !== rawComposerAttachments.length) {
         toast.error("Wait for attachments to finish uploading before sending.");
         return;
+      }
+
+      // Prepend screen capture context if metadata is available from a unified session
+      let finalComposerText = composerText;
+      if (captureSession.isUnifiedSession && captureSession.metadata) {
+        const meta = captureSession.metadata;
+        const contextParts: string[] = [];
+        if (meta.activeAppName && meta.activeWindowTitle) {
+          contextParts.push(`[Screen Context: ${meta.activeAppName} — ${meta.activeWindowTitle}]`);
+        } else if (meta.activeWindowTitle) {
+          contextParts.push(`[Screen Context: ${meta.activeWindowTitle}]`);
+        }
+        if (meta.browserUrl) {
+          contextParts.push(`[URL: ${meta.browserUrl}]`);
+        }
+        if (contextParts.length > 0) {
+          finalComposerText = contextParts.join("\n") + "\n\n" + finalComposerText;
+        }
       }
 
       const inlineAttachments = inlineImageParts.map((part, index) => ({
@@ -621,7 +826,7 @@ export const Composer: FC<{
 
       threadRuntime.append({
         role: "user",
-        content: composerText ? [{ type: "text", text: composerText }] : [],
+        content: finalComposerText ? [{ type: "text", text: finalComposerText }] : [],
         attachments: [...composerAttachments, ...inlineAttachments],
       });
 
@@ -631,9 +836,12 @@ export const Composer: FC<{
       if (composerAttachments.length > 0) {
         threadRuntime.composer.clearAttachments();
       }
+      // End unified capture session after send (don't clear attachments — already sent)
+      if (captureSession.isUnifiedSession) captureSession.endSession();
     },
     [
       attachmentCount,
+      captureSession,
       clearEnhancement,
       clearTiptapDraft,
       deepResearch,
@@ -687,8 +895,12 @@ export const Composer: FC<{
   const handleTiptapDraftChange = useCallback(
     (nextDraft: JSONContent | null) => {
       setTiptapDraft(nextDraft);
+      // Cancel auto-send countdown when user edits in Tiptap (matches textarea behavior)
+      if (captureSession.countdownRemaining > 0) {
+        captureSession.cancelAutoSend();
+      }
     },
-    [setTiptapDraft],
+    [setTiptapDraft, captureSession],
   );
 
   const handleClearTiptapDraft = useCallback(() => {
@@ -1108,12 +1320,46 @@ export const Composer: FC<{
 
 {/* Reward suggestion is shown as inline ghost text in the textarea */}
 
-        {isRecordingVoice && (
-          <VoiceWaveform
-            isRecording={isRecordingVoice}
-            analyserNode={analyserNode}
-            className="border-b border-terminal-dark/10"
-          />
+        {/* Unified capture overlay — replaces standalone waveform during unified sessions */}
+        {captureSession.isUnifiedSession && captureSession.phase !== "idle" ? (
+          <>
+            <UnifiedCaptureOverlay
+              phase={captureSession.phase}
+              screenshotUrl={captureSession.screenshotUrl}
+              isRecording={isRecordingVoice}
+              analyserNode={analyserNode}
+              onCancel={() => {
+                captureSession.cancelSession();
+                if (isRecordingVoice) handleVoiceStop();
+              }}
+              onStopRecording={() => {
+                captureSession.stopAndSend();
+                handleVoiceStop();
+              }}
+              className="border-b border-terminal-dark/10"
+            />
+            {captureSession.phase === "reviewing" && captureSession.countdownRemaining > 0 && (
+              <AutoSendCountdown
+                remaining={captureSession.countdownRemaining}
+                total={quickCaptureAutoSendDelay}
+                onCancel={captureSession.cancelAutoSend}
+                onSendNow={() => {
+                  captureSession.cancelAutoSend();
+                  void handleSubmit();
+                }}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {isRecordingVoice && (
+              <VoiceWaveform
+                isRecording={isRecordingVoice}
+                analyserNode={analyserNode}
+                className="border-b border-terminal-dark/10"
+              />
+            )}
+          </>
         )}
 
         {!isRecordingVoice && !isTranscribingVoice && sttEnabled && voiceActionsEnabled && inputValue.trim().length > 0 && (
@@ -1127,8 +1373,8 @@ export const Composer: FC<{
           />
         )}
 
-        {/* I7: Transcribing state indicator */}
-        {isTranscribingVoice && (
+        {/* I7: Transcribing state indicator — only shown outside unified sessions */}
+        {!captureSession.isUnifiedSession && isTranscribingVoice && (
           <div className="flex items-center gap-2 px-4 py-2 text-xs font-mono text-terminal-muted border-b border-terminal-dark/10">
             <Loader2Icon className="size-3 animate-spin flex-shrink-0" />
             <span>Transcribing...</span>
@@ -1200,6 +1446,12 @@ export const Composer: FC<{
                 onVoiceStop={handleVoiceStop}
                 inputHasText={tiptapRef.current?.hasContent() ?? false}
                 attachmentCount={attachmentCount}
+                screenCaptureEnabled={isScreenCaptureAvailable}
+                screenCaptureShortcut={screenCaptureShortcut}
+                onScreenCapture={() => {
+                  void captureNow();
+                }}
+                screenCaptureBusy={isCapturing}
                 showEnhanceButton={false}
                 isEnhancing={false}
                 enhancedContext={null}
@@ -1225,6 +1477,9 @@ export const Composer: FC<{
                 onChange={(e) => {
                   setInputValue(e.target.value);
                   updateCursorPosition(e.target.selectionStart ?? 0, e.target.selectionEnd ?? e.target.selectionStart ?? 0);
+                  if (captureSession.countdownRemaining > 0) {
+                    captureSession.cancelAutoSend();
+                  }
                   if (enhancedContext || enhancementInfo) clearEnhancement();
                 }}
                 onSelect={(e) => {
@@ -1281,6 +1536,12 @@ export const Composer: FC<{
               onVoiceStop={handleVoiceStop}
               inputHasText={inputValue.trim().length > 2}
               attachmentCount={attachmentCount}
+              screenCaptureEnabled={isScreenCaptureAvailable}
+              screenCaptureShortcut={screenCaptureShortcut}
+              onScreenCapture={() => {
+                void captureNow();
+              }}
+              screenCaptureBusy={isCapturing}
               showEnhanceButton={!!(character?.id && character.id !== "default")}
               isEnhancing={isEnhancing}
               enhancedContext={enhancedContext}

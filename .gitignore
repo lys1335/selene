@@ -77,6 +77,8 @@ models/**
 
 # Audio files (large binary files)
 *.wav
+# Allow test fixture audio files
+!tests/fixtures/**/*.wav
 *.mp3
 *.flac
 *.aac

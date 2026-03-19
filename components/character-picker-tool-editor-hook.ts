@@ -24,6 +24,7 @@ type DependencyStatus = {
   flux2Klein9bEnabled: boolean;
   localGrepEnabled: boolean;
   devWorkspaceEnabled: boolean;
+  screenCaptureEnabled: boolean;
 };
 
 const DEFAULT_DEPENDENCY_STATUS: DependencyStatus = {
@@ -37,6 +38,7 @@ const DEFAULT_DEPENDENCY_STATUS: DependencyStatus = {
   flux2Klein9bEnabled: false,
   localGrepEnabled: true,
   devWorkspaceEnabled: false,
+  screenCaptureEnabled: true,
 };
 
 export function useToolEditor(
@@ -155,6 +157,7 @@ export function useToolEditor(
           flux2Klein9bEnabled: settingsData.flux2Klein9bEnabled === true,
           localGrepEnabled: settingsData.localGrepEnabled !== false,
           devWorkspaceEnabled: settingsData.devWorkspaceEnabled === true,
+          screenCaptureEnabled: settingsData.screenCaptureEnabled !== false,
         });
       } catch (error) {
         if (cancelled) return;

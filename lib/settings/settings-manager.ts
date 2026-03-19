@@ -236,6 +236,16 @@ export interface AppSettings {
     parakeetAutoStart?: boolean;
     parakeetServerPort?: number;
     voiceHotkey?: string;
+    screenCaptureEnabled?: boolean;
+    screenCaptureShortcut?: string;
+    quickCaptureEnabled?: boolean;
+    quickCaptureHotkey?: string;
+    quickCaptureAutoSend?: boolean;
+    quickCaptureAutoSendDelay?: number;
+    screenCaptureExcludedApps?: string;
+    screenCaptureRetention?: "session" | "day" | "week" | "forever";
+    screenCapturePreviewBeforeSend?: boolean;
+    screenCaptureOnboardingSeen?: boolean;
     customDictionary?: string[];
     voiceHistoryEnabled?: boolean;
     voiceHistoryLimit?: number;
@@ -282,6 +292,11 @@ export interface AppSettings {
     // First-visit modals
     hasSeenThemeChooser?: boolean;          // Whether user has seen the post-onboarding theme chooser
 
+    // Mini Overlay settings
+    miniOverlayDefaultMode?: "direct" | "compose";
+    miniOverlayAutoCloseAfterSpeak?: boolean;
+    miniOverlayKeepAppFocusedOnCompose?: boolean;
+    miniOverlayShowScreenPreview?: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -367,6 +382,16 @@ const DEFAULT_SETTINGS: AppSettings = {
     parakeetModel: "parakeet-tdt-0.6b-v3",
     parakeetAutoStart: true,
     voiceHotkey: "CommandOrControl+Shift+Space",
+    screenCaptureEnabled: true,
+    screenCaptureShortcut: "CommandOrControl+Shift+S",
+    quickCaptureEnabled: true,
+    quickCaptureHotkey: "CommandOrControl+Shift+A",
+    quickCaptureAutoSend: false,
+    quickCaptureAutoSendDelay: 3,
+    screenCaptureExcludedApps: "1Password, Keychain Access, System Preferences",
+    screenCaptureRetention: "session",
+    screenCapturePreviewBeforeSend: true,
+    screenCaptureOnboardingSeen: false,
     customDictionary: [],
     voiceHistoryEnabled: true,
     voiceHistoryLimit: 200,
@@ -393,6 +418,11 @@ const DEFAULT_SETTINGS: AppSettings = {
     // Browser automation defaults
     chromiumBrowserMode: "standalone",
     chromiumUserProfilePath: "",
+    // Mini Overlay defaults
+    miniOverlayDefaultMode: "direct",
+    miniOverlayAutoCloseAfterSpeak: false,
+    miniOverlayKeepAppFocusedOnCompose: true,
+    miniOverlayShowScreenPreview: true,
 };
 
 function getSettingsPath(): string {

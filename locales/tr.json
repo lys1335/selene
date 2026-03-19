@@ -648,7 +648,8 @@
         "flux2Klein4bEnabled": "FLUX.2 Klein 4B etkin olmalı",
         "flux2Klein9bEnabled": "FLUX.2 Klein 9B etkin olmalı",
         "localGrepEnabled": "Yerel Grep etkin olmalı",
-        "devWorkspaceEnabled": "Geliştirici Çalışma Alanı etkin olmalı"
+        "devWorkspaceEnabled": "Geliştirici Çalışma Alanı etkin olmalı",
+        "screenCaptureEnabled": "Ekran Görüntüsü Yakalama etkin olmalı"
       }
     },
     "tools": {
@@ -711,6 +712,10 @@
       "describeImage": {
         "name": "Görseli Açıkla",
         "description": "Görselleri analiz edin ve açıklayın"
+      },
+      "screenCapture": {
+        "name": "Ekran Görüntüsü",
+        "description": "Aktif ekranı yakala ve mevcut mesaja ekle"
       },
       "showProductImages": {
         "name": "Ürün Galerisi",
@@ -1000,7 +1005,9 @@
       "voiceInput": "Sesle yaz",
       "voiceInputHold": "Kaydetmek için basılı tut",
       "stopVoiceInput": "Kaydı durdur",
-      "transcribingAudio": "Ses yazıya dönüştürülüyor..."
+      "transcribingAudio": "Ses yazıya dönüştürülüyor...",
+      "captureScreen": "Ekran goruntusu al",
+      "captureScreenShortcut": "Ekran goruntusu al ({shortcut})"
     },
     "prevBranch": "Önceki dal",
     "nextBranch": "Sonraki dal",
@@ -1747,6 +1754,8 @@
         "assembleVideoDesc": "Oturum görsellerini/videolarını düzenlenmiş videolara birleştir",
         "describeImage": "Görsel Tanımla",
         "describeImageDesc": "AI görüşü kullanarak görselleri analiz et ve tanımla",
+        "screenCapture": "Ekran Görüntüsü",
+        "screenCaptureDesc": "Aktif ekranı yakala ve mevcut mesaja ekle",
         "showProductImages": "Ürün Galerisi",
         "showProductImagesDesc": "Alışveriş sorguları için görsellerle ve satın alma bağlantılarıyla ürünleri görüntüle",
         "executeCommand": "Komut Çalıştır",
@@ -1838,7 +1847,8 @@
         "flux2Klein4bEnabled": "FLUX.2 Klein 4B etkin olmalı",
         "flux2Klein9bEnabled": "FLUX.2 Klein 9B etkin olmalı",
         "localGrepEnabled": "Yerel Grep etkin olmalı",
-        "devWorkspaceEnabled": "Geliştirici Çalışma Alanı etkin olmalı"
+        "devWorkspaceEnabled": "Geliştirici Çalışma Alanı etkin olmalı",
+        "screenCaptureEnabled": "Ekran Görüntüsü Yakalama etkin olmalı"
       }
     },
     "style": {
@@ -2528,6 +2538,59 @@
         "agentNameLabel": "Duzeltme ajan adi",
         "agentNameDesc": "İşlem sonrası istem personası tarafından kullanılır.",
         "agentNameHelper": "Temizleme isteminde kullanilan ajan kimligi."
+      },
+      "screen": {
+        "title": "Ekran Görüntüsü",
+        "description": "Etkin ekranı alıp dosya seçiciyi açmadan mevcut yazma alanına ekler.",
+        "enableLabel": "Ekran görüntüsü kısayolunu etkinleştir",
+        "enableDesc": "Geçerli ekranı yakalayıp aktif sohbete ekleyen global kısayolu kaydeder.",
+        "shortcutLabel": "Global ekran görüntüsü kısayolu",
+        "shortcutHelper": "Electron globalShortcut formatı, örnek: CommandOrControl+Shift+S",
+        "shortcutPlaceholder": "CommandOrControl+Shift+S",
+        "captureHint": "Tetiklendiğinde Selene imlecin bulunduğu ekranı yakalar, pencereyi öne getirir ve görüntüyü mevcut taslağa ekler."
+      },
+      "quickCapture": {
+        "title": "Hızlı Yakalama (ses + ekran)",
+        "description": "Tek kısayol ekranı yakalar ve aynı anda ses kaydını başlatır.",
+        "enableLabel": "Birleşik yakalmayı etkinleştir",
+        "enableDesc": "Ekranı yakalayıp anında ses kaydını başlatan global kısayol kaydeder.",
+        "hotkeyLabel": "Birleşik yakalama kısayolu",
+        "hotkeyHelper": "Electron globalShortcut formatı, örnek: CommandOrControl+Shift+A",
+        "autoSendLabel": "Sesten sonra otomatik gönder",
+        "autoSendDesc": "Ses transkripsiyonu tamamlandıktan sonra mesajı otomatik gönderir (iptal etmek için geri sayım ile).",
+        "autoSendDelayLabel": "Otomatik gönderme gecikmesi",
+        "autoSendDelayHelper": "Otomatik göndermeden önce beklenecek süre. Geri sayım sırasında iptal edebilirsiniz.",
+        "hint": "Herhangi bir uygulamadan kısayola basın → ekran yakalandı + ses kaydı başlar → sorunuzu söyleyin → transkripsiyon eklenir → mesaj gönderilir (veya otomatik gönderme kapalı ise önce inceleyin)."
+      },
+      "privacy": {
+        "title": "Ekran görüntüsü gizliliği",
+        "description": "Yakalamadan hariç tutulacak uygulamaları ve ekran görüntülerinin ne kadar süre saklanacağını ayarlayın.",
+        "excludedAppsLabel": "Hariç tutulan uygulamalar",
+        "excludedAppsHelper": "Bu uygulamalar hiçbir zaman yakalanmaz (virgülle ayrılmış)",
+        "retentionLabel": "Ekran görüntülerini sakla",
+        "retentionHelper": "Yakalanan ekran görüntülerinin diskte ne kadar süre tutulacağı",
+        "retentionSession": "Oturum bitene kadar",
+        "retentionDay": "24 saat",
+        "retentionWeek": "1 hafta",
+        "retentionForever": "Sonsuza kadar sakla",
+        "clearBtn": "Tüm ekran görüntülerini sil",
+        "clearingBtn": "Siliniyor...",
+        "clearSuccess": "{count} ekran görüntüsü silindi"
+      },
+      "miniOverlay": {
+        "title": "Mini pencere",
+        "description": "Ana pencereyi açmadan sesli sorularınızı yanıtlayan hafif bir yardımcı.",
+        "listening": "Dinleniyor...",
+        "transcribing": "Yazıya dönüştürülüyor...",
+        "thinking": "Düşünüyor...",
+        "speaking": "Konuşuyor...",
+        "done": "Tamam",
+        "ready": "Hazır",
+        "cancel": "İptal",
+        "clickToStop": "Kaydı durdurmak için tıklayın veya kısayolu tekrar basın",
+        "error": "Bir şeyler ters gitti",
+        "noMic": "Mikrofon erişimi reddedildi",
+        "ttsUnavailable": "Metin-konuşma yapılandırılmamış"
       },
       "dictionary": {
         "title": "Kisisel sozluk",

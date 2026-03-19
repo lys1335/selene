@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import type { SettingsSection, FormState } from "./settings-types";
 import { DEFAULT_FORM_STATE, buildFormStateFromData } from "./settings-types";
 import { SettingsPanel } from "./settings-panel";
+import { getElectronAPI } from "@/lib/electron/types";
+import { OnboardingDialog } from "@/components/quick-capture/onboarding-dialog";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -27,6 +29,8 @@ export default function SettingsPage() {
   const [lastSavedState, setLastSavedState] = useState<FormState>(DEFAULT_FORM_STATE);
   const saveResetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasInitializedRef = useRef(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const prevScreenCaptureEnabledRef = useRef<boolean>(false);
 
   const hasUnsavedChanges = useMemo(() => {
     if (!hasInitializedRef.current) return false;
@@ -78,6 +82,7 @@ export default function SettingsPage() {
       const nextFormState = buildFormStateFromData(data);
       setFormState(nextFormState);
       setLastSavedState(nextFormState);
+      prevScreenCaptureEnabledRef.current = nextFormState.screenCaptureEnabled;
       hasInitializedRef.current = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : t("errors.load"));
@@ -548,6 +553,30 @@ export default function SettingsPage() {
       saveResetTimeoutRef.current = setTimeout(() => setSaved(false), 2000);
       setTheme(formState.theme);
       setChatWorkspaceMode(formState.chatWorkspaceMode);
+
+      const electron = getElectronAPI();
+      if (electron?.voiceHotkey) {
+        try {
+          await electron.voiceHotkey.registerFromSettings();
+        } catch (shortcutError) {
+          console.warn("[Settings] Failed to apply voice hotkey:", shortcutError);
+        }
+      }
+      if (electron?.screenCapture) {
+        try {
+          await electron.screenCapture.registerFromSettings();
+        } catch (shortcutError) {
+          console.warn("[Settings] Failed to apply screen capture shortcut:", shortcutError);
+        }
+      }
+      if (electron?.unifiedCapture) {
+        try {
+          await electron.unifiedCapture.registerFromSettings();
+        } catch (shortcutError) {
+          console.warn("[Settings] Failed to apply unified capture shortcut:", shortcutError);
+        }
+      }
+
       toast.success(t("save.savedToast"));
       await loadSettings(); // Reload to get masked keys
     } catch (err) {
@@ -564,6 +593,16 @@ export default function SettingsPage() {
       }
     };
   }, []);
+
+  // Show onboarding when screen capture is first enabled and hasn't been seen
+  useEffect(() => {
+    const wasEnabled = prevScreenCaptureEnabledRef.current;
+    const isEnabled = formState.screenCaptureEnabled;
+    if (isEnabled && !wasEnabled && !formState.screenCaptureOnboardingSeen && hasInitializedRef.current) {
+      setShowOnboarding(true);
+    }
+    prevScreenCaptureEnabledRef.current = isEnabled;
+  }, [formState.screenCaptureEnabled, formState.screenCaptureOnboardingSeen]);
 
   useEffect(() => {
     if (!hasUnsavedChanges || saving) return;
@@ -609,6 +648,23 @@ export default function SettingsPage() {
     { id: "memory" as const, label: t("nav.memory"), icon: BrainIcon },
   ];
 
+  const handleOnboardingComplete = useCallback((result: {
+    screenCaptureShortcut: string;
+    quickCaptureHotkey: string;
+    autoSend: boolean;
+    privacy: { excludedApps: string };
+  }) => {
+    setShowOnboarding(false);
+    setFormState((prev) => ({
+      ...prev,
+      screenCaptureShortcut: result.screenCaptureShortcut,
+      quickCaptureHotkey: result.quickCaptureHotkey,
+      quickCaptureAutoSend: result.autoSend,
+      screenCaptureExcludedApps: result.privacy.excludedApps,
+      screenCaptureOnboardingSeen: true,
+    }));
+  }, []);
+
   if (loading) {
     return (
       <Shell>
@@ -621,6 +677,12 @@ export default function SettingsPage() {
 
   return (
     <Shell>
+      <OnboardingDialog
+        open={showOnboarding}
+        onComplete={handleOnboardingComplete}
+        initialScreenShortcut={formState.screenCaptureShortcut}
+        initialUnifiedShortcut={formState.quickCaptureHotkey}
+      />
       <div className="flex h-full flex-col">
         {/* Header */}
         <div className="flex items-center gap-4 border-b border-terminal-border bg-terminal-cream p-4">

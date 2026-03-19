@@ -192,6 +192,119 @@ const electronAPI = {
     },
   },
 
+  screenCapture: {
+    onCaptured: (callback: (result: {
+      success: boolean;
+      imageUrl?: string;
+      relativePath?: string;
+      width?: number;
+      height?: number;
+      error?: string;
+      permissionStatus: "granted" | "denied" | "restricted" | "not-determined" | "unknown";
+    }) => void): (() => void) | undefined => {
+      const handler = (_event: Electron.IpcRendererEvent, result: {
+        success: boolean;
+        imageUrl?: string;
+        relativePath?: string;
+        width?: number;
+        height?: number;
+        error?: string;
+        permissionStatus: "granted" | "denied" | "restricted" | "not-determined" | "unknown";
+      }) => callback(result);
+      ipcRenderer.on("screen-capture:captured", handler);
+      return () => {
+        ipcRenderer.removeListener("screen-capture:captured", handler);
+      };
+    },
+    capture: (): Promise<{
+      success: boolean;
+      imageUrl?: string;
+      relativePath?: string;
+      width?: number;
+      height?: number;
+      error?: string;
+      permissionStatus: "granted" | "denied" | "restricted" | "not-determined" | "unknown";
+    }> => {
+      return ipcRenderer.invoke("screen-capture:capture");
+    },
+    register: (accelerator: string, enabled = true): Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }> => {
+      return ipcRenderer.invoke("screen-capture:register", accelerator, enabled);
+    },
+    registerFromSettings: (): Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }> => {
+      return ipcRenderer.invoke("screen-capture:registerFromSettings");
+    },
+    getRegistered: (): Promise<{ accelerator: string }> => {
+      return ipcRenderer.invoke("screen-capture:getRegistered");
+    },
+    clear: (): Promise<{ success: boolean }> => {
+      return ipcRenderer.invoke("screen-capture:clear");
+    },
+    checkPermission: (): Promise<{ status: "granted" | "denied" | "restricted" | "not-determined" | "unknown" }> => {
+      return ipcRenderer.invoke("screen-capture:check-permission");
+    },
+  },
+
+  // Unified capture (voice + screen) operations
+  unifiedCapture: {
+    onTriggered: (callback: (payload: {
+      mode: "voice+screen" | "voice-only" | "screen-only";
+      screenshot?: { url: string; filePath: string };
+      metadata?: {
+        capturedAt: string;
+        activeWindowTitle?: string;
+        activeAppName?: string;
+        activeUrl?: string;
+        displayIndex?: number;
+        originalResolution?: { width: number; height: number };
+        captureMode: "fullscreen" | "active-window" | "region" | "display";
+      };
+      startVoice: boolean;
+      screenshotError?: string;
+      traceId: string;
+    }) => void): (() => void) | undefined => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: Parameters<typeof callback>[0]) => callback(payload);
+      ipcRenderer.on("unified-capture:triggered", handler);
+      return () => {
+        ipcRenderer.removeListener("unified-capture:triggered", handler);
+      };
+    },
+    trigger: (mode?: "voice+screen" | "voice-only" | "screen-only"): Promise<unknown> => {
+      return ipcRenderer.invoke("unified-capture:trigger", mode);
+    },
+    register: (accelerator: string, enabled = true): Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }> => {
+      return ipcRenderer.invoke("unified-capture:register", accelerator, enabled);
+    },
+    registerFromSettings: (): Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }> => {
+      return ipcRenderer.invoke("unified-capture:registerFromSettings");
+    },
+    getRegistered: (): Promise<{ accelerator: string }> => {
+      return ipcRenderer.invoke("unified-capture:getRegistered");
+    },
+    clear: (): Promise<{ success: boolean }> => {
+      return ipcRenderer.invoke("unified-capture:clear");
+    },
+  },
+
+  // Permission management
+  permissions: {
+    check: (): Promise<{
+      screen: "granted" | "denied" | "not-determined" | "restricted" | "unavailable";
+      microphone: "granted" | "denied" | "not-determined" | "restricted" | "unavailable";
+      accessibility: "granted" | "denied" | "not-determined" | "restricted" | "unavailable";
+    }> => {
+      return ipcRenderer.invoke("permission:check");
+    },
+    requestScreen: (): Promise<void> => {
+      return ipcRenderer.invoke("permission:request-screen");
+    },
+    requestMic: (): Promise<boolean> => {
+      return ipcRenderer.invoke("permission:request-mic");
+    },
+    requestAccessibility: (): Promise<boolean> => {
+      return ipcRenderer.invoke("permission:request-accessibility");
+    },
+  },
+
   // ComfyUI local backend operations
   comfyui: {
     checkStatus: (backendPath?: string): Promise<{
@@ -375,6 +488,10 @@ const electronAPI = {
         "logs:subscribe",
         "logs:unsubscribe",
         "logs:clear",
+        "mini-overlay:close",
+        "mini-overlay:phase-update",
+        "mini-overlay:message-sent",
+        "mini-overlay:dismiss",
       ];
       if (validChannels.includes(channel)) {
         ipcRenderer.send(channel, ...args);
@@ -417,10 +534,27 @@ const electronAPI = {
         "voice-hotkey:registerFromSettings",
         "voice-hotkey:getRegistered",
         "voice-hotkey:clear",
+        "screen-capture:capture",
+        "screen-capture:register",
+        "screen-capture:registerFromSettings",
+        "screen-capture:getRegistered",
+        "screen-capture:clear",
+        "screen-capture:check-permission",
+        "unified-capture:trigger",
+        "unified-capture:register",
+        "unified-capture:registerFromSettings",
+        "unified-capture:getRegistered",
+        "unified-capture:clear",
+        "permission:check",
+        "permission:request-screen",
+        "permission:request-mic",
+        "permission:request-accessibility",
         "browser-session:open",
         "browser-session:close",
         "browser-session:is-open",
         "browser-session:save-recording",
+        "mini-overlay:request-focus-return",
+        "mini-overlay:compose-ready",
       ];
       if (validChannels.includes(channel)) {
         return ipcRenderer.invoke(channel, ...args);
@@ -429,13 +563,13 @@ const electronAPI = {
     },
     on: (channel: string, callback: (...args: unknown[]) => void): void => {
       // Whitelist of allowed channels
-      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered"];
+      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:toggle-recording", "overlay:session-updated", "overlay:compose-inject", "overlay:add-screenshot"];
       if (validChannels.includes(channel)) {
         ipcRenderer.on(channel, (_event, ...args) => callback(...args));
       }
     },
     removeAllListeners: (channel: string): void => {
-      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered"];
+      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:toggle-recording", "overlay:session-updated", "overlay:compose-inject", "overlay:add-screenshot"];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeAllListeners(channel);
       }

@@ -11,9 +11,9 @@ import {
 } from "@/lib/skills/skill-picker-utils";
 import { resilientFetch, resilientPost } from "@/lib/utils/resilient-fetch";
 import {
-  finalizeTranscriptText,
-  normalizeTranscriptText,
-} from "./voice-transcript-utils";
+  createSpeechMediaRecorder,
+  transcribeRecordedSpeech,
+} from "@/lib/voice/browser-stt";
 import type { ComposerSkillLite, SkillPickerMode } from "./composer-skill-picker";
 import { MAX_SLASH_SKILL_RESULTS } from "./composer-skill-picker";
 
@@ -161,17 +161,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
         // Waveform not available — recording still works
       }
 
-      const preferredMimeTypes = [
-        "audio/webm;codecs=opus",
-        "audio/webm",
-        "audio/ogg;codecs=opus",
-      ];
-      const supportedMimeType = preferredMimeTypes.find((mimeType) =>
-        MediaRecorder.isTypeSupported(mimeType)
-      );
-      const recorder = supportedMimeType
-        ? new MediaRecorder(stream, { mimeType: supportedMimeType })
-        : new MediaRecorder(stream);
+      const recorder = createSpeechMediaRecorder(stream);
 
       recordingStreamRef.current = stream;
       recordingChunksRef.current = [];
@@ -221,66 +211,27 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
 
         setIsTranscribingVoice(true);
         try {
-          const extension = mimeType.includes("ogg")
-            ? "ogg"
-            : mimeType.includes("wav")
-              ? "wav"
-              : mimeType.includes("mp4") || mimeType.includes("m4a")
-                ? "m4a"
-                : "webm";
-          const formData = new FormData();
-          formData.append("file", audioBlob, `voice-input.${extension}`);
-
-          const response = await fetch("/api/voice/transcribe", {
-            method: "POST",
-            body: formData,
+          const result = await transcribeRecordedSpeech({
+            audioBlob,
+            mimeType,
+            postProcessingEnabled: voicePostProcessing,
+            transcriptionFailedMessage: t("toast.transcriptionFailed"),
+            noSpeechDetectedMessage: t("toast.noSpeechDetected"),
+            onPostProcessingFallback: () => {
+              toast.info("Grammar cleanup unavailable. Using raw transcription.");
+            },
           });
-
-          const payload = await response.json().catch(() => null);
-          if (!response.ok) {
-            throw new Error(payload?.error || t("toast.transcriptionFailed"));
-          }
-
-          const transcript =
-            typeof payload?.text === "string" ? payload.text.trim() : "";
-          if (!transcript) {
-            throw new Error(t("toast.noSpeechDetected"));
-          }
 
           // Store raw transcript for auto-learn comparison when user sends
-          lastTranscriptRef.current = transcript;
+          lastTranscriptRef.current = result.transcript;
 
-          let enhancedText: string | null = null;
-          if (voicePostProcessing && transcript.length > 0) {
-            try {
-              const cleanupResponse = await fetch("/api/voice/actions", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: transcript, action: "fix-grammar" }),
-              });
-              const cleanupData = await cleanupResponse.json() as { success?: boolean; text?: string };
-              if (cleanupData.success && typeof cleanupData.text === "string" && cleanupData.text.trim().length > 0) {
-                enhancedText = cleanupData.text.trim();
-              }
-            } catch {
-              // Post-processing failed — use raw transcript
-              toast.info("Grammar cleanup unavailable. Using raw transcription.");
-            }
-          }
-
-          const result = finalizeTranscriptText({
-            transcript,
-            postProcessingEnabled: voicePostProcessing,
-            enhancedText,
-          });
-
-          wasAiEnhancedRef.current = result.usedEnhancedText;
+          wasAiEnhancedRef.current = result.usedPostProcessing;
 
           onTranscript({
             transcript: result.transcript,
             finalText: result.finalText,
             fallbackText: result.fallbackText,
-            usedPostProcessing: result.usedEnhancedText,
+            usedPostProcessing: result.usedPostProcessing,
           });
           onTranscriptInserted?.();
         } catch (error) {

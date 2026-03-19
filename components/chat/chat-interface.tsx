@@ -46,6 +46,11 @@ import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
 import { useChatWorkspaceStore } from "@/lib/stores/chat-workspace-store";
 import type { ChatWorkspaceMode } from "@/lib/chat/workspace-mode";
 
+interface OverlaySessionUpdateDetail {
+    sessionId?: string;
+    characterId?: string;
+}
+
 interface DetectedGitFolder {
     id: string;
     path: string;
@@ -76,6 +81,32 @@ const ChatSetMessagesBridge: FC<{
 }> = ({ setMessagesRef }) => {
     const setMessages = useChatSetMessages();
     useEffect(() => { setMessagesRef.current = setMessages; }, [setMessages, setMessagesRef]);
+    return null;
+};
+
+/** Bridge component: lives inside ChatProvider to receive overlay events and
+ *  reload messages when the overlay sends to the active session. */
+const OverlaySyncBridge: FC<{
+    characterId: string;
+    onOverlaySessionUpdated: (payload: { sessionId: string; characterId: string }) => void;
+}> = ({ characterId, onOverlaySessionUpdated }) => {
+    useEffect(() => {
+        const handleOverlaySessionUpdated = (event: Event) => {
+            const detail = (event as CustomEvent<OverlaySessionUpdateDetail>).detail;
+            if (!detail?.sessionId || !detail.characterId) return;
+            if (detail.characterId !== characterId) return;
+            onOverlaySessionUpdated({
+                sessionId: detail.sessionId,
+                characterId: detail.characterId,
+            });
+        };
+
+        window.addEventListener("overlay:session-updated", handleOverlaySessionUpdated);
+        return () => {
+            window.removeEventListener("overlay:session-updated", handleOverlaySessionUpdated);
+        };
+    }, [characterId, onOverlaySessionUpdated]);
+
     return null;
 };
 
@@ -887,6 +918,22 @@ export default function ChatInterface({
         sm.refreshSessionTimestamp(targetSessionId);
     }, [bg.isRunActiveRef, sm.fetchSessionMessages, sm.notifySessionUpdate, sm.refreshSessionTimestamp]);
 
+    const handleOverlaySessionUpdated = useCallback(async (
+        payload: { sessionId: string; characterId: string }
+    ) => {
+        if (payload.characterId !== character.id) return;
+
+        await sm.loadSessions({
+            silent: true,
+            overrideCursor: null,
+            preserveExtra: sm.userLoadedMoreRef.current,
+        });
+
+        if (payload.sessionId === activeSessionIdRef.current) {
+            await reloadSessionMessages(payload.sessionId, { force: true });
+        }
+    }, [character.id, reloadSessionMessages, sm]);
+
     // ── Pathname-triggered refresh ──────────────────────────────────────────
     // When navigating away (e.g. to /settings) and back, the Next.js Router
     // Cache may serve a stale RSC payload. Using `pathname` as a dependency
@@ -1546,6 +1593,10 @@ export default function ChatInterface({
                                 initialMessages={messages}
                             >
                                 <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
+                                <OverlaySyncBridge
+                                    characterId={character.id}
+                                    onOverlaySessionUpdated={handleOverlaySessionUpdated}
+                                />
                                 <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
                                 <ForegroundStreamingBridge
                                     isForegroundStreamingRef={isForegroundStreamingRef}
@@ -1700,6 +1751,10 @@ export default function ChatInterface({
                         initialMessages={messages}
                     >
                         <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
+                        <OverlaySyncBridge
+                            characterId={character.id}
+                            onOverlaySessionUpdated={handleOverlaySessionUpdated}
+                        />
                         <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
                         <ForegroundStreamingBridge
                             isForegroundStreamingRef={isForegroundStreamingRef}

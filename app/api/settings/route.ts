@@ -146,6 +146,20 @@ export async function PUT(request: NextRequest) {
       parakeetAutoStart: body.parakeetAutoStart !== undefined ? body.parakeetAutoStart : currentSettings.parakeetAutoStart,
       parakeetServerPort: body.parakeetServerPort !== undefined ? body.parakeetServerPort : currentSettings.parakeetServerPort,
       voiceHotkey: body.voiceHotkey !== undefined ? body.voiceHotkey : currentSettings.voiceHotkey,
+      screenCaptureEnabled: body.screenCaptureEnabled !== undefined ? body.screenCaptureEnabled : currentSettings.screenCaptureEnabled,
+      screenCaptureShortcut: body.screenCaptureShortcut !== undefined ? body.screenCaptureShortcut : currentSettings.screenCaptureShortcut,
+      quickCaptureEnabled: body.quickCaptureEnabled !== undefined ? body.quickCaptureEnabled : currentSettings.quickCaptureEnabled,
+      quickCaptureHotkey: body.quickCaptureHotkey !== undefined ? body.quickCaptureHotkey : currentSettings.quickCaptureHotkey,
+      quickCaptureAutoSend: body.quickCaptureAutoSend !== undefined ? body.quickCaptureAutoSend : currentSettings.quickCaptureAutoSend,
+      quickCaptureAutoSendDelay: body.quickCaptureAutoSendDelay !== undefined ? body.quickCaptureAutoSendDelay : currentSettings.quickCaptureAutoSendDelay,
+      miniOverlayDefaultMode:
+        body.miniOverlayDefaultMode === "compose" || body.miniOverlayDefaultMode === "direct"
+          ? body.miniOverlayDefaultMode
+          : currentSettings.miniOverlayDefaultMode,
+      screenCaptureExcludedApps: body.screenCaptureExcludedApps !== undefined ? body.screenCaptureExcludedApps : currentSettings.screenCaptureExcludedApps,
+      screenCaptureRetention: body.screenCaptureRetention !== undefined ? body.screenCaptureRetention : currentSettings.screenCaptureRetention,
+      screenCapturePreviewBeforeSend: body.screenCapturePreviewBeforeSend !== undefined ? body.screenCapturePreviewBeforeSend : currentSettings.screenCapturePreviewBeforeSend,
+      screenCaptureOnboardingSeen: body.screenCaptureOnboardingSeen !== undefined ? body.screenCaptureOnboardingSeen : currentSettings.screenCaptureOnboardingSeen,
       customDictionary: Array.isArray(body.customDictionary) ? body.customDictionary : (currentSettings.customDictionary ?? []),
       voiceHistoryEnabled: body.voiceHistoryEnabled !== undefined ? body.voiceHistoryEnabled : currentSettings.voiceHistoryEnabled,
       voiceHistoryLimit: body.voiceHistoryLimit !== undefined ? body.voiceHistoryLimit : currentSettings.voiceHistoryLimit,

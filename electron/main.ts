@@ -6,7 +6,7 @@
 // this is only the right thing to do it will be funny.
 // — with love, Selene (https://github.com/tercumantanumut/selene)
 
-import { app, session } from "electron";
+import { app, globalShortcut, session } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import { initializeRTK } from "../lib/rtk";
@@ -169,9 +169,20 @@ import {
 import { ensureLocalCerts } from "./certs";
 import { startH2Proxy, stopH2Proxy } from "./h2-proxy";
 import { setupIpcHandlers, setupEmbeddingModelPaths } from "./ipc-handlers";
-import { registerVoiceHotkeyFromSettings } from "./hotkey-manager";
+import {
+  registerScreenCaptureHotkeyFromSettings,
+  registerUnifiedCaptureHotkeyFromSettings,
+  registerVoiceHotkeyFromSettings,
+} from "./hotkey-manager";
+import { emitCapturedScreen } from "./ipc-screen-capture-handlers";
+import { captureDisplay, cleanScreenshotsByRetention } from "./screen-capture";
+import { loadSettings } from "../lib/settings/settings-manager";
+import { createUnifiedCaptureTrigger } from "./ipc-unified-capture-handlers";
+import { createVoiceOverlayTrigger } from "./ipc-voice-hotkey-handlers";
 import { cleanupAllVoiceProcesses } from "../lib/audio/transcription";
 import { closeAllBrowserSessionWindows } from "./ipc-browser-session-handlers";
+import { initTray, destroyTray } from "./tray-manager";
+import { showOverlay, destroyMiniOverlay, getOverlay } from "./mini-overlay-window";
 
 // ---------------------------------------------------------------------------
 // Initialize debug log
@@ -343,20 +354,133 @@ app.whenReady().then(async () => {
   });
   debugLog("[App] Main window created");
 
+  // Initialize system tray (keeps app running when main window is closed)
+  initTray({
+    onShowMainWindow: () => {
+      const { mainWindow: mw } = require("./window-manager") as typeof import("./window-manager");
+      if (mw && !mw.isDestroyed()) {
+        mw.show();
+        mw.focus();
+      } else {
+        createWindow({
+          isDev,
+          dataDir,
+          mediaDir,
+          prodServerPort: PROD_SERVER_PORT,
+          prodUseHttps: useH2,
+          preloadPath: path.join(__dirname, "preload.js"),
+          devServerUrl: process.env.ELECTRON_DEV_URL || devProxyUrl,
+          waitForServer: waitForServerReady,
+        });
+      }
+    },
+    onQuit: () => {
+      app.quit();
+    },
+  });
+
+  // Shared IPC context for hotkey callbacks that need to capture + focus window
+  const captureCtx = {
+    mainWindow: () => {
+      const { mainWindow } = require("./window-manager") as typeof import("./window-manager");
+      return mainWindow;
+    },
+    isDev,
+    dataDir,
+    mediaDir,
+    userDataPath,
+    userModelsDir,
+    prodServerPort: PROD_SERVER_PORT,
+    prodUseHttps: useH2,
+  };
+
   // Register global voice hotkey from user settings
   try {
+    const triggerVoiceOverlay = createVoiceOverlayTrigger(captureCtx);
     const hotkeyResult = registerVoiceHotkeyFromSettings({
       dataDir,
-      onTrigger: () => {
-        const { mainWindow } = require("./window-manager") as typeof import("./window-manager");
-        if (mainWindow) {
-          mainWindow.webContents.send("voice-hotkey:triggered");
-        }
-      },
+      onTrigger: triggerVoiceOverlay,
     });
     debugLog(`[App] Voice hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);
   } catch (error) {
     debugError("[App] Voice hotkey registration failed:", error);
+  }
+
+  // Clean up screenshots based on configured retention policy
+  try {
+    const captureSettings = loadSettings();
+    cleanScreenshotsByRetention(mediaDir, captureSettings.screenCaptureRetention ?? "session");
+  } catch (err) {
+    debugError("[App] Screenshot cleanup failed:", err);
+  }
+
+  try {
+    const hotkeyResult = registerScreenCaptureHotkeyFromSettings({
+      dataDir,
+      onTrigger: () => {
+        // If overlay is active, add screenshot to it instead of main chat
+        const overlay = getOverlay();
+        if (overlay && !overlay.isDestroyed() && overlay.isVisible() && !overlay.webContents.isCrashed()) {
+          captureDisplay({ mediaDir })
+            .then((result) => {
+              if (result.success && result.imageUrl) {
+                overlay.webContents.send("overlay:add-screenshot", result.imageUrl);
+              }
+            })
+            .catch((err: unknown) => {
+              debugError("[App] Failed to capture screenshot for overlay:", err);
+            });
+        } else {
+          void emitCapturedScreen(captureCtx);
+        }
+      },
+    });
+    debugLog(`[App] Screen capture hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);
+  } catch (error) {
+    debugError("[App] Screen capture hotkey registration failed:", error);
+  }
+
+  // Register unified capture hotkey (voice + screen) — always routes to mini overlay.
+  // If the overlay is already visible, send a toggle-recording signal.
+  // If hidden or not yet created, capture a screenshot FIRST, then show the overlay
+  // with the screenshot URL so the entire pipeline has the capture from the start.
+  try {
+    const hotkeyResult = registerUnifiedCaptureHotkeyFromSettings({
+      dataDir,
+      onTrigger: () => {
+        const baseUrl = isDev
+          ? (process.env.ELECTRON_DEV_URL || devProxyUrl)
+          : `${useH2 ? "https" : "http"}://localhost:${PROD_SERVER_PORT}`;
+        const overlay = getOverlay();
+        if (overlay && !overlay.isDestroyed() && overlay.isVisible() && !overlay.webContents.isCrashed()) {
+          // Overlay already showing — toggle recording:
+          // If recording → stop and proceed to transcribe/AI/TTS
+          // If idle/done/error → start a fresh recording
+          overlay.webContents.send("overlay:toggle-recording");
+        } else {
+          // Capture screenshot BEFORE showing overlay so the capture shows the
+          // user's actual screen, not the overlay window itself.
+          captureDisplay({ mediaDir })
+            .then((captureResult) => {
+              const screenshotUrl = captureResult.success ? captureResult.imageUrl : undefined;
+              if (!captureResult.success) {
+                debugLog("[App] Screenshot capture failed, opening overlay without screenshot:", captureResult.error);
+              }
+              return showOverlay({
+                baseUrl,
+                preloadPath: path.join(__dirname, "preload.js"),
+                screenshotUrl,
+              });
+            })
+            .catch((err: unknown) => {
+              debugError("[App] Failed to show mini overlay:", err);
+            });
+        }
+      },
+    });
+    debugLog(`[App] Unified capture hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);
+  } catch (error) {
+    debugError("[App] Unified capture hotkey registration failed:", error);
   }
 
   // On macOS, re-create window when dock icon is clicked and main window is gone.
@@ -386,19 +510,28 @@ app.whenReady().then(async () => {
 // Quit when all windows are closed (except on macOS)
 app.on("window-all-closed", () => {
   debugLog("[App] window-all-closed event");
-  stopH2Proxy();
-  stopNextServer();
-  flushDebugLog();
   if (process.platform !== "darwin") {
+    // On non-macOS, all windows closing means the user is done — stop servers and quit.
+    stopH2Proxy();
+    stopNextServer();
+    flushDebugLog();
     debugLog("[App] Non-macOS - quitting app");
     app.quit();
   }
+  // On macOS: app stays alive in tray / mini overlay — servers must keep running.
+});
+
+// Unregister all global shortcuts before process exit (will-quit fires after windows close)
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 // Clean up before quitting
 app.on("before-quit", () => {
   debugLog("[App] before-quit event - cleaning up");
   isAppQuitting = true;
+  destroyTray();
+  destroyMiniOverlay();
   closeAllBrowserSessionWindows();
   clearServerRestartTimer();
   stopH2Proxy();

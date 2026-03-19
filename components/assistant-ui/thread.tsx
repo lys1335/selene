@@ -92,6 +92,12 @@ export const Thread: FC<ThreadProps> = ({
     voiceAudioCues: true,
     voiceActivationMode: "tap",
     voiceHotkey: "CommandOrControl+Shift+Space",
+    screenCaptureEnabled: true,
+    screenCaptureShortcut: "CommandOrControl+Shift+S",
+    quickCaptureEnabled: true,
+    quickCaptureHotkey: "CommandOrControl+Shift+A",
+    quickCaptureAutoSend: false,
+    quickCaptureAutoSendDelay: 3,
   });
   const [toolDisplayMode, setToolDisplayMode] = useState<ToolDisplayMode>("compact");
   const [devWorkspaceEnabled, setDevWorkspaceEnabled] = useState(false);
@@ -112,6 +118,12 @@ export const Thread: FC<ThreadProps> = ({
         voiceAudioCues?: boolean;
         voiceActivationMode?: "tap" | "push";
         voiceHotkey?: string;
+        screenCaptureEnabled?: boolean;
+        screenCaptureShortcut?: string;
+        quickCaptureEnabled?: boolean;
+        quickCaptureHotkey?: string;
+        quickCaptureAutoSend?: boolean;
+        quickCaptureAutoSendDelay?: number;
         toolDisplayMode?: ToolDisplayMode;
         devWorkspaceEnabled?: boolean;
       }>("/api/settings", {
@@ -134,6 +146,18 @@ export const Thread: FC<ThreadProps> = ({
           typeof data.voiceHotkey === "string" && data.voiceHotkey.trim().length > 0
             ? data.voiceHotkey.trim()
             : "CommandOrControl+Shift+Space",
+        screenCaptureEnabled: data.screenCaptureEnabled !== false,
+        screenCaptureShortcut:
+          typeof data.screenCaptureShortcut === "string" && data.screenCaptureShortcut.trim().length > 0
+            ? data.screenCaptureShortcut.trim()
+            : "CommandOrControl+Shift+S",
+        quickCaptureEnabled: data.quickCaptureEnabled !== false,
+        quickCaptureHotkey:
+          typeof data.quickCaptureHotkey === "string" && data.quickCaptureHotkey.trim().length > 0
+            ? data.quickCaptureHotkey.trim()
+            : "CommandOrControl+Shift+A",
+        quickCaptureAutoSend: data.quickCaptureAutoSend === true,
+        quickCaptureAutoSendDelay: typeof data.quickCaptureAutoSendDelay === "number" ? data.quickCaptureAutoSendDelay : 3,
       });
       setToolDisplayMode(data.toolDisplayMode === "detailed" ? "detailed" : "compact");
       setDevWorkspaceEnabled(data.devWorkspaceEnabled === true);
@@ -395,6 +419,12 @@ export const Thread: FC<ThreadProps> = ({
               voiceAudioCues={voiceUiSettings.voiceAudioCues}
               voiceActivationMode={voiceUiSettings.voiceActivationMode}
               voiceHotkey={voiceUiSettings.voiceHotkey}
+              screenCaptureEnabled={voiceUiSettings.screenCaptureEnabled}
+              screenCaptureShortcut={voiceUiSettings.screenCaptureShortcut}
+              quickCaptureEnabled={voiceUiSettings.quickCaptureEnabled}
+              quickCaptureHotkey={voiceUiSettings.quickCaptureHotkey}
+              quickCaptureAutoSend={voiceUiSettings.quickCaptureAutoSend}
+              quickCaptureAutoSendDelay={voiceUiSettings.quickCaptureAutoSendDelay}
               onCancelBackgroundRun={onCancelBackgroundRun}
               isCancellingBackgroundRun={isCancellingBackgroundRun}
               canCancelBackgroundRun={canCancelBackgroundRun}

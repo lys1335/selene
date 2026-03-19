@@ -3,6 +3,12 @@
  * This allows type-safe access to Electron functionality from the renderer process.
  */
 
+/**
+ * Shared error marker for debounced captures. Used in both Electron main and renderer
+ * to suppress toast notifications for rapid successive shortcut presses.
+ */
+export const UNIFIED_CAPTURE_DEBOUNCE_MARKER = "debounced";
+
 export interface ElectronWindowAPI {
   minimize: () => void;
   maximize: () => void;
@@ -91,6 +97,87 @@ export interface ElectronLogsAPI {
   removeListeners: () => void;
 }
 
+export interface ScreenCaptureResult {
+  success: boolean;
+  imageUrl?: string;
+  relativePath?: string;
+  width?: number;
+  height?: number;
+  error?: string;
+  permissionStatus: "granted" | "denied" | "restricted" | "not-determined" | "unknown";
+}
+
+export interface ElectronScreenCaptureAPI {
+  onCaptured: (callback: (result: ScreenCaptureResult) => void) => (() => void) | undefined;
+  capture: () => Promise<ScreenCaptureResult>;
+  register: (accelerator: string, enabled?: boolean) => Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }>;
+  registerFromSettings: () => Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }>;
+  getRegistered: () => Promise<{ accelerator: string }>;
+  clear: () => Promise<{ success: boolean }>;
+  checkPermission: () => Promise<{ status: ScreenCaptureResult["permissionStatus"] }>;
+}
+
+export type MiniOverlayPhase = "idle" | "recording" | "transcribing" | "refining" | "thinking" | "speaking" | "compose-pending" | "compose-review" | "done" | "error";
+
+export interface ScreenCaptureMetadata {
+  capturedAt: string;
+  activeWindowTitle?: string;
+  activeAppName?: string;
+  activeUrl?: string;
+  displayIndex?: number;
+  originalResolution?: { width: number; height: number };
+  captureMode: "fullscreen" | "active-window" | "region" | "display";
+}
+
+export interface UnifiedCaptureTriggerPayload {
+  mode: "voice+screen" | "voice-only" | "screen-only";
+  screenshot?: {
+    url: string;
+    filePath: string;
+  };
+  metadata?: ScreenCaptureMetadata;
+  startVoice: boolean;
+  screenshotError?: string;
+  traceId: string;
+}
+
+export interface ElectronUnifiedCaptureAPI {
+  onTriggered: (callback: (payload: UnifiedCaptureTriggerPayload) => void) => (() => void) | undefined;
+  trigger: (mode?: "voice+screen" | "voice-only" | "screen-only") => Promise<UnifiedCaptureTriggerPayload>;
+  register: (accelerator: string, enabled?: boolean) => Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }>;
+  registerFromSettings: () => Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }>;
+  getRegistered: () => Promise<{ accelerator: string }>;
+  clear: () => Promise<{ success: boolean }>;
+}
+
+export interface ElectronVoiceHotkeyAPI {
+  onTriggered: (callback: () => void) => (() => void) | undefined;
+  register: (accelerator: string) => Promise<{ success: boolean; accelerator: string; error?: string }>;
+  registerFromSettings: () => Promise<{ success: boolean; accelerator: string; error?: string }>;
+  getRegistered: () => Promise<{ accelerator: string }>;
+  clear: () => Promise<{ success: boolean }>;
+}
+
+export type PermissionStatus =
+  | "granted"
+  | "denied"
+  | "not-determined"
+  | "restricted"
+  | "unavailable";
+
+export interface PermissionCheckResult {
+  screen: PermissionStatus;
+  microphone: PermissionStatus;
+  accessibility: PermissionStatus;
+}
+
+export interface ElectronPermissionsAPI {
+  check: () => Promise<PermissionCheckResult>;
+  requestScreen: () => Promise<void>;
+  requestMic: () => Promise<boolean>;
+  requestAccessibility: () => Promise<boolean>;
+}
+
 export interface ElectronAPI {
   platform: NodeJS.Platform;
   isElectron: boolean;
@@ -101,6 +188,10 @@ export interface ElectronAPI {
   model: ElectronModelAPI;
   logs?: ElectronLogsAPI;
   browserSession?: ElectronBrowserSessionAPI;
+  voiceHotkey?: ElectronVoiceHotkeyAPI;
+  screenCapture?: ElectronScreenCaptureAPI;
+  unifiedCapture?: ElectronUnifiedCaptureAPI;
+  permissions?: ElectronPermissionsAPI;
 }
 
 /**
