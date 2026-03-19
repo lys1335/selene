@@ -1,5 +1,11 @@
 # Selene v0.3.2
 
+![Waveform Close-up](public/overlay-waveform.png)
+
+<img src="public/overlay-preview.png" alt="Voice Overlay" width="80%">
+
+> **Windows users:** The Windows build is up but largely untested — will give it a proper pass tomorrow. If you hit something, open an issue.
+
 A major feature release. Voice capture gets a floating overlay that lives outside the main window, screen capture is now a first-class shortcut, BlackBox AI joins the provider lineup with 327 models, and multi-agent workflows get smarter folder sharing. Plus a full browser workspace overhaul and significantly better Windows support.
 
 ## Highlights
