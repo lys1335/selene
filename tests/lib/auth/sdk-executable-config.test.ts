@@ -28,16 +28,28 @@ import { getSdkExecutableConfig } from "@/lib/auth/claude-agent-sdk-auth";
 
 describe("getSdkExecutableConfig", () => {
   const originalPath = process.env.PATH;
+  const originalPort = process.env.PORT;
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalNextRuntime = process.env.NEXT_RUNTIME;
+  const originalNextProcessed = process.env.__NEXT_PROCESSED_ENV;
 
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.PATH = originalPath;
+    process.env.PORT = originalPort;
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.NEXT_RUNTIME = originalNextRuntime;
+    process.env.__NEXT_PROCESSED_ENV = originalNextProcessed;
     process.env.ANTHROPIC_API_KEY = "test-key";
     process.env.CLAUDECODE = "1";
   });
 
   afterEach(() => {
     process.env.PATH = originalPath;
+    process.env.PORT = originalPort;
+    process.env.NODE_ENV = originalNodeEnv;
+    process.env.NEXT_RUNTIME = originalNextRuntime;
+    process.env.__NEXT_PROCESSED_ENV = originalNextProcessed;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.CLAUDECODE;
   });

@@ -42,6 +42,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   claudecode: "Claude Code",
   kimi: "Moonshot Kimi",
   minimax: "MiniMax",
+  blackboxai: "BlackBox AI",
   ollama: "Ollama",
 };
 

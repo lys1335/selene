@@ -5,11 +5,12 @@ import {
 } from "@/lib/chat/workspace-mode";
 
 export interface AppSettings {
-  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode";
+  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai";
   anthropicApiKey?: string;
   openrouterApiKey?: string;
   kimiApiKey?: string;
   minimaxApiKey?: string;
+  blackboxaiApiKey?: string;
   openaiApiKey?: string;
   ollamaBaseUrl?: string;
   tavilyApiKey?: string;
@@ -74,16 +75,32 @@ export interface AppSettings {
     accountId?: string;
     expiresAt?: number;
   };
+  screenCaptureEnabled?: boolean;
+  screenCaptureShortcut?: string;
+  quickCaptureEnabled?: boolean;
+  quickCaptureHotkey?: string;
+  quickCaptureAutoSend?: boolean;
+  quickCaptureAutoSendDelay?: number;
+  screenCaptureExcludedApps?: string;
+  screenCaptureRetention?: "session" | "day" | "week" | "forever";
+  screenCapturePreviewBeforeSend?: boolean;
+  screenCaptureOnboardingSeen?: boolean;
+  // Mini Overlay settings
+  miniOverlayDefaultMode?: "direct" | "compose";
+  miniOverlayAutoCloseAfterSpeak?: boolean;
+  miniOverlayKeepAppFocusedOnCompose?: boolean;
+  miniOverlayShowScreenPreview?: boolean;
 }
 
 export type SettingsSection = "api-keys" | "models" | "vector-search" | "comfyui" | "preferences" | "memory" | "mcp" | "plugins" | "voice";
 
 export interface FormState {
-  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode";
+  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai";
   anthropicApiKey: string;
   openrouterApiKey: string;
   kimiApiKey: string;
   minimaxApiKey: string;
+  blackboxaiApiKey: string;
   openaiApiKey: string;
   ollamaBaseUrl: string;
   tavilyApiKey: string;
@@ -181,6 +198,16 @@ export interface FormState {
   parakeetAutoStart: boolean;
   parakeetServerPort: number;
   voiceHotkey: string;
+  screenCaptureEnabled: boolean;
+  screenCaptureShortcut: string;
+  quickCaptureEnabled: boolean;
+  quickCaptureHotkey: string;
+  quickCaptureAutoSend: boolean;
+  quickCaptureAutoSendDelay: number;
+  screenCaptureExcludedApps: string;
+  screenCaptureRetention: "session" | "day" | "week" | "forever";
+  screenCapturePreviewBeforeSend: boolean;
+  screenCaptureOnboardingSeen: boolean;
   customDictionary: string[];
   voiceHistoryEnabled: boolean;
   voiceHistoryLimit: number;
@@ -193,6 +220,11 @@ export interface FormState {
   voiceActionFormalTone: "auto" | "business" | "casual";
   voiceActionTranslationStyle: "natural" | "literal";
   voiceActionSummarizeLength: "short" | "medium" | "long";
+  // Mini Overlay settings
+  miniOverlayDefaultMode: "direct" | "compose";
+  miniOverlayAutoCloseAfterSpeak: boolean;
+  miniOverlayKeepAppFocusedOnCompose: boolean;
+  miniOverlayShowScreenPreview: boolean;
 }
 
 export const DEFAULT_FORM_STATE: FormState = {
@@ -201,6 +233,7 @@ export const DEFAULT_FORM_STATE: FormState = {
   openrouterApiKey: "",
   kimiApiKey: "",
   minimaxApiKey: "",
+  blackboxaiApiKey: "",
   openaiApiKey: "",
   ollamaBaseUrl: "http://localhost:11434/v1",
   tavilyApiKey: "",
@@ -290,6 +323,16 @@ export const DEFAULT_FORM_STATE: FormState = {
   parakeetAutoStart: true,
   parakeetServerPort: 0,
   voiceHotkey: "CommandOrControl+Shift+Space",
+  screenCaptureEnabled: true,
+  screenCaptureShortcut: "CommandOrControl+Shift+S",
+  quickCaptureEnabled: true,
+  quickCaptureHotkey: "CommandOrControl+Shift+A",
+  quickCaptureAutoSend: false,
+  quickCaptureAutoSendDelay: 3,
+  screenCaptureExcludedApps: "1Password, Keychain Access, System Preferences",
+  screenCaptureRetention: "session",
+  screenCapturePreviewBeforeSend: true,
+  screenCaptureOnboardingSeen: false,
   customDictionary: [],
   voiceHistoryEnabled: true,
   voiceHistoryLimit: 200,
@@ -302,6 +345,10 @@ export const DEFAULT_FORM_STATE: FormState = {
   voiceActionFormalTone: "auto",
   voiceActionTranslationStyle: "natural",
   voiceActionSummarizeLength: "medium",
+  miniOverlayDefaultMode: "direct",
+  miniOverlayAutoCloseAfterSpeak: false,
+  miniOverlayKeepAppFocusedOnCompose: true,
+  miniOverlayShowScreenPreview: true,
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -312,6 +359,7 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     openrouterApiKey: data.openrouterApiKey || "",
     kimiApiKey: data.kimiApiKey || "",
     minimaxApiKey: data.minimaxApiKey || "",
+    blackboxaiApiKey: data.blackboxaiApiKey || "",
     openaiApiKey: data.openaiApiKey || "",
     ollamaBaseUrl: data.ollamaBaseUrl || "http://localhost:11434/v1",
     tavilyApiKey: data.tavilyApiKey || "",
@@ -401,6 +449,16 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     parakeetAutoStart: data.parakeetAutoStart ?? true,
     parakeetServerPort: data.parakeetServerPort ?? 0,
     voiceHotkey: data.voiceHotkey ?? "CommandOrControl+Shift+Space",
+    screenCaptureEnabled: data.screenCaptureEnabled ?? true,
+    screenCaptureShortcut: data.screenCaptureShortcut ?? "CommandOrControl+Shift+S",
+    quickCaptureEnabled: data.quickCaptureEnabled ?? true,
+    quickCaptureHotkey: data.quickCaptureHotkey ?? "CommandOrControl+Shift+A",
+    quickCaptureAutoSend: data.quickCaptureAutoSend ?? false,
+    quickCaptureAutoSendDelay: data.quickCaptureAutoSendDelay ?? 3,
+    screenCaptureExcludedApps: data.screenCaptureExcludedApps ?? "1Password, Keychain Access, System Preferences",
+    screenCaptureRetention: data.screenCaptureRetention ?? "session",
+    screenCapturePreviewBeforeSend: data.screenCapturePreviewBeforeSend ?? true,
+    screenCaptureOnboardingSeen: data.screenCaptureOnboardingSeen ?? false,
     customDictionary: Array.isArray(data.customDictionary) ? data.customDictionary : [],
     voiceHistoryEnabled: data.voiceHistoryEnabled ?? true,
     voiceHistoryLimit: data.voiceHistoryLimit ?? 200,
@@ -413,5 +471,9 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     voiceActionFormalTone: data.voiceActionFormalTone ?? "auto",
     voiceActionTranslationStyle: data.voiceActionTranslationStyle ?? "natural",
     voiceActionSummarizeLength: data.voiceActionSummarizeLength ?? "medium",
+    miniOverlayDefaultMode: data.miniOverlayDefaultMode === "compose" ? "compose" : "direct",
+    miniOverlayAutoCloseAfterSpeak: data.miniOverlayAutoCloseAfterSpeak ?? false,
+    miniOverlayKeepAppFocusedOnCompose: data.miniOverlayKeepAppFocusedOnCompose ?? true,
+    miniOverlayShowScreenPreview: data.miniOverlayShowScreenPreview ?? true,
   };
 }

@@ -648,7 +648,8 @@
         "flux2Klein4bEnabled": "Requires FLUX.2 Klein 4B enabled",
         "flux2Klein9bEnabled": "Requires FLUX.2 Klein 9B enabled",
         "localGrepEnabled": "Requires Local Grep enabled",
-        "devWorkspaceEnabled": "Requires Developer Workspace enabled"
+        "devWorkspaceEnabled": "Requires Developer Workspace enabled",
+        "screenCaptureEnabled": "Requires Screen Capture enabled"
       }
     },
     "tools": {
@@ -719,6 +720,10 @@
       "describeImage": {
         "name": "Describe Image",
         "description": "Analyze and describe images"
+      },
+      "screenCapture": {
+        "name": "Screen Capture",
+        "description": "Capture the active display and attach it to the current message"
       },
       "showProductImages": {
         "name": "Product Gallery",
@@ -953,9 +958,6 @@
       "fileTooLarge": "File is too large ({size}MB). Maximum: {max}MB",
       "someFilesTooLarge": "{count, plural, one {# file is} other {# files are}} too large. Maximum: {max}MB",
       "attachmentsDisabledResearch": "Attachments are not available in Deep Research mode",
-      "pastedTextChip": "Pasted text #{n} · {lines} lines",
-      "removePastedText": "Remove pasted text",
-      "textPasted": "Large text captured ({lines} lines)",
       "editorEnable": "Rich editor",
       "editorDisable": "Simple mode",
       "rewardSuggestion": "Upon completion: +{amount} · {reason}",
@@ -1000,7 +1002,9 @@
       "voiceInput": "Voice input",
       "voiceInputHold": "Hold to record",
       "stopVoiceInput": "Stop recording",
-      "transcribingAudio": "Transcribing audio..."
+      "transcribingAudio": "Transcribing audio...",
+      "captureScreen": "Capture screen",
+      "captureScreenShortcut": "Capture screen ({shortcut})"
     },
     "prevBranch": "Previous branch",
     "nextBranch": "Next branch",
@@ -1749,6 +1753,8 @@
         "assembleVideoDesc": "Assemble session images/videos into edited videos",
         "describeImage": "Describe Image",
         "describeImageDesc": "Analyze and describe images using AI vision",
+        "screenCapture": "Screen Capture",
+        "screenCaptureDesc": "Capture the active display and attach it to the current message",
         "showProductImages": "Product Gallery",
         "showProductImagesDesc": "Display products with images and purchase links for shopping queries",
         "executeCommand": "Execute Command",
@@ -1834,7 +1840,8 @@
         "flux2Klein4bEnabled": "Requires FLUX.2 Klein 4B enabled",
         "flux2Klein9bEnabled": "Requires FLUX.2 Klein 9B enabled",
         "localGrepEnabled": "Requires Local Grep enabled",
-        "devWorkspaceEnabled": "Requires Developer Workspace enabled"
+        "devWorkspaceEnabled": "Requires Developer Workspace enabled",
+        "screenCaptureEnabled": "Requires Screen Capture enabled"
       },
       "back": "Back",
       "continue": "Continue →"
@@ -2039,6 +2046,7 @@
       "openrouter": "OpenRouter",
       "kimi": "Moonshot Kimi",
       "minimax": "MiniMax",
+      "blackboxai": "BlackBox AI",
       "ollama": "Ollama (local)",
       "keysTitle": "Provider keys",
       "auth": {
@@ -2092,6 +2100,11 @@
           "label": "MiniMax API Key",
           "placeholder": "eyJ...",
           "helper": "Get your key from the MiniMax platform."
+        },
+        "blackboxai": {
+          "label": "BlackBox AI API Key",
+          "placeholder": "sk-...",
+          "helper": "Get your key from the BlackBox AI platform."
         },
         "webSearchProvider": {
           "label": "Web search source",
@@ -2688,6 +2701,59 @@
         "hotkeyLabel": "Global dictation hotkey",
         "hotkeyDesc": "Works app-wide in Electron builds.",
         "hotkeyPlaceholder": "CommandOrControl+Shift+Space"
+      },
+      "screen": {
+        "title": "Screen capture",
+        "description": "Grab the active display and attach it to the current composer without opening the file picker.",
+        "enableLabel": "Enable screenshot shortcut",
+        "enableDesc": "Registers a global shortcut that captures your current display and attaches it to the active chat.",
+        "shortcutLabel": "Global screenshot shortcut",
+        "shortcutHelper": "Uses Electron globalShortcut format, for example: CommandOrControl+Shift+S",
+        "shortcutPlaceholder": "CommandOrControl+Shift+S",
+        "captureHint": "When triggered, Selene captures the display under your cursor, brings the window forward, and attaches the screenshot to the current draft."
+      },
+      "quickCapture": {
+        "title": "Quick capture (voice + screen)",
+        "description": "One shortcut captures your screen and starts voice recording simultaneously.",
+        "enableLabel": "Enable unified capture",
+        "enableDesc": "Registers a global shortcut that captures your screen and immediately starts voice recording.",
+        "hotkeyLabel": "Unified capture shortcut",
+        "hotkeyHelper": "Electron globalShortcut format, e.g. CommandOrControl+Shift+A",
+        "autoSendLabel": "Auto-send after voice",
+        "autoSendDesc": "Automatically sends the message after voice transcription completes (with a countdown to cancel).",
+        "autoSendDelayLabel": "Auto-send delay",
+        "autoSendDelayHelper": "Seconds to wait before auto-sending. You can cancel during the countdown.",
+        "hint": "Press the shortcut from any app → screen captured + voice recording starts → speak your question → transcription inserted → message sent (or review first if auto-send is off)."
+      },
+      "privacy": {
+        "title": "Screenshot privacy",
+        "description": "Control which apps are excluded from capture and how long screenshots are kept.",
+        "excludedAppsLabel": "Excluded apps",
+        "excludedAppsHelper": "These apps will never be captured (comma-separated)",
+        "retentionLabel": "Keep screenshots",
+        "retentionHelper": "How long captured screenshots are stored on disk",
+        "retentionSession": "Until session ends",
+        "retentionDay": "24 hours",
+        "retentionWeek": "1 week",
+        "retentionForever": "Keep forever",
+        "clearBtn": "Clear all screenshots",
+        "clearingBtn": "Clearing...",
+        "clearSuccess": "Deleted {count} screenshot(s)"
+      },
+      "miniOverlay": {
+        "title": "Mini overlay",
+        "description": "A lightweight floating assistant that handles voice queries without opening the main window.",
+        "listening": "Listening...",
+        "transcribing": "Transcribing...",
+        "thinking": "Thinking...",
+        "speaking": "Speaking...",
+        "done": "Done",
+        "ready": "Ready",
+        "cancel": "Cancel",
+        "clickToStop": "Click or press shortcut to stop recording",
+        "error": "Something went wrong",
+        "noMic": "Microphone access denied",
+        "ttsUnavailable": "Text-to-speech not configured"
       },
       "dictionary": {
         "title": "Personal dictionary",

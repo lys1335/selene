@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { ipcMain } from "electron";
 import type { IpcHandlerContext } from "./ipc-handlers";
 import {
@@ -6,22 +7,43 @@ import {
   getRegisteredVoiceHotkey,
   clearVoiceHotkey,
 } from "./hotkey-manager";
+import { debugError } from "./debug-logger";
+import { getOverlay, showOverlay } from "./mini-overlay-window";
 
 function normalizeAccelerator(value: unknown): string {
   if (typeof value !== "string") return "";
   return value.trim();
 }
 
+export function createVoiceOverlayTrigger(ctx: IpcHandlerContext): () => void {
+  return () => {
+    const baseUrl = ctx.isDev
+      ? (process.env.ELECTRON_DEV_URL || "http://localhost:3000")
+      : `${ctx.prodUseHttps ? "https" : "http"}://localhost:${ctx.prodServerPort}`;
+
+    const overlay = getOverlay();
+    if (overlay && !overlay.isDestroyed() && overlay.isVisible() && !overlay.webContents.isCrashed()) {
+      overlay.webContents.send("overlay:toggle-recording");
+      return;
+    }
+
+    void showOverlay({
+      baseUrl,
+      preloadPath: path.join(__dirname, "preload.js"),
+    }).catch((error) => {
+      debugError("[VoiceHotkey] Failed to show mini overlay:", error);
+    });
+  };
+}
+
 export function registerVoiceHotkeyHandlers(ctx: IpcHandlerContext): void {
+  const triggerCallback = createVoiceOverlayTrigger(ctx);
+
   ipcMain.handle("voice-hotkey:register", (_event, accelerator?: unknown) => {
     const input = normalizeAccelerator(accelerator);
     const result = registerVoiceHotkey({
       accelerator: input || getRegisteredVoiceHotkey(),
-      onTrigger: () => {
-        const win = ctx.mainWindow();
-        if (!win) return;
-        win.webContents.send("voice-hotkey:triggered");
-      },
+      onTrigger: triggerCallback,
     });
 
     return result;
@@ -30,11 +52,7 @@ export function registerVoiceHotkeyHandlers(ctx: IpcHandlerContext): void {
   ipcMain.handle("voice-hotkey:registerFromSettings", () => {
     const result = registerVoiceHotkeyFromSettings({
       dataDir: ctx.dataDir,
-      onTrigger: () => {
-        const win = ctx.mainWindow();
-        if (!win) return;
-        win.webContents.send("voice-hotkey:triggered");
-      },
+      onTrigger: triggerCallback,
     });
 
     return result;

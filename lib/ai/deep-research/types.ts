@@ -170,9 +170,9 @@ export interface DeepResearchConfig {
   maxIterations: number;
   maxConcurrentSearches: number;
   searchProvider: 'tavily' | 'duckduckgo' | 'serper' | 'mock';
-  modelProvider: 'anthropic' | 'openrouter' | 'codex';
+  modelProvider: 'anthropic' | 'openrouter' | 'codex' | 'blackboxai';
   researchModel?: string;
-  sessionProvider?: 'anthropic' | 'openrouter' | 'codex' | 'claudecode' | 'antigravity' | 'kimi' | 'minimax' | 'ollama';
+  sessionProvider?: 'anthropic' | 'openrouter' | 'codex' | 'claudecode' | 'antigravity' | 'kimi' | 'minimax' | 'ollama' | 'blackboxai';
   abortSignal?: AbortSignal;
 }
 

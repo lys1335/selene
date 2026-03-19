@@ -14,6 +14,11 @@ import { registerModelHandlers } from "./ipc-model-handlers";
 import { registerFileHandlers } from "./ipc-file-handlers";
 import { registerVoiceHotkeyHandlers } from "./ipc-voice-hotkey-handlers";
 import { registerBrowserSessionHandlers } from "./ipc-browser-session-handlers";
+import { registerScreenCaptureHandlers } from "./ipc-screen-capture-handlers";
+import { registerUnifiedCaptureHandlers } from "./ipc-unified-capture-handlers";
+import { registerPermissionHandlers } from "./permission-manager";
+import { registerMiniOverlayHandlers } from "./mini-overlay-ipc-handlers";
+import { registerOverlaySessionHandlers } from "./ipc-overlay-session-handlers";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -163,6 +168,11 @@ export function setupIpcHandlers(ctx: IpcHandlerContext): void {
   registerFileHandlers(ctx);
   registerModelHandlers(ctx);
   registerVoiceHotkeyHandlers(ctx);
+  registerScreenCaptureHandlers(ctx);
+  registerUnifiedCaptureHandlers(ctx);
+  registerPermissionHandlers(ctx);
+  registerMiniOverlayHandlers(ctx);
+  registerOverlaySessionHandlers();
   registerComfyUIHandlers(ctx);
   registerFlux2Handlers(ctx);
   registerBrowserSessionHandlers(ctx);

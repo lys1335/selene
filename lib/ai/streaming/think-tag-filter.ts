@@ -327,9 +327,14 @@ export function shouldFilterThinkTags(
   }
 
   // For providers that might route to thinking models:
-  // OpenRouter, Ollama, Antigravity, Kimi
+  // OpenRouter, Ollama, Antigravity, Kimi, BlackBox AI
   if (providerId === "ollama") {
     // Ollama frequently runs local thinking models — always filter.
+    return true;
+  }
+
+  // BlackBox AI routes to Qwen and DeepSeek models that emit think tags — always filter.
+  if (providerId === "blackboxai") {
     return true;
   }
 

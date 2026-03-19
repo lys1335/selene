@@ -35,6 +35,7 @@ const MODEL_PREFIXES: Record<LLMProvider, string[]> = {
   codex: ["gpt-5", "codex"],
   kimi: ["kimi-", "moonshot-"],
   minimax: ["minimax-"],
+  blackboxai: ["blackbox-", "blackboxai/"], // used by openrouter exclusion check
   antigravity: [], // uses exact match
   ollama: [],      // accepts any model name
   openrouter: [],  // accepts anything
@@ -56,6 +57,7 @@ const MODEL_PREFIXES: Record<LLMProvider, string[]> = {
  * - Claude Code: claude-opus-4*, claude-sonnet-4*, claude-haiku-4* (also accepts Anthropic claude-* models)
  * - Codex: gpt-5*, codex*
  * - Kimi: kimi-*, moonshot-*
+ * - BlackBox AI: accepts any model (multi-model router, 325+ models)
  * - Ollama: accepts any model
  * - OpenRouter: accepts anything with "/" or non-provider-specific bare IDs
  */
@@ -103,6 +105,9 @@ export function isModelCompatibleWithProvider(
     return MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p));
   }
 
+  // BlackBox AI: multi-model router (325+ models), accepts any model ID
+  if (provider === "blackboxai") return true;
+
   // Ollama: accepts any model name
   if (provider === "ollama") return true;
 
@@ -114,7 +119,8 @@ export function isModelCompatibleWithProvider(
       ANTIGRAVITY_EXACT_MODELS.has(lowerModel) ||
       MODEL_PREFIXES.codex.some((p) => lowerModel.startsWith(p)) ||
       MODEL_PREFIXES.kimi.some((p) => lowerModel.startsWith(p)) ||
-      MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p))
+      MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p)) ||
+      MODEL_PREFIXES.blackboxai.some((p) => lowerModel.startsWith(p))
     ) {
       return false;
     }

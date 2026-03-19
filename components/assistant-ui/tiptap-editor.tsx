@@ -2,9 +2,7 @@
 
 import {
   useEffect,
-  useRef,
   useCallback,
-  useState,
   forwardRef,
   useImperativeHandle,
 } from "react";
@@ -22,7 +20,6 @@ import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import {
-  ImageIcon,
   BoldIcon,
   ItalicIcon,
   ListIcon,
@@ -30,11 +27,8 @@ import {
   CodeIcon,
   QuoteIcon,
   Heading2Icon,
-  SendHorizontalIcon,
-  Loader2Icon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -518,9 +512,6 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(
     },
     ref,
   ) => {
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [isUploading, setIsUploading] = useState(false);
-
     const editor = useEditor({
       content: initialContent ?? undefined,
       onUpdate: ({ editor: currentEditor }) => {
@@ -588,8 +579,6 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(
       async (file: File, position?: number) => {
         if (!editor) return;
 
-        setIsUploading(true);
-
         // Show local preview immediately
         const localUrl = URL.createObjectURL(file);
         if (position !== undefined) {
@@ -656,32 +645,8 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(
         }
 
         URL.revokeObjectURL(localUrl);
-        setIsUploading(false);
       },
       [editor, sessionId],
-    );
-
-    const handleImageButtonClick = useCallback(() => {
-      fileInputRef.current?.click();
-    }, []);
-
-    const handleFileChange = useCallback(
-      (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files?.length) return;
-
-        for (const file of files) {
-          if (file.type.startsWith("image/")) {
-            void handleImageFile(file);
-          }
-        }
-
-        // Reset file input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = "";
-        }
-      },
-      [handleImageFile],
     );
 
     const handleSubmitClick = useCallback(() => {
@@ -799,64 +764,10 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(
             icon={<CodeIcon className="size-3.5" />}
             tooltip="Code block"
           />
-          <div className="mx-1 h-4 w-px bg-terminal-border" />
-          <ToolbarButton
-            onClick={handleImageButtonClick}
-            active={false}
-            icon={
-              isUploading ? (
-                <Loader2Icon className="size-3.5 animate-spin" />
-              ) : (
-                <ImageIcon className="size-3.5" />
-              )
-            }
-            tooltip="Add image"
-            disabled={isUploading}
-          />
-
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Submit button */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                onClick={handleSubmitClick}
-                disabled={
-                  disabled || isSubmitting || editor.isEmpty
-                }
-                className="h-7 px-3 text-xs font-mono bg-terminal-dark hover:bg-terminal-dark/90 text-terminal-cream gap-1.5"
-              >
-                {isSubmitting ? (
-                  <Loader2Icon className="size-3 animate-spin" />
-                ) : (
-                  <SendHorizontalIcon className="size-3" />
-                )}
-                <span className="hidden sm:inline">
-                  Send
-                </span>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent className="bg-terminal-dark text-terminal-cream font-mono text-xs">
-              Send message (⌘+Enter)
-            </TooltipContent>
-          </Tooltip>
         </div>
 
         {/* Editor content */}
         <EditorContent editor={editor} />
-
-        {/* Hidden file input */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={handleFileChange}
-          className="hidden"
-        />
       </div>
     );
   },

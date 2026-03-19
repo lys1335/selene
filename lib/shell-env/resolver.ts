@@ -5,11 +5,26 @@ import { tmpdir } from "os";
 
 const SHELL_RESOLVE_TIMEOUT_MS = 3000;
 
+/**
+ * Env vars that should be stripped from the captured shell environment.
+ * These are Electron/Selene internals that can confuse child Node.js processes.
+ */
 const BLOCKED_ENV_KEYS = new Set([
     "ELECTRON_RUN_AS_NODE",
     "ELECTRON_NO_ATTACH_CONSOLE",
     "ELECTRON_ENABLE_LOGGING",
+    "SELENE_PRODUCTION_BUILD",
+    "NEXT_RUNTIME",
+    "NEXT_DEPLOYMENT_ID",
+    "PORT",
 ]);
+
+/**
+ * Prefix patterns stripped during shell-env capture. Any env var starting with
+ * these belongs to the running Next.js host process and must not be inherited
+ * by user-facing child commands.
+ */
+const BLOCKED_ENV_PREFIXES = ["__NEXT_"];
 
 let cachedShellEnv: Record<string, string> | null = null;
 let shellEnvResolutionAttempted = false;
@@ -17,6 +32,44 @@ let lastResolutionAttemptMs = 0;
 
 /** Minimum interval between retry attempts when previous resolution returned empty. */
 const RETRY_INTERVAL_MS = 5000;
+
+/**
+ * Build a minimal, clean environment for spawning the user's login shell.
+ *
+ * The goal is to start the shell in the same state as opening a fresh terminal
+ * window — no Electron, Next.js, or Selene runtime vars. The login shell's
+ * rc-files (.zshrc, .zprofile, .bashrc, .bash_profile, etc.) run on top of
+ * this baseline and produce the user's real working environment.
+ *
+ * We intentionally exclude vars like NODE_ENV, __NEXT_PRIVATE_*, and
+ * SELENE_PRODUCTION_BUILD because they come from the Electron/Next.js
+ * runtime and would contaminate the captured environment.
+ */
+function getMinimalShellBootstrapEnv(): Record<string, string> {
+    const env: Record<string, string> = {
+        // Base PATH — login shell will prepend user-specific dirs via rcfiles.
+        // On macOS, /usr/libexec/path_helper (called from /etc/zprofile) also
+        // contributes entries from /etc/paths and /etc/paths.d/*.
+        PATH: "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        TERM: "xterm-256color",
+    };
+
+    // Essentials for shell startup and rcfile sourcing.
+    const passthrough: (keyof NodeJS.ProcessEnv)[] = [
+        "HOME", "USER", "LOGNAME", "SHELL",
+        // Locale — some shells and tools behave differently without these
+        "LANG", "LC_ALL", "LC_CTYPE",
+        // XDG dirs affect config file locations for many tools
+        "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR",
+    ];
+
+    for (const key of passthrough) {
+        const value = process.env[key];
+        if (value) env[key] = value;
+    }
+
+    return env;
+}
 
 function getCandidateShells(): string[] {
     const candidates = [process.env.SHELL];
@@ -49,6 +102,7 @@ function parseNullSeparatedEnvironment(raw: string): Record<string, string> {
         const value = record.slice(separatorIndex + 1);
 
         if (!key || BLOCKED_ENV_KEYS.has(key)) continue;
+        if (BLOCKED_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
         parsed[key] = value;
     }
 
@@ -60,6 +114,10 @@ function resolveShellEnvironmentOnce(): Record<string, string> {
         return {};
     }
 
+    // Start the login shell with a clean env so Electron/Next.js vars
+    // don't leak into the captured environment.
+    const bootstrapEnv = getMinimalShellBootstrapEnv() as NodeJS.ProcessEnv;
+
     // First try: normal spawnSync with pipes (works in dev, fails in Electron prod)
     for (const shellPath of getCandidateShells()) {
         try {
@@ -67,7 +125,7 @@ function resolveShellEnvironmentOnce(): Record<string, string> {
                 encoding: "utf8",
                 stdio: ["ignore", "pipe", "ignore"],
                 timeout: SHELL_RESOLVE_TIMEOUT_MS,
-                env: process.env,
+                env: bootstrapEnv,
             });
 
             if (probe.error || probe.status !== 0 || !probe.stdout) {
@@ -96,7 +154,7 @@ function resolveShellEnvironmentOnce(): Record<string, string> {
                 execSync(`${shellPath} -ilc 'env -0 > "${tmpFile}"'`, {
                     stdio: "ignore",
                     timeout: SHELL_RESOLVE_TIMEOUT_MS,
-                    env: process.env,
+                    env: bootstrapEnv,
                 });
                 const raw = fs.readFileSync(tmpFile, "utf8");
                 try { fs.unlinkSync(tmpFile); } catch { /* noop */ }

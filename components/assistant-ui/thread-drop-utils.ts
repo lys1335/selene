@@ -13,6 +13,12 @@ export interface VoiceUiSettings {
   voiceAudioCues: boolean;
   voiceActivationMode: "tap" | "push";
   voiceHotkey: string;
+  screenCaptureEnabled: boolean;
+  screenCaptureShortcut: string;
+  quickCaptureEnabled: boolean;
+  quickCaptureHotkey: string;
+  quickCaptureAutoSend: boolean;
+  quickCaptureAutoSendDelay: number;
 }
 
 export interface ComfyWorkflowImportPreview {

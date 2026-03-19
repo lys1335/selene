@@ -4,6 +4,7 @@ import type { FC } from "react";
 import { useState, useEffect, useRef, memo, useMemo, useCallback } from "react";
 import ShikiHighlighter, { type ShikiHighlighterProps } from "react-shiki";
 import type { SyntaxHighlighterProps as AUIProps } from "@assistant-ui/react-markdown";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme/theme-provider";
 
@@ -20,6 +21,29 @@ export type HighlighterProps = Omit<
 // Base styles for code blocks
 const baseCodeStyles =
   "overflow-x-auto rounded-lg p-4 text-sm font-mono whitespace-pre";
+
+function CopyCodeButton({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(() => {
+    void navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [code]);
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="absolute right-2 top-2 flex items-center gap-1 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] font-mono text-white/40 opacity-0 transition-opacity hover:bg-white/10 hover:text-white/70 group-hover:opacity-100"
+      aria-label="Copy code"
+    >
+      {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
 
 // Minimum code length for syntax highlighting (skip tiny snippets)
 const MIN_HIGHLIGHT_LENGTH = 100;
@@ -171,25 +195,28 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
     if (shikiReady && shouldRenderShiki && !skipHighlighting) {
       // Shiki is ready - show highlighted code
       return (
-        <div
-          ref={shikiContainerRef}
-          className={cn(
-            "aui-shiki-base",
-            "[&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-4 [&_pre]:text-sm",
-            `[&_pre]:${bgClass}`,
-            className
-          )}
-        >
-          <ShikiHighlighter
-            {...props}
-            language={language ?? "plaintext"}
-            theme={theme}
-            addDefaultStyles={addDefaultStyles}
-            showLanguage={showLanguage}
-            delay={400}
+        <div className="group relative">
+          <div
+            ref={shikiContainerRef}
+            className={cn(
+              "aui-shiki-base",
+              "[&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:p-4 [&_pre]:text-sm",
+              `[&_pre]:${bgClass}`,
+              className
+            )}
           >
-            {trimmedCode}
-          </ShikiHighlighter>
+            <ShikiHighlighter
+              {...props}
+              language={language ?? "plaintext"}
+              theme={theme}
+              addDefaultStyles={addDefaultStyles}
+              showLanguage={showLanguage}
+              delay={400}
+            >
+              {trimmedCode}
+            </ShikiHighlighter>
+          </div>
+          <CopyCodeButton code={trimmedCode} />
         </div>
       );
     }
@@ -197,11 +224,14 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
     // Plain code fallback (during streaming or while Shiki loads)
     return (
       <>
-        <pre
-          className={cn(baseCodeStyles, bgClass, textClass, className)}
-        >
-          <code>{trimmedCode}</code>
-        </pre>
+        <div className="group relative">
+          <pre
+            className={cn(baseCodeStyles, bgClass, textClass, className)}
+          >
+            <code>{trimmedCode}</code>
+          </pre>
+          <CopyCodeButton code={trimmedCode} />
+        </div>
 
         {/* Hidden Shiki container for pre-rendering */}
         {shouldRenderShiki && !skipHighlighting && (

@@ -36,18 +36,96 @@ describe("buildSafeEnvironment", () => {
         process.env = originalEnv;
     });
 
-    it("merges resolved shell environment over process.env", () => {
-        process.env.TEST_BASE_ENV = "base";
+    // ── Shell env as primary source ──────────────────────────────────────
+
+    it("uses shell env as primary source when available (process.env excluded)", () => {
+        process.env.LEAKED_FROM_ELECTRON = "bad";
+        process.env.TEST_BASE_ENV = "from-process";
         vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
-            TEST_BASE_ENV: "shell",
+            TEST_BASE_ENV: "from-shell",
             TEST_ONLY_SHELL: "yes",
         });
 
         const env = buildSafeEnvironment(baseRuntime);
 
-        expect(env.TEST_BASE_ENV).toBe("shell");
+        // Shell env values are present
+        expect(env.TEST_BASE_ENV).toBe("from-shell");
         expect(env.TEST_ONLY_SHELL).toBe("yes");
+        // process.env values that are NOT in shell env should NOT leak through
+        expect(env.LEAKED_FROM_ELECTRON).toBeUndefined();
     });
+
+    it("preserves NODE_ENV from shell env (user's rcfiles set it)", () => {
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
+            NODE_ENV: "development",
+            PATH: "/usr/local/bin:/usr/bin",
+        });
+
+        const env = buildSafeEnvironment(baseRuntime);
+
+        // NODE_ENV from shell env should pass through — the shell env was
+        // captured from a clean login shell, so this value comes from the
+        // user's rcfiles, which is correct behavior.
+        expect(env.NODE_ENV).toBe("development");
+    });
+
+    it("strips SELENE_PRODUCTION_BUILD even from shell env (defense-in-depth)", () => {
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
+            SELENE_PRODUCTION_BUILD: "1",
+            SAFE_KEY: "ok",
+        });
+
+        const env = buildSafeEnvironment(baseRuntime);
+
+        expect(env.SELENE_PRODUCTION_BUILD).toBeUndefined();
+        expect(env.SAFE_KEY).toBe("ok");
+    });
+
+    // ── process.env fallback (shell env unavailable) ────────────────────
+
+    it("falls back to process.env when shell env is empty", () => {
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({});
+        process.env.MY_VAR = "from-process";
+
+        const env = buildSafeEnvironment(baseRuntime);
+
+        expect(env.MY_VAR).toBe("from-process");
+    });
+
+    it("strips NODE_ENV from process.env fallback", () => {
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({});
+        process.env.NODE_ENV = "production";
+
+        const env = buildSafeEnvironment(baseRuntime);
+
+        // In fallback mode, NODE_ENV (from Electron/Next.js) must be stripped
+        expect(env.NODE_ENV).toBeUndefined();
+    });
+
+    it("strips SELENE_PRODUCTION_BUILD from process.env fallback", () => {
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({});
+        process.env.SELENE_PRODUCTION_BUILD = "1";
+
+        const env = buildSafeEnvironment(baseRuntime);
+
+        expect(env.SELENE_PRODUCTION_BUILD).toBeUndefined();
+    });
+
+    it("preserves important defaults when shell env is sparse (fallback)", () => {
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({});
+        process.env.USERPROFILE = "/Users/test";
+        delete process.env.HOME;
+        delete process.env.USER;
+        process.env.USERNAME = "tester";
+
+        const env = buildSafeEnvironment(baseRuntime);
+
+        expect(env.HOME).toBe("/Users/test");
+        expect(env.USER).toBe("tester");
+        expect(env.TERM).toBe("xterm-256color");
+    });
+
+    // ── Common behavior (both paths) ────────────────────────────────────
 
     it("prepends bundled binary dirs to the resolved PATH", () => {
         const sep = delimiter; // ";" on Windows, ":" elsewhere
@@ -63,21 +141,7 @@ describe("buildSafeEnvironment", () => {
         expect(env.PATH).toBe(`/bundle/node/.bin${sep}/bundle/tools/bin${sep}${bundledRipgrepBinDir}${sep}/usr/local/bin${sep}/usr/bin`);
     });
 
-    it("preserves important defaults when shell env is sparse", () => {
-        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({});
-        process.env.USERPROFILE = "/Users/test";
-        delete process.env.HOME;
-        delete process.env.USER;
-        process.env.USERNAME = "tester";
-
-        const env = buildSafeEnvironment(baseRuntime);
-
-        expect(env.HOME).toBe("/Users/test");
-        expect(env.USER).toBe("tester");
-        expect(env.TERM).toBe("xterm-256color");
-    });
-
-    it("removes Electron-only env keys from resolved shell env", () => {
+    it("removes Electron-only env keys from shell env", () => {
         vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
             ELECTRON_RUN_AS_NODE: "1",
             ELECTRON_NO_ATTACH_CONSOLE: "1",
@@ -91,28 +155,57 @@ describe("buildSafeEnvironment", () => {
         expect(env.SAFE_KEY).toBe("ok");
     });
 
-    it("removes runtime identity vars inherited from the app process", () => {
-        process.env.NODE_ENV = "production";
-        process.env.SELENE_PRODUCTION_BUILD = "1";
+    it("removes Electron-only env keys from process.env fallback", () => {
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({});
+        process.env.ELECTRON_RUN_AS_NODE = "1";
+        process.env.ELECTRON_ENABLE_LOGGING = "1";
 
         const env = buildSafeEnvironment(baseRuntime);
 
-        expect(env.NODE_ENV).toBeUndefined();
-        expect(env.SELENE_PRODUCTION_BUILD).toBeUndefined();
+        expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+        expect(env.ELECTRON_ENABLE_LOGGING).toBeUndefined();
     });
 
-    it("removes runtime identity vars resolved from the login shell", () => {
+    it("strips all __NEXT_* vars regardless of source", () => {
         vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
-            NODE_ENV: "production",
-            SELENE_PRODUCTION_BUILD: "1",
+            __NEXT_PRIVATE_STANDALONE_CONFIG: "/some/path",
+            __NEXT_PROCESSED_ENV: "true",
+            __NEXT_PRIVATE_ORIGIN: "http://localhost:3457",
             SAFE_KEY: "ok",
         });
 
         const env = buildSafeEnvironment(baseRuntime);
 
-        expect(env.NODE_ENV).toBeUndefined();
-        expect(env.SELENE_PRODUCTION_BUILD).toBeUndefined();
+        expect(env.__NEXT_PRIVATE_STANDALONE_CONFIG).toBeUndefined();
+        expect(env.__NEXT_PROCESSED_ENV).toBeUndefined();
+        expect(env.__NEXT_PRIVATE_ORIGIN).toBeUndefined();
         expect(env.SAFE_KEY).toBe("ok");
+    });
+
+    it("strips NEXT_RUNTIME and NEXT_DEPLOYMENT_ID from always-blocked list", () => {
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
+            NEXT_RUNTIME: "nodejs",
+            NEXT_DEPLOYMENT_ID: "abc123",
+            PATH: "/usr/bin",
+        });
+
+        const env = buildSafeEnvironment(baseRuntime);
+
+        expect(env.NEXT_RUNTIME).toBeUndefined();
+        expect(env.NEXT_DEPLOYMENT_ID).toBeUndefined();
+    });
+
+    it("always injects ELECTRON_RESOURCES_PATH from process.env", () => {
+        // Even when shell env is primary, ELECTRON_RESOURCES_PATH comes from
+        // process.env because it's a Selene platform-specific addition.
+        process.env.ELECTRON_RESOURCES_PATH = "/app/resources";
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
+            PATH: "/usr/local/bin:/usr/bin",
+        });
+
+        const env = buildSafeEnvironment(baseRuntime);
+
+        expect(env.ELECTRON_RESOURCES_PATH).toBe("/app/resources");
     });
 
     it("preserves system PATH on Windows despite case mismatch", () => {
@@ -120,10 +213,6 @@ describe("buildSafeEnvironment", () => {
         Object.defineProperty(process, "platform", { value: "win32" });
 
         // Simulate Windows env where PATH is stored as "Path"
-        const originalPath = process.env.PATH;
-        const originalPathLower = process.env.Path;
-        // process.env.PATH always works (case-insensitive proxy on Windows)
-        // The fix ensures PATH in child env is non-empty
         const env = buildSafeEnvironment(baseRuntime);
 
         // PATH must contain the system PATH value, not be empty

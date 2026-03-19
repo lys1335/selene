@@ -10,26 +10,59 @@ import { basename, isAbsolute, join } from "path";
 import { tmpdir } from "os";
 import { getResolvedShellEnvironment } from "@/lib/shell-env/resolver";
 
-const BLOCKED_ENV_KEYS = new Set([
+/**
+ * Keys that are always stripped from the child environment, regardless of
+ * whether we're using shell env or falling back to process.env.
+ * These are Electron/Selene internals that should never reach user commands.
+ */
+const ALWAYS_BLOCKED_ENV_KEYS = new Set([
     "ELECTRON_RUN_AS_NODE",
     "ELECTRON_NO_ATTACH_CONSOLE",
     "ELECTRON_ENABLE_LOGGING",
-    "NODE_ENV",
     "SELENE_PRODUCTION_BUILD",
+    "NEXT_RUNTIME",
+    "NEXT_DEPLOYMENT_ID",
+    "PORT",
+]);
+
+/**
+ * Additional keys to strip when falling back to process.env (i.e. when shell
+ * env resolution failed). These are set by the Electron/Next.js runtime and
+ * would break user dev tooling if they leaked through.
+ *
+ * When shell env IS available, these are NOT stripped — the shell env was
+ * captured from a clean login shell, so if NODE_ENV is present it's because
+ * the user's rcfiles explicitly set it, which is the correct behavior.
+ */
+const PROCESS_ENV_FALLBACK_BLOCKED_KEYS = new Set([
+    "NODE_ENV",
 ]);
 
 /**
  * Prefix patterns for env vars that should never leak to child processes.
- * __NEXT_PRIVATE_* vars are internal to the running Next.js instance —
- * leaking them causes child Next.js processes (e.g. in synced project folders)
- * to use the wrong project root, turbopack config, or React bundle.
+ * All __NEXT_* vars are internal to the running Next.js instance — they
+ * control standalone config, processed env markers, React bundle paths, etc.
+ * Leaking them causes child Next.js processes to use Selene's config instead
+ * of their own, which crashes with path resolution errors.
+ *
+ * Note: We intentionally do NOT block NEXT_PUBLIC_* (no double underscore)
+ * because those are user-facing env vars. NEXT_RUNTIME and NEXT_DEPLOYMENT_ID
+ * are handled explicitly above.
  */
-const BLOCKED_ENV_PREFIXES = ["__NEXT_PRIVATE_"];
+const BLOCKED_ENV_PREFIXES = ["__NEXT_"];
 
-function sanitizeEnvironment(env: Record<string, string | undefined>): Record<string, string | undefined> {
+export function sanitizeEnvironment(
+    env: Record<string, string | undefined>,
+    extraBlockedKeys?: Set<string>,
+): Record<string, string | undefined> {
     const sanitized = { ...env };
-    for (const key of BLOCKED_ENV_KEYS) {
+    for (const key of ALWAYS_BLOCKED_ENV_KEYS) {
         delete sanitized[key];
+    }
+    if (extraBlockedKeys) {
+        for (const key of extraBlockedKeys) {
+            delete sanitized[key];
+        }
     }
     for (const key of Object.keys(sanitized)) {
         if (BLOCKED_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
@@ -98,18 +131,42 @@ export function prependBundledPaths(pathValue: string, runtime: BundledRuntimeIn
 }
 
 /**
- * Build a minimal, safe environment for command execution.
- * Includes bundled Node.js binaries in PATH for packaged apps.
+ * Build the environment for command execution that mirrors what the user gets
+ * in their terminal.
+ *
+ * Strategy:
+ *   1. When shell env is available (non-empty) — use it as the PRIMARY source.
+ *      The resolver captures it from a clean login shell (no Electron/Next.js
+ *      contamination), so it's exactly what the user would get in a new
+ *      terminal window. process.env is NOT mixed in.
+ *
+ *   2. When shell env is unavailable (Windows, EBADF, resolution failure) —
+ *      fall back to process.env with aggressive sanitization to strip
+ *      runtime-specific vars that would break user commands.
+ *
+ * In both cases, bundled binary dirs are prepended to PATH and a small set
+ * of platform-essential vars (ELECTRON_RESOURCES_PATH, TERM) are set.
  */
 export function buildSafeEnvironment(runtime: BundledRuntimeInfo): Record<string, string | undefined> {
     const shellEnv = getResolvedShellEnvironment();
-    const baseEnv = { ...process.env, ...shellEnv } as Record<string, string | undefined>;
+    const shellEnvAvailable = Object.keys(shellEnv).length > 0;
+
+    let baseEnv: Record<string, string | undefined>;
+
+    if (shellEnvAvailable) {
+        // Shell env IS the user's environment — captured from a clean login
+        // shell with no Electron/Next.js vars. Use it directly.
+        baseEnv = { ...shellEnv } as Record<string, string | undefined>;
+    } else {
+        // Fallback: shell env resolution failed. Use process.env but apply
+        // extra sanitization to strip runtime-specific vars.
+        baseEnv = { ...process.env };
+    }
 
     // On Windows, process.env is a case-insensitive Proxy, but spreading it
     // creates a plain (case-sensitive) object where PATH is typically stored
-    // as "Path". Collect the value case-insensitively (last match wins, so
-    // shellEnv can override process.env) and remove all variants to avoid
-    // duplicate/conflicting PATH entries in the child environment.
+    // as "Path". Collect the value case-insensitively (last match wins) and
+    // remove all variants to avoid duplicate/conflicting PATH entries.
     let currentPath = "";
     if (process.platform === "win32") {
         for (const key of Object.keys(baseEnv)) {
@@ -134,6 +191,14 @@ export function buildSafeEnvironment(runtime: BundledRuntimeInfo): Record<string
         tmpOverrides.TMPDIR = tmpdir();
     }
 
+    // When falling back to process.env, also strip NODE_ENV and other
+    // runtime vars that would break dev tooling. When shell env is the
+    // source, these are either absent (clean bootstrap) or intentionally
+    // set by the user's rcfiles — both are correct.
+    const extraBlocked = shellEnvAvailable
+        ? undefined
+        : PROCESS_ENV_FALLBACK_BLOCKED_KEYS;
+
     return sanitizeEnvironment({
         ...baseEnv,
         ...tmpOverrides,
@@ -141,8 +206,9 @@ export function buildSafeEnvironment(runtime: BundledRuntimeInfo): Record<string
         TERM: baseEnv.TERM && baseEnv.TERM !== "dumb" ? baseEnv.TERM : "xterm-256color",
         HOME: baseEnv.HOME || baseEnv.USERPROFILE,
         USER: baseEnv.USER || baseEnv.USERNAME,
+        // Selene-specific: needed for bundled binary resolution in child processes
         ELECTRON_RESOURCES_PATH: process.env.ELECTRON_RESOURCES_PATH || runtime.resourcesPath || undefined,
-    });
+    }, extraBlocked);
 }
 
 // ── Unix-to-Windows path normalization ────────────────────────────────────────

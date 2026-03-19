@@ -90,7 +90,7 @@ export const agentMetadataSchema = z.object({
 
   /** Per-agent defaults for provider/model selection */
   modelConfig: z.object({
-    provider: z.enum(["anthropic", "openrouter", "antigravity", "codex", "kimi", "minimax", "ollama", "claudecode"]).optional(),
+    provider: z.enum(["anthropic", "openrouter", "antigravity", "codex", "kimi", "minimax", "blackboxai", "ollama", "claudecode"]).optional(),
     chatModel: z.string().max(200).optional(),
     researchModel: z.string().max(200).optional(),
     visionModel: z.string().max(200).optional(),
