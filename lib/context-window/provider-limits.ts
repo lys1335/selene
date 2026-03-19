@@ -386,13 +386,6 @@ export const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>>
     maxTokens: 262144,
     supportsStreaming: true,
   },
-  "blackbox-search": {
-    maxTokens: 1048576,
-    supportsStreaming: true,
-    warningThreshold: 0.80,
-    criticalThreshold: 0.92,
-    hardLimit: 0.97,
-  },
 };
 
 // ---------------------------------------------------------------------------

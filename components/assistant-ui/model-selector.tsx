@@ -29,6 +29,7 @@ const PROVIDER_COLORS: Record<string, { bg: string; text: string; border: string
   claudecode: { bg: "bg-orange-500/10", text: "text-orange-700", border: "border-orange-500/30" },
   kimi: { bg: "bg-cyan-500/10", text: "text-cyan-700", border: "border-cyan-500/30" },
   minimax: { bg: "bg-rose-500/10", text: "text-rose-700", border: "border-rose-500/30" },
+  blackboxai: { bg: "bg-emerald-500/10", text: "text-emerald-700", border: "border-emerald-500/30" },
   ollama: { bg: "bg-gray-500/10", text: "text-gray-700", border: "border-gray-500/30" },
 };
 
@@ -40,6 +41,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   claudecode: "Claude Code",
   kimi: "Kimi",
   minimax: "MiniMax",
+  blackboxai: "BlackBox AI",
   ollama: "Ollama",
 };
 

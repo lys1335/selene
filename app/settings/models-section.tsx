@@ -263,7 +263,7 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           claudecodeDefault="claude-haiku-4-5-20251001"
           kimiDefault="kimi-k2-turbo-preview"
           minimaxDefault="MiniMax-M2.1-lightning"
-          blackboxaiDefault="blackbox-search"
+          blackboxaiDefault="openai/gpt-4o-mini"
           anthropicPlaceholder="claude-haiku-4-5-20251001"
           ollamaPlaceholder="llama3.1:8b"
           openrouterPlaceholder="google/gemini-2.0-flash-lite-001"

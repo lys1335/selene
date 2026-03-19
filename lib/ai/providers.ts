@@ -134,7 +134,7 @@ export const UTILITY_MODELS: Record<LLMProvider, string> = {
   claudecode: "claude-haiku-4-5-20251001", // Via Claude Pro/MAX OAuth
   kimi: "kimi-k2-turbo-preview", // Fast Kimi model for utility tasks
   minimax: "MiniMax-M2.1-lightning", // Fast MiniMax model for utility tasks
-  blackboxai: "blackbox-search",
+  blackboxai: "openai/gpt-4o-mini",
   ollama: "llama3.1:8b",
 };
 
