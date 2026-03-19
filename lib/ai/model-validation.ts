@@ -111,11 +111,11 @@ export function isModelCompatibleWithProvider(
   if (provider === "blackboxai") {
     if (lowerModel.includes("/")) return true;
     if (
-      ANTIGRAVITY_EXACT_MODELS.has(lowerModel) ||
-      MODEL_PREFIXES.codex.some((p) => lowerModel.startsWith(p)) ||
-      MODEL_PREFIXES.anthropic.some((p) => lowerModel.startsWith(p)) ||
-      MODEL_PREFIXES.kimi.some((p) => lowerModel.startsWith(p)) ||
-      MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p))
+      isModelCompatibleWithProvider(lowerModel, "antigravity") ||
+      isModelCompatibleWithProvider(lowerModel, "codex") ||
+      isModelCompatibleWithProvider(lowerModel, "anthropic") ||
+      isModelCompatibleWithProvider(lowerModel, "kimi") ||
+      isModelCompatibleWithProvider(lowerModel, "minimax")
     ) {
       return false;
     }
@@ -130,10 +130,10 @@ export function isModelCompatibleWithProvider(
     if (lowerModel.includes("/")) return true;
     // Reject bare provider-specific IDs that should go through their own provider
     if (
-      ANTIGRAVITY_EXACT_MODELS.has(lowerModel) ||
-      MODEL_PREFIXES.codex.some((p) => lowerModel.startsWith(p)) ||
-      MODEL_PREFIXES.kimi.some((p) => lowerModel.startsWith(p)) ||
-      MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p)) ||
+      isModelCompatibleWithProvider(lowerModel, "antigravity") ||
+      isModelCompatibleWithProvider(lowerModel, "codex") ||
+      isModelCompatibleWithProvider(lowerModel, "kimi") ||
+      isModelCompatibleWithProvider(lowerModel, "minimax") ||
       MODEL_PREFIXES.blackboxai.some((p) => lowerModel.startsWith(p))
     ) {
       return false;
