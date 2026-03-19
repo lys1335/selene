@@ -131,6 +131,7 @@ export async function handleStartAction(
   input: DelegateToSubagentInput,
   userId: string,
   characterId: string,
+  initiatorSessionId: string,
 ): Promise<DelegateResult> {
   // Compatibility mode: resume + start maps to continue with task as follow-up.
   if (input.resume) {
@@ -138,7 +139,7 @@ export async function handleStartAction(
       return {
         success: false,
         error: "'task' is required when using 'resume' with action='start'.",
-        delegations: buildDelegationsSummary(characterId),
+        delegations: buildDelegationsSummary(characterId, initiatorSessionId),
       };
     }
 
@@ -149,11 +150,12 @@ export async function handleStartAction(
         followUpMessage: input.task,
       },
       characterId,
+      initiatorSessionId,
     );
   }
 
   const mode = resolveExecutionMode(input);
-  const startResult = await handleStart(input, userId, characterId);
+  const startResult = await handleStart(input, userId, characterId, initiatorSessionId);
 
   if (!startResult.success || !startResult.delegationId) {
     return startResult;
@@ -220,6 +222,7 @@ async function handleStart(
   input: DelegateToSubagentInput,
   userId: string,
   characterId: string,
+  initiatorSessionId: string,
 ): Promise<DelegateResult> {
   const { agentId, agentName, task, context: extraContext } = input;
 
@@ -227,7 +230,7 @@ async function handleStart(
     return {
       success: false,
       error: "'task' is required for the 'start' action.",
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -266,7 +269,7 @@ async function handleStart(
       success: false,
       error: resolution.error,
       availableAgents,
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -276,7 +279,7 @@ async function handleStart(
       success: false,
       error: "Cannot delegate to yourself. Choose a different sub-agent from the workflow.",
       availableAgents,
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -319,6 +322,7 @@ async function handleStart(
   const delegation: ActiveDelegation = {
     id: delegationId,
     sessionId: session.id,
+    initiatorSessionId,
     delegateId: resolution.candidate.agentId,
     delegateName: resolution.candidate.agentName,
     delegatorId: characterId,
@@ -341,20 +345,21 @@ async function handleStart(
     delegateAgent: delegation.delegateName,
     message: `Delegation ${delegationId} created for sub-agent "${delegation.delegateName}".`,
     availableAgents,
-    delegations: buildDelegationsSummary(characterId),
+    delegations: buildDelegationsSummary(characterId, initiatorSessionId),
   };
 }
 
 export async function handleObserve(
   input: DelegateToSubagentInput,
   characterId: string,
+  initiatorSessionId: string,
 ): Promise<DelegateResult> {
   const { delegationId, waitSeconds } = input;
   if (!delegationId) {
     return {
       success: false,
       error: "'delegationId' is required for the 'observe' action.",
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -367,11 +372,11 @@ export async function handleObserve(
   }
 
   const delegation = activeDelegations.get(delegationId);
-  if (!delegation) {
+  if (!delegation || delegation.initiatorSessionId !== initiatorSessionId) {
     return {
       success: false,
       error: `Delegation ${delegationId} not found. It may have already completed and been cleaned up.`,
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -395,7 +400,7 @@ export async function handleObserve(
       elapsed: Date.now() - delegation.startedAt,
       waitedMs,
       waitTimedOut: waitValidation.waitMs > 0 && !delegation.settled,
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -456,13 +461,14 @@ export async function handleObserve(
             "Use delegateToSubagent action='answer' with the delegationId, toolUseId, and answers to continue.",
         }
       : {}),
-    delegations: buildDelegationsSummary(characterId),
+    delegations: buildDelegationsSummary(characterId, initiatorSessionId),
   };
 }
 
 export async function handleAnswer(
   input: DelegateToSubagentInput,
   characterId: string,
+  initiatorSessionId: string,
 ): Promise<DelegateResult> {
   const { delegationId, toolUseId, answers } = input;
 
@@ -470,7 +476,7 @@ export async function handleAnswer(
     return {
       success: false,
       error: "'delegationId' is required for the 'answer' action.",
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -478,7 +484,7 @@ export async function handleAnswer(
     return {
       success: false,
       error: "'toolUseId' is required for the 'answer' action.",
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -491,16 +497,16 @@ export async function handleAnswer(
     return {
       success: false,
       error: "'answers' must be a Record<string, string> for the 'answer' action.",
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
   const delegation = activeDelegations.get(delegationId);
-  if (!delegation) {
+  if (!delegation || delegation.initiatorSessionId !== initiatorSessionId) {
     return {
       success: false,
       error: `Delegation ${delegationId} not found. It may have already completed and been cleaned up.`,
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -515,7 +521,7 @@ export async function handleAnswer(
       error:
         `No pending interactive prompt found for toolUseId "${toolUseId}" in delegation ${delegationId}.`,
       ...(pendingInteractivePrompts.length > 0 ? { pendingInteractivePrompts } : {}),
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -527,13 +533,14 @@ export async function handleAnswer(
     message:
       "Interactive answer forwarded to the sub-agent. " +
       "Use 'observe' to check progress and any follow-up prompts.",
-    delegations: buildDelegationsSummary(characterId),
+    delegations: buildDelegationsSummary(characterId, initiatorSessionId),
   };
 }
 
 export async function handleContinue(
   input: DelegateToSubagentInput,
   characterId: string,
+  initiatorSessionId: string,
 ): Promise<DelegateResult> {
   const { delegationId, followUpMessage } = input;
 
@@ -541,14 +548,14 @@ export async function handleContinue(
     return {
       success: false,
       error: "'delegationId' is required for the 'continue' action.",
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
   if (!followUpMessage) {
     return {
       success: false,
       error: "'followUpMessage' is required for the 'continue' action.",
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -557,16 +564,16 @@ export async function handleContinue(
     return {
       success: false,
       error: "'followUpMessage' cannot be empty after sanitization.",
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
   const delegation = activeDelegations.get(delegationId);
-  if (!delegation) {
+  if (!delegation || delegation.initiatorSessionId !== initiatorSessionId) {
     return {
       success: false,
       error: `Delegation ${delegationId} not found. It may have already completed and been cleaned up.`,
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -588,7 +595,7 @@ export async function handleContinue(
         message:
           "Follow-up message queued for live injection. The active sub-agent stream continues without interruption. " +
           "Use 'observe' to check progress and response updates.",
-        delegations: buildDelegationsSummary(characterId),
+        delegations: buildDelegationsSummary(characterId, initiatorSessionId),
       };
     }
   }
@@ -605,29 +612,30 @@ export async function handleContinue(
     message:
       "Follow-up message sent. The sub-agent is processing your message. " +
       "Use 'observe' to check the response, and set observe.waitSeconds to avoid tight polling loops.",
-    delegations: buildDelegationsSummary(characterId),
+    delegations: buildDelegationsSummary(characterId, initiatorSessionId),
   };
 }
 
 export async function handleStop(
   input: DelegateToSubagentInput,
   characterId: string,
+  initiatorSessionId: string,
 ): Promise<DelegateResult> {
   const { delegationId } = input;
   if (!delegationId) {
     return {
       success: false,
       error: "'delegationId' is required for the 'stop' action.",
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
   const delegation = activeDelegations.get(delegationId);
-  if (!delegation) {
+  if (!delegation || delegation.initiatorSessionId !== initiatorSessionId) {
     return {
       success: false,
       error: `Delegation ${delegationId} not found. It may have already completed.`,
-      delegations: buildDelegationsSummary(characterId),
+      delegations: buildDelegationsSummary(characterId, initiatorSessionId),
     };
   }
 
@@ -641,12 +649,13 @@ export async function handleStop(
     success: true,
     delegationId,
     message: `Delegation ${delegationId} stopped and cancelled.`,
-    delegations: buildDelegationsSummary(characterId),
+    delegations: buildDelegationsSummary(characterId, initiatorSessionId),
   };
 }
 
 export async function handleList(
   characterId: string,
+  initiatorSessionId: string,
 ): Promise<DelegateResult> {
   const membership = await getWorkflowByAgentId(characterId);
   if (!membership) {
@@ -674,11 +683,12 @@ export async function handleList(
 
   const results: DelegateResult["delegations"] = [];
 
-  // Clean up stale entries and collect only delegations that are still active.
+  // Clean up stale entries and collect only delegations scoped to this session.
   const staleIds: string[] = [];
 
   for (const [id, del] of activeDelegations.entries()) {
     if (del.delegatorId !== characterId) continue;
+    if (del.initiatorSessionId !== initiatorSessionId) continue;
 
     if (del.settled) {
       if (Date.now() - del.startedAt > 10 * 60 * 1000) {

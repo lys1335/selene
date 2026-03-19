@@ -19,6 +19,8 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const sessionId = request.nextUrl.searchParams.get("sessionId") ?? undefined;
+
   const character = await getCharacter(characterId);
   if (!character) {
     return NextResponse.json({ error: "Character not found" }, { status: 404 });
@@ -27,7 +29,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const delegations = getActiveDelegationsForCharacter(characterId);
+  const delegations = getActiveDelegationsForCharacter(characterId, sessionId);
 
   return NextResponse.json({ delegations });
 }

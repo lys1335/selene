@@ -91,7 +91,10 @@ export interface DelegateResult {
 
 export interface ActiveDelegation {
   id: string;
+  /** The sub-agent's chat session ID. */
   sessionId: string;
+  /** The initiator's chat session ID — used to scope delegations per session. */
+  initiatorSessionId: string;
   delegateId: string;
   delegateName: string;
   delegatorId: string;

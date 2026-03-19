@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Validate macOS builds stay unsigned and skip notarization.
+ * Validate macOS builds have signing and notarization enabled.
  *
  * Usage:
  *   npx tsx scripts/validation/validate-macos-signing-notarization.ts [--dry-run]
@@ -19,17 +19,17 @@ interface GuardCheck {
 
 const checks: GuardCheck[] = [
   {
-    id: "electron-builder-signing-disabled",
-    description: "electron-builder keeps macOS signing and notarization disabled",
+    id: "electron-builder-signing-enabled",
+    description: "electron-builder has macOS signing and notarization enabled",
     filePath: "electron-builder.yml",
-    requiredSnippets: ["mac:", "identity: null", "hardenedRuntime: false", "dmg:", "sign: false"],
-    forbiddenSnippets: [
+    requiredSnippets: [
+      "mac:",
+      "hardenedRuntime: true",
       'afterSign: "scripts/notarize.js"',
       'entitlements: "build-resources/entitlements.mac.plist"',
       'entitlementsInherit: "build-resources/entitlements.mac.inherit.plist"',
-      "hardenedRuntime: true",
-      "sign: true",
     ],
+    forbiddenSnippets: ["identity: null", "hardenedRuntime: false"],
   },
 ];
 

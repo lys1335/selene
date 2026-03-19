@@ -37,8 +37,14 @@ import {
 // Read-only accessor for external consumers (API routes, system prompt)
 // ---------------------------------------------------------------------------
 
+/**
+ * Return active (unsettled) delegations for a character.
+ * When `initiatorSessionId` is provided, only delegations created in that
+ * session are returned — this prevents cross-session leakage.
+ */
 export function getActiveDelegationsForCharacter(
   characterId: string,
+  initiatorSessionId?: string,
 ): Array<{
   delegationId: string;
   sessionId: string;
@@ -61,6 +67,7 @@ export function getActiveDelegationsForCharacter(
   const staleIds: string[] = [];
   for (const [id, del] of activeDelegations.entries()) {
     if (del.delegatorId !== characterId) continue;
+    if (initiatorSessionId && del.initiatorSessionId !== initiatorSessionId) continue;
     if (del.settled) {
       if (Date.now() - del.startedAt > 10 * 60 * 1000) {
         staleIds.push(id);
@@ -84,8 +91,11 @@ export function getActiveDelegationsForCharacter(
 }
 
 /** Build compact delegations array for inclusion in all tool responses. */
-export function buildDelegationsSummary(characterId: string): DelegateResult["delegations"] {
-  return getActiveDelegationsForCharacter(characterId);
+export function buildDelegationsSummary(
+  characterId: string,
+  initiatorSessionId?: string,
+): DelegateResult["delegations"] {
+  return getActiveDelegationsForCharacter(characterId, initiatorSessionId);
 }
 
 // ---------------------------------------------------------------------------

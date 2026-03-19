@@ -613,7 +613,7 @@ export async function POST(req: Request) {
       try {
         const workflowCtx = await getWorkflowByAgentId(characterId);
         if (workflowCtx) {
-          const resources = await getWorkflowResources(workflowCtx.workflow.id, characterId);
+          const resources = await getWorkflowResources(workflowCtx.workflow.id, characterId, sessionId);
           if (resources) {
             if (resources.sharedResources.pluginIds.length > 0) {
               const existingIds = new Set(scopedPlugins.map((p) => p.id));

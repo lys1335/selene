@@ -57,7 +57,7 @@ const MODEL_PREFIXES: Record<LLMProvider, string[]> = {
  * - Claude Code: claude-opus-4*, claude-sonnet-4*, claude-haiku-4* (also accepts Anthropic claude-* models)
  * - Codex: gpt-5*, codex*
  * - Kimi: kimi-*, moonshot-*
- * - BlackBox AI: accepts any model (multi-model router, 325+ models)
+ * - BlackBox AI: provider-prefixed format (e.g., "anthropic/claude-*"), rejects bare IDs from other providers
  * - Ollama: accepts any model
  * - OpenRouter: accepts anything with "/" or non-provider-specific bare IDs
  */
@@ -105,8 +105,22 @@ export function isModelCompatibleWithProvider(
     return MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p));
   }
 
-  // BlackBox AI: multi-model router (325+ models), accepts any model ID
-  if (provider === "blackboxai") return true;
+  // BlackBox AI: multi-model router, but reject bare IDs claimed by other providers.
+  // BlackBox uses provider-prefixed format (e.g., "anthropic/claude-sonnet-4.5").
+  // Bare IDs like "gpt-5.4-high" (Codex) would fail at the BlackBox API.
+  if (provider === "blackboxai") {
+    if (lowerModel.includes("/")) return true;
+    if (
+      isModelCompatibleWithProvider(lowerModel, "antigravity") ||
+      isModelCompatibleWithProvider(lowerModel, "codex") ||
+      isModelCompatibleWithProvider(lowerModel, "anthropic") ||
+      isModelCompatibleWithProvider(lowerModel, "kimi") ||
+      isModelCompatibleWithProvider(lowerModel, "minimax")
+    ) {
+      return false;
+    }
+    return true;
+  }
 
   // Ollama: accepts any model name
   if (provider === "ollama") return true;
@@ -116,10 +130,10 @@ export function isModelCompatibleWithProvider(
     if (lowerModel.includes("/")) return true;
     // Reject bare provider-specific IDs that should go through their own provider
     if (
-      ANTIGRAVITY_EXACT_MODELS.has(lowerModel) ||
-      MODEL_PREFIXES.codex.some((p) => lowerModel.startsWith(p)) ||
-      MODEL_PREFIXES.kimi.some((p) => lowerModel.startsWith(p)) ||
-      MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p)) ||
+      isModelCompatibleWithProvider(lowerModel, "antigravity") ||
+      isModelCompatibleWithProvider(lowerModel, "codex") ||
+      isModelCompatibleWithProvider(lowerModel, "kimi") ||
+      isModelCompatibleWithProvider(lowerModel, "minimax") ||
       MODEL_PREFIXES.blackboxai.some((p) => lowerModel.startsWith(p))
     ) {
       return false;
