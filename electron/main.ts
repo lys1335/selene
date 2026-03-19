@@ -421,7 +421,21 @@ app.whenReady().then(async () => {
     const hotkeyResult = registerScreenCaptureHotkeyFromSettings({
       dataDir,
       onTrigger: () => {
-        void emitCapturedScreen(captureCtx);
+        // If overlay is active, add screenshot to it instead of main chat
+        const overlay = getOverlay();
+        if (overlay && !overlay.isDestroyed() && overlay.isVisible() && !overlay.webContents.isCrashed()) {
+          captureDisplay({ mediaDir })
+            .then((result) => {
+              if (result.success && result.imageUrl) {
+                overlay.webContents.send("overlay:add-screenshot", result.imageUrl);
+              }
+            })
+            .catch((err: unknown) => {
+              debugError("[App] Failed to capture screenshot for overlay:", err);
+            });
+        } else {
+          void emitCapturedScreen(captureCtx);
+        }
       },
     });
     debugLog(`[App] Screen capture hotkey registered: ${hotkeyResult.accelerator} (success: ${hotkeyResult.success})`);

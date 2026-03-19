@@ -18,8 +18,8 @@ interface RecordingPillProps {
   agentPicker?: ReactNode;
   /** Optional slot rendered at the bottom of the pill, below the cancel button. */
   modeToggle?: ReactNode;
-  /** Screenshot context for the current session — shown as a small thumbnail. */
-  screenshotUrl?: string;
+  /** Screenshot context for the current session — shown as small thumbnails. */
+  screenshotUrls?: string[];
   /** Called when the user clicks "Open in Selene" in compose-review phase. */
   onConfirmCompose?: () => void;
   /** Called when the user clicks "Close" in done phase. */
@@ -37,12 +37,13 @@ export function RecordingPill({
   onStopRecording,
   agentPicker,
   modeToggle,
-  screenshotUrl,
+  screenshotUrls,
   onConfirmCompose,
   onDismiss,
 }: RecordingPillProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [resolvedPrimaryColor, setResolvedPrimaryColor] = useState("#6366f1");
+  const [showFullScreenshot, setShowFullScreenshot] = useState<string | null>(null);
 
   // Resolve CSS variable to a concrete color for canvas rendering.
   // Canvas 2D context doesn't support CSS custom properties like "hsl(var(--primary))".
@@ -266,16 +267,30 @@ export function RecordingPill({
           WebkitAppRegion: "no-drag",
         }}
       >
-        {screenshotUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={screenshotUrl}
-            alt="Screenshot context"
-            width={32}
-            height={32}
-            className="w-8 h-8 rounded object-cover border border-border/40 shrink-0"
-          />
+        {screenshotUrls && screenshotUrls.length > 0 && (
+          <div className="flex items-center gap-1.5 max-w-[200px] overflow-x-auto">
+            {screenshotUrls.map((url, i) => (
+              <button
+                key={`${url}-${i}`}
+                onClick={() => setShowFullScreenshot(url)}
+                className="group relative shrink-0"
+                title="Click to view full screenshot"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt={`Screenshot ${i + 1}`}
+                  className="w-24 h-16 rounded-md object-cover border border-border/40 group-hover:border-primary/60 transition-colors"
+                />
+                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-md">
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                </span>
+              </button>
+            ))}
+          </div>
         )}
+        {/* Shortcut hint */}
+        <span className="text-[10px] text-muted-foreground/60 whitespace-nowrap">{"\u2318\u21E7S"} add screenshot</span>
         <button
           onClick={onClose}
           className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
@@ -325,6 +340,32 @@ export function RecordingPill({
           }}
         >
           {modeToggle}
+        </div>
+      )}
+
+      {/* Screenshot lightbox */}
+      {showFullScreenshot && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+          onClick={() => setShowFullScreenshot(null)}
+          style={{
+            // @ts-ignore
+            WebkitAppRegion: "no-drag",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={showFullScreenshot}
+            alt="Full screenshot"
+            className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setShowFullScreenshot(null)}
+            className="absolute top-3 right-3 p-1.5 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
     </div>

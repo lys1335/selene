@@ -823,110 +823,68 @@ export function SettingsPanel({
           </SettingsPanelCard>
 
           <SettingsPanelCard
-            title={t("voice.screen.title")}
-            description={t("voice.screen.description")}
+            title="Shortcuts"
+            description="Global keyboard shortcuts for screen and voice capture."
           >
             <PermissionStatusBanner />
 
-            <SettingsToggleRow
-              id="screenCaptureEnabled"
-              label={t("voice.screen.enableLabel")}
-              description={t("voice.screen.enableDesc")}
-              checked={formState.screenCaptureEnabled}
-              onChange={(checked) => updateField("screenCaptureEnabled", checked)}
-            />
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
+                <SettingsToggleRow
+                  id="screenCaptureEnabled"
+                  label="Screenshot shortcut"
+                  description="Capture the active display and attach it to the current chat."
+                  checked={formState.screenCaptureEnabled}
+                  onChange={(checked) => updateField("screenCaptureEnabled", checked)}
+                />
+              </div>
+              {formState.screenCaptureEnabled && (
+                <div className="shrink-0 w-48">
+                  <ShortcutRecorder
+                    id="screenCaptureShortcut"
+                    value={formState.screenCaptureShortcut}
+                    onChange={(v) => updateField("screenCaptureShortcut", v)}
+                  />
+                </div>
+              )}
+            </div>
 
-            <SettingsField
-              label={t("voice.screen.shortcutLabel")}
-              htmlFor="screenCaptureShortcut"
-              helperText={t("voice.screen.shortcutHelper")}
-              className="max-w-md"
-            >
-              <ShortcutRecorder
-                id="screenCaptureShortcut"
-                value={formState.screenCaptureShortcut}
-                onChange={(v) => updateField("screenCaptureShortcut", v)}
-              />
-            </SettingsField>
-
-            <div className="rounded-xl border border-terminal-border/55 bg-terminal-bg/5 px-3.5 py-3 font-mono text-xs leading-relaxed text-terminal-muted dark:border-terminal-border/90 dark:bg-terminal-cream-dark/45">
-              {t("voice.screen.captureHint")}
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex-1">
+                <SettingsToggleRow
+                  id="quickCaptureEnabled"
+                  label="Voice + screen shortcut"
+                  description="Capture screen and open the voice overlay simultaneously."
+                  checked={formState.quickCaptureEnabled}
+                  onChange={(checked) => updateField("quickCaptureEnabled", checked)}
+                />
+              </div>
+              {formState.quickCaptureEnabled && (
+                <div className="shrink-0 w-48">
+                  <ShortcutRecorder
+                    id="quickCaptureHotkey"
+                    value={formState.quickCaptureHotkey}
+                    onChange={(v) => updateField("quickCaptureHotkey", v)}
+                  />
+                </div>
+              )}
             </div>
           </SettingsPanelCard>
 
           <SettingsPanelCard
-            title={t("voice.quickCapture.title")}
-            description={t("voice.quickCapture.description")}
-          >
-            <SettingsToggleRow
-              id="quickCaptureEnabled"
-              label={t("voice.quickCapture.enableLabel")}
-              description={t("voice.quickCapture.enableDesc")}
-              checked={formState.quickCaptureEnabled}
-              onChange={(checked) => updateField("quickCaptureEnabled", checked)}
-            />
-
-            <SettingsField
-              label={t("voice.quickCapture.hotkeyLabel")}
-              htmlFor="quickCaptureHotkey"
-              helperText={t("voice.quickCapture.hotkeyHelper")}
-              className="max-w-md"
-            >
-              <ShortcutRecorder
-                id="quickCaptureHotkey"
-                value={formState.quickCaptureHotkey}
-                onChange={(v) => updateField("quickCaptureHotkey", v)}
-              />
-            </SettingsField>
-
-            <SettingsToggleRow
-              id="quickCaptureAutoSend"
-              label={t("voice.quickCapture.autoSendLabel")}
-              description={t("voice.quickCapture.autoSendDesc")}
-              checked={formState.quickCaptureAutoSend}
-              onChange={(checked) => updateField("quickCaptureAutoSend", checked)}
-            />
-
-            {formState.quickCaptureAutoSend && (
-              <SettingsField
-                label={t("voice.quickCapture.autoSendDelayLabel")}
-                htmlFor="quickCaptureAutoSendDelay"
-                helperText={t("voice.quickCapture.autoSendDelayHelper")}
-                className="max-w-md"
-              >
-                <select
-                  id="quickCaptureAutoSendDelay"
-                  value={formState.quickCaptureAutoSendDelay}
-                  onChange={(e) => updateField("quickCaptureAutoSendDelay", Number(e.target.value))}
-                  className={settingsInputClassName}
-                >
-                  <option value={2}>2 seconds</option>
-                  <option value={3}>3 seconds</option>
-                  <option value={5}>5 seconds</option>
-                  <option value={10}>10 seconds</option>
-                </select>
-              </SettingsField>
-            )}
-
-            <div className="rounded-xl border border-terminal-border/55 bg-terminal-bg/5 px-3.5 py-3 font-mono text-xs leading-relaxed text-terminal-muted dark:border-terminal-border/90 dark:bg-terminal-cream-dark/45">
-              {t("voice.quickCapture.hint")}
-            </div>
-          </SettingsPanelCard>
-
-          <SettingsPanelCard
-            title="Mini Overlay"
-            description="Behavior for the floating voice overlay triggered by the global shortcut."
+            title="Overlay"
+            description="Behavior for the floating capture overlay."
           >
             <SettingsOptionGroup
               title="Default mode"
-              description="Which mode the overlay starts in when no preference is stored."
+              description="Which mode the overlay starts in."
             >
               <SettingsRadioCard
                 id="miniOverlayDefaultMode-direct"
                 name="miniOverlayDefaultMode"
                 value="direct"
                 label="Direct"
-                description="Send message immediately and get a spoken response."
+                description="Send immediately and get a spoken response."
                 checked={formState.miniOverlayDefaultMode === "direct"}
                 onChange={() => updateField("miniOverlayDefaultMode", "direct")}
               />
@@ -935,7 +893,7 @@ export function SettingsPanel({
                 name="miniOverlayDefaultMode"
                 value="compose"
                 label="Compose"
-                description="Refine transcript, then open as a draft in Selene."
+                description="Refine transcript, then open as draft."
                 checked={formState.miniOverlayDefaultMode === "compose"}
                 onChange={() => updateField("miniOverlayDefaultMode", "compose")}
               />
@@ -944,7 +902,7 @@ export function SettingsPanel({
             <SettingsToggleRow
               id="miniOverlayAutoCloseAfterSpeak"
               label="Auto-close after response"
-              description="In Direct mode, close the overlay automatically after TTS finishes speaking."
+              description="Close overlay after TTS finishes in Direct mode."
               checked={formState.miniOverlayAutoCloseAfterSpeak}
               onChange={(checked) => updateField("miniOverlayAutoCloseAfterSpeak", checked)}
             />
@@ -952,7 +910,7 @@ export function SettingsPanel({
             <SettingsToggleRow
               id="miniOverlayShowScreenPreview"
               label="Show screen preview"
-              description="Display a screenshot thumbnail in the overlay when a screen capture is attached."
+              description="Display screenshot thumbnail in the overlay."
               checked={formState.miniOverlayShowScreenPreview}
               onChange={(checked) => updateField("miniOverlayShowScreenPreview", checked)}
             />
@@ -960,7 +918,7 @@ export function SettingsPanel({
             <SettingsToggleRow
               id="miniOverlayKeepAppFocusedOnCompose"
               label="Keep Selene focused after compose"
-              description="When handing off to Compose mode, keep Selene in the foreground instead of returning to the previous app."
+              description="Keep Selene in foreground after compose handoff."
               checked={formState.miniOverlayKeepAppFocusedOnCompose}
               onChange={(checked) => updateField("miniOverlayKeepAppFocusedOnCompose", checked)}
             />

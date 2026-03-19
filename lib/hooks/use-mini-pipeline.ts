@@ -11,11 +11,13 @@ interface UseMiniPipelineOptions {
   sessionId?: string;
   characterId?: string;
   screenshotUrl?: string;
+  /** Additional screenshots captured while the overlay is active (via Cmd+Shift+S). */
+  screenshotUrls?: string[];
   autoStart?: boolean;
   mode?: "direct" | "compose";
   voicePostProcessing?: boolean;
   onError?: (error: string) => void;
-  onComposeReady?: (payload: { transcript: string; screenshotUrl?: string; characterId?: string; sessionId?: string }) => void;
+  onComposeReady?: (payload: { transcript: string; screenshotUrl?: string; screenshotUrls?: string[]; characterId?: string; sessionId?: string }) => void;
 }
 
 interface UseMiniPipelineReturn {
@@ -36,6 +38,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     sessionId,
     characterId,
     screenshotUrl,
+    screenshotUrls,
     autoStart,
     mode = "direct",
     voicePostProcessing = true,
@@ -61,8 +64,14 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const ttsAudioRejectRef = useRef<((reason?: unknown) => void) | null>(null);
   const cancelledRef = useRef(false);
+  const modeRef = useRef(mode);
   const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+
+  // Keep refs in sync so the recorder.onstop closure always sees the latest values
+  useEffect(() => { modeRef.current = mode; }, [mode]);
+  const screenshotUrlsRef = useRef(screenshotUrls);
+  useEffect(() => { screenshotUrlsRef.current = screenshotUrls; }, [screenshotUrls]);
 
   const stopAllStreams = useCallback(() => {
     // Stop media stream tracks
@@ -133,9 +142,15 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     // Only allow confirmCompose from the compose-review phase
     if (phase !== "compose-review") return;
     setPhase("compose-pending");
+    const currentScreenshotUrls = screenshotUrlsRef.current;
+    const allScreenshots = [
+      ...(screenshotUrl ? [screenshotUrl] : []),
+      ...(currentScreenshotUrls ?? []),
+    ];
     onComposeReady?.({
       transcript,
-      screenshotUrl,
+      screenshotUrl: allScreenshots[0],
+      screenshotUrls: allScreenshots.length > 0 ? allScreenshots : undefined,
       characterId,
       sessionId,
     });
@@ -255,7 +270,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         setTranscript(finalTranscript);
 
         // --- Compose mode: pause at compose-review for user confirmation ---
-        if (mode === "compose") {
+        if (modeRef.current === "compose") {
           setPhase("compose-review");
           // Stop here. The user will click "Open in Selene" to trigger
           // confirmCompose(), which calls onComposeReady and transitions
@@ -287,35 +302,57 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         chatAbortRef.current = new AbortController();
         let accumulated = "";
         try {
+          // Combine initial screenshot with any additional ones captured during recording
+          const currentExtraUrls = screenshotUrlsRef.current;
+          const allScreenshots = [
+            ...(screenshotUrl ? [screenshotUrl] : []),
+            ...(currentExtraUrls ?? []),
+          ];
+          const screenshotAttachments = allScreenshots.map((url, i) => ({
+            name: `screenshot-${i + 1}.png`,
+            contentType: "image/png",
+            url,
+          }));
           const chatBody: Record<string, unknown> = {
-            id: resolvedSessionId,
-            message: {
-              role: "user",
-              content: finalTranscript,
-              ...(screenshotUrl
-                ? {
-                    experimental_attachments: [
-                      {
-                        name: "screenshot.png",
-                        contentType: "image/png",
-                        url: screenshotUrl,
-                      },
-                    ],
-                  }
-                : {}),
-            },
+            sessionId: resolvedSessionId,
+            messages: [
+              {
+                role: "user",
+                content: finalTranscript,
+                ...(screenshotAttachments.length > 0
+                  ? { experimental_attachments: screenshotAttachments }
+                  : {}),
+              },
+            ],
           };
           if (characterId) {
             chatBody.characterId = characterId;
           }
 
+          const chatHeaders: Record<string, string> = {
+            "Content-Type": "application/json",
+          };
+          if (resolvedSessionId) {
+            chatHeaders["X-Session-Id"] = resolvedSessionId;
+          }
+          if (characterId) {
+            chatHeaders["X-Character-Id"] = characterId;
+          }
+
           const chatRes = await fetch("/api/chat", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: chatHeaders,
             body: JSON.stringify(chatBody),
             signal: chatAbortRef.current.signal,
           });
-          if (!chatRes.ok) throw new Error(`Chat failed: ${chatRes.status}`);
+          if (!chatRes.ok) {
+            let detail = `${chatRes.status}`;
+            try {
+              const errBody = await chatRes.json();
+              if (errBody?.error) detail = errBody.error;
+            } catch {}
+            throw new Error(`Chat failed: ${detail}`);
+          }
 
           const reader = chatRes.body!.getReader();
           try {

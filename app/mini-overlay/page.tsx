@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useCallback } from "react";
+import { Suspense, useEffect, useCallback, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMiniPipeline } from "@/lib/hooks/use-mini-pipeline";
 import { useOverlayAgentPicker } from "@/lib/hooks/use-overlay-agent-picker";
@@ -24,10 +24,16 @@ function MiniOverlayContent() {
   const sessionId = selectedAgent?.lastSessionId ?? sessionIdParam;
 
   // ---------------------------------------------------------------------------
+  // Additional screenshots added via Cmd+Shift+S while overlay is active
+  // ---------------------------------------------------------------------------
+  const [additionalScreenshots, setAdditionalScreenshots] = useState<string[]>([]);
+  const additionalScreenshotsRef = useRef<string[]>([]);
+
+  // ---------------------------------------------------------------------------
   // Compose handoff — invoked when pipeline.confirmCompose() fires onComposeReady
   // ---------------------------------------------------------------------------
   const handleComposeReady = useCallback(
-    async (payload: { transcript: string; screenshotUrl?: string; characterId?: string; sessionId?: string }) => {
+    async (payload: { transcript: string; screenshotUrl?: string; screenshotUrls?: string[]; characterId?: string; sessionId?: string }) => {
       const api = getElectronAPI();
       try {
         await api?.ipc?.invoke("mini-overlay:compose-ready", payload);
@@ -45,6 +51,7 @@ function MiniOverlayContent() {
     sessionId,
     characterId,
     screenshotUrl,
+    screenshotUrls: additionalScreenshots,
     autoStart: true,
     mode,
     voicePostProcessing,
@@ -83,14 +90,44 @@ function MiniOverlayContent() {
         setTimeout(() => {
           pipeline.startRecording();
         }, 100);
+      } else if (pipeline.phase === "compose-review") {
+        // Shortcut in compose-review = confirm handoff
+        pipeline.confirmCompose();
       }
-      // During transcribing/refining/thinking/speaking/compose-review/compose-pending — ignore
+      // During transcribing/refining/thinking/speaking/compose-pending — ignore
     };
     api.ipc.on("overlay:toggle-recording", handleToggle);
     return () => {
       api?.ipc?.removeAllListeners?.("overlay:toggle-recording");
     };
-  }, [pipeline.phase, pipeline.stopRecording, pipeline.cancel, pipeline.startRecording]);
+  }, [pipeline.phase, pipeline.stopRecording, pipeline.cancel, pipeline.startRecording, pipeline.confirmCompose]);
+
+  // ---------------------------------------------------------------------------
+  // IPC listener for additional screenshots (Cmd+Shift+S while overlay is active)
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const api = getElectronAPI();
+    if (!api?.ipc?.on) return;
+    const handleAddScreenshot = (url: unknown) => {
+      if (typeof url === "string") {
+        setAdditionalScreenshots((prev) => {
+          const next = [...prev, url];
+          additionalScreenshotsRef.current = next;
+          return next;
+        });
+      }
+    };
+    api.ipc.on("overlay:add-screenshot", handleAddScreenshot);
+    return () => {
+      api?.ipc?.removeAllListeners?.("overlay:add-screenshot");
+    };
+  }, []);
+
+  // Combine initial screenshot with any additional ones
+  const allScreenshots = [
+    ...(screenshotUrl ? [screenshotUrl] : []),
+    ...additionalScreenshots,
+  ];
 
   // ---------------------------------------------------------------------------
   // Actions
@@ -143,7 +180,7 @@ function MiniOverlayContent() {
         onStopRecording={handleStopRecording}
         onConfirmCompose={handleConfirmCompose}
         onDismiss={handleDismiss}
-        screenshotUrl={showScreenPreview ? screenshotUrl : undefined}
+        screenshotUrls={showScreenPreview ? allScreenshots : undefined}
         agentPicker={
           !agentLoading && agents.length > 0 ? (
             <AgentPicker
