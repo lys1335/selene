@@ -2149,8 +2149,7 @@
         }
       },
       "readyStatus": "Hazır",
-      "minimax": "MiniMax",
-      "blackboxai": "BlackBox AI"
+      "minimax": "MiniMax"
     },
     "models": {
       "title": "Model Seçimi",
