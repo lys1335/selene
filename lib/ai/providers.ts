@@ -121,7 +121,7 @@ export const DEFAULT_MODELS: Record<LLMProvider, string> = {
   claudecode: "claude-sonnet-4-6", // Via Claude Pro/MAX OAuth
   kimi: "kimi-k2.5", // Moonshot Kimi K2.5 with 256K context
   minimax: "MiniMax-M2.1", // MiniMax flagship with 80K context
-  blackboxai: "anthropic/claude-sonnet-4.5",
+  blackboxai: "claude-sonnet-4.5",
   ollama: "llama3.1:8b",
 };
 
@@ -134,7 +134,7 @@ export const UTILITY_MODELS: Record<LLMProvider, string> = {
   claudecode: "claude-haiku-4-5-20251001", // Via Claude Pro/MAX OAuth
   kimi: "kimi-k2-turbo-preview", // Fast Kimi model for utility tasks
   minimax: "MiniMax-M2.1-lightning", // Fast MiniMax model for utility tasks
-  blackboxai: "openai/gpt-4o-mini",
+  blackboxai: "gpt-4o-mini",
   ollama: "llama3.1:8b",
 };
 
@@ -315,8 +315,10 @@ function isMiniMaxModel(modelId: string): boolean {
 
 function isBlackBoxModel(modelId: string): boolean {
   const lowerModel = modelId.toLowerCase();
+  // Only auto-detect BlackBox-native models to avoid misrouting common model
+  // IDs (e.g. "gpt-4o", "claude-sonnet-4.5") that exist in multiple providers.
+  // Users who want BlackBox should set their provider explicitly.
   return (
-    BLACKBOX_MODEL_ID_SET.has(lowerModel) ||
     lowerModel.startsWith("blackbox-") ||
     lowerModel.startsWith("blackboxai/")
   );
@@ -687,8 +689,9 @@ export function getLanguageModelForProvider(
       if (!apiKey) {
         throw new Error("BLACKBOX_API_KEY environment variable is not configured");
       }
-      // BlackBox AI API requires the blackboxai/ prefix on all model IDs
-      const bbModel = model.startsWith("blackboxai/") ? model : `blackboxai/${model}`;
+      // BlackBox AI uses flat model IDs (e.g. "claude-sonnet-4.5", "deepseek-r1-0528:free").
+      // Strip any legacy org prefix (e.g. "qwen/qwen3-235b-a22b" → "qwen3-235b-a22b").
+      const bbModel = model.includes("/") ? model.substring(model.lastIndexOf("/") + 1) : model;
       return getBlackBoxClient()(bbModel);
     }
 
@@ -754,7 +757,8 @@ export function getModelByName(modelId: string): LanguageModel {
     const apiKey = getBlackBoxApiKey();
     if (apiKey) {
       console.log(`[PROVIDERS] Using BlackBox AI for model: ${modelId}`);
-      const bbModel = modelId.startsWith("blackboxai/") ? modelId : `blackboxai/${modelId}`;
+      // Strip any legacy org prefix for flat BlackBox API model IDs
+      const bbModel = modelId.includes("/") ? modelId.substring(modelId.lastIndexOf("/") + 1) : modelId;
       return getBlackBoxClient()(bbModel);
     }
     // Fall through to OpenRouter if no BlackBox key
