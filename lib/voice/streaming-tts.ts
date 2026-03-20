@@ -77,16 +77,20 @@ export class StableStreamingLifecycle {
 
 /**
  * Buffers streaming text tokens and emits complete sentences for TTS synthesis.
- * Skips code block content and strips markdown formatting before emitting.
+ * Skips code block content by default. When `readCodeBlocks` is true, code
+ * block content is emitted with a "Code:" prefix instead of being discarded.
  */
 export class SentenceSplitter {
   private buffer = "";
   private pendingProse = "";
   private inCodeBlock = false;
+  private codeBlockContent = "";
   private onSentence: (sentence: string) => void;
+  private readCodeBlocks: boolean;
 
-  constructor(onSentence: (sentence: string) => void) {
+  constructor(onSentence: (sentence: string) => void, options?: { readCodeBlocks?: boolean }) {
     this.onSentence = onSentence;
+    this.readCodeBlocks = options?.readCodeBlocks ?? false;
   }
 
   /** Feed a text delta (streaming token). */
@@ -97,10 +101,19 @@ export class SentenceSplitter {
 
   /** Flush remaining buffer as final sentence. */
   flush(): void {
-    // If we're stuck inside a code block at the end, discard the leftover
+    // If we're stuck inside a code block at the end
     if (this.inCodeBlock) {
+      if (this.readCodeBlocks) {
+        // Emit any pending prose before the code block
+        const prose = stripMarkdown(this.pendingProse.trim());
+        if (prose.length > 0) this.onSentence(prose);
+        // Emit accumulated code block content
+        const code = (this.codeBlockContent + this.buffer).trim();
+        if (code.length > 0) this.onSentence("Code: " + code);
+      }
       this.buffer = "";
       this.pendingProse = "";
+      this.codeBlockContent = "";
       this.inCodeBlock = false;
       return;
     }
@@ -118,6 +131,7 @@ export class SentenceSplitter {
   reset(): void {
     this.buffer = "";
     this.pendingProse = "";
+    this.codeBlockContent = "";
     this.inCodeBlock = false;
   }
 
@@ -132,15 +146,30 @@ export class SentenceSplitter {
         // Look for closing fence
         const closeIdx = this.buffer.indexOf("```");
         if (closeIdx === -1) {
-          // Still inside code block — discard everything so far and wait
-          // for more input. We keep the buffer because the closing fence
-          // may arrive partially across two deltas.
+          if (this.readCodeBlocks) {
+            // Accumulate code content for later emission
+            this.codeBlockContent += this.buffer;
+            this.buffer = "";
+          }
+          // Still inside code block — wait for closing fence
           break;
         }
-        // Skip past the closing fence and restore any prose we buffered
-        // before the code block opened.
-        this.buffer = this.pendingProse + this.buffer.slice(closeIdx + 3);
-        this.pendingProse = "";
+
+        if (this.readCodeBlocks) {
+          // Emit pending prose, then code block content
+          const prose = stripMarkdown(this.pendingProse.trim());
+          if (prose.length > 0) this.onSentence(prose);
+          const code = (this.codeBlockContent + this.buffer.slice(0, closeIdx)).trim();
+          if (code.length > 0) this.onSentence("Code: " + code);
+          this.codeBlockContent = "";
+          this.pendingProse = "";
+          this.buffer = this.buffer.slice(closeIdx + 3);
+        } else {
+          // Skip past the closing fence and restore any prose we buffered
+          // before the code block opened.
+          this.buffer = this.pendingProse + this.buffer.slice(closeIdx + 3);
+          this.pendingProse = "";
+        }
         this.inCodeBlock = false;
         continue;
       }
@@ -155,7 +184,10 @@ export class SentenceSplitter {
         const afterFence = this.buffer.slice(openIdx + 3);
         const { remaining } = this.extractFromText(before);
         this.pendingProse = remaining;
-        this.buffer = afterFence;
+        this.codeBlockContent = "";
+        // Strip optional language identifier on the opening fence line
+        const nlIdx = afterFence.indexOf("\n");
+        this.buffer = nlIdx !== -1 ? afterFence.slice(nlIdx + 1) : afterFence;
         this.inCodeBlock = true;
         continue;
       }

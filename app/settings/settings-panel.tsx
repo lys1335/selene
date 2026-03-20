@@ -767,6 +767,14 @@ export function SettingsPanel({
                     className={settingsInputClassName}
                   />
                 </SettingsField>
+
+                <SettingsToggleRow
+                  id="ttsReadCodeBlocks"
+                  label={t("voice.tts.readCodeBlocksLabel")}
+                  description={t("voice.tts.readCodeBlocksDesc")}
+                  checked={formState.ttsReadCodeBlocks}
+                  onChange={(checked) => updateField("ttsReadCodeBlocks", checked)}
+                />
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-terminal-border/60 bg-terminal-bg/5 px-3 py-2.5 font-mono text-xs text-terminal-muted dark:border-terminal-border/80 dark:bg-terminal-cream/5">
