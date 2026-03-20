@@ -199,9 +199,10 @@ const AvatarAudioBridge: FC<{
 const StreamingAutoSpeakBridge: FC<{
     ttsAutoMode: string;
     ttsEnabled: boolean;
+    ttsReadCodeBlocks: boolean;
     muted: boolean;
     mutedRef: React.RefObject<boolean>;
-}> = ({ ttsAutoMode, ttsEnabled, muted, mutedRef }) => {
+}> = ({ ttsAutoMode, ttsEnabled, ttsReadCodeBlocks, muted, mutedRef }) => {
     const voiceCtx = useOptionalVoice();
     const playAudio = voiceCtx?.playAudio;
     const cancelAudio = voiceCtx?.cancelAudio;
@@ -255,7 +256,7 @@ const StreamingAutoSpeakBridge: FC<{
                 queuedAudioRef.current = true;
                 queue.enqueue(sentence);
             }
-        });
+        }, { readCodeBlocks: ttsReadCodeBlocks });
 
         const lifecycle = new StableStreamingLifecycle({
             onStart: () => {
@@ -309,7 +310,7 @@ const StreamingAutoSpeakBridge: FC<{
             splitterRef.current = null;
             bridgePlaybackRef.current = false;
         };
-    }, [cancelAudio, playAudio, mutedRef]);
+    }, [cancelAudio, playAudio, mutedRef, ttsReadCodeBlocks]);
 
     useEffect(() => {
         const shouldSpeak = ttsAutoMode === "always" && ttsEnabled && !muted;
@@ -404,6 +405,7 @@ export default function ChatInterface({
     const isForegroundStreamingRef = useRef(false);
     const [ttsAutoMode, setTtsAutoMode] = useState<string>("off");
     const [ttsEnabled, setTtsEnabled] = useState(false);
+    const [ttsReadCodeBlocks, setTtsReadCodeBlocks] = useState(false);
     const [showThemeChooser, setShowThemeChooser] = useState(false);
     const [availableAgents, setAvailableAgents] = useState<Array<{ id: string; name: string; avatarUrl?: string | null }>>([]);
     const [browserArchivedSessions, setBrowserArchivedSessions] = useState<SessionInfo[]>([]);
@@ -440,6 +442,7 @@ export default function ChatInterface({
                 }
                 if (data?.ttsAutoMode) setTtsAutoMode(data.ttsAutoMode);
                 if (data?.ttsEnabled != null) setTtsEnabled(data.ttsEnabled);
+                if (data?.ttsReadCodeBlocks != null) setTtsReadCodeBlocks(data.ttsReadCodeBlocks);
                 // Show theme chooser for newly onboarded users who haven't seen it
                 if (data?.onboardingComplete && !data?.hasSeenThemeChooser) {
                     setShowThemeChooser(true);
@@ -1641,7 +1644,7 @@ export default function ChatInterface({
                                     {avatarConfig.enabled && (
                                         <>
                                             <AvatarAudioBridge avatarRef={avatarRef} mutedRef={avatarMutedRef} />
-                                            <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} muted={avatarMuted} mutedRef={avatarMutedRef} />
+                                            <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} muted={avatarMuted} mutedRef={avatarMutedRef} />
                                             <AvatarPipWidget
                                                 avatarRef={avatarRef}
                                                 config={avatarConfig}
@@ -1804,7 +1807,7 @@ export default function ChatInterface({
                             {avatarConfig.enabled && (
                                 <>
                                     <AvatarAudioBridge avatarRef={avatarRef} mutedRef={avatarMutedRef} />
-                                    <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} muted={avatarMuted} mutedRef={avatarMutedRef} />
+                                    <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} muted={avatarMuted} mutedRef={avatarMutedRef} />
                                     <AvatarPipWidget
                                         avatarRef={avatarRef}
                                         config={avatarConfig}

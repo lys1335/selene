@@ -221,6 +221,7 @@ export interface AppSettings {
     openaiTtsModel?: string;
     edgeTtsVoice?: string;         // Edge TTS voice ID (e.g. "en-US-AriaNeural")
     ttsSummarizeThreshold?: number; // Chars above which to summarize before TTS
+    ttsReadCodeBlocks?: boolean;    // Include code block content in TTS output (default: false)
 
     // Audio Transcription (STT) settings
     sttEnabled?: boolean;
@@ -367,6 +368,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     ttsProvider: "edge",
     ttsAutoMode: "off",
     ttsSummarizeThreshold: 1500,
+    ttsReadCodeBlocks: false,
     openaiTtsVoice: "alloy",
     openaiTtsModel: "gpt-4o-mini-tts",
     edgeTtsVoice: "en-US-AriaNeural",
