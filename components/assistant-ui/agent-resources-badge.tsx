@@ -100,6 +100,16 @@ export function AgentResourcesBadge() {
     loadResources();
   }, [loadResources]);
 
+  // Re-fetch when a plugin is installed via drag-drop (or any other path
+  // that dispatches "agent-resources-changed").
+  useEffect(() => {
+    const handler = () => {
+      loadResources();
+    };
+    window.addEventListener("agent-resources-changed", handler);
+    return () => window.removeEventListener("agent-resources-changed", handler);
+  }, [loadResources]);
+
   useEffect(() => {
     if (!open) return;
     const handler = (event: MouseEvent) => {

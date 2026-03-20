@@ -608,6 +608,10 @@ export function useThreadDropHandler({
             }
           }
 
+          // Notify AgentResourcesBadge to re-fetch so the newly installed
+          // plugin appears in the current session's UI immediately.
+          window.dispatchEvent(new CustomEvent("agent-resources-changed"));
+
           scheduleSkillImportReset(3000, false);
         } catch (error) {
           const isAbortError =
