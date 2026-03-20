@@ -114,16 +114,9 @@ function createOverlayWindow(opts: ShowOverlayOptions): BrowserWindow {
   positionOverlayWindow(win);
 
   win.once("ready-to-show", () => {
-    win.showInactive();
-    debugLog("[MiniOverlay] Window ready-to-show — shown (inactive)");
-    // Delay focus slightly so the window appears without stealing the active
-    // Space on macOS. The panel type + visibleOnAllWorkspaces keeps it floating
-    // above the current app; focusing after show avoids the fullscreen-space grab.
-    setImmediate(() => {
-      if (!win.isDestroyed()) {
-        win.focus();
-      }
-    });
+    win.show();
+    win.focus();
+    debugLog("[MiniOverlay] Window ready-to-show — shown and focused");
   });
 
   win.on("closed", () => {
@@ -231,12 +224,8 @@ export async function showOverlay(opts: ShowOverlayOptions): Promise<void> {
       // visible without inheriting fullscreen/maximized state.
       if (isReused) {
         normalizeOverlayState(win);
-        win.showInactive();
-        setImmediate(() => {
-          if (!win.isDestroyed()) {
-            win.focus();
-          }
-        });
+        win.show();
+        win.focus();
         debugLog("[MiniOverlay] Reused window normalized, shown and focused after loadURL");
       }
     } catch (err) {
