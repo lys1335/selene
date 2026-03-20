@@ -26,6 +26,24 @@ import { debugLog, debugError, debugVerbose, debugWarn, setLogRendererWindow } f
 export let mainWindow: BrowserWindow | null = null;
 
 // ---------------------------------------------------------------------------
+// macOS hide-to-tray state (globalThis for hot-reload safety)
+//
+// When the user closes the main window (Cmd+W), we hide it instead of
+// destroying it. This ensures the app always has a "regular" BrowserWindow
+// so macOS keeps the dock icon and Cmd+Tab entry visible — even when the
+// mini overlay (a panel-type utility window) is the only other window.
+//
+// Using globalThis prevents a hot-reload bug: module-scoped `let` resets on
+// re-evaluation, but the old `before-quit` listener still references the old
+// variable. With globalThis, the flag persists across hot reloads.
+// ---------------------------------------------------------------------------
+
+const G = globalThis as typeof globalThis & {
+  __seleneForceQuit?: boolean;
+  __seleneBeforeQuitRegistered?: boolean;
+};
+
+// ---------------------------------------------------------------------------
 // Theme helpers
 // ---------------------------------------------------------------------------
 
@@ -430,7 +448,35 @@ export async function createWindow(opts: CreateWindowOptions): Promise<void> {
     shell.openExternal(targetUrl);
   });
 
-  // Clean up on close
+  // ---------------------------------------------------------------------------
+  // macOS hide-to-tray: hide the window instead of destroying it when the
+  // user clicks the close button or presses Cmd+W. This keeps a "regular"
+  // BrowserWindow alive so macOS maintains the dock icon and Cmd+Tab entry.
+  // Without this, closing the main window and then showing/hiding the mini
+  // overlay (a panel-type utility window with skipTaskbar) causes macOS to
+  // remove the app from the dock and app switcher.
+  // ---------------------------------------------------------------------------
+  if (isMac) {
+    // Register the before-quit listener exactly once (globalThis guard
+    // survives hot reloads — avoids listener accumulation).
+    if (!G.__seleneBeforeQuitRegistered) {
+      app.on("before-quit", () => {
+        G.__seleneForceQuit = true;
+      });
+      G.__seleneBeforeQuitRegistered = true;
+    }
+    mainWindow.on("close", (event) => {
+      if (!G.__seleneForceQuit) {
+        event.preventDefault();
+        mainWindow?.hide();
+        debugLog("[Window] macOS: window hidden instead of closed (hide-to-tray)");
+      }
+    });
+  }
+
+  // Clean up on close (fires only when the window is actually destroyed —
+  // on macOS this only happens during app quit because the close handler
+  // above intercepts normal closes).
   mainWindow.on("closed", () => {
     debugLog("[Window] Window closed");
     mainWindow = null;
@@ -438,18 +484,6 @@ export async function createWindow(opts: CreateWindowOptions): Promise<void> {
   });
 
   debugLog("=== WINDOW CREATION COMPLETE ===\n");
-}
-
-// ---------------------------------------------------------------------------
-// App activate handler (macOS re-open)
-// ---------------------------------------------------------------------------
-
-export async function handleActivate(createWindowFn: () => Promise<void>): Promise<void> {
-  debugLog("[App] activate event fired");
-  if (BrowserWindow.getAllWindows().length === 0) {
-    debugLog("[App] No windows open, creating new window");
-    await createWindowFn();
-  }
 }
 
 /**
