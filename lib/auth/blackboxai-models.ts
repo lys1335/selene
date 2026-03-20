@@ -708,7 +708,6 @@ export const BLACKBOX_MODEL_IDS = [
   "kimi-k2-thinking",
 
   // BlackBox Native
-  "blackbox-search",
   "qwen3-coder",
   "qwen3-max",
 
@@ -888,7 +887,6 @@ const MODEL_LABELS: Record<string, string> = {
   "kimi-k2-thinking": "Moonshot: Kimi K2 Thinking",
 
   // BlackBox Native
-  "blackbox-search": "BLACKBOX: Search",
   "qwen3-coder": "BLACKBOX: Qwen3 Coder",
   "qwen3-max": "BLACKBOX: Qwen3 Max",
 
@@ -1005,8 +1003,6 @@ export const BLACKBOX_CONTEXT_WINDOWS: Record<string, number> = {
   "sonar-pro": 200000,
   "sonar-deep-research": 128000,
 
-  // BlackBox Native
-  "blackbox-search": 1048576,
 };
 
 // Free models — auto-detected from IDs ending in ":free" plus known free-tier models

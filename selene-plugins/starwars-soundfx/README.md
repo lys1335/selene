@@ -49,7 +49,7 @@ Runs all hook scripts with simulated inputs and verifies sound files exist.
 
 ## Plugin Structure
 
-```
+```text
 starwars-soundfx/
 ├── .claude-plugin              # Plugin marker file
 ├── hooks/

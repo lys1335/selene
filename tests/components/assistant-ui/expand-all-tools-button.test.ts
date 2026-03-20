@@ -67,7 +67,7 @@ describe("ExpandAllToolsButton keyboard shortcut", () => {
     container.remove();
   });
 
-  it("toggles tool expansion when Shift+E is pressed from the focused composer", () => {
+  it("toggles tool expansion when Cmd+Shift+E is pressed from the focused composer", () => {
     const composer = container.querySelector("textarea");
     const state = container.querySelector("[data-testid='expansion-state']");
 
@@ -81,6 +81,7 @@ describe("ExpandAllToolsButton keyboard shortcut", () => {
     const event = new KeyboardEvent("keydown", {
       key: "E",
       shiftKey: true,
+      metaKey: true,
       bubbles: true,
       cancelable: true,
     });
@@ -92,6 +93,51 @@ describe("ExpandAllToolsButton keyboard shortcut", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(state?.getAttribute("data-mode")).toBe("expand");
     expect(state?.getAttribute("data-counter")).toBe("1");
+  });
+
+  it("toggles tool expansion when Ctrl+Shift+E is pressed (non-Mac platforms)", () => {
+    const composer = container.querySelector("textarea");
+    const state = container.querySelector("[data-testid='expansion-state']");
+
+    composer?.focus();
+
+    const event = new KeyboardEvent("keydown", {
+      key: "E",
+      shiftKey: true,
+      ctrlKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    flushSync(() => {
+      composer?.dispatchEvent(event);
+    });
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(state?.getAttribute("data-mode")).toBe("expand");
+    expect(state?.getAttribute("data-counter")).toBe("1");
+  });
+
+  it("does not toggle tool expansion for bare Shift+E (regression: must not block typing capital E)", () => {
+    const composer = container.querySelector("textarea");
+    const state = container.querySelector("[data-testid='expansion-state']");
+
+    composer?.focus();
+
+    const event = new KeyboardEvent("keydown", {
+      key: "E",
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+    flushSync(() => {
+      composer?.dispatchEvent(event);
+    });
+
+    expect(event.defaultPrevented).toBe(false);
+    expect(state?.getAttribute("data-mode")).toBe("collapse");
+    expect(state?.getAttribute("data-counter")).toBe("0");
   });
 
   it("does not toggle tool expansion for normal composer typing", () => {

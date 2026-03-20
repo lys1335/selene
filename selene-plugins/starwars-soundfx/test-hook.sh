@@ -76,7 +76,7 @@ test_hook "SessionStart (ignition)" \
   "$HOOKS_DIR/play-session-sound.sh" \
   '{"hook_type":"SessionStart","session_id":"test-1"}'
 
-# PostToolUse (run 3 times for randomness)
+# PostToolUse (run 2 times for randomness)
 test_hook "PostToolUse (swing #1)" \
   "$HOOKS_DIR/play-tool-sound.sh" \
   '{"hook_type":"PostToolUse","tool_name":"Write","tool_input":{}}'

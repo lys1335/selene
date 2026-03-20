@@ -650,9 +650,17 @@ export function loadPluginHooks(pluginsToLoad: InstalledPlugin[]): number {
 
 /**
  * Load and register hooks from all active plugins for a user.
+ * When allowedPluginNames is provided, only loads hooks for plugins in the allowed set
+ * (per-agent scoping). When omitted, loads all active plugins (backward compatible).
  */
-export async function loadActivePluginHooks(userId: string): Promise<number> {
-  const activePlugins = await getInstalledPlugins(userId, { status: "active" });
+export async function loadActivePluginHooks(
+  userId: string,
+  allowedPluginNames?: Set<string>,
+): Promise<number> {
+  let activePlugins = await getInstalledPlugins(userId, { status: "active" });
+  if (allowedPluginNames) {
+    activePlugins = activePlugins.filter(p => allowedPluginNames.has(p.name));
+  }
   return loadPluginHooks(activePlugins);
 }
 

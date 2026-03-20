@@ -15,17 +15,13 @@ export const ExpandAllToolsButton: FC = () => {
   const ctx = useToolExpansion();
   const t = useTranslations("assistantUi.tools");
 
-  // Keyboard shortcut: Shift+E toggles all tool details.
-  // Works from the composer (textarea / contentEditable) too — the shortcut
-  // is specific enough (shiftKey + 'e' + no meta/ctrl/alt) to not conflict
-  // with normal typing. Only skip standalone <input> fields (search boxes, etc.)
-  // where Shift+E legitimately types "E".
+  // Keyboard shortcut: Cmd+Shift+E (Mac) / Ctrl+Shift+E (other) toggles all
+  // tool details. Using a modifier-heavy chord avoids conflicts with normal
+  // typing in textareas, contentEditable divs, and input fields.
   useEffect(() => {
     if (!ctx) return;
     const handler = (e: KeyboardEvent) => {
-      if (e.shiftKey && e.key.toLowerCase() === "e" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        const el = document.activeElement as HTMLElement | null;
-        if (el?.tagName === "INPUT") return;
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "e" && !e.altKey) {
         e.preventDefault();
         ctx.toggleAll();
       }
@@ -61,7 +57,7 @@ export const ExpandAllToolsButton: FC = () => {
       <TooltipContent side="top" className="text-xs font-mono">
         {isExpanded ? t("collapseAll") : t("expandAll")}
         <kbd className="ml-1.5 rounded border border-current/20 px-1 py-0.5 text-[10px] opacity-60">
-          Shift+E
+          ⌘⇧E
         </kbd>
       </TooltipContent>
     </Tooltip>

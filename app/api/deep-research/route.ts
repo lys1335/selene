@@ -113,8 +113,8 @@ export async function POST(req: Request) {
     });
     const deepResearchConfig: Partial<DeepResearchConfig> = {
       ...userConfig,
-      researchModel: resolvedSessionModels.effectiveConfig.researchModel,
-      sessionProvider: resolvedSessionModels.effectiveConfig.provider,
+      researchModel: userConfig?.researchModel || resolvedSessionModels.effectiveConfig.researchModel,
+      sessionProvider: userConfig?.sessionProvider || resolvedSessionModels.effectiveConfig.provider,
     };
 
     // Save user query as a message

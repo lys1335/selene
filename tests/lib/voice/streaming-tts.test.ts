@@ -64,7 +64,7 @@ describe("SentenceSplitter", () => {
     ]);
   });
 
-  it("discards unclosed code blocks when readCodeBlocks is false (default)", () => {
+  it("emits prose before unclosed code blocks when readCodeBlocks is false (default)", () => {
     const sentences: string[] = [];
     const splitter = new SentenceSplitter((sentence) => {
       sentences.push(sentence);
@@ -73,8 +73,8 @@ describe("SentenceSplitter", () => {
     splitter.feed("Before code. ```python\nprint('hello')");
     splitter.flush();
 
-    // No output — prose was saved as pendingProse but code block discards everything on flush
-    expect(sentences).toEqual([]);
+    // Prose before the code fence is emitted; only the code block content is discarded
+    expect(sentences).toEqual(["Before code."]);
   });
 });
 

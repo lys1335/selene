@@ -110,6 +110,10 @@ export class SentenceSplitter {
         // Emit accumulated code block content
         const code = (this.codeBlockContent + this.buffer).trim();
         if (code.length > 0) this.onSentence("Code: " + code);
+      } else {
+        // Emit prose that preceded the unclosed code block
+        const prose = stripMarkdown(this.pendingProse.trim());
+        if (prose.length > 0) this.onSentence(prose);
       }
       this.buffer = "";
       this.pendingProse = "";

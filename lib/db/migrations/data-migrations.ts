@@ -577,6 +577,84 @@ export function runDataMigrations(sqlite: Database.Database): void {
     console.warn("[SQLite Migration] chromiumWorkspace migration failed:", error);
   }
 
+  // Migration: Backfill agent_plugins rows for plugins installed before the junction table existed.
+  // Without this, the LEFT JOIN in getAvailablePluginsForAgent returns NULL for assignmentEnabled,
+  // which coalesces to false via `?? false`, silently disabling previously-working plugins.
+  try {
+    // Guard: skip if already applied
+    const backfillMarker = sqlite.prepare(
+      "SELECT 1 FROM agent_plugins WHERE id LIKE 'backfill-%' LIMIT 1"
+    ).get();
+
+    // Also check if there are actually any plugins missing assignment rows
+    const missingCount = sqlite.prepare(`
+      SELECT COUNT(*) AS cnt FROM plugins p
+      WHERE p.status = 'active'
+        AND NOT EXISTS (
+          SELECT 1 FROM agent_plugins ap WHERE ap.plugin_id = p.id
+        )
+    `).get() as { cnt: number } | undefined;
+
+    if (!backfillMarker && missingCount && missingCount.cnt > 0) {
+      let inserted = 0;
+
+      // Part A: Plugins with character_id set — create assignment for the installing agent
+      const agentScopedPlugins = sqlite.prepare(`
+        SELECT p.id AS plugin_id, p.character_id AS agent_id
+        FROM plugins p
+        WHERE p.status = 'active'
+          AND p.character_id IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM agent_plugins ap
+            WHERE ap.plugin_id = p.id AND ap.agent_id = p.character_id
+          )
+      `).all() as Array<{ plugin_id: string; agent_id: string }>;
+
+      const insertStmt = sqlite.prepare(`
+        INSERT OR IGNORE INTO agent_plugins (id, agent_id, plugin_id, enabled, created_at)
+        VALUES (?, ?, ?, 1, datetime('now'))
+      `);
+
+      for (const row of agentScopedPlugins) {
+        const result = insertStmt.run(
+          `backfill-${row.plugin_id}-${row.agent_id}`,
+          row.agent_id,
+          row.plugin_id
+        );
+        inserted += result.changes;
+      }
+
+      // Part B: Plugins with character_id IS NULL (user-wide) — create assignment for ALL agents of that user
+      const userWidePlugins = sqlite.prepare(`
+        SELECT p.id AS plugin_id, p.user_id
+        FROM plugins p
+        WHERE p.status = 'active'
+          AND p.character_id IS NULL
+      `).all() as Array<{ plugin_id: string; user_id: string }>;
+
+      for (const plugin of userWidePlugins) {
+        const userAgents = sqlite.prepare(`
+          SELECT id AS agent_id FROM characters WHERE user_id = ?
+        `).all(plugin.user_id) as Array<{ agent_id: string }>;
+
+        for (const agent of userAgents) {
+          const result = insertStmt.run(
+            `backfill-${plugin.plugin_id}-${agent.agent_id}`,
+            agent.agent_id,
+            plugin.plugin_id
+          );
+          inserted += result.changes;
+        }
+      }
+
+      if (inserted > 0) {
+        console.log(`[SQLite Migration] Backfilled ${inserted} agent_plugins row(s) for pre-existing plugins`);
+      }
+    }
+  } catch (error) {
+    console.warn("[SQLite Migration] Plugin assignment backfill migration failed:", error);
+  }
+
   // Migration: Add workflow folder inheritance tracking columns
   try {
     const folderCols = sqlite.prepare("PRAGMA table_info(agent_sync_folders)").all() as Array<{ name: string }>;

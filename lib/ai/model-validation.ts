@@ -12,10 +12,16 @@
  */
 
 import type { AgentModelConfig, LLMProvider } from "@/components/model-bag/model-bag.types";
+import { BLACKBOX_ALL_MODEL_IDS } from "@/lib/auth/blackboxai-models";
 
 // ---------------------------------------------------------------------------
 // Provider-specific model ID sets (imported dynamically to avoid circular deps)
 // ---------------------------------------------------------------------------
+
+// BlackBox's full catalogue (400+ models), pre-lowercased for fast lookups.
+// Checked BEFORE the cross-provider rejection so that IDs like "claude-sonnet-4.5"
+// (which overlap with Anthropic's prefix) are accepted when BlackBox is the provider.
+const BLACKBOX_MODEL_SET = new Set(BLACKBOX_ALL_MODEL_IDS.map(m => m.toLowerCase()));
 
 // Antigravity uses exact model ID matching to avoid ambiguity with Anthropic's
 // "claude-" prefix (Antigravity has short IDs like "claude-sonnet-4-6")
@@ -110,6 +116,8 @@ export function isModelCompatibleWithProvider(
   // Bare IDs like "gpt-5.4-high" (Codex) would fail at the BlackBox API.
   if (provider === "blackboxai") {
     if (lowerModel.includes("/")) return true;
+    // Accept any model in BlackBox's known catalogue (even if the ID overlaps another provider)
+    if (BLACKBOX_MODEL_SET.has(lowerModel)) return true;
     if (
       isModelCompatibleWithProvider(lowerModel, "antigravity") ||
       isModelCompatibleWithProvider(lowerModel, "codex") ||

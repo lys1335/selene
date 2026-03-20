@@ -8,8 +8,6 @@
 #   aborted   → clash (disengage)
 #
 
-set -e
-
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SOUNDS_DIR="$PLUGIN_ROOT/sounds"
 
@@ -18,7 +16,7 @@ INPUT=$(cat)
 
 # Extract stop reason
 if command -v jq &> /dev/null; then
-  STOP_REASON=$(echo "$INPUT" | jq -r '.stop_reason // "unknown"')
+  STOP_REASON=$(echo "$INPUT" | jq -r '.stop_reason // "unknown"' 2>/dev/null || echo "unknown")
 else
   STOP_REASON=$(echo "$INPUT" | grep -o '"stop_reason":"[^"]*"' | cut -d'"' -f4 || echo "unknown")
 fi
