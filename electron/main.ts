@@ -488,9 +488,10 @@ app.whenReady().then(async () => {
     debugError("[App] Unified capture hotkey registration failed:", error);
   }
 
-  // On macOS, re-create window when dock icon is clicked and main window is gone.
-  // Check for main window specifically — browser session windows may still be open
-  // but shouldn't prevent re-creating the main window.
+  // On macOS, handle dock icon click / app reactivation.
+  // With hide-to-tray enabled, the main window may be hidden (not destroyed)
+  // when the user closed it via Cmd+W. In that case, show + focus it.
+  // If the window was actually destroyed, recreate it.
   app.on("activate", async () => {
     debugLog("[App] activate event fired");
     const { mainWindow: currentMainWindow } = require("./window-manager") as typeof import("./window-manager");
@@ -506,6 +507,10 @@ app.whenReady().then(async () => {
         devServerUrl: process.env.ELECTRON_DEV_URL || devProxyUrl,
         waitForServer: waitForServerReady,
       });
+    } else if (!currentMainWindow.isVisible()) {
+      debugLog("[App] Main window hidden, showing and focusing");
+      currentMainWindow.show();
+      currentMainWindow.focus();
     }
   });
 
