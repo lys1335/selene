@@ -3,7 +3,11 @@ import * as path from "path";
 import * as fs from "fs";
 import { debugLog, debugError } from "./debug-logger";
 import type { IpcHandlerContext } from "./ipc-handlers";
-import { getWindowBackgroundColor, currentThemePreference } from "./window-manager";
+import {
+  getWindowBackgroundColor,
+  currentThemePreference,
+  resolveWindowsWindowIconPath,
+} from "./window-manager";
 
 // ---------------------------------------------------------------------------
 // Browser session windows — one per sessionId
@@ -30,6 +34,8 @@ export function registerBrowserSessionHandlers(ctx: IpcHandlerContext): void {
 
     let win: BrowserWindow | null = null;
     try {
+      const windowsIconPath =
+        process.platform === "win32" ? resolveWindowsWindowIconPath() : undefined;
       let shown = false;
       const showWindow = () => {
         if (!win || shown || win.isDestroyed()) return;
@@ -46,6 +52,7 @@ export function registerBrowserSessionHandlers(ctx: IpcHandlerContext): void {
         title: `Browser Session`,
         backgroundColor: getWindowBackgroundColor(currentThemePreference),
         autoHideMenuBar: true,
+        ...(windowsIconPath ? { icon: windowsIconPath } : {}),
         webPreferences: {
           preload: path.join(__dirname, "preload.js"),
           contextIsolation: true,
