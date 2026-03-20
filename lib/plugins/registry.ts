@@ -551,7 +551,7 @@ export async function getAvailablePluginsForAgent(
       installedAt: row.installedAt,
       updatedAt: row.updatedAt,
     }),
-    enabledForAgent: row.assignmentEnabled ?? true,
+    enabledForAgent: row.assignmentEnabled ?? false,
   }));
 }
 

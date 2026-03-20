@@ -369,6 +369,13 @@ export async function POST(request: NextRequest) {
       marketplaceName: marketplaceName || undefined,
     });
 
+    // Auto-enable the plugin for the installing agent.
+    // With `enabledForAgent` defaulting to false for unassigned plugins,
+    // we must explicitly create the assignment so the plugin is active.
+    if (characterId) {
+      await enablePluginForAgent(characterId, plugin.id);
+    }
+
     // Link auxiliary files (references, scripts, etc.) to the agent's workspace
     const workspaceLink: WorkspaceLinkResult = characterId
       ? await linkPluginAuxiliaryFilesToWorkspace(plugin, parsed).catch(
