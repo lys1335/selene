@@ -20,6 +20,11 @@ import { initializeRTK } from "../lib/rtk";
 
 const isDev = !app.isPackaged;
 
+if (process.platform === "win32") {
+  // Keep taskbar/start-menu identity stable so Windows uses the packaged app icon.
+  app.setAppUserModelId("ai.zlutty.app");
+}
+
 // Keep dev data isolated from production builds to avoid DB collisions.
 if (isDev) {
   try {
