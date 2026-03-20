@@ -465,7 +465,7 @@ export function useThreadDropHandler({
         }
 
         const MAX_SKILL_SIZE = 50 * 1024 * 1024;
-        const oversized = pluginItems.find(({ file }) => file.size > MAX_SKILL_SIZE);
+        const oversized = droppedItems.find(({ file }) => file.size > MAX_SKILL_SIZE);
         if (oversized) {
           toast.error(t("audio.skillFileTooLarge"), {
             description: `File size: ${Math.round(oversized.file.size / 1024 / 1024)}MB (${oversized.relativePath})`,
@@ -503,7 +503,10 @@ export function useThreadDropHandler({
             const single = pluginItems[0];
             formData.append("file", single.file, single.relativePath);
           } else {
-            for (const item of pluginItems) {
+            // Send ALL dropped files, not just structure files — plugins may
+            // include custom asset directories (e.g. sounds/, images/) that
+            // don't match known plugin paths but must be persisted to cache.
+            for (const item of droppedItems) {
               formData.append("files", item.file, item.relativePath);
             }
           }

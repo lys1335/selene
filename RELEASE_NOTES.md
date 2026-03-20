@@ -74,6 +74,17 @@ A new built-in plugin for generating app UI mockups. Describe a screen, get a st
 - Fixed plan update rendering in multi-step agent tasks
 - Fixed BlackBox AI models not showing up in the model picker after adding the API key
 
+## Hotfixes (v0.3.2a)
+
+Patch applied after initial release — included in updated installers.
+
+- Fixed macOS tray showing a ghost icon by adding proper template icons
+- Fixed Windows build logo and app tray icon not displaying
+- Fixed BlackBoxAI model IDs retaining provider prefixes, causing model lookup failures
+- Fixed deep research mode ignoring the globally selected model
+- Fixed mini overlay inheriting fullscreen state on macOS, expanding to fill the screen
+- Fixed disabled plugins still firing lifecycle hooks on sub-agent delegations
+
 ## Platform
 
 - macOS (Apple Silicon + Intel) / Windows

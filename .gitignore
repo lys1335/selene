@@ -79,6 +79,8 @@ models/**
 *.wav
 # Allow test fixture audio files
 !tests/fixtures/**/*.wav
+# Allow plugin sound assets
+!selene-plugins/**/*.wav
 *.mp3
 *.flac
 *.aac

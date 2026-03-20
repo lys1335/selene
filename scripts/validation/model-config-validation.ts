@@ -44,7 +44,7 @@ const MODEL_PREFIXES: Record<LLMProvider, string[]> = {
   codex: ["gpt-5", "codex"],
   kimi: ["kimi-", "moonshot-"],
   minimax: ["minimax-"],
-  blackboxai: ["blackbox-", "qwen3-", "blackboxai/"],
+  blackboxai: ["blackbox-", "qwen3-", "claude-", "gpt-", "deepseek-", "gemini-", "llama-", "mistral-"],
   antigravity: [],
   ollama: [],
   openrouter: [],

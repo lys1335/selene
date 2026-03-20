@@ -2652,7 +2652,9 @@
         "voiceIdHelper": "You can copy this from the ElevenLabs voice library.",
         "voiceIdPlaceholder": "e.g. 21m00Tcm4TlvDq8ikWAM",
         "limitLabel": "Long message limit (characters)",
-        "limitHelper": "Messages above this limit are shortened before audio is generated."
+        "limitHelper": "Messages above this limit are shortened before audio is generated.",
+        "readCodeBlocksLabel": "Read code blocks aloud",
+        "readCodeBlocksDesc": "When enabled, code block content is included in speech output with a \"Code\" prefix instead of being skipped."
       },
       "stt": {
         "title": "Speech-to-Text (STT)",

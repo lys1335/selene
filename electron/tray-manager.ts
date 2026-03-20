@@ -27,7 +27,13 @@ function setTrayInstance(t: Tray | null): void {
  * Resolve the tray icon image for the current platform.
  * Checks multiple candidate locations for both dev and packaged builds.
  */
-function resolveTrayIconImage(isMac: boolean): Electron.NativeImage | null {
+interface TrayIconResult {
+  image: Electron.NativeImage;
+  /** True when the image was loaded from a dedicated *Template icon file. */
+  isTemplate: boolean;
+}
+
+function resolveTrayIconImage(isMac: boolean): TrayIconResult | null {
   const platformIconName = isMac ? "tray-iconTemplate.png" : "tray-icon.png";
 
   // Candidate directories to search (in priority order)
@@ -50,7 +56,7 @@ function resolveTrayIconImage(isMac: boolean): Electron.NativeImage | null {
       const img = nativeImage.createFromPath(iconPath);
       if (!img.isEmpty()) {
         debugLog(`[Tray] Loaded platform icon: ${iconPath}`);
-        return img;
+        return { image: img, isTemplate: isMac };
       }
     } catch (err) {
       debugError(`[Tray] Failed to load platform icon ${iconPath}:`, err);
@@ -71,7 +77,10 @@ function resolveTrayIconImage(isMac: boolean): Electron.NativeImage | null {
         if (!img.isEmpty()) {
           const resized = img.resize({ width: 22, height: 22 });
           debugLog(`[Tray] Loaded fallback icon (resized): ${iconPath}`);
-          return resized;
+          // Fallback is a full-color app icon — NOT a template.
+          // Setting setTemplateImage(true) on macOS would discard the color
+          // data and render only the alpha channel, producing a ghost icon.
+          return { image: resized, isTemplate: false };
         }
       } catch (err) {
         debugError(`[Tray] Failed to load fallback icon ${iconPath}:`, err);
@@ -109,17 +118,21 @@ export function initTray(opts: InitTrayOptions): Tray | null {
   // Resolve icon image
   // -------------------------------------------------------------------------
 
-  let iconImage = resolveTrayIconImage(isMac);
+  const resolved = resolveTrayIconImage(isMac);
 
-  // Last resort: empty image (tray will still function, just invisible)
-  if (!iconImage) {
+  let iconImage: Electron.NativeImage;
+  if (resolved) {
+    iconImage = resolved.image;
+    // Only mark as template when we loaded an actual *Template.png file.
+    // Fallback full-color icons must NOT be set as template on macOS —
+    // macOS templates render alpha-only, which turns full-color icons into
+    // invisible "ghost" icons in the menu bar.
+    if (isMac && resolved.isTemplate) {
+      iconImage.setTemplateImage(true);
+    }
+  } else {
     debugLog("[Tray] Using empty icon as last resort");
     iconImage = nativeImage.createEmpty();
-  }
-
-  // On macOS, mark as template image so the system handles dark/light mode
-  if (isMac) {
-    iconImage.setTemplateImage(true);
   }
 
   // -------------------------------------------------------------------------

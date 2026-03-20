@@ -31,6 +31,51 @@ describe("SentenceSplitter", () => {
 
     expect(sentences).toEqual(["Intro sentence. After code block."]);
   });
+
+  it("emits code block content with 'Code:' prefix when readCodeBlocks is true", () => {
+    const sentences: string[] = [];
+    const splitter = new SentenceSplitter((sentence) => {
+      sentences.push(sentence);
+    }, { readCodeBlocks: true });
+
+    splitter.feed("Here is the code. ```ts\nconst a = 1;\n```");
+    splitter.feed(" After the code.");
+    splitter.flush();
+
+    expect(sentences).toEqual([
+      "Here is the code.",
+      "Code: const a = 1;",
+      "After the code.",
+    ]);
+  });
+
+  it("emits code block content on flush when block is unclosed and readCodeBlocks is true", () => {
+    const sentences: string[] = [];
+    const splitter = new SentenceSplitter((sentence) => {
+      sentences.push(sentence);
+    }, { readCodeBlocks: true });
+
+    splitter.feed("Before code. ```python\nprint('hello')");
+    splitter.flush();
+
+    expect(sentences).toEqual([
+      "Before code.",
+      "Code: print('hello')",
+    ]);
+  });
+
+  it("emits prose before unclosed code blocks when readCodeBlocks is false (default)", () => {
+    const sentences: string[] = [];
+    const splitter = new SentenceSplitter((sentence) => {
+      sentences.push(sentence);
+    });
+
+    splitter.feed("Before code. ```python\nprint('hello')");
+    splitter.flush();
+
+    // Prose before the code fence is emitted; only the code block content is discarded
+    expect(sentences).toEqual(["Before code."]);
+  });
 });
 
 describe("StreamingTTSQueue", () => {

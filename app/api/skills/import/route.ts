@@ -5,7 +5,7 @@ import { loadSettings } from "@/lib/settings/settings-manager";
 import { parseSkillPackage, parseSingleSkillMd } from "@/lib/skills/import-parser";
 import { importSkillPackage } from "@/lib/skills/queries";
 import { parsePluginPackage } from "@/lib/plugins/import-parser";
-import { installPlugin } from "@/lib/plugins/registry";
+import { enablePluginForAgent, installPlugin } from "@/lib/plugins/registry";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // 1 minute timeout for large files
@@ -102,6 +102,11 @@ export async function POST(request: NextRequest) {
         parsed,
         scope: "user",
       });
+
+      // Auto-enable the plugin for the installing agent
+      if (characterId) {
+        await enablePluginForAgent(characterId, plugin.id);
+      }
 
       return NextResponse.json({
         success: true,

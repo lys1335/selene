@@ -206,6 +206,46 @@ describe("Channel Delivery with TTS", () => {
     expect(ttsMocks.synthesizeSpeech).not.toHaveBeenCalled();
   });
 
+  it("strips code blocks from TTS text by default", async () => {
+    ttsMocks.isTTSAvailable.mockReturnValue(true);
+    ttsMocks.synthesizeSpeech.mockResolvedValue({
+      audio: Buffer.from("audio"),
+      mimeType: "audio/mpeg",
+    });
+
+    await deliverChannelReply({
+      sessionId: "sess-1",
+      messageId: "msg-1",
+      content: [{ type: "text", text: "Here is code:\n```js\nconst x = 1;\n```\nDone." }],
+      sessionMetadata: { channelConversationId: "conv-1" },
+    });
+
+    const ttsText = ttsMocks.synthesizeSpeech.mock.calls[0][0].text;
+    expect(ttsText).not.toContain("const x = 1");
+    expect(ttsText).toContain("Done.");
+  });
+
+  it("includes code blocks in TTS text when ttsReadCodeBlocks is enabled", async () => {
+    settingsMock.state.settings.ttsReadCodeBlocks = true;
+    ttsMocks.isTTSAvailable.mockReturnValue(true);
+    ttsMocks.synthesizeSpeech.mockResolvedValue({
+      audio: Buffer.from("audio"),
+      mimeType: "audio/mpeg",
+    });
+
+    await deliverChannelReply({
+      sessionId: "sess-1",
+      messageId: "msg-1",
+      content: [{ type: "text", text: "Here is code:\n```js\nconst x = 1;\n```\nDone." }],
+      sessionMetadata: { channelConversationId: "conv-1" },
+    });
+
+    const ttsText = ttsMocks.synthesizeSpeech.mock.calls[0][0].text;
+    expect(ttsText).toContain("Code:");
+    expect(ttsText).toContain("const x = 1;");
+    expect(ttsText).toContain("Done.");
+  });
+
   it("summarizes long text before TTS", async () => {
     ttsMocks.isTTSAvailable.mockReturnValue(true);
     ttsMocks.shouldSummarizeForTTS.mockReturnValue(true);

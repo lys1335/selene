@@ -69,17 +69,22 @@ function buildOverlayUrl(opts: ShowOverlayOptions): string {
   return base.toString();
 }
 
+const OVERLAY_WIDTH = 480;
+const OVERLAY_HEIGHT = 280;
+
 function createOverlayWindow(opts: ShowOverlayOptions): BrowserWindow {
   const isMac = process.platform === "darwin";
 
   const win = new BrowserWindow({
-    width: 480,
-    height: 280,
+    width: OVERLAY_WIDTH,
+    height: OVERLAY_HEIGHT,
     frame: false,
     transparent: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
+    fullscreenable: false,
+    maximizable: false,
     show: false,
     roundedCorners: true,
     // macOS: use "panel" for floating behavior with native vibrancy
@@ -99,16 +104,26 @@ function createOverlayWindow(opts: ShowOverlayOptions): BrowserWindow {
     },
   });
 
-  // Position: top center of the primary display, 80 px from the top edge
-  const { workArea } = screen.getPrimaryDisplay();
-  const x = Math.round(workArea.x + (workArea.width - 480) / 2);
-  const y = workArea.y + 60;
-  win.setPosition(x, y);
+  // Make overlay visible on all Spaces (including fullscreen ones on macOS)
+  // so it never pulls the user out of their current workspace.
+  if (isMac) {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+
+  // Position: top center of the primary display, 60 px from the top edge
+  positionOverlayWindow(win);
 
   win.once("ready-to-show", () => {
-    win.show();
-    win.focus();
-    debugLog("[MiniOverlay] Window ready-to-show — shown and focused");
+    win.showInactive();
+    debugLog("[MiniOverlay] Window ready-to-show — shown (inactive)");
+    // Delay focus slightly so the window appears without stealing the active
+    // Space on macOS. The panel type + visibleOnAllWorkspaces keeps it floating
+    // above the current app; focusing after show avoids the fullscreen-space grab.
+    setImmediate(() => {
+      if (!win.isDestroyed()) {
+        win.focus();
+      }
+    });
   });
 
   win.on("closed", () => {
@@ -117,6 +132,39 @@ function createOverlayWindow(opts: ShowOverlayOptions): BrowserWindow {
   });
 
   return win;
+}
+
+/**
+ * Position the overlay at the top-center of the primary display.
+ */
+function positionOverlayWindow(win: BrowserWindow): void {
+  const { workArea } = screen.getPrimaryDisplay();
+  const x = Math.round(workArea.x + (workArea.width - OVERLAY_WIDTH) / 2);
+  const y = workArea.y + 60;
+  win.setPosition(x, y);
+}
+
+/**
+ * Normalize overlay window state before showing.
+ * Ensures the window is never fullscreen/maximized and has the correct size,
+ * regardless of what happened to the main Selene window.
+ */
+function normalizeOverlayState(win: BrowserWindow): void {
+  if (win.isFullScreen()) {
+    debugLog("[MiniOverlay] Window was fullscreen — exiting fullscreen");
+    win.setFullScreen(false);
+  }
+  if (win.isMaximized()) {
+    debugLog("[MiniOverlay] Window was maximized — restoring");
+    win.unmaximize();
+  }
+  // Restore intended size in case something changed it
+  const [w, h] = win.getSize();
+  if (w !== OVERLAY_WIDTH || h !== OVERLAY_HEIGHT) {
+    debugLog(`[MiniOverlay] Size was ${w}x${h} — restoring to ${OVERLAY_WIDTH}x${OVERLAY_HEIGHT}`);
+    win.setSize(OVERLAY_WIDTH, OVERLAY_HEIGHT);
+  }
+  positionOverlayWindow(win);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,11 +227,17 @@ export async function showOverlay(opts: ShowOverlayOptions): Promise<void> {
       }
 
       // For reused windows, ready-to-show does not fire again after loadURL —
-      // explicitly show and focus to ensure the hidden window becomes visible.
+      // explicitly normalize state and show to ensure the hidden window becomes
+      // visible without inheriting fullscreen/maximized state.
       if (isReused) {
-        win.show();
-        win.focus();
-        debugLog("[MiniOverlay] Reused window shown and focused after loadURL");
+        normalizeOverlayState(win);
+        win.showInactive();
+        setImmediate(() => {
+          if (!win.isDestroyed()) {
+            win.focus();
+          }
+        });
+        debugLog("[MiniOverlay] Reused window normalized, shown and focused after loadURL");
       }
     } catch (err) {
       debugError("[MiniOverlay] Failed to show overlay:", err);
