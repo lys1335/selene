@@ -201,6 +201,54 @@ describe("session-model-resolver", () => {
     expect(providerMocks.getLanguageModelForProvider).toHaveBeenCalledWith("codex", "gpt-session-utility");
   });
 
+  it("prefers agent research defaults over global research settings when deep research has no session override", () => {
+    const scope = resolveSessionModelScope(
+      { sessionProvider: "codex" },
+      {
+        agentModelConfig: {
+          provider: "codex",
+          chatModel: "gpt-agent-chat",
+          researchModel: "gpt-agent-research",
+        },
+      },
+    );
+    const researchModel = resolveSessionResearchModel(
+      { sessionProvider: "codex" },
+      {
+        agentModelConfig: {
+          provider: "codex",
+          chatModel: "gpt-agent-chat",
+          researchModel: "gpt-agent-research",
+        },
+      },
+    );
+
+    expect(scope.effectiveConfig.researchModel).toBe("gpt-agent-research");
+    expect(scope.sources.researchModel).toBe("agent");
+    expect(researchModel).toEqual({ provider: "codex", model: "gpt-agent-research" });
+    expect(providerMocks.getLanguageModelForProvider).toHaveBeenCalledWith("codex", "gpt-agent-research");
+  });
+
+  it("keeps explicit session research overrides ahead of agent research defaults for deep research", () => {
+    const researchModel = resolveSessionResearchModel(
+      {
+        sessionProvider: "codex",
+        sessionChatModel: "gpt-session-chat",
+        sessionResearchModel: "gpt-session-research",
+      },
+      {
+        agentModelConfig: {
+          provider: "codex",
+          chatModel: "gpt-agent-chat",
+          researchModel: "gpt-agent-research",
+        },
+      },
+    );
+
+    expect(researchModel).toEqual({ provider: "codex", model: "gpt-session-research" });
+    expect(providerMocks.getLanguageModelForProvider).toHaveBeenCalledWith("codex", "gpt-session-research");
+  });
+
   it("uses kimi fixed temperature based on the resolved provider", () => {
     const temperature = getSessionProviderTemperature(
       {},

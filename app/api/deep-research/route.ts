@@ -11,7 +11,7 @@ import { requireAuth } from '@/lib/auth/local-auth';
 import { createSession, createMessage, getOrCreateLocalUser, getSession } from '@/lib/db/queries';
 import { nextOrderingIndex } from '@/lib/session/message-ordering';
 import { loadSettings } from '@/lib/settings/settings-manager';
-import { extractSessionModelConfig } from '@/lib/ai/session-model-resolver';
+import { resolveSessionModelScopeForSession } from '@/lib/ai/session-model-resolver';
 import {
   createAgentRun,
   completeAgentRun,
@@ -84,6 +84,7 @@ export async function POST(req: Request) {
     // Get or create session
     let sessionId = typeof providedSessionId === 'string' ? providedSessionId.trim() : providedSessionId;
     let sessionMetadata: Record<string, unknown> | null = null;
+    let sessionCharacterId: string | null | undefined;
 
     if (sessionId) {
       const existingSession = await getSession(sessionId);
@@ -94,6 +95,7 @@ export async function POST(req: Request) {
         );
       }
       sessionMetadata = (existingSession.metadata as Record<string, unknown> | null) ?? null;
+      sessionCharacterId = existingSession.characterId;
     } else {
       const session = await createSession({
         title: `Research: ${query.slice(0, 50)}...`,
@@ -102,13 +104,17 @@ export async function POST(req: Request) {
       });
       sessionId = session.id;
       sessionMetadata = (session.metadata as Record<string, unknown> | null) ?? null;
+      sessionCharacterId = session.characterId;
     }
 
-    const sessionModelConfig = extractSessionModelConfig(sessionMetadata);
+    const resolvedSessionModels = await resolveSessionModelScopeForSession(sessionMetadata, {
+      characterId: sessionCharacterId,
+      settings,
+    });
     const deepResearchConfig: Partial<DeepResearchConfig> = {
       ...userConfig,
-      ...(sessionModelConfig?.sessionResearchModel ? { researchModel: sessionModelConfig.sessionResearchModel } : {}),
-      ...(sessionModelConfig?.sessionProvider ? { sessionProvider: sessionModelConfig.sessionProvider } : {}),
+      researchModel: resolvedSessionModels.effectiveConfig.researchModel,
+      sessionProvider: resolvedSessionModels.effectiveConfig.provider,
     };
 
     // Save user query as a message
@@ -128,6 +134,11 @@ export async function POST(req: Request) {
       metadata: {
         queryLength: query.length,
         hasCustomConfig: !!userConfig,
+        resolvedModelConfig: {
+          provider: resolvedSessionModels.effectiveConfig.provider,
+          researchModel: resolvedSessionModels.effectiveConfig.researchModel,
+          researchSource: resolvedSessionModels.sources.researchModel,
+        },
       },
     });
 

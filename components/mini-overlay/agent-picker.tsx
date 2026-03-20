@@ -3,6 +3,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 import type { OverlayAgent } from "@/app/api/overlay/agents/route";
 
 interface AgentPickerProps {
@@ -109,12 +110,12 @@ export function AgentPicker({ agents, selectedAgent, onSelectAgent }: AgentPicke
   }
 
   return (
-    <div style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}>
+    <div className="webkit-app-region-no-drag">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
             type="button"
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-sm text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg text-sm text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring webkit-app-region-no-drag"
             aria-haspopup="listbox"
             aria-expanded={open}
           >
@@ -128,11 +129,11 @@ export function AgentPicker({ agents, selectedAgent, onSelectAgent }: AgentPicke
           </button>
         </PopoverTrigger>
         <PopoverContent
-          className="p-1 w-64"
+          className="p-1 w-64 webkit-app-region-no-drag"
           align="start"
           side="bottom"
           sideOffset={4}
-          // Stay within the overlay — prevent the dropdown from going outside
+          // Keep the floating list inside the overlay's non-draggable region so mouse clicks land.
           avoidCollisions
           collisionPadding={8}
         >
@@ -148,12 +149,16 @@ export function AgentPicker({ agents, selectedAgent, onSelectAgent }: AgentPicke
                     role="option"
                     aria-selected={isSelected}
                     tabIndex={focusedIndex === idx ? 0 : -1}
-                    className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                    className={cn(
+                      "w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring webkit-app-region-no-drag",
                       isSelected
                         ? "bg-accent text-accent-foreground"
-                        : "hover:bg-muted/60 text-foreground"
-                    }`}
+                        : "hover:bg-muted/60 text-foreground",
+                    )}
                     onClick={() => handleSelect(agent)}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                    }}
                     onKeyDown={handleKeyDown}
                   >
                     <AgentAvatar agent={agent} size={22} />
