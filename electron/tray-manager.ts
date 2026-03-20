@@ -1,4 +1,5 @@
 import * as path from "path";
+import * as fs from "fs";
 import { Tray, Menu, nativeImage, app } from "electron";
 import { debugLog, debugError } from "./debug-logger";
 
@@ -22,11 +23,63 @@ function setTrayInstance(t: Tray | null): void {
 // Path helper
 // ---------------------------------------------------------------------------
 
-function getResourcesPath(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, "resources");
+/**
+ * Resolve the tray icon image for the current platform.
+ * Checks multiple candidate locations for both dev and packaged builds.
+ */
+function resolveTrayIconImage(isMac: boolean): Electron.NativeImage | null {
+  const platformIconName = isMac ? "tray-iconTemplate.png" : "tray-icon.png";
+
+  // Candidate directories to search (in priority order)
+  const candidateDirs = app.isPackaged
+    ? [
+        process.resourcesPath,                                    // extraResources root (icon.ico / icon.png land here)
+        path.join(process.resourcesPath, "resources"),            // legacy resources/ subfolder
+      ]
+    : [
+        path.join(process.cwd(), "build-resources"),              // dev: project build-resources/
+        path.join(__dirname, "..", "resources"),                   // dev: legacy resources/
+        path.join(process.cwd(), "resources"),                    // dev: project resources/
+      ];
+
+  // 1. Try platform-specific tray icon in each directory
+  for (const dir of candidateDirs) {
+    const iconPath = path.join(dir, platformIconName);
+    if (!fs.existsSync(iconPath)) continue;
+    try {
+      const img = nativeImage.createFromPath(iconPath);
+      if (!img.isEmpty()) {
+        debugLog(`[Tray] Loaded platform icon: ${iconPath}`);
+        return img;
+      }
+    } catch (err) {
+      debugError(`[Tray] Failed to load platform icon ${iconPath}:`, err);
+    }
   }
-  return path.join(__dirname, "..", "resources");
+
+  // 2. Try icon.ico (Windows) then icon.png as fallback, resized to 22×22
+  const fallbackNames = process.platform === "win32"
+    ? ["icon.ico", "icon.png"]
+    : ["icon.png"];
+
+  for (const dir of candidateDirs) {
+    for (const name of fallbackNames) {
+      const iconPath = path.join(dir, name);
+      if (!fs.existsSync(iconPath)) continue;
+      try {
+        const img = nativeImage.createFromPath(iconPath);
+        if (!img.isEmpty()) {
+          const resized = img.resize({ width: 22, height: 22 });
+          debugLog(`[Tray] Loaded fallback icon (resized): ${iconPath}`);
+          return resized;
+        }
+      } catch (err) {
+        debugError(`[Tray] Failed to load fallback icon ${iconPath}:`, err);
+      }
+    }
+  }
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,43 +104,14 @@ export function initTray(opts: InitTrayOptions): Tray | null {
   }
 
   const isMac = process.platform === "darwin";
-  const resourcesPath = getResourcesPath();
 
   // -------------------------------------------------------------------------
   // Resolve icon image
   // -------------------------------------------------------------------------
 
-  let iconImage: Electron.NativeImage | null = null;
+  let iconImage = resolveTrayIconImage(isMac);
 
-  // 1. Platform-specific tray icon
-  const platformIconName = isMac ? "tray-iconTemplate.png" : "tray-icon.png";
-  const platformIconPath = path.join(resourcesPath, platformIconName);
-
-  try {
-    const candidate = nativeImage.createFromPath(platformIconPath);
-    if (!candidate.isEmpty()) {
-      iconImage = candidate;
-      debugLog(`[Tray] Loaded platform icon: ${platformIconPath}`);
-    }
-  } catch (err) {
-    debugError("[Tray] Failed to load platform icon:", err);
-  }
-
-  // 2. Fallback: resize icon.png to 22×22
-  if (!iconImage) {
-    const fallbackPath = path.join(resourcesPath, "icon.png");
-    try {
-      const fallback = nativeImage.createFromPath(fallbackPath);
-      if (!fallback.isEmpty()) {
-        iconImage = fallback.resize({ width: 22, height: 22 });
-        debugLog(`[Tray] Loaded fallback icon (resized): ${fallbackPath}`);
-      }
-    } catch (err) {
-      debugError("[Tray] Failed to load fallback icon:", err);
-    }
-  }
-
-  // 3. Last resort: empty image (tray will still function, just invisible)
+  // Last resort: empty image (tray will still function, just invisible)
   if (!iconImage) {
     debugLog("[Tray] Using empty icon as last resort");
     iconImage = nativeImage.createEmpty();

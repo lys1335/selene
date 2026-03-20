@@ -21,6 +21,11 @@ files:
 
 # Extra resources - these stay OUTSIDE the asar archive
 extraResources:
+  # Window/tray icon fallbacks consumed by Electron at runtime.
+  - from: "build-resources/icon.ico"
+    to: "icon.ico"
+  - from: "build-resources/icon.png"
+    to: "icon.png"
   # Next.js standalone server (needs to be outside asar to spawn)
   # Note: We explicitly include node_modules as electron-builder excludes it by default
   - from: ".next/standalone"
@@ -154,11 +159,11 @@ mac:
 
 # Windows specific configuration
 win:
-  signAndEditExecutable: false
+  icon: "build-resources/icon.ico"
+  signAndEditExecutable: true
   target:
     - target: "nsis"
     - target: "portable"
-  # icon: "build-resources/icon.ico"
   legalTrademarks: "Selene is a trademark of Selene"
 
 # NSIS installer settings
@@ -167,6 +172,9 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
+  installerIcon: "build-resources/icon.ico"
+  uninstallerIcon: "build-resources/icon.ico"
+  installerHeaderIcon: "build-resources/icon.ico"
   shortcutName: "Selene"
   artifactName: "${productName}-Setup-${version}.${ext}"
   uninstallDisplayName: "Selene"
