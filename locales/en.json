@@ -2895,7 +2895,7 @@
     "providerSwitched": "Switched to {name}",
     "manualUse": "Use",
     "manualSessionHint": "Enter a provider model ID and apply it as this session's chat model.",
-    "manualBlackboxHint": "Enter any BlackBox AI model ID, even if it is not in the current catalog yet."
+    "manualBlackboxHint": "Enter any BlackBox AI model ID."
   },
   "comfyui": {
     "workflows": {
