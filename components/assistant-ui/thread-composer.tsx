@@ -401,7 +401,7 @@ export const Composer: FC<{
     [isEditorMode, threadRuntime]
   );
 
-  const { captureNow, isCapturing } = useScreenCapture({
+  useScreenCapture({
     enabled: isScreenCaptureAvailable,
     onCaptured: handleAttachCapturedScreen,
   });

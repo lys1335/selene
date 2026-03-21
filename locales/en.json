@@ -1002,9 +1002,7 @@
       "voiceInput": "Voice input",
       "voiceInputHold": "Hold to record",
       "stopVoiceInput": "Stop recording",
-      "transcribingAudio": "Transcribing audio...",
-      "captureScreen": "Capture screen",
-      "captureScreenShortcut": "Capture screen ({shortcut})"
+      "transcribingAudio": "Transcribing audio..."
     },
     "prevBranch": "Previous branch",
     "nextBranch": "Next branch",

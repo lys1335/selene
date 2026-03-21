@@ -1005,9 +1005,7 @@
       "voiceInput": "Sesle yaz",
       "voiceInputHold": "Kaydetmek için basılı tut",
       "stopVoiceInput": "Kaydı durdur",
-      "transcribingAudio": "Ses yazıya dönüştürülüyor...",
-      "captureScreen": "Ekran goruntusu al",
-      "captureScreenShortcut": "Ekran goruntusu al ({shortcut})"
+      "transcribingAudio": "Ses yazıya dönüştürülüyor..."
     },
     "prevBranch": "Önceki dal",
     "nextBranch": "Sonraki dal",
