@@ -38,11 +38,25 @@ interface MCPServerStatus {
     tools: string[];
 }
 
+interface PluginServerInfo {
+    namespacedName: string;
+    serverName: string;
+    pluginName: string;
+    pluginId: string;
+    pluginVersion: string;
+    connected: boolean;
+    toolCount: number;
+    tools: string[];
+    lastError?: string;
+    config: Record<string, unknown>;
+}
+
 export function MCPSettings() {
     const t = useTranslations("settings.mcp");
     const [mcpServers, setMcpServers] = useState<Record<string, MCPServerConfig>>({});
     const [environment, setEnvironment] = useState<Record<string, string>>({});
     const [status, setStatus] = useState<MCPServerStatus[]>([]);
+    const [pluginServers, setPluginServers] = useState<PluginServerInfo[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [connectingState, setConnectingState] = useState<Record<string, boolean>>({});
@@ -84,12 +98,14 @@ export function MCPSettings() {
             config: { mcpServers?: Record<string, MCPServerConfig> };
             environment?: Record<string, string>;
             status?: MCPServerStatus[];
+            pluginServers?: PluginServerInfo[];
         }>("/api/mcp");
         if (data) {
             setMcpServers(data.config.mcpServers || {});
             setRawJson(JSON.stringify({ mcpServers: data.config.mcpServers || {} }, null, 2));
             setEnvironment(data.environment || {});
             setStatus(data.status || []);
+            setPluginServers(data.pluginServers || []);
         }
         if (error) {
             console.error("Failed to load MCP config:", error);
@@ -345,7 +361,86 @@ export function MCPSettings() {
                 </div>
             </div>
 
-            {/* 2. Configured Servers List */}
+            {/* 2. Plugin-Provided Servers */}
+            {pluginServers.length > 0 && (
+                <div className="space-y-4">
+                    <h3 className="font-mono text-sm font-semibold text-terminal-dark border-b border-terminal-border pb-2">
+                        {t("pluginServers")}
+                    </h3>
+                    <div className="grid gap-3">
+                        {pluginServers.map((ps) => {
+                            const isConnecting = connectingState[ps.namespacedName];
+                            const StatusIcon = ps.connected ? Check : ps.lastError ? X : AlertCircle;
+                            const statusBadge = ps.connected
+                                ? "bg-terminal-green/20 text-terminal-green"
+                                : ps.lastError
+                                    ? "bg-red-100 text-red-600"
+                                    : "bg-terminal-border text-terminal-muted";
+
+                            return (
+                                <div
+                                    key={ps.namespacedName}
+                                    className="flex items-center justify-between p-4 rounded-lg border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 shadow-sm"
+                                >
+                                    <div className="flex items-center gap-4 flex-1">
+                                        <div className={cn("p-2 rounded-full", statusBadge)}>
+                                            <StatusIcon className="h-4 w-4" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-mono font-semibold text-terminal-dark">{ps.serverName}</h4>
+                                                <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal text-terminal-muted">
+                                                    {(ps.config as { type?: string }).type || ((ps.config as { command?: string }).command ? "stdio" : "sse")}
+                                                </Badge>
+                                                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-purple-50 text-purple-700 border-purple-200">
+                                                    <Plug className="h-3 w-3 mr-1" />
+                                                    {t("pluginServerSource", { plugin: ps.pluginName, version: ps.pluginVersion })}
+                                                </Badge>
+                                            </div>
+
+                                            {ps.lastError ? (
+                                                <Alert variant="destructive" className="mt-2">
+                                                    <AlertCircle className="h-4 w-4" />
+                                                    <AlertTitle>{t("connectionFailedTitle")}</AlertTitle>
+                                                    <AlertDescription className="text-xs whitespace-pre-wrap font-mono">
+                                                        {ps.lastError}
+                                                    </AlertDescription>
+                                                </Alert>
+                                            ) : (
+                                                <div className="flex gap-4 mt-1">
+                                                    <span className="font-mono text-xs text-terminal-muted">
+                                                        {t("pluginServerManaged")}
+                                                    </span>
+                                                    {ps.connected && (
+                                                        <span className="font-mono text-xs text-terminal-green">
+                                                            {t("activeTools", { count: ps.toolCount })}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className={cn("h-8 px-2", isConnecting && "animate-pulse")}
+                                            onClick={() => connectServer(ps.namespacedName)}
+                                            disabled={isConnecting}
+                                            aria-label={t("pluginServerReconnect")}
+                                        >
+                                            {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4 text-terminal-muted hover:text-terminal-dark" />}
+                                        </Button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* 3. Configured Servers List */}
             <div className="space-y-4">
                 <div className="flex items-center justify-between border-b border-terminal-border pb-2">
                     <h3 className="font-mono text-sm font-semibold text-terminal-dark">

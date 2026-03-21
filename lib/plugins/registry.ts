@@ -315,6 +315,47 @@ export async function getPluginByName(
 }
 
 // =============================================================================
+// Plugin MCP Server Queries
+// =============================================================================
+
+/**
+ * Get all MCP servers from active plugins.
+ * Used by the MCP Settings UI to show plugin-provided servers alongside user-configured ones.
+ */
+export async function getActivePluginMCPServers(): Promise<
+  Array<{
+    serverName: string;
+    config: Record<string, unknown>;
+    pluginId: string;
+    pluginName: string;
+    pluginVersion: string;
+    cachePath: string | null;
+  }>
+> {
+  const rows = await db
+    .select({
+      serverName: pluginMcpServers.serverName,
+      config: pluginMcpServers.config,
+      pluginId: plugins.id,
+      pluginName: plugins.name,
+      pluginVersion: plugins.version,
+      cachePath: plugins.cachePath,
+    })
+    .from(pluginMcpServers)
+    .innerJoin(plugins, eq(pluginMcpServers.pluginId, plugins.id))
+    .where(eq(plugins.status, "active"));
+
+  return rows as Array<{
+    serverName: string;
+    config: Record<string, unknown>;
+    pluginId: string;
+    pluginName: string;
+    pluginVersion: string;
+    cachePath: string | null;
+  }>;
+}
+
+// =============================================================================
 // Plugin Update / Uninstall
 // =============================================================================
 

@@ -8,6 +8,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadSettings } from "@/lib/settings/settings-manager";
 import { MCPClientManager, resolveMCPConfig } from "@/lib/mcp/client-manager";
 import { clearMCPAuthCache, clearMCPAuthCacheForServer } from "@/lib/mcp/auth-cache";
+import { getActivePluginMCPServers } from "@/lib/plugins/registry";
+import { connectPluginMCPServers } from "@/lib/plugins/mcp-integration";
+import type { PluginMCPServerEntry } from "@/lib/plugins/types";
 
 /**
  * POST /api/mcp/connect
@@ -66,9 +69,14 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        // Separate plugin servers (plugin:*) from user-configured servers
+        const pluginServerNames = serverNames?.filter(n => n.startsWith("plugin:")) || [];
+        const userServerNames = serversToConnect.filter(n => !n.startsWith("plugin:"));
+
         const results: Record<string, { success: boolean; error?: string; toolCount?: number }> = {};
 
-        for (const serverName of serversToConnect) {
+        // Connect user-configured servers
+        for (const serverName of userServerNames) {
             const config = mcpConfig[serverName];
             if (!config) {
                 results[serverName] = { success: false, error: "Server not configured" };
@@ -93,6 +101,75 @@ export async function POST(request: NextRequest) {
                     success: false,
                     error: error instanceof Error ? error.message : String(error),
                 };
+            }
+        }
+
+        // Connect plugin-declared servers (namespaced as plugin:{pluginName}:{serverName})
+        if (pluginServerNames.length > 0) {
+            try {
+                const pluginMcpRows = await getActivePluginMCPServers();
+
+                for (const namespacedName of pluginServerNames) {
+                    // Parse plugin:{pluginName}:{serverName}
+                    const parts = namespacedName.split(":");
+                    if (parts.length < 3) {
+                        results[namespacedName] = { success: false, error: "Invalid plugin server name" };
+                        continue;
+                    }
+                    const pluginName = parts[1];
+                    const serverName = parts.slice(2).join(":");
+
+                    const row = pluginMcpRows.find(
+                        r => r.pluginName === pluginName && r.serverName === serverName
+                    );
+                    if (!row) {
+                        results[namespacedName] = { success: false, error: "Plugin server not found" };
+                        continue;
+                    }
+
+                    try {
+                        // Disconnect first if reconnecting
+                        if (manager.isConnected(namespacedName)) {
+                            await manager.disconnect(namespacedName);
+                        }
+
+                        const singleServerConfig: Record<string, PluginMCPServerEntry> = {
+                            [serverName]: row.config as unknown as PluginMCPServerEntry,
+                        };
+                        const { connected, failed } = await connectPluginMCPServers(
+                            pluginName,
+                            singleServerConfig,
+                            characterId,
+                            row.cachePath || undefined
+                        );
+
+                        if (connected.length > 0) {
+                            const status = manager.getAllStatus().find(s => s.serverName === namespacedName);
+                            results[namespacedName] = {
+                                success: true,
+                                toolCount: status?.toolCount ?? 0,
+                            };
+                        } else {
+                            results[namespacedName] = {
+                                success: false,
+                                error: `Failed to connect plugin server: ${failed.join(", ")}`,
+                            };
+                        }
+                    } catch (error) {
+                        results[namespacedName] = {
+                            success: false,
+                            error: error instanceof Error ? error.message : String(error),
+                        };
+                    }
+                }
+            } catch (error) {
+                // Mark all plugin servers as failed
+                for (const name of pluginServerNames) {
+                    results[name] = {
+                        success: false,
+                        error: error instanceof Error ? error.message : "Failed to query plugin servers",
+                    };
+                }
             }
         }
 
