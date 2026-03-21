@@ -133,6 +133,7 @@ export async function PUT(request: NextRequest) {
       openaiTtsModel: body.openaiTtsModel !== undefined ? body.openaiTtsModel : currentSettings.openaiTtsModel,
       edgeTtsVoice: body.edgeTtsVoice !== undefined ? body.edgeTtsVoice : currentSettings.edgeTtsVoice,
       ttsSummarizeThreshold: body.ttsSummarizeThreshold !== undefined ? body.ttsSummarizeThreshold : currentSettings.ttsSummarizeThreshold,
+      ttsReadCodeBlocks: body.ttsReadCodeBlocks !== undefined ? body.ttsReadCodeBlocks : currentSettings.ttsReadCodeBlocks,
       // Voice & Audio - STT
       sttEnabled: body.sttEnabled !== undefined ? body.sttEnabled : currentSettings.sttEnabled,
       sttProvider: body.sttProvider !== undefined ? body.sttProvider : currentSettings.sttProvider,
@@ -157,6 +158,9 @@ export async function PUT(request: NextRequest) {
         body.miniOverlayDefaultMode === "compose" || body.miniOverlayDefaultMode === "direct"
           ? body.miniOverlayDefaultMode
           : currentSettings.miniOverlayDefaultMode,
+      miniOverlayAutoCloseAfterSpeak: body.miniOverlayAutoCloseAfterSpeak !== undefined ? body.miniOverlayAutoCloseAfterSpeak : currentSettings.miniOverlayAutoCloseAfterSpeak,
+      miniOverlayKeepAppFocusedOnCompose: body.miniOverlayKeepAppFocusedOnCompose !== undefined ? body.miniOverlayKeepAppFocusedOnCompose : currentSettings.miniOverlayKeepAppFocusedOnCompose,
+      miniOverlayShowScreenPreview: body.miniOverlayShowScreenPreview !== undefined ? body.miniOverlayShowScreenPreview : currentSettings.miniOverlayShowScreenPreview,
       screenCaptureExcludedApps: body.screenCaptureExcludedApps !== undefined ? body.screenCaptureExcludedApps : currentSettings.screenCaptureExcludedApps,
       screenCaptureRetention: body.screenCaptureRetention !== undefined ? body.screenCaptureRetention : currentSettings.screenCaptureRetention,
       screenCapturePreviewBeforeSend: body.screenCapturePreviewBeforeSend !== undefined ? body.screenCapturePreviewBeforeSend : currentSettings.screenCapturePreviewBeforeSend,
@@ -178,6 +182,9 @@ export async function PUT(request: NextRequest) {
       devWorkspaceAutoCleanup: body.devWorkspaceAutoCleanup !== undefined ? body.devWorkspaceAutoCleanup : currentSettings.devWorkspaceAutoCleanup,
       devWorkspaceAutoCleanupDays: body.devWorkspaceAutoCleanupDays !== undefined ? body.devWorkspaceAutoCleanupDays : currentSettings.devWorkspaceAutoCleanupDays,
       workspaceOnboardingSeen: body.workspaceOnboardingSeen !== undefined ? body.workspaceOnboardingSeen : currentSettings.workspaceOnboardingSeen,
+      // Browser Automation
+      chromiumBrowserMode: body.chromiumBrowserMode !== undefined ? body.chromiumBrowserMode : currentSettings.chromiumBrowserMode,
+      chromiumUserProfilePath: body.chromiumUserProfilePath !== undefined ? body.chromiumUserProfilePath : currentSettings.chromiumUserProfilePath,
       // 3D Avatar
       avatar3dEnabled: body.avatar3dEnabled !== undefined ? body.avatar3dEnabled : currentSettings.avatar3dEnabled,
       // Emotion Detection
