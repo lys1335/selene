@@ -154,7 +154,7 @@ describe("POST /api/plugins/import", () => {
     expect(syncServiceMocks.addSyncFolder).not.toHaveBeenCalled();
   });
 
-  it("does not materialize auxiliary files when no character is selected", async () => {
+  it("materializes auxiliary files even when no character is selected", async () => {
     const formData = new FormData();
     formData.append("file", new File([new Uint8Array([1, 2, 3])], "demo.zip", { type: "application/zip" }));
 
@@ -166,13 +166,14 @@ describe("POST /api/plugins/import", () => {
     expect(response.status).toBe(200);
     const payload = await response.json();
 
+    // Auxiliary files are always materialized regardless of characterId
     expect(payload.auxiliaryFiles).toEqual({
-      count: 0,
-      path: null,
+      count: 1,
+      path: path.join("/mock-workspace", "plugins", "demo-plugin"),
       workspaceRegistered: false,
     });
 
-    expect(fsPromisesMocks.copyFile).not.toHaveBeenCalled();
+    expect(fsPromisesMocks.copyFile).toHaveBeenCalled();
     expect(syncServiceMocks.getSyncFolders).not.toHaveBeenCalled();
     expect(syncServiceMocks.addSyncFolder).not.toHaveBeenCalled();
   });
