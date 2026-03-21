@@ -160,10 +160,6 @@ function resolveWorkspacePath(relativePath, rootDir) {
     fail("Encountered an empty file path in patch.");
   }
 
-  if (path.isAbsolute(relativePath)) {
-    fail(`Absolute paths are not allowed: ${relativePath}`);
-  }
-
   const normalized = relativePath.replace(/\\/g, "/");
   const resolved = path.resolve(rootDir, normalized);
   if (resolved !== rootDir && !resolved.startsWith(rootDir + path.sep)) {
