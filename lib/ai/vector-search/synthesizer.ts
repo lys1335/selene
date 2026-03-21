@@ -13,7 +13,7 @@
  */
 
 import { generateText, tool, jsonSchema } from "ai";
-import { readFile } from "fs/promises";
+import { readFile, open } from "fs/promises";
 import type {
   SynthesisRequest,
   SynthesisResult,
@@ -403,6 +403,29 @@ const readFileSchema = jsonSchema<{
 });
 
 /**
+ * Detect binary files by checking for null bytes in the first 1KB
+ */
+async function isBinaryFile(filePath: string): Promise<boolean> {
+  let fileHandle;
+  try {
+    fileHandle = await open(filePath, "r");
+    const buffer = Buffer.alloc(1024);
+    const { bytesRead } = await fileHandle.read(buffer, 0, 1024, 0);
+
+    for (let i = 0; i < bytesRead; i++) {
+      if (buffer[i] === 0) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  } finally {
+    await fileHandle?.close();
+  }
+}
+
+/**
  * Create the readFile tool for the synthesizer
  */
 function createReadFileTool(allowedFolderPaths: string[]) {
@@ -421,7 +444,20 @@ Returns the file content with line numbers.`,
         // Security: Check if path is allowed
         const validPath = isPathAllowed(filePath, allowedFolderPaths);
         if (!validPath) {
-          return { error: `File path not allowed: ${filePath}` };
+          return {
+            status: "success",
+            text: "File not found in Knowledge Base or synced folders. Use the Read tool to read files from the filesystem directly.",
+          };
+        }
+
+        // Binary check — soft redirect so the model uses the Read tool instead.
+        if (await isBinaryFile(validPath)) {
+          return {
+            status: "success",
+            text: `File is binary. Use the Read tool to read binary/image files from the filesystem.`,
+            filePath: validPath,
+            isBinary: true,
+          };
         }
 
         // Read file

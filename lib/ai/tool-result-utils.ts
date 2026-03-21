@@ -170,6 +170,10 @@ export function buildToolSummary(toolName: string, input?: unknown, output?: unk
   switch (safeName) {
     case "readFile": {
       const filePath = getString(result.filePath) || getString(result.path) || "file";
+      // Binary file soft-redirect: show a descriptive summary instead of "lines ?"
+      if (result.isBinary === true) {
+        return `${filePath}: binary file (use Read tool)`;
+      }
       const lineRange = getString(result.lineRange) || "?";
       const totalLines = getNumber(result.totalLines);
       const truncated = Boolean(result.truncated);

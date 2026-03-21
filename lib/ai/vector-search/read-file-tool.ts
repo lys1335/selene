@@ -10,7 +10,7 @@
 
 import { tool, jsonSchema } from "ai";
 import { getSyncFolders } from "@/lib/vectordb";
-import { readFile } from "fs/promises";
+import { readFile, open } from "fs/promises";
 import { extname, basename } from "path";
 import { findAgentDocumentByName, getAgentDocumentChunksByDocumentId } from "@/lib/db/queries";
 import { isPathAllowed, findSimilarFiles, recordFileRead } from "@/lib/ai/filesystem";
@@ -62,12 +62,14 @@ interface ReadFileResult {
   lineRange?: string;
   totalLines?: number;
   content?: string;
+  text?: string; // Soft redirect message (used instead of error for non-fatal issues)
   truncated?: boolean;
   message?: string;
   error?: string;
   allowedFolders?: string[];
   source?: "synced_folder" | "knowledge_base"; // Indicates where the file was read from
   documentTitle?: string; // For KB documents, the document title if available
+  isBinary?: boolean; // True when file is binary (soft redirect)
 }
 
 /**
@@ -81,6 +83,29 @@ function getCodeLanguage(filePath: string): string {
     css: "css", sql: "sql", yaml: "yaml", yml: "yaml", sh: "bash", bash: "bash",
   };
   return langMap[ext] || ext || "text";
+}
+
+/**
+ * Detect binary files by checking for null bytes in the first 1KB
+ */
+async function isBinaryFile(filePath: string): Promise<boolean> {
+  let fileHandle;
+  try {
+    fileHandle = await open(filePath, "r");
+    const buffer = Buffer.alloc(1024);
+    const { bytesRead } = await fileHandle.read(buffer, 0, 1024, 0);
+
+    for (let i = 0; i < bytesRead; i++) {
+      if (buffer[i] === 0) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
+  } finally {
+    await fileHandle?.close();
+  }
 }
 
 /**
@@ -241,14 +266,33 @@ async function executeReadFile(
   if (!validPath) {
     // Try to suggest similar files
     const suggestions = await findSimilarFiles(characterId, filePath);
-    const suggestionText = suggestions.length > 0
-      ? ` Did you mean: ${suggestions.map(s => `"${s}"`).join(", ")}?`
-      : "";
+
+    // Keep hard error when suggestions exist (likely a typo the model can fix).
+    // Use soft redirect when no suggestions — the file is simply outside synced
+    // folders and the model should use its built-in Read tool instead.
+    if (suggestions.length > 0) {
+      const suggestionText = ` Did you mean: ${suggestions.map(s => `"${s}"`).join(", ")}?`;
+      return {
+        status: "error" as const,
+        error: `File not found in Knowledge Base or synced folders.${suggestionText}`,
+        allowedFolders: allowedFolderPaths,
+      };
+    }
 
     return {
-      status: "error" as const,
-      error: `File not found in Knowledge Base or synced folders. Tried matching "${filePath}" against KB documents and synced folder paths.${suggestionText}`,
-      allowedFolders: allowedFolderPaths,
+      status: "success" as const,
+      text: "File not found in Knowledge Base or synced folders. Use the Read tool to read files from the filesystem directly.",
+    };
+  }
+
+  // Binary check — soft redirect so the UI doesn't show an error icon.
+  // The model will retry with its built-in Read tool which handles images.
+  if (await isBinaryFile(validPath)) {
+    return {
+      status: "success" as const,
+      text: `File "${basename(validPath)}" is a binary file (image, compiled, etc). The readFile tool only supports text files. Use the Read tool to read binary/image files from the filesystem.`,
+      filePath: validPath,
+      isBinary: true,
     };
   }
 
