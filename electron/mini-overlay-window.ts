@@ -104,11 +104,10 @@ function createOverlayWindow(opts: ShowOverlayOptions): BrowserWindow {
     },
   });
 
-  // Make overlay visible on all Spaces (including fullscreen ones on macOS)
-  // so it never pulls the user out of their current workspace.
-  if (isMac) {
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  }
+  // On macOS, the panel window type already floats above fullscreen apps and
+  // appears across Spaces. Avoid setVisibleOnAllWorkspaces() here: Electron's
+  // docs note that it can temporarily transform process type and hide the Dock,
+  // which matches the regression where Selene disappeared from Dock/Cmd+Tab.
 
   // Position: top center of the primary display, 60 px from the top edge
   positionOverlayWindow(win);
