@@ -85,6 +85,23 @@ Patch applied after initial release — included in updated installers.
 - Fixed mini overlay inheriting fullscreen state on macOS, expanding to fill the screen
 - Fixed disabled plugins still firing lifecycle hooks on sub-agent delegations
 
+## Hotfixes (v0.3.2b)
+
+- Fixed macOS app disappearing from dock and Cmd+Tab after using voice overlay — closing or cancelling the overlay removed the app from the macOS app switcher entirely
+- Fixed delegation tool results not appearing in chat UI or message history — sub-agent MCP responses were silently dropped due to SDK bridge timeout, missing summary cases, and empty expanded view
+- Fixed reconnect leaving Claude Code tasks permanently stuck in active state after network outage
+- Fixed settings not persisting for browser launch mode, TTS code blocks, and mini overlay preferences — six fields were accepted by the UI but discarded by the API save handler
+- Fixed newly added plugins not taking effect in active agent sessions until app restart
+- Fixed dark mode rendering Claude Code tool panels nearly invisible — containers, code blocks, diff colors, and status badges all lacked dark variants
+- Fixed MCP servers with missing URL config crashing on connection instead of showing a "configuration required" state
+- Fixed apply_patch rejecting valid absolute paths that resolve inside the workspace boundary
+- Fixed interactive tool calls (plan mode, user questions) not rendering after page reload in background mode
+- Fixed Shift+E shortcut for expanding tool results blocking normal typing of capital E — changed to Cmd/Ctrl+Shift+E
+- Fixed TTS discarding buffered speech when encountering an unclosed code fence
+- Fixed plugin import not including asset directories alongside plugin structure files
+- Added plugin-declared MCP servers to the Settings panel with connection status, tool counts, and plugin attribution
+- Added centralized macOS permission prompts for screen capture — actionable toasts with "Open System Settings" deep-links replace generic error messages
+
 ## Platform
 
 - macOS (Apple Silicon + Intel) / Windows

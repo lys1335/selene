@@ -1239,7 +1239,7 @@ export const Composer: FC<{
               ? t("queue.messagesInjected", { count: queuedMessages.length })
               : t("queue.messagesQueued", { count: queuedMessages.length })}
           </div>
-          {isBackgroundTaskRunning && (
+          {isBackgroundTaskRunning && !queuedMessages.every(m => m.status === "injected-live") && (
             <div className="text-[11px] text-terminal-muted/80 font-mono">{t("queue.backgroundHint")}</div>
           )}
           <div className="flex flex-wrap gap-1">
