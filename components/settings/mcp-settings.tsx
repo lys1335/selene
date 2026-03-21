@@ -49,6 +49,8 @@ interface PluginServerInfo {
     tools: string[];
     lastError?: string;
     config: Record<string, unknown>;
+    incomplete?: boolean;
+    incompleteReason?: string;
 }
 
 export function MCPSettings() {
@@ -370,17 +372,26 @@ export function MCPSettings() {
                     <div className="grid gap-3">
                         {pluginServers.map((ps) => {
                             const isConnecting = connectingState[ps.namespacedName];
-                            const StatusIcon = ps.connected ? Check : ps.lastError ? X : AlertCircle;
-                            const statusBadge = ps.connected
-                                ? "bg-terminal-green/20 text-terminal-green"
-                                : ps.lastError
-                                    ? "bg-red-100 text-red-600"
-                                    : "bg-terminal-border text-terminal-muted";
+                            const StatusIcon = ps.incomplete
+                                ? AlertCircle
+                                : ps.connected ? Check : ps.lastError ? X : AlertCircle;
+                            const statusBadge = ps.incomplete
+                                ? "bg-yellow-100 text-yellow-700"
+                                : ps.connected
+                                    ? "bg-terminal-green/20 text-terminal-green"
+                                    : ps.lastError
+                                        ? "bg-red-100 text-red-600"
+                                        : "bg-terminal-border text-terminal-muted";
 
                             return (
                                 <div
                                     key={ps.namespacedName}
-                                    className="flex items-center justify-between p-4 rounded-lg border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 shadow-sm"
+                                    className={cn(
+                                        "flex items-center justify-between p-4 rounded-lg border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 shadow-sm",
+                                        ps.incomplete
+                                            ? "border-yellow-300/50 opacity-80"
+                                            : "border-terminal-border"
+                                    )}
                                 >
                                     <div className="flex items-center gap-4 flex-1">
                                         <div className={cn("p-2 rounded-full", statusBadge)}>
@@ -396,9 +407,22 @@ export function MCPSettings() {
                                                     <Plug className="h-3 w-3 mr-1" />
                                                     {t("pluginServerSource", { plugin: ps.pluginName, version: ps.pluginVersion })}
                                                 </Badge>
+                                                {ps.incomplete && (
+                                                    <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-yellow-50 text-yellow-700 border-yellow-200">
+                                                        {t("pluginServerIncomplete")}
+                                                    </Badge>
+                                                )}
                                             </div>
 
-                                            {ps.lastError ? (
+                                            {ps.incomplete ? (
+                                                <Alert className="mt-2 border-yellow-200 bg-yellow-50/50">
+                                                    <AlertCircle className="h-4 w-4 text-yellow-600" />
+                                                    <AlertTitle className="text-yellow-800 text-xs">{t("pluginServerMissingConfig")}</AlertTitle>
+                                                    <AlertDescription className="text-xs font-mono text-yellow-700">
+                                                        {ps.incompleteReason}
+                                                    </AlertDescription>
+                                                </Alert>
+                                            ) : ps.lastError ? (
                                                 <Alert variant="destructive" className="mt-2">
                                                     <AlertCircle className="h-4 w-4" />
                                                     <AlertTitle>{t("connectionFailedTitle")}</AlertTitle>
@@ -427,8 +451,9 @@ export function MCPSettings() {
                                             variant="ghost"
                                             className={cn("h-8 px-2", isConnecting && "animate-pulse")}
                                             onClick={() => connectServer(ps.namespacedName)}
-                                            disabled={isConnecting}
+                                            disabled={isConnecting || ps.incomplete}
                                             aria-label={t("pluginServerReconnect")}
+                                            title={ps.incomplete ? t("pluginServerMissingConfig") : undefined}
                                         >
                                             {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4 text-terminal-muted hover:text-terminal-dark" />}
                                         </Button>

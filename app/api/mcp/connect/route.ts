@@ -83,6 +83,16 @@ export async function POST(request: NextRequest) {
                 continue;
             }
 
+            // Upfront validation: SSE/HTTP servers need a URL
+            const transportType = config.command ? "stdio" : (config.type || "sse");
+            if ((transportType === "sse" || transportType === "http") && !config.url) {
+                results[serverName] = {
+                    success: false,
+                    error: `Server "${serverName}" uses ${transportType} transport but has no URL configured. Edit the server and add a URL to connect.`,
+                };
+                continue;
+            }
+
             try {
                 // Disconnect first if forceReauth to ensure clean state
                 if (forceReauth && manager.isConnected(serverName)) {
@@ -124,6 +134,17 @@ export async function POST(request: NextRequest) {
                     );
                     if (!row) {
                         results[namespacedName] = { success: false, error: "Plugin server not found" };
+                        continue;
+                    }
+
+                    // Upfront validation: SSE/HTTP plugin servers need a URL
+                    const cfg = row.config as { command?: string; url?: string; type?: string };
+                    const pluginTransport = cfg.command ? "stdio" : (cfg.type || "sse");
+                    if ((pluginTransport === "sse" || pluginTransport === "http") && !cfg.url) {
+                        results[namespacedName] = {
+                            success: false,
+                            error: `Plugin server "${serverName}" (from ${pluginName}) uses ${pluginTransport} transport but has no URL configured. The plugin needs to provide a server URL.`,
+                        };
                         continue;
                     }
 

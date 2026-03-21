@@ -46,6 +46,8 @@ export async function GET() {
             tools: string[];
             lastError?: string;
             config: Record<string, unknown>;
+            incomplete?: boolean;
+            incompleteReason?: string;
         }> = [];
 
         try {
@@ -53,6 +55,13 @@ export async function GET() {
             pluginServers = pluginMcpRows.map(row => {
                 const namespacedName = `plugin:${row.pluginName}:${row.serverName}`;
                 const status = statusByName.get(namespacedName);
+                const cfg = row.config as { command?: string; url?: string; type?: string };
+
+                // Detect incomplete configs: SSE/HTTP transport without a URL
+                const transportType = cfg.command ? "stdio" : (cfg.type || "sse");
+                const needsUrl = transportType === "sse" || transportType === "http";
+                const incomplete = needsUrl && !cfg.url;
+
                 return {
                     namespacedName,
                     serverName: row.serverName,
@@ -62,8 +71,12 @@ export async function GET() {
                     connected: status?.connected ?? false,
                     toolCount: status?.toolCount ?? 0,
                     tools: status?.tools ?? [],
-                    lastError: status?.lastError,
+                    lastError: incomplete ? undefined : status?.lastError,
                     config: row.config,
+                    incomplete: incomplete || undefined,
+                    incompleteReason: incomplete
+                        ? `This server uses ${transportType} transport but has no URL configured.`
+                        : undefined,
                 };
             });
         } catch (error) {

@@ -2740,6 +2740,8 @@
       "pluginServerSource": "{plugin} v{version} ile",
       "pluginServerManaged": "Eklenti tarafından yönetiliyor",
       "pluginServerReconnect": "Yeniden bağlan",
+      "pluginServerIncomplete": "Yapılandırma gerekli",
+      "pluginServerMissingConfig": "Eksik yapılandırma",
       "connectionFailedTitle": "Bağlantı başarısız",
       "activeTools": "{count} aktif araç",
       "environmentVariables": "Ortam değişkenleri",
