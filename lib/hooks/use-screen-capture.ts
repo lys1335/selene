@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getElectronAPI, type ScreenCaptureResult } from "@/lib/electron/types";
 import { optimizeScreenshot } from "@/lib/voice-screen/image-optimization";
+import { showPermissionToast } from "@/lib/electron/permission-toast";
 
 function buildScreenCaptureFile(result: ScreenCaptureResult): File | null {
   if (!result.success || !result.imageUrl) {
@@ -30,7 +31,11 @@ export function useScreenCapture(options: {
       }
 
       if (!result.success) {
-        toast.error(result.error || "Screen capture failed");
+        if (result.permissionStatus === "denied" || result.permissionStatus === "restricted") {
+          showPermissionToast("screen");
+        } else {
+          toast.error(result.error || "Screen capture failed");
+        }
         return;
       }
 

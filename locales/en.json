@@ -2208,6 +2208,8 @@
       "pluginServerSource": "via {plugin} v{version}",
       "pluginServerManaged": "Managed by plugin",
       "pluginServerReconnect": "Reconnect",
+      "pluginServerIncomplete": "Needs configuration",
+      "pluginServerMissingConfig": "Missing configuration",
       "connectionFailedTitle": "Connection failed",
       "activeTools": "{count} active tools",
       "environmentVariables": "Environment variables",
@@ -2747,6 +2749,14 @@
         "clearBtn": "Clear all screenshots",
         "clearingBtn": "Clearing...",
         "clearSuccess": "Deleted {count} screenshot(s)"
+      },
+      "permissions": {
+        "screenRequired": "Screen Recording permission is required to capture your display.",
+        "screenAction": "Open System Settings",
+        "screenManual": "Open System Settings → Privacy & Security → Screen Recording, then enable Selene.",
+        "micRequired": "Microphone access is required for voice capture.",
+        "accessibilityRequired": "Accessibility permission is required for global shortcuts.",
+        "accessibilityManual": "Open System Settings → Privacy & Security → Accessibility, then enable Selene."
       },
       "miniOverlay": {
         "title": "Mini overlay",

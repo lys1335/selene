@@ -160,6 +160,7 @@ mac:
   extendInfo:
     NSCameraUsageDescription: "This app requires access to your camera for image capture."
     NSMicrophoneUsageDescription: "This app requires access to your microphone for audio capture."
+    NSScreenCaptureUsageDescription: "Selene captures your screen to attach screenshots to conversations."
     NSUserNotificationAlertStyle: "alert"
 
 # Windows specific configuration

@@ -138,6 +138,8 @@ export interface UnifiedCaptureTriggerPayload {
   metadata?: ScreenCaptureMetadata;
   startVoice: boolean;
   screenshotError?: string;
+  /** Permission status at capture time — allows renderer to show actionable prompts. */
+  permissionStatus?: ScreenCaptureResult["permissionStatus"];
   traceId: string;
 }
 
@@ -176,6 +178,8 @@ export interface ElectronPermissionsAPI {
   requestScreen: () => Promise<void>;
   requestMic: () => Promise<boolean>;
   requestAccessibility: () => Promise<boolean>;
+  /** Fires when the main process detects a capture attempt without screen recording permission. */
+  onScreenPermissionRequired: (callback: () => void) => (() => void) | undefined;
 }
 
 export interface ElectronAPI {
