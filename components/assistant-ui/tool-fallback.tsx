@@ -755,11 +755,16 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
 
   // Final defensive fallback: render unknown object-shaped outputs so the UI
   // never appears empty when a tool completed but returned an unrecognized schema.
+  // Only use summary as the sole output when the result has no other substantive fields.
   const genericSummary =
     typeof (normalizedResult as { summary?: unknown }).summary === "string"
       ? ((normalizedResult as { summary?: string }).summary ?? "")
       : "";
-  if (genericSummary.trim().length > 0) {
+  const hasSubstantiveFields = Object.keys(normalizedResult).some(
+    (k) => !["status", "summary", "metadata", "success", "isError"].includes(k)
+  );
+
+  if (!hasSubstantiveFields && genericSummary.trim().length > 0) {
     return (
       <div className={cn("mt-2", TOOL_RESULT_TEXT_CLASS)}>
         <pre className={cn("max-h-64", TOOL_RESULT_PRE_CLASS)}>

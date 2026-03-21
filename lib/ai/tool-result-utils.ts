@@ -252,6 +252,42 @@ export function buildToolSummary(toolName: string, input?: unknown, output?: unk
       const contentId = getString(result.contentId) || getString(inputObj?.contentId);
       return contentId ? `Retrieved full content (${contentId})` : "Retrieved full content";
     }
+    case "delegateToSubagent": {
+      const action = getString(inputObj?.action) || "delegate";
+      const agentName = getString(result.agentName) || getString(result.delegateAgent) || getString(inputObj?.agentName);
+      const delegationId = getString(result.delegationId);
+      const completed = result.completed === true;
+      const statusTag = completed ? "completed" : status || "in-progress";
+
+      // Extract actual sub-agent response content
+      const allResponses = Array.isArray(result.allResponses) ? result.allResponses : [];
+      let responseExcerpt = "";
+      if (allResponses.length > 0) {
+        const lastResponse = allResponses[allResponses.length - 1];
+        let text: string | undefined;
+        if (typeof lastResponse === "string") {
+          text = lastResponse;
+        } else if (typeof lastResponse === "object" && lastResponse) {
+          const rec = lastResponse as Record<string, unknown>;
+          text = getString(rec.content) || getString(rec.text);
+          if (!text) {
+            try { text = JSON.stringify(lastResponse).slice(0, 300); } catch { /* circular ref */ }
+          }
+        } else {
+          text = String(lastResponse);
+        }
+        if (text) {
+          responseExcerpt = text.length > 200 ? text.slice(0, 200) + "…" : text;
+        }
+      }
+
+      const parts: string[] = [`Delegation ${action}`];
+      if (agentName) parts.push(`to ${agentName}`);
+      if (delegationId) parts.push(`(${delegationId})`);
+      parts.push(`[${statusTag}]`);
+      if (responseExcerpt) parts.push(`— ${responseExcerpt}`);
+      return parts.join(" ");
+    }
     default: {
       const statusTag = status ? ` (${status})` : "";
       const keys = summarizeToolKeys(result);

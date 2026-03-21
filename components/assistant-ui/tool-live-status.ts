@@ -278,6 +278,16 @@ export function summarizeToolInputByName(toolName: string, value: unknown): stri
     case "Skill": {
       return typeof args.skill === "string" ? args.skill : summarizeToolInput(value);
     }
+    case "delegateToSubagent": {
+      const action = typeof args.action === "string" ? args.action : undefined;
+      const agentName = typeof args.agentName === "string" ? args.agentName : undefined;
+      const task = typeof args.task === "string" ? args.task : undefined;
+      const parts: string[] = [];
+      if (action) parts.push(action);
+      if (agentName) parts.push(`→ ${agentName}`);
+      if (task) parts.push(summarizeString(task, 60));
+      return parts.length > 0 ? parts.join(" ") : summarizeToolInput(value);
+    }
     default:
       return summarizeToolInput(value);
   }
@@ -438,6 +448,36 @@ export function summarizeToolOutputByName(toolName: string, value: unknown): str
       if (action && title) return `${action}: ${summarizeString(title, MAX - action.length - 2)}`;
       if (action) return action;
       return summarizeToolOutput(value);
+    }
+    case "delegateToSubagent": {
+      const agentName = typeof record.agentName === "string" ? record.agentName
+        : typeof record.delegateAgent === "string" ? record.delegateAgent
+        : undefined;
+      const completed = record.completed === true;
+      const allResponses = Array.isArray(record.allResponses) ? record.allResponses : [];
+
+      // Extract the most meaningful content from the delegation result
+      let content = "";
+      if (allResponses.length > 0) {
+        const last = allResponses[allResponses.length - 1];
+        content = typeof last === "string" ? last
+          : typeof last === "object" && last
+            ? (typeof (last as Record<string, unknown>).content === "string"
+                ? (last as Record<string, unknown>).content as string
+                : typeof (last as Record<string, unknown>).text === "string"
+                  ? (last as Record<string, unknown>).text as string
+                  : "")
+            : "";
+      }
+
+      const parts: string[] = [];
+      if (agentName) parts.push(agentName);
+      if (completed) parts.push("completed");
+      if (content) {
+        const used = parts.join(", ").length;
+        parts.push(summarizeString(content, Math.max(40, MAX - used - 4)));
+      }
+      return parts.length > 0 ? parts.join(", ") : summarizeToolOutput(value);
     }
     default:
       return summarizeToolOutput(value);

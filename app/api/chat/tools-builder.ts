@@ -414,6 +414,7 @@ export async function buildToolsForRequest(
   // lifecycle completes (UI shows "completed"). Loop prevention is handled
   // in route.ts via stopWhen(1) for claudecode provider.
   const sdkPassthroughNames = new Set<string>();
+  const mcpPassthroughNames = new Set<string>();
 
   if (ctx.provider === "claudecode") {
     const createSdkPassthroughTool = (registeredToolName: string): Tool =>
@@ -456,7 +457,11 @@ export async function buildToolsForRequest(
 
           const bridge = mcpContextStore.getStore()?.sdkToolResultBridge;
           if (bridge && toolCallId) {
-            const isLongRunningSdkTool =
+            // MCP tools (delegateToSubagent, etc.) are executed by the MCP
+            // server and can run arbitrarily long — never time them out.
+            // SDK agent tools (Task, Agent, etc.) also run long.
+            const isLongRunningTool =
+              mcpPassthroughNames.has(registeredToolName) ||
               registeredToolName === "Task" ||
               registeredToolName === "Agent" ||
               registeredToolName === "TaskCreate" ||
@@ -466,9 +471,9 @@ export async function buildToolsForRequest(
 
             try {
               const resolved = await bridge.waitFor(toolCallId, {
-                // Claude SDK Task/Agent calls can run well beyond the default 5-minute
-                // passthrough timeout while sub-agents complete; keep waiting unless aborted.
-                timeoutMs: isLongRunningSdkTool ? null : 300_000,
+                // Long-running tools (SDK agents, MCP tools) can run well beyond
+                // the default 5-minute passthrough timeout; keep waiting unless aborted.
+                timeoutMs: isLongRunningTool ? null : 300_000,
                 abortSignal,
               });
               if (resolved) {
@@ -526,6 +531,7 @@ export async function buildToolsForRequest(
       if (sdkPassthroughNames.has(name)) continue;
       allToolsWithMCP[name] = createSdkPassthroughTool(name);
       sdkPassthroughNames.add(name);
+      mcpPassthroughNames.add(name);
     }
   }
 

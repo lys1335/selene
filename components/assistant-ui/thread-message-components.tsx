@@ -66,6 +66,7 @@ import {
   ClaudeSkillToolUI,
   ClaudeTaskOutputToolUI,
   ClaudeTaskStopToolUI,
+  DelegationToolUI,
 } from "./claude-code-tools";
 import { useOptionalVoice } from "./voice-context";
 import { YouTubeInlinePreview } from "./youtube-inline";
@@ -607,6 +608,7 @@ export const AssistantMessage: FC<{ ttsEnabled?: boolean }> = ({ ttsEnabled = fa
                   Skill: ClaudeSkillToolUI,
                   TaskOutput: ClaudeTaskOutputToolUI,
                   TaskStop: ClaudeTaskStopToolUI,
+                  delegateToSubagent: DelegationToolUI,
                 }),
                 Fallback: ToolFallback,
               },
