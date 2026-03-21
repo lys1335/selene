@@ -258,6 +258,20 @@ export function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
           !toolCallsWithOutput.has(toolCallId) &&
           !(part as { active?: boolean }).active
         ) {
+          // Interactive tools (ExitPlanMode, AskUserQuestion, AskFollowupQuestion) persist
+          // to the DB without a result while waiting for user input. Don't strip them —
+          // they need to render in the UI so the user can respond (especially in background
+          // mode where the client reloads from DB). Mirrors INTERACTIVE_TOOL_NAMES in
+          // app/api/chat/streaming-progress.ts.
+          const partToolName = typeof part.type === "string" ? part.type.replace("tool-", "") : "";
+          if (
+            partToolName === "ExitPlanMode" ||
+            partToolName === "AskUserQuestion" ||
+            partToolName === "AskFollowupQuestion"
+          ) {
+            return true;
+          }
+
           if (!loggedSanitizerToolCallIds.has(key)) {
             loggedSanitizerToolCallIds.add(key);
             console.warn("[ChatProvider] Removing dangling input-available tool part:", toolCallId);

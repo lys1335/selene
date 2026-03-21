@@ -56,6 +56,18 @@ function emitDroppedToolCallTelemetry(
   });
 }
 
+/**
+ * Tool names that block SDK execution while waiting for user input.
+ * These must be persisted to the DB even without a matching tool-result,
+ * otherwise they vanish from the chat when the client reloads from DB
+ * (background mode). See: https://github.com/seline/seline/issues/XXX
+ */
+const INTERACTIVE_TOOL_NAMES = new Set([
+  "ExitPlanMode",
+  "AskUserQuestion",
+  "AskFollowupQuestion",
+]);
+
 export function filterStreamingPartsForPersistence(
   streamingState: StreamingMessageState
 ): DBContentPart[] {
@@ -83,6 +95,13 @@ export function filterStreamingPartsForPersistence(
     }
 
     if (!persistedToolResultIds.has(part.toolCallId)) {
+      // Interactive tools block the SDK waiting for user input. They must
+      // persist so the UI can render them when the client reloads from DB
+      // (e.g. background mode page return or polling refresh).
+      if (INTERACTIVE_TOOL_NAMES.has(part.toolName) && hasCompleteArgs) {
+        return true;
+      }
+
       emitDroppedToolCallTelemetry(
         streamingState,
         part,

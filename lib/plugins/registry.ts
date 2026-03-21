@@ -5,7 +5,7 @@
  * with proper DB persistence and hook/MCP lifecycle management.
  */
 
-import { and, eq, desc, or, isNull } from "drizzle-orm";
+import { and, eq, desc, or, isNull, isNotNull } from "drizzle-orm";
 import { mkdir, writeFile, chmod } from "fs/promises";
 import path from "path";
 import { db } from "@/lib/db/sqlite-client";
@@ -492,7 +492,11 @@ export interface AgentPluginAssignment {
 
 /**
  * Get all available plugins for assignment to an agent.
- * Includes global plugins and character-scoped plugins for this character.
+ * Includes:
+ *  - Null-scoped plugins (available to all agents)
+ *  - Character-scoped plugins matching this character
+ *  - Plugins with an explicit agent_plugins assignment for this agent
+ *    (handles sub-agents that inherit plugins via enablePluginForAgent)
  */
 export async function getAvailablePluginsForAgent(
   userId: string,
@@ -526,9 +530,15 @@ export async function getAvailablePluginsForAgent(
       and(
         eq(plugins.userId, userId),
         eq(plugins.status, "active"),
-        characterId
-          ? or(isNull(plugins.characterId), eq(plugins.characterId, characterId))
-          : isNull(plugins.characterId)
+        or(
+          // Null-scoped plugins (self-contained plugins with own agents)
+          isNull(plugins.characterId),
+          // Character-scoped plugins for this specific agent
+          ...(characterId ? [eq(plugins.characterId, characterId)] : []),
+          // Plugins explicitly assigned to this agent via agent_plugins
+          // (covers sub-agents inheriting from parent-scoped plugins)
+          isNotNull(agentPlugins.enabled)
+        )
       )
     )
     .orderBy(desc(plugins.installedAt));

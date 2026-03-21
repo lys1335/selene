@@ -57,21 +57,25 @@ export function PluginInstallDialog({
             </p>
           </div>
 
-          <div className="space-y-1">
-            <label className="font-mono text-xs text-terminal-muted uppercase tracking-wider">{t("mainAgentLabel")}</label>
-            <select
-              value={selectedTargetCharacterId}
-              onChange={(event) => onTargetCharacterChange(event.target.value)}
-              className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
-              disabled={uploading}
-            >
-              {characters.map((character) => (
-                <option key={character.id} value={character.id}>
-                  {character.displayName || character.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {characters.length > 0 && (
+            <div className="space-y-1">
+              <label className="font-mono text-xs text-terminal-muted uppercase tracking-wider">{t("mainAgentLabel")}</label>
+              <select
+                value={selectedTargetCharacterId}
+                onChange={(event) => onTargetCharacterChange(event.target.value)}
+                className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+                disabled={uploading}
+              >
+                <option value="">{t("standaloneInstallOption")}</option>
+                {characters.map((character) => (
+                  <option key={character.id} value={character.id}>
+                    {character.displayName || character.name}
+                  </option>
+                ))}
+              </select>
+              <p className="font-mono text-[10px] text-terminal-muted/70">{t("agentOptionalHint")}</p>
+            </div>
+          )}
         </div>
 
         <DialogFooter>
@@ -81,7 +85,7 @@ export function PluginInstallDialog({
           <Button
             className="font-mono bg-terminal-green text-white hover:bg-terminal-green/90"
             onClick={onInstall}
-            disabled={uploading || pendingUploadFiles.length === 0 || !selectedTargetCharacterId}
+            disabled={uploading || pendingUploadFiles.length === 0}
           >
             {uploading ? (
               <>
@@ -89,7 +93,7 @@ export function PluginInstallDialog({
                 {t("installing")}
               </>
             ) : (
-              t("installAndAssign")
+              t("installPlugin")
             )}
           </Button>
         </DialogFooter>

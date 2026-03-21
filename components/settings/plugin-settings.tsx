@@ -74,36 +74,27 @@ export function PluginSettings() {
     }
   }, []);
 
+  const loadCharacters = useCallback(async () => {
+    try {
+      const res = await fetch("/api/characters");
+      if (!res.ok) return;
+      const data = await res.json();
+      const activeCharacters: CharacterOption[] = (data.characters || []).filter(
+        (character: CharacterOption) => character.status === "active"
+      );
+      setCharacters(activeCharacters);
+    } catch {
+      // no-op
+    }
+  }, []);
+
   useEffect(() => {
     loadPlugins();
   }, [loadPlugins]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const loadCharacters = async () => {
-      try {
-        const res = await fetch("/api/characters");
-        if (!res.ok) return;
-        const data = await res.json();
-        const activeCharacters: CharacterOption[] = (data.characters || []).filter(
-          (character: CharacterOption) => character.status === "active"
-        );
-        if (cancelled) return;
-        setCharacters(activeCharacters);
-        if (activeCharacters.length > 0) {
-          setSelectedTargetCharacterId((prev) => prev || activeCharacters[0].id);
-        }
-      } catch {
-        // no-op
-      }
-    };
-
     loadCharacters();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [loadCharacters]);
 
   const togglePlugin = async (pluginId: string, currentStatus: string) => {
     const newStatus = currentStatus === "active" ? "disabled" : "active";
@@ -136,10 +127,6 @@ export function PluginSettings() {
 
   const startInstallForFiles = (files: File[]) => {
     if (files.length === 0) return;
-    if (characters.length === 0) {
-      toast.error(t("requireAgentFirst"));
-      return;
-    }
     setPendingUploadFiles(files);
     setConfirmInstallOpen(true);
   };
@@ -152,15 +139,13 @@ export function PluginSettings() {
 
   const installPendingPluginFiles = async () => {
     if (pendingUploadFiles.length === 0) return;
-    if (!selectedTargetCharacterId) {
-      toast.error(t("selectAgentFirst"));
-      return;
-    }
 
     setUploading(true);
     try {
       const formData = new FormData();
-      formData.append("characterId", selectedTargetCharacterId);
+      if (selectedTargetCharacterId) {
+        formData.append("characterId", selectedTargetCharacterId);
+      }
       if (pendingUploadFiles.length === 1) {
         const single = pendingUploadFiles[0];
         const relativePath = single.webkitRelativePath || single.name;
@@ -213,6 +198,8 @@ export function PluginSettings() {
       setConfirmInstallOpen(false);
       setPendingUploadFiles([]);
       loadPlugins();
+      // Refresh agent list in case the plugin created new agents
+      loadCharacters();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("importFailed"));
     } finally {
