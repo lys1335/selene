@@ -139,8 +139,8 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
   const statusColor = isRunning
     ? "text-terminal-muted"
     : hasError
-      ? "text-red-600"
-      : "text-emerald-600";
+      ? "text-red-600 dark:text-red-400"
+      : "text-emerald-600 dark:text-emerald-400";
 
   const statusLabel = isRunning
     ? `Delegating to ${resolvedAgentName}...`
@@ -149,7 +149,7 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
       : `${resolvedAgentName}`;
 
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 font-mono text-xs overflow-hidden">
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -165,7 +165,7 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
         <span className="text-terminal-muted">{statusLabel}</span>
 
         {action !== "start" && (
-          <span className="text-[10px] text-terminal-muted shrink-0 bg-terminal-dark/5 rounded px-1 py-0.5">
+          <span className="text-[10px] text-terminal-muted shrink-0 bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] rounded px-1 py-0.5">
             {action}
           </span>
         )}
@@ -193,7 +193,7 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
               <div className="text-[10px] text-terminal-muted uppercase tracking-wider">
                 Task
               </div>
-              <pre className="rounded bg-terminal-dark/5 p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+              <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
                 {task.length > 2000
                   ? task.substring(0, 2000) +
                     `\n\n... [${(task.length - 2000).toLocaleString()} more characters]`
@@ -207,7 +207,7 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
               <div className="text-[10px] text-terminal-muted uppercase tracking-wider">
                 Result
               </div>
-              <pre className="rounded bg-terminal-dark/5 p-2 overflow-x-auto max-h-96 overflow-y-auto text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+              <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-96 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
                 {displayContent}
               </pre>
             </div>
@@ -218,7 +218,7 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
               <div className="text-[10px] text-terminal-muted uppercase tracking-wider">
                 All Responses ({dr.allResponses.length})
               </div>
-              <pre className="rounded bg-terminal-dark/5 p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+              <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
                 {(() => {
                   const joined = dr.allResponses!
                     .map((r, i) => `--- Response ${i + 1} ---\n${r}`)
@@ -237,7 +237,7 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
               <div className="text-[10px] text-red-600 uppercase tracking-wider">
                 Error
               </div>
-              <pre className="rounded bg-red-50 p-2 overflow-x-auto max-h-48 overflow-y-auto text-red-700 whitespace-pre-wrap break-all font-mono text-[11px]">
+              <pre className="rounded bg-red-50 dark:bg-red-950/40 p-2 overflow-x-auto max-h-48 overflow-y-auto text-red-700 dark:text-red-300 whitespace-pre-wrap break-all font-mono text-[11px]">
                 {dr.error || dr.status || "Unknown error"}
               </pre>
             </div>

@@ -53,8 +53,8 @@ export const ClaudeWebSearchToolUI: ToolCallContentPartComponent = ({ args, resu
   const statusColor = isRunning
     ? "text-terminal-muted"
     : hasError
-      ? "text-red-600"
-      : "text-emerald-600";
+      ? "text-red-600 dark:text-red-400"
+      : "text-emerald-600 dark:text-emerald-400";
 
   const DISPLAY_LIMIT = 5_000;
   const displayContent = content && content.length > DISPLAY_LIMIT
@@ -62,7 +62,7 @@ export const ClaudeWebSearchToolUI: ToolCallContentPartComponent = ({ args, resu
     : content;
 
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 font-mono text-xs overflow-hidden">
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -84,13 +84,13 @@ export const ClaudeWebSearchToolUI: ToolCallContentPartComponent = ({ args, resu
       {expanded && (
         <div className="border-t border-border px-3 py-2 space-y-2">
           {displayContent && (
-            <pre className="rounded bg-terminal-dark/5 p-2 overflow-x-auto max-h-64 overflow-y-auto text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+            <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-64 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
               {displayContent}
             </pre>
           )}
 
           {hasError && content && (
-            <div className="text-[11px] text-red-600">{content.slice(0, 500)}</div>
+            <div className="text-[11px] text-red-600 dark:text-red-400">{content.slice(0, 500)}</div>
           )}
 
           {isRunning && (

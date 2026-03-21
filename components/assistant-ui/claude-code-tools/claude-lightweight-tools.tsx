@@ -78,11 +78,11 @@ function CompactToolCard({
   const statusColor = isRunning
     ? "text-terminal-muted"
     : hasError
-      ? "text-red-600"
-      : "text-emerald-600";
+      ? "text-red-600 dark:text-red-400"
+      : "text-emerald-600 dark:text-emerald-400";
 
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 font-mono text-xs overflow-hidden">
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
       <button
         type="button"
         onClick={() => hasExpandable && setExpanded(!expanded)}
@@ -109,7 +109,7 @@ function CompactToolCard({
       </button>
       {expanded && expandedContent && (
         <div className="border-t border-border px-3 py-2">
-          <pre className="rounded bg-terminal-dark/5 p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+          <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
             {expandedContent.length > 3000
               ? expandedContent.substring(0, 3000) + `\n\n... [${(expandedContent.length - 3000).toLocaleString()} more characters]`
               : expandedContent}

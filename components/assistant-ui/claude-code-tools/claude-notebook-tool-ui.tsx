@@ -63,14 +63,14 @@ export const ClaudeNotebookEditToolUI: ToolCallContentPartComponent = ({ args, r
   const statusColor = isRunning
     ? "text-terminal-muted"
     : hasError
-      ? "text-red-600"
-      : "text-emerald-600";
+      ? "text-red-600 dark:text-red-400"
+      : "text-emerald-600 dark:text-emerald-400";
 
   const newSource = args?.new_source || "";
   const lineCount = newSource ? newSource.split("\n").length : 0;
 
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 font-mono text-xs overflow-hidden">
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -85,14 +85,14 @@ export const ClaudeNotebookEditToolUI: ToolCallContentPartComponent = ({ args, r
         <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={fileName}>{fileName}</span>
 
         {cellType && (
-          <span className="text-[10px] text-terminal-muted shrink-0 bg-terminal-dark/5 rounded px-1 py-0.5">
+          <span className="text-[10px] text-terminal-muted shrink-0 bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] rounded px-1 py-0.5">
             {cellType}
           </span>
         )}
 
         {lineCount > 0 && editMode !== "delete" && (
           <span className="text-terminal-muted ml-auto shrink-0">
-            <span className="text-emerald-600">+{lineCount}</span>
+            <span className="text-emerald-600 dark:text-emerald-400">+{lineCount}</span>
           </span>
         )}
 
@@ -110,7 +110,7 @@ export const ClaudeNotebookEditToolUI: ToolCallContentPartComponent = ({ args, r
           </div>
 
           {newSource && (
-            <pre className="rounded bg-terminal-dark/5 p-2 overflow-x-auto max-h-64 overflow-y-auto text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+            <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-64 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
               {newSource.length > 5000
                 ? newSource.substring(0, 5000) + `\n\n... [${(newSource.length - 5000).toLocaleString()} more characters]`
                 : newSource}
