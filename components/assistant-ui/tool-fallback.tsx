@@ -490,6 +490,21 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
     const fileName = readResult.filePath
       ? readResult.filePath.split("/").pop() || readResult.filePath
       : "file";
+
+    // Handle binary file soft-redirect or text-only responses (no content field)
+    if (!readResult.content && readResult.text) {
+      return (
+        <div className={cn("font-mono", TOOL_RESULT_TEXT_CLASS)}>
+          <div className="flex items-center gap-2 mb-2 text-terminal-dark">
+            <span className="font-medium">{fileName}</span>
+          </div>
+          <p className="text-xs text-terminal-muted">
+            {readResult.text}
+          </p>
+        </div>
+      );
+    }
+
     const sourceLabel = readResult.source === "knowledge_base"
       ? ` (Knowledge Base${readResult.documentTitle ? `: ${readResult.documentTitle}` : ""})`
       : "";
