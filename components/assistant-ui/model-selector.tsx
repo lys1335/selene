@@ -17,10 +17,6 @@ import { resilientPut } from "@/lib/utils/resilient-fetch";
 import { useTranslations } from "next-intl";
 import type { ContextWindowStatus } from "@/lib/hooks/use-context-status";
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
 const PROVIDER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   anthropic: { bg: "bg-amber-500/10", text: "text-amber-700", border: "border-amber-500/30" },
   openrouter: { bg: "bg-blue-500/10", text: "text-blue-700", border: "border-blue-500/30" },
@@ -45,9 +41,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   ollama: "Ollama",
 };
 
-// ---------------------------------------------------------------------------
-// formatModelName — human-friendly model label from full model ID
-// ---------------------------------------------------------------------------
+const MANUAL_MODEL_PROVIDERS = new Set(["openrouter", "blackboxai", "ollama"]);
 
 function formatModelName(modelId: string): string {
   const stripped = modelId.includes("/") ? modelId.split("/").pop()! : modelId;
@@ -85,18 +79,14 @@ function formatModelName(modelId: string): string {
     .trim();
 }
 
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
+function getManualModelPlaceholder(provider: string): string {
+  return provider === "blackboxai" ? "anthropic/claude-sonnet-4.6" : "x-ai/grok-4.1-fast";
+}
 
 interface ModelSelectorProps {
   sessionId: string;
   status: ContextWindowStatus | null;
 }
-
-// ---------------------------------------------------------------------------
-// ModelSelector component
-// ---------------------------------------------------------------------------
 
 export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => {
   const t = useTranslations("modelBag");
@@ -105,10 +95,10 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
   const [search, setSearch] = useState("");
   const [filterProvider, setFilterProvider] = useState<string | "all">("all");
   const [saving, setSaving] = useState(false);
+  const [manualModelInput, setManualModelInput] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // ── Close on outside click ──────────────────────────────────────────────
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -120,7 +110,6 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  // ── Close on Escape ────────────────────────────────────────────────────
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -133,27 +122,23 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
     return () => document.removeEventListener("keydown", handler);
   }, [open]);
 
-  // ── Focus search input when popover opens ──────────────────────────────
   useEffect(() => {
     if (open) {
-      // Small delay to let the DOM render
       requestAnimationFrame(() => {
         searchInputRef.current?.focus();
       });
     } else {
-      // Reset search and filter when closing
       setSearch("");
       setFilterProvider("all");
+      setManualModelInput("");
     }
   }, [open]);
 
-  // ── Authenticated providers with models ────────────────────────────────
   const authProviders = useMemo(
     () => bag.providers.filter((p) => p.isAuthenticated && p.modelCount > 0),
     [bag.providers],
   );
 
-  // ── Filter + search ───────────────────────────────────────────────────
   const visibleModels = useMemo(() => {
     let result = bag.models.filter((m) => m.isAvailable);
     if (filterProvider !== "all") {
@@ -168,7 +153,6 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
     return result;
   }, [bag.models, filterProvider, search]);
 
-  // ── Group by provider ─────────────────────────────────────────────────
   const groupedModels = useMemo(() => {
     const groups: Record<string, typeof visibleModels> = {};
     for (const m of visibleModels) {
@@ -177,34 +161,33 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
     return groups;
   }, [visibleModels]);
 
-  // ── Active model from context status ──────────────────────────────────
   const activeModelId = status?.model?.id ?? null;
   const activeProvider = status?.model?.provider ?? null;
+  const manualProvider = filterProvider !== "all" && MANUAL_MODEL_PROVIDERS.has(filterProvider)
+    ? filterProvider
+    : activeProvider && MANUAL_MODEL_PROVIDERS.has(activeProvider)
+      ? activeProvider
+      : null;
 
-  // ── Select a model ────────────────────────────────────────────────────
-  const handleSelectModel = useCallback(
-    async (model: ModelItem) => {
-      // Skip if already the active model
-      if (model.id === activeModelId && model.provider === activeProvider) {
-        setOpen(false);
-        return;
-      }
+  const persistSessionModel = useCallback(
+    async (provider: string, modelId: string, modelName: string) => {
       setSaving(true);
       try {
         const { error: putError } = await resilientPut(
           `/api/sessions/${sessionId}/model-config`,
-          { sessionChatModel: model.id, sessionProvider: model.provider },
+          { sessionChatModel: modelId, sessionProvider: provider },
         );
         if (putError) {
           toast.error(putError);
-          return;
+          return false;
         }
-        toast.success(t("switched", { name: model.name }));
+        toast.success(t("switched", { name: modelName }));
         setOpen(false);
-        // Notify context-status to refresh immediately
         window.dispatchEvent(new Event("seline:model-config-changed"));
+        return true;
       } catch {
         toast.error(t("switchFailed"));
+        return false;
       } finally {
         setSaving(false);
       }
@@ -212,7 +195,31 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
     [sessionId, t],
   );
 
-  // ── Trigger: derive display values from status ────────────────────────
+  const handleSelectModel = useCallback(
+    async (model: ModelItem) => {
+      if (model.id === activeModelId && model.provider === activeProvider) {
+        setOpen(false);
+        return;
+      }
+      await persistSessionModel(model.provider, model.id, model.name);
+    },
+    [activeModelId, activeProvider, persistSessionModel],
+  );
+
+  const handleManualSubmit = useCallback(async () => {
+    if (!manualProvider) return;
+    const trimmed = manualModelInput.trim();
+    if (!trimmed) return;
+    if (trimmed === activeModelId && manualProvider === activeProvider) {
+      setOpen(false);
+      return;
+    }
+    const success = await persistSessionModel(manualProvider, trimmed, trimmed);
+    if (success) {
+      setManualModelInput("");
+    }
+  }, [activeModelId, activeProvider, manualModelInput, manualProvider, persistSessionModel]);
+
   if (!status?.model) return null;
 
   const triggerModelName = formatModelName(status.model.id);
@@ -222,7 +229,6 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
 
   return (
     <div className="relative" ref={containerRef}>
-      {/* ── Trigger badge ── */}
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -248,11 +254,8 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
         />
       </button>
 
-      {/* ── Popover ── */}
       {open && (
         <div className="absolute bottom-full left-0 mb-2 z-50 w-[380px] max-h-[420px] flex flex-col rounded-xl border border-terminal-border/60 bg-white shadow-xl overflow-hidden">
-
-          {/* ── Search ── */}
           <div className="shrink-0 px-3 pt-3 pb-2">
             <div className="relative">
               <SearchIcon className="absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-terminal-muted/50" />
@@ -276,7 +279,6 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
             </div>
           </div>
 
-          {/* ── Provider filter tabs ── */}
           <div className="shrink-0 flex items-center gap-1 px-3 pb-2 overflow-x-auto">
             <button
               type="button"
@@ -315,97 +317,87 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
             ))}
           </div>
 
-          {/* ── Separator ── */}
           <div className="shrink-0 h-px bg-terminal-border/20" />
 
-          {/* ── Model list ── */}
-          {bag.isLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2Icon className="size-5 animate-spin text-terminal-muted" />
-            </div>
-          ) : visibleModels.length === 0 ? (
-            <div className="py-10 text-center">
-              <p className="font-mono text-xs text-terminal-muted">{t("noModels")}</p>
-              <p className="font-mono text-[10px] text-terminal-muted/60 mt-1">
-                {t("connectProviders")}
+          {manualProvider && (
+            <div className="shrink-0 border-b border-terminal-border/20 bg-terminal-cream/20 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={manualModelInput}
+                  onChange={(e) => setManualModelInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleManualSubmit();
+                    }
+                  }}
+                  placeholder={getManualModelPlaceholder(manualProvider)}
+                  className="flex-1 rounded-lg border border-terminal-border/40 bg-white py-1.5 px-2.5 font-mono text-xs text-terminal-dark placeholder:text-terminal-muted/40 focus:border-terminal-green/50 focus:outline-none focus:ring-1 focus:ring-terminal-green/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleManualSubmit()}
+                  disabled={saving || manualModelInput.trim().length === 0}
+                  className="rounded-lg border border-terminal-border/40 px-2.5 py-1.5 font-mono text-[10px] text-terminal-dark transition-colors hover:bg-terminal-dark/5 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {t("manualUse")}
+                </button>
+              </div>
+              <p className="mt-1 font-mono text-[10px] text-terminal-muted/70">
+                {manualProvider === "blackboxai" ? t("manualBlackboxHint") : t("manualSessionHint")}
               </p>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-y-auto overscroll-contain">
-              {Object.entries(groupedModels).map(([provider, models]) => (
-                <div key={provider}>
-                  {/* Provider section header (only when showing all) */}
-                  {filterProvider === "all" && (
-                    <div className="sticky top-0 z-10 flex items-center gap-2 px-3 py-1.5 bg-terminal-cream/95 backdrop-blur-sm border-b border-terminal-border/10">
-                      <span className="font-mono text-[10px] font-bold text-terminal-dark/70 uppercase tracking-wider">
-                        {PROVIDER_NAMES[provider] ?? provider}
-                      </span>
-                      <span className="font-mono text-[9px] text-terminal-muted">
-                        {models.length}
-                      </span>
-                      <div className="flex-1 h-px bg-terminal-border/15" />
-                    </div>
-                  )}
-
-                  {/* Model rows */}
-                  {models.map((model) => {
-                    const isActive = model.id === activeModelId && model.provider === activeProvider;
-                    return (
-                      <button
-                        type="button"
-                        key={`${model.provider}:${model.id}`}
-                        onClick={() => handleSelectModel(model)}
-                        disabled={saving}
-                        className={cn(
-                          "flex w-full items-center gap-2.5 px-3 py-2 transition-colors duration-75",
-                          "hover:bg-terminal-green/5",
-                          isActive && "bg-terminal-green/8",
-                          saving && "opacity-50 pointer-events-none",
-                        )}
-                      >
-                        {/* Name + ID */}
-                        <div className="flex-1 min-w-0 text-left">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={cn(
-                                "font-mono text-xs font-semibold truncate",
-                                isActive ? "text-terminal-green" : "text-terminal-dark",
-                              )}
-                            >
-                              {model.name}
-                            </span>
-                            {isActive && (
-                              <CheckIcon className="size-3 shrink-0 text-terminal-green" />
-                            )}
-                          </div>
-                          <p className="font-mono text-[10px] text-terminal-muted/50 truncate mt-0.5">
-                            {model.id}
-                          </p>
-                        </div>
-
-                        {/* Context window badge */}
-                        {model.capabilities.contextWindow && (
-                          <span className="shrink-0 rounded px-1.5 py-0.5 bg-terminal-dark/5 font-mono text-[9px] text-terminal-muted">
-                            {model.capabilities.contextWindow}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
             </div>
           )}
 
-          {/* ── Footer ── */}
-          <div className="shrink-0 border-t border-terminal-border/20 px-3 py-2 bg-terminal-cream/40">
-            <p className="font-mono text-[10px] text-terminal-muted text-center">
-              {t.rich("footerHint", {
-                settings: (chunks) => (
-                  <span className="text-terminal-green font-semibold">{chunks}</span>
-                ),
-              })}
-            </p>
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+            {visibleModels.length === 0 ? (
+              <div className="flex h-full min-h-[120px] items-center justify-center px-4 py-8 text-center font-mono text-xs text-terminal-muted">
+                {t("noModels")}
+              </div>
+            ) : (
+              Object.entries(groupedModels).map(([provider, models]) => (
+                <div key={provider} className="mb-3 last:mb-0">
+                  <div className="sticky top-0 z-10 bg-white px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-wide text-terminal-muted">
+                    {PROVIDER_NAMES[provider] ?? provider}
+                  </div>
+                  <div className="space-y-1 px-1">
+                    {models.map((model) => {
+                      const isActive = model.id === activeModelId && model.provider === activeProvider;
+                      return (
+                        <button
+                          key={`${model.provider}:${model.id}`}
+                          type="button"
+                          onClick={() => void handleSelectModel(model)}
+                          disabled={saving}
+                          className={cn(
+                            "flex w-full items-center gap-2 rounded-lg border px-2 py-2 text-left transition-colors",
+                            isActive
+                              ? "border-terminal-green/40 bg-terminal-green/5"
+                              : "border-transparent hover:border-terminal-border/40 hover:bg-terminal-cream/30",
+                            saving && "cursor-wait opacity-70",
+                          )}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate font-mono text-xs font-semibold text-terminal-dark">
+                              {model.name}
+                            </div>
+                            <div className="truncate font-mono text-[10px] text-terminal-muted/70">
+                              {model.id}
+                            </div>
+                          </div>
+                          {saving && isActive ? (
+                            <Loader2Icon className="size-3.5 animate-spin text-terminal-muted" />
+                          ) : isActive ? (
+                            <CheckIcon className="size-3.5 text-terminal-green" />
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

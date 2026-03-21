@@ -191,6 +191,10 @@ export function IdentityEditorDialog({
     () => models.filter((model) => model.provider === currentProvider),
     [currentProvider, models],
   );
+  const blackboxModelIds = useMemo(
+    () => new Set(providerModels.map((model) => model.id)),
+    [providerModels],
+  );
 
   const roleOptions = useMemo(() => {
     const options = {} as Record<ModelRole, Array<{ id: string; label: string }>>;
@@ -215,6 +219,9 @@ export function IdentityEditorDialog({
 
     return options;
   }, [identityForm.modelConfig, providerModels, t]);
+
+  const isManualBlackBoxModel = (value: string) =>
+    currentProvider === "blackboxai" && value.length > 0 && !blackboxModelIds.has(value);
 
   const updateModelConfig = (nextConfig: AgentModelConfigDraft) => {
     setIdentityForm({
@@ -368,15 +375,24 @@ export function IdentityEditorDialog({
             <div className="grid gap-3 md:grid-cols-2">
               {MODEL_ROLE_ORDER.map((role) => {
                 const roleKey = MODEL_ROLE_KEYS[role];
+                const currentValue = identityForm.modelConfig[roleKey];
                 const globalValue = roleAssignments[role] || getDefaultModelForProvider(currentProvider);
+                const showBlackBoxManualInput = isManualBlackBoxModel(currentValue);
                 return (
                   <div key={role} className="space-y-1.5">
                     <Label className="font-mono text-xs font-semibold text-terminal-dark/70 uppercase tracking-wider">
                       {t(`identityEditor.modelConfig.roles.${role}.label`)}
                     </Label>
                     <select
-                      value={identityForm.modelConfig[roleKey]}
-                      onChange={(event) => handleRoleModelChange(role, event.target.value)}
+                      value={showBlackBoxManualInput ? "__manual__" : currentValue}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        if (nextValue === "__manual__") {
+                          handleRoleModelChange(role, currentValue);
+                          return;
+                        }
+                        handleRoleModelChange(role, nextValue);
+                      }}
                       disabled={isSaving || isModelBagLoading}
                       className="w-full rounded-lg border border-terminal-border/50 bg-white px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green disabled:opacity-60"
                     >
@@ -388,7 +404,20 @@ export function IdentityEditorDialog({
                           {option.label}
                         </option>
                       ))}
+                      {currentProvider === "blackboxai" && (
+                        <option value="__manual__">{t("identityEditor.modelConfig.manualOption")}</option>
+                      )}
                     </select>
+                    {showBlackBoxManualInput && (
+                      <input
+                        type="text"
+                        value={currentValue}
+                        onChange={(event) => handleRoleModelChange(role, event.target.value)}
+                        placeholder={globalValue || "anthropic/claude-sonnet-4.6"}
+                        disabled={isSaving || isModelBagLoading}
+                        className="w-full rounded-lg border border-terminal-border/50 bg-white px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green disabled:opacity-60"
+                      />
+                    )}
                   </div>
                 );
               })}

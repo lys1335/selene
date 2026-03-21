@@ -592,6 +592,7 @@
         "agentProviderFallback": "bu ajanın {provider} sağlayıcı zinciri",
         "globalFallback": "{provider} için global/sağlayıcı fallback zinciri",
         "customModel": "özel model",
+        "manualOption": "Manuel model ID",
         "roles": {
           "chat": {
             "label": "Ana sohbet modeli",
@@ -2740,6 +2741,8 @@
       "pluginServerReconnect": "Yeniden bağlan",
       "pluginServerIncomplete": "Yapılandırma gerekli",
       "pluginServerMissingConfig": "Eksik yapılandırma",
+      "pluginServerUrlHint": "Bağlanmak için sunucu URL'sini girin.",
+      "pluginServerUrlInvalid": "Geçerli bir URL girin (ör. https://example.com/sse)",
       "connectionFailedTitle": "Bağlantı başarısız",
       "activeTools": "{count} aktif araç",
       "environmentVariables": "Ortam değişkenleri",
@@ -2897,7 +2900,10 @@
     "updateFailed": "Model güncellenemedi",
     "roleUpdated": "{role} modeli güncellendi",
     "switchProviderFailed": "Sağlayıcı değiştirilemedi",
-    "providerSwitched": "{name} sağlayıcısına geçildi"
+    "providerSwitched": "{name} sağlayıcısına geçildi",
+    "manualUse": "Kullan",
+    "manualSessionHint": "Bir sağlayıcı model ID'si girin ve bu oturumun sohbet modeli olarak uygulayın.",
+    "manualBlackboxHint": "Geçerli katalogda henüz görünmese bile herhangi bir BlackBox AI model ID'si girin."
   },
   "comfyui": {
     "workflows": {

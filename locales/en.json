@@ -592,6 +592,7 @@
         "agentProviderFallback": "this agent's {provider} provider chain",
         "globalFallback": "the global/provider fallback chain for {provider}",
         "customModel": "custom model",
+        "manualOption": "Manual model ID",
         "roles": {
           "chat": {
             "label": "Main chat model",
@@ -2208,6 +2209,8 @@
       "pluginServerReconnect": "Reconnect",
       "pluginServerIncomplete": "Needs configuration",
       "pluginServerMissingConfig": "Missing configuration",
+      "pluginServerUrlHint": "Enter the server URL to connect.",
+      "pluginServerUrlInvalid": "Please enter a valid URL (e.g. https://example.com/sse)",
       "connectionFailedTitle": "Connection failed",
       "activeTools": "{count} active tools",
       "environmentVariables": "Environment variables",
@@ -2889,7 +2892,10 @@
     "updateFailed": "Failed to update model",
     "roleUpdated": "{role} model updated",
     "switchProviderFailed": "Failed to switch provider",
-    "providerSwitched": "Switched to {name}"
+    "providerSwitched": "Switched to {name}",
+    "manualUse": "Use",
+    "manualSessionHint": "Enter a provider model ID and apply it as this session's chat model.",
+    "manualBlackboxHint": "Enter any BlackBox AI model ID, even if it is not in the current catalog yet."
   },
   "comfyui": {
     "workflows": {

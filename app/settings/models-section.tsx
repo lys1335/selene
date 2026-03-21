@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { settingsSectionShellClassName } from "@/components/settings/settings-form-layout";
 import { getAntigravityModels } from "@/lib/auth/antigravity-models";
@@ -10,6 +10,53 @@ import { getKimiModels } from "@/lib/auth/kimi-models";
 import { getMiniMaxModels } from "@/lib/auth/minimax-models";
 import { getBlackBoxModels } from "@/lib/auth/blackboxai-models";
 import type { FormState } from "./settings-types";
+
+const MODEL_FIELDS = ["chatModel", "researchModel", "visionModel", "utilityModel"] as const;
+type ModelFieldKey = (typeof MODEL_FIELDS)[number];
+const BLACKBOX_MANUAL_OPTION = "__manual__";
+
+function getBlackBoxSelectValue(value: string, fallback: string, knownModels: Set<string>): string {
+  if (!value) return fallback;
+  return knownModels.has(value) ? value : BLACKBOX_MANUAL_OPTION;
+}
+
+function renderModelOptions(models: Array<{ id: string; name: string }>) {
+  return models.map((model) => (
+    <option key={model.id} value={model.id}>{model.name}</option>
+  ));
+}
+
+function BlackBoxManualInput({
+  value,
+  onChange,
+  label,
+  placeholder,
+  helper,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  placeholder: string;
+  helper: string;
+}) {
+  return (
+    <div className="mt-2 rounded border border-dashed border-terminal-border/70 bg-terminal-cream/40 p-3">
+      <label className="mb-1 block font-mono text-xs uppercase tracking-wide text-terminal-muted">
+        {label}
+      </label>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+      />
+      <p className="mt-1 font-mono text-xs text-terminal-muted">
+        {helper}
+      </p>
+    </div>
+  );
+}
 
 const ANTIGRAVITY_MODELS = getAntigravityModels();
 const CODEX_MODELS = getCodexModels();
@@ -41,7 +88,7 @@ function ModelSelect({
   t,
 }: {
   label: string;
-  fieldKey: "chatModel" | "researchModel" | "visionModel" | "utilityModel";
+  fieldKey: ModelFieldKey;
   formState: FormState;
   updateField: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
   antigravityDefault: string;
@@ -56,6 +103,17 @@ function ModelSelect({
   helperKey: string;
   t: ReturnType<typeof useTranslations<"settings">>;
 }) {
+  const blackboxModelIds = useMemo(
+    () => new Set(BLACKBOX_MODELS.map((model) => model.id)),
+    [],
+  );
+  const blackboxSelectValue = getBlackBoxSelectValue(
+    formState[fieldKey] ?? "",
+    blackboxaiDefault,
+    blackboxModelIds,
+  );
+  const isBlackBoxManual = formState.llmProvider === "blackboxai" && blackboxSelectValue === "__manual__";
+
   return (
     <div>
       <label className="mb-1 block font-mono text-sm text-terminal-muted">{label}</label>
@@ -65,9 +123,7 @@ function ModelSelect({
           onChange={(e) => updateField(fieldKey, e.target.value)}
           className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
         >
-          {ANTIGRAVITY_MODELS.map((model) => (
-            <option key={model.id} value={model.id}>{model.name}</option>
-          ))}
+          {renderModelOptions(ANTIGRAVITY_MODELS)}
         </select>
       ) : formState.llmProvider === "codex" ? (
         <select
@@ -75,9 +131,7 @@ function ModelSelect({
           onChange={(e) => updateField(fieldKey, e.target.value)}
           className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
         >
-          {CODEX_MODELS.map((model) => (
-            <option key={model.id} value={model.id}>{model.name}</option>
-          ))}
+          {renderModelOptions(CODEX_MODELS)}
         </select>
       ) : formState.llmProvider === "claudecode" ? (
         <select
@@ -85,9 +139,7 @@ function ModelSelect({
           onChange={(e) => updateField(fieldKey, e.target.value)}
           className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
         >
-          {CLAUDECODE_MODELS.map((model) => (
-            <option key={model.id} value={model.id}>{model.name}</option>
-          ))}
+          {renderModelOptions(CLAUDECODE_MODELS)}
         </select>
       ) : formState.llmProvider === "kimi" ? (
         <select
@@ -95,9 +147,7 @@ function ModelSelect({
           onChange={(e) => updateField(fieldKey, e.target.value)}
           className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
         >
-          {KIMI_MODELS.map((model) => (
-            <option key={model.id} value={model.id}>{model.name}</option>
-          ))}
+          {renderModelOptions(KIMI_MODELS)}
         </select>
       ) : formState.llmProvider === "minimax" ? (
         <select
@@ -105,20 +155,36 @@ function ModelSelect({
           onChange={(e) => updateField(fieldKey, e.target.value)}
           className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
         >
-          {MINIMAX_MODELS.map((model) => (
-            <option key={model.id} value={model.id}>{model.name}</option>
-          ))}
+          {renderModelOptions(MINIMAX_MODELS)}
         </select>
       ) : formState.llmProvider === "blackboxai" ? (
-        <select
-          value={formState[fieldKey] || blackboxaiDefault}
-          onChange={(e) => updateField(fieldKey, e.target.value)}
-          className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
-        >
-          {BLACKBOX_MODELS.map((model) => (
-            <option key={model.id} value={model.id}>{model.name}</option>
-          ))}
-        </select>
+        <>
+          <select
+            value={blackboxSelectValue}
+            onChange={(e) => {
+              const nextValue = e.target.value;
+              if (nextValue === "__manual__") {
+                updateField(fieldKey, formState[fieldKey] || "");
+                return;
+              }
+              updateField(fieldKey, nextValue);
+            }}
+            className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+          >
+            {renderModelOptions(BLACKBOX_MODELS)}
+            <option value="__manual__">Manual model ID</option>
+          </select>
+          {isBlackBoxManual && (
+            <BlackBoxManualInput
+              value={formState[fieldKey] ?? ""}
+              onChange={(value) => updateField(fieldKey, value)}
+              label="Advanced BlackBox model ID"
+              placeholder={blackboxaiDefault}
+              helper="Enter any BlackBox AI model ID, even before the catalog is updated."
+            />
+          )}
+
+        </>
       ) : (
         <input
           type="text"
@@ -150,8 +216,6 @@ const PROVIDER_MODEL_SETS: Partial<Record<FormState["llmProvider"], Set<string>>
   minimax: new Set(MINIMAX_MODELS.map((m) => m.id)),
   blackboxai: new Set(BLACKBOX_MODELS.map((m) => m.id)),
 };
-
-const MODEL_FIELDS = ["chatModel", "researchModel", "visionModel", "utilityModel"] as const;
 
 export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
   const t = useTranslations("settings");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ModelBagItem } from "./model-bag-item";
 import type { ModelItem, ModelRole, LLMProvider } from "./model-bag.types";
 import { cn } from "@/lib/utils";
@@ -16,9 +16,33 @@ interface ModelBagGridProps {
   isSaving: boolean;
 }
 
+const MANUAL_MODEL_PROVIDERS: ReadonlySet<LLMProvider> = new Set(["openrouter", "ollama", "blackboxai"]);
+
+function isManualModelProvider(provider: LLMProvider): provider is "openrouter" | "ollama" | "blackboxai" {
+  return MANUAL_MODEL_PROVIDERS.has(provider);
+}
+
+function getManualModelPlaceholder(provider: LLMProvider): string {
+  switch (provider) {
+    case "blackboxai":
+      return "anthropic/claude-sonnet-4.6";
+    case "openrouter":
+      return "x-ai/grok-4.1-fast";
+    default:
+      return "llama3.1:8b";
+  }
+}
+
+function getManualModelHelper(
+  provider: LLMProvider,
+  t: ReturnType<typeof useTranslations<"modelBag">>,
+): string {
+  return provider === "blackboxai" ? t("manualBlackboxHint") : t("enterToAssign");
+}
+
 export function ModelBagGrid({
   models,
-  roleAssignments,
+  roleAssignments: _roleAssignments,
   onAssign,
   onHover,
   hoveredModel,
@@ -27,8 +51,13 @@ export function ModelBagGrid({
 }: ModelBagGridProps) {
   const t = useTranslations("modelBag");
   const [customModelInput, setCustomModelInput] = useState("");
+  const supportsManualInput = isManualModelProvider(activeProvider);
 
-  if (models.length === 0 && activeProvider !== "openrouter" && activeProvider !== "ollama") {
+  useEffect(() => {
+    setCustomModelInput("");
+  }, [activeProvider]);
+
+  if (models.length === 0 && !supportsManualInput) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-dashed border-terminal-border p-8">
         <p className="font-mono text-sm text-terminal-muted">
@@ -40,34 +69,27 @@ export function ModelBagGrid({
 
   return (
     <div className="space-y-2">
-      {/* OpenRouter / Ollama custom input */}
-      {(activeProvider === "openrouter" || activeProvider === "ollama") && (
+      {supportsManualInput && (
         <div className="flex items-center gap-2 rounded-lg border border-dashed border-terminal-border bg-white/30 p-2">
           <input
             type="text"
             value={customModelInput}
             onChange={(e) => setCustomModelInput(e.target.value)}
-            placeholder={
-              activeProvider === "openrouter"
-                ? "x-ai/grok-4.1-fast"
-                : "llama3.1:8b"
-            }
+            placeholder={getManualModelPlaceholder(activeProvider)}
             className="flex-1 rounded border border-terminal-border bg-white/50 px-2 py-1 font-mono text-xs text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none"
             onKeyDown={(e) => {
               if (e.key === "Enter" && customModelInput.trim()) {
-                // Assign to chat role by default
                 onAssign(customModelInput.trim(), "chat");
                 setCustomModelInput("");
               }
             }}
           />
           <span className="font-mono text-[9px] text-terminal-muted">
-            {t("enterToAssign")}
+            {getManualModelHelper(activeProvider, t)}
           </span>
         </div>
       )}
 
-      {/* Model grid */}
       {models.length > 0 && (
         <div
           className={cn(
