@@ -4,7 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, BotIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
-import { parseTextResult } from "./parse-text-result";
+import { parseTextResult, parseTextResultWithStatus } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -52,7 +52,7 @@ export const ClaudeAgentToolUI: ToolCallContentPartComponent = ({ args, result }
   const model = args?.model;
   const isRunning = result === undefined;
   const hasError = isErrorResult(result);
-  const content = parseTextResult(result);
+  const { text: content, statuses: xmlStatuses } = parseTextResultWithStatus(result);
 
   const StatusIcon = isRunning ? null : hasError ? XCircleIcon : CheckCircleIcon;
   const statusColor = isRunning

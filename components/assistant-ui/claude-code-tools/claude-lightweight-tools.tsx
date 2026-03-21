@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
-import { parseTextResult } from "./parse-text-result";
+import { parseTextResult, parseTextResultWithStatus } from "./parse-text-result";
 
 // Shared type
 type ToolCallContentPartComponent = FC<{
@@ -251,13 +251,24 @@ export const ClaudeSkillToolUI: ToolCallContentPartComponent = ({ args, result }
 export const ClaudeTaskOutputToolUI: ToolCallContentPartComponent = ({ args, result }) => {
   const taskId = typeof args?.task_id === "string" ? args.task_id : undefined;
   const isRunning = result === undefined;
-  const hasError = isErrorResult(result);
-  const content = parseTextResult(result);
+  const baseError = isErrorResult(result);
+  const { text: content, statuses } = parseTextResultWithStatus(result);
+
+  // Detect timeout/error statuses from XML tags (e.g., <retrieval_status>timeout</retrieval_status>)
+  const isTimeout = statuses.retrieval_status === "timeout";
+  const hasError = baseError || isTimeout;
+  const label = isRunning
+    ? "Reading task..."
+    : isTimeout
+      ? "Task timed out"
+      : hasError
+        ? "Task read failed"
+        : "Task output";
 
   return (
     <CompactToolCard
       icon={ClipboardListIcon}
-      label={isRunning ? "Reading task..." : hasError ? "Task read failed" : "Task output"}
+      label={label}
       detail={taskId ? `#${taskId.slice(0, 8)}` : undefined}
       isRunning={isRunning}
       hasError={hasError}

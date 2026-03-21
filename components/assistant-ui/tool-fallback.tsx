@@ -8,6 +8,7 @@ import { resilientFetch } from "@/lib/utils/resilient-fetch";
 import { getToolIcon } from "@/components/ui/tool-icon-map";
 import { getCanonicalToolName } from "./tool-name-utils";
 import { useToolExpansion } from "./tool-expansion-context";
+import { stripXmlStatusTags } from "./claude-code-tools/parse-text-result";
 // Define the tool call component type manually since it's no longer exported
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -738,8 +739,10 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
   }
 
   // Fallback for generic text/content results (e.g., MCP tools like take_snapshot)
-  const textContent = normalizedResult.text || (normalizedResult as { content?: string }).content;
-  if (textContent && typeof textContent === "string") {
+  const rawTextContent = normalizedResult.text || (normalizedResult as { content?: string }).content;
+  if (rawTextContent && typeof rawTextContent === "string") {
+    // Strip XML status tags (e.g., <retrieval_status>timeout</retrieval_status>)
+    const { cleanText: textContent } = stripXmlStatusTags(rawTextContent);
     // Truncate very long results for display (full result is still available to AI)
     const displayText = textContent.length > 2000
       ? textContent.substring(0, 2000) + `\n\n... [${textContent.length - 2000} more characters]`
