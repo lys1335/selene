@@ -93,7 +93,6 @@ export const Thread: FC<ThreadProps> = ({
     voiceActivationMode: "tap",
     voiceHotkey: "CommandOrControl+Shift+Space",
     screenCaptureEnabled: true,
-    screenCaptureShortcut: "CommandOrControl+Shift+S",
     quickCaptureEnabled: true,
     quickCaptureHotkey: "CommandOrControl+Shift+A",
     quickCaptureAutoSend: false,
@@ -119,7 +118,6 @@ export const Thread: FC<ThreadProps> = ({
         voiceActivationMode?: "tap" | "push";
         voiceHotkey?: string;
         screenCaptureEnabled?: boolean;
-        screenCaptureShortcut?: string;
         quickCaptureEnabled?: boolean;
         quickCaptureHotkey?: string;
         quickCaptureAutoSend?: boolean;
@@ -147,10 +145,6 @@ export const Thread: FC<ThreadProps> = ({
             ? data.voiceHotkey.trim()
             : "CommandOrControl+Shift+Space",
         screenCaptureEnabled: data.screenCaptureEnabled !== false,
-        screenCaptureShortcut:
-          typeof data.screenCaptureShortcut === "string" && data.screenCaptureShortcut.trim().length > 0
-            ? data.screenCaptureShortcut.trim()
-            : "CommandOrControl+Shift+S",
         quickCaptureEnabled: data.quickCaptureEnabled !== false,
         quickCaptureHotkey:
           typeof data.quickCaptureHotkey === "string" && data.quickCaptureHotkey.trim().length > 0
@@ -420,7 +414,6 @@ export const Thread: FC<ThreadProps> = ({
               voiceActivationMode={voiceUiSettings.voiceActivationMode}
               voiceHotkey={voiceUiSettings.voiceHotkey}
               screenCaptureEnabled={voiceUiSettings.screenCaptureEnabled}
-              screenCaptureShortcut={voiceUiSettings.screenCaptureShortcut}
               quickCaptureEnabled={voiceUiSettings.quickCaptureEnabled}
               quickCaptureHotkey={voiceUiSettings.quickCaptureHotkey}
               quickCaptureAutoSend={voiceUiSettings.quickCaptureAutoSend}

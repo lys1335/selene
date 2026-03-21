@@ -2,7 +2,7 @@ import { ipcMain, screen } from "electron";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { IpcHandlerContext } from "./ipc-handlers";
-import { captureDisplay } from "./screen-capture";
+import { captureDisplay, getScreenCapturePermissionStatus, type ScreenCapturePermissionStatus } from "./screen-capture";
 import { collectMetadata, type ScreenCaptureMetadata } from "./metadata-collector";
 import {
   registerUnifiedCaptureHotkey,
@@ -24,6 +24,8 @@ export interface UnifiedCaptureTriggerPayload {
   metadata?: ScreenCaptureMetadata;
   startVoice: boolean;
   screenshotError?: string;
+  /** Permission status at capture time — allows renderer to show actionable prompts. */
+  permissionStatus?: ScreenCapturePermissionStatus;
   traceId: string;
 }
 
@@ -101,6 +103,8 @@ async function executeUnifiedCapture(
         }),
       ]);
 
+      payload.permissionStatus = captureResult.permissionStatus;
+
       if (captureResult.success && captureResult.imageUrl) {
         payload.screenshot = {
           url: captureResult.imageUrl,
@@ -157,6 +161,26 @@ export function createUnifiedCaptureTrigger(ctx: IpcHandlerContext): () => void 
     if (overlay && !overlay.isDestroyed() && overlay.isVisible() && !overlay.webContents.isCrashed()) {
       // Overlay already showing — toggle recording
       overlay.webContents.send("overlay:toggle-recording");
+      return;
+    }
+
+    // Pre-check: if screen recording permission is missing, notify the
+    // renderer so it can show an actionable prompt instead of silently
+    // opening the overlay without a screenshot.
+    const permStatus = getScreenCapturePermissionStatus();
+    if (permStatus !== "granted" && permStatus !== "not-determined") {
+      const win = ctx.mainWindow();
+      if (win && !win.isDestroyed()) {
+        win.webContents.send("permission:screen-required");
+      }
+      // Still open overlay for voice, just without a screenshot
+      showOverlay({
+        baseUrl,
+        preloadPath: path.join(__dirname, "preload.js"),
+        screenshotUrl: undefined,
+      }).catch((err: unknown) => {
+        debugError("[UnifiedCapture] Failed to show mini overlay:", err);
+      });
       return;
     }
 

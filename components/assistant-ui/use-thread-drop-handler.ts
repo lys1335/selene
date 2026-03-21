@@ -452,14 +452,11 @@ export function useThreadDropHandler({
       );
 
       if (pluginItems.length > 0) {
-        if (!characterId || characterId === "default") {
-          toast.error(t("skillImportOverlay.selectAgentFirst"));
-          return;
-        }
-
-        const confirmInstall = window.confirm(
-          t("skillImportOverlay.confirmInstall", { name: characterName ?? "" })
-        );
+        const hasAgent = characterId && characterId !== "default";
+        const confirmMessage = hasAgent
+          ? t("skillImportOverlay.confirmInstall", { name: characterName ?? "" })
+          : t("skillImportOverlay.confirmStandaloneInstall");
+        const confirmInstall = window.confirm(confirmMessage);
         if (!confirmInstall) {
           return;
         }
@@ -497,7 +494,9 @@ export function useThreadDropHandler({
         let importTimedOut = false;
         try {
           const formData = new FormData();
-          formData.append("characterId", characterId);
+          if (hasAgent) {
+            formData.append("characterId", characterId);
+          }
 
           if (pluginItems.length === 1 && isDirectPluginFile(pluginItems[0].relativePath)) {
             const single = pluginItems[0];
@@ -582,24 +581,34 @@ export function useThreadDropHandler({
 
           const isLegacy = pluginResult.isLegacySkillFormat;
           const summary = parts.length > 0 ? ` (${parts.join(", ")})` : "";
+
+          // Determine the best action link for the success toast.
+          // Legacy skill imports link to the agent's skill page (only if we have a valid characterId).
+          // Workflow-creating installs link to the agent list.
+          // Everything else links to the plugins settings page.
+          let toastAction: { label: string; onClick: () => void };
+          if (isLegacy && hasAgent) {
+            toastAction = {
+              label: t("skillImportOverlay.viewSkills"),
+              onClick: () => router.push(`/agents/${characterId}/skills`),
+            };
+          } else if (pluginResult.workflow) {
+            toastAction = {
+              label: t("skillImportOverlay.viewWorkflow"),
+              onClick: () => router.push("/"),
+            };
+          } else {
+            toastAction = {
+              label: t("skillImportOverlay.viewPlugins"),
+              onClick: () => router.push("/settings?section=plugins"),
+            };
+          }
+
           toast.success(isLegacy ? t("skillImportOverlay.skillImported") : t("skillImportOverlay.pluginInstalled"), {
             description: isLegacy
               ? t("skillImportOverlay.readyToUse", { name: pluginResult.plugin?.name ?? "" })
               : `${pluginResult.plugin?.name}${summary}`,
-            action: isLegacy
-              ? {
-                  label: t("skillImportOverlay.viewSkills"),
-                  onClick: () => router.push(`/agents/${characterId}/skills`),
-                }
-              : pluginResult.workflow
-                ? {
-                    label: t("skillImportOverlay.viewWorkflow"),
-                    onClick: () => router.push("/"),
-                  }
-                : {
-                    label: t("skillImportOverlay.viewPlugins"),
-                    onClick: () => router.push("/settings?section=plugins"),
-                  },
+            action: toastAction,
           });
 
           if (pluginResult.warnings?.length > 0) {

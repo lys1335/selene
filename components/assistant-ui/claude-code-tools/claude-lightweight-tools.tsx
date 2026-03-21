@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
-import { parseTextResult } from "./parse-text-result";
+import { parseTextResult, parseTextResultWithStatus } from "./parse-text-result";
 
 // Shared type
 type ToolCallContentPartComponent = FC<{
@@ -78,11 +78,11 @@ function CompactToolCard({
   const statusColor = isRunning
     ? "text-terminal-muted"
     : hasError
-      ? "text-red-600"
-      : "text-emerald-600";
+      ? "text-red-600 dark:text-red-400"
+      : "text-emerald-600 dark:text-emerald-400";
 
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 font-mono text-xs overflow-hidden">
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
       <button
         type="button"
         onClick={() => hasExpandable && setExpanded(!expanded)}
@@ -109,7 +109,7 @@ function CompactToolCard({
       </button>
       {expanded && expandedContent && (
         <div className="border-t border-border px-3 py-2">
-          <pre className="rounded bg-terminal-dark/5 p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+          <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
             {expandedContent.length > 3000
               ? expandedContent.substring(0, 3000) + `\n\n... [${(expandedContent.length - 3000).toLocaleString()} more characters]`
               : expandedContent}
@@ -251,13 +251,24 @@ export const ClaudeSkillToolUI: ToolCallContentPartComponent = ({ args, result }
 export const ClaudeTaskOutputToolUI: ToolCallContentPartComponent = ({ args, result }) => {
   const taskId = typeof args?.task_id === "string" ? args.task_id : undefined;
   const isRunning = result === undefined;
-  const hasError = isErrorResult(result);
-  const content = parseTextResult(result);
+  const baseError = isErrorResult(result);
+  const { text: content, statuses } = parseTextResultWithStatus(result);
+
+  // Detect timeout/error statuses from XML tags (e.g., <retrieval_status>timeout</retrieval_status>)
+  const isTimeout = statuses.retrieval_status === "timeout";
+  const hasError = baseError || isTimeout;
+  const label = isRunning
+    ? "Reading task..."
+    : isTimeout
+      ? "Task timed out"
+      : hasError
+        ? "Task read failed"
+        : "Task output";
 
   return (
     <CompactToolCard
       icon={ClipboardListIcon}
-      label={isRunning ? "Reading task..." : hasError ? "Task read failed" : "Task output"}
+      label={label}
       detail={taskId ? `#${taskId.slice(0, 8)}` : undefined}
       isRunning={isRunning}
       hasError={hasError}

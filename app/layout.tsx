@@ -19,6 +19,7 @@ import { GlobalSyncWrapper } from "@/components/vector-search";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 import { TaskNotificationProvider } from "@/components/schedules/task-notification-provider";
 import { OverlaySessionNavigator } from "@/components/overlay-session-navigator";
+import { PermissionListener } from "@/components/permission-listener";
 import { loadSettings } from "@/lib/settings/settings-manager";
 
 const inter = Inter({
@@ -213,6 +214,7 @@ export default async function RootLayout({
                 <AuthProvider>
                   <TaskNotificationProvider>
                     <OverlaySessionNavigator />
+                    <PermissionListener />
                     {children}
                   </TaskNotificationProvider>
                 </AuthProvider>

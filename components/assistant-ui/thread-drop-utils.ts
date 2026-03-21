@@ -14,7 +14,6 @@ export interface VoiceUiSettings {
   voiceActivationMode: "tap" | "push";
   voiceHotkey: string;
   screenCaptureEnabled: boolean;
-  screenCaptureShortcut: string;
   quickCaptureEnabled: boolean;
   quickCaptureHotkey: string;
   quickCaptureAutoSend: boolean;

@@ -93,7 +93,6 @@ export const Composer: FC<{
   voiceActivationMode?: "tap" | "push";
   voiceHotkey?: string;
   screenCaptureEnabled?: boolean;
-  screenCaptureShortcut?: string;
   quickCaptureEnabled?: boolean;
   quickCaptureHotkey?: string;
   quickCaptureAutoSend?: boolean;
@@ -120,7 +119,6 @@ export const Composer: FC<{
   voiceActivationMode = "tap",
   voiceHotkey = "CommandOrControl+Shift+Space",
   screenCaptureEnabled = false,
-  screenCaptureShortcut = "CommandOrControl+Shift+S",
   quickCaptureEnabled = true,
   quickCaptureHotkey: _quickCaptureHotkey = "CommandOrControl+Shift+A",
   quickCaptureAutoSend = false,
@@ -403,7 +401,7 @@ export const Composer: FC<{
     [isEditorMode, threadRuntime]
   );
 
-  const { captureNow, isCapturing } = useScreenCapture({
+  useScreenCapture({
     enabled: isScreenCaptureAvailable,
     onCaptured: handleAttachCapturedScreen,
   });
@@ -1241,7 +1239,7 @@ export const Composer: FC<{
               ? t("queue.messagesInjected", { count: queuedMessages.length })
               : t("queue.messagesQueued", { count: queuedMessages.length })}
           </div>
-          {isBackgroundTaskRunning && (
+          {isBackgroundTaskRunning && !queuedMessages.every(m => m.status === "injected-live") && (
             <div className="text-[11px] text-terminal-muted/80 font-mono">{t("queue.backgroundHint")}</div>
           )}
           <div className="flex flex-wrap gap-1">
@@ -1446,12 +1444,6 @@ export const Composer: FC<{
                 onVoiceStop={handleVoiceStop}
                 inputHasText={tiptapRef.current?.hasContent() ?? false}
                 attachmentCount={attachmentCount}
-                screenCaptureEnabled={isScreenCaptureAvailable}
-                screenCaptureShortcut={screenCaptureShortcut}
-                onScreenCapture={() => {
-                  void captureNow();
-                }}
-                screenCaptureBusy={isCapturing}
                 showEnhanceButton={false}
                 isEnhancing={false}
                 enhancedContext={null}
@@ -1536,12 +1528,6 @@ export const Composer: FC<{
               onVoiceStop={handleVoiceStop}
               inputHasText={inputValue.trim().length > 2}
               attachmentCount={attachmentCount}
-              screenCaptureEnabled={isScreenCaptureAvailable}
-              screenCaptureShortcut={screenCaptureShortcut}
-              onScreenCapture={() => {
-                void captureNow();
-              }}
-              screenCaptureBusy={isCapturing}
               showEnhanceButton={!!(character?.id && character.id !== "default")}
               isEnhancing={isEnhancing}
               enhancedContext={enhancedContext}

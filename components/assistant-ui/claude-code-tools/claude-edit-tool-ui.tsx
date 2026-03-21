@@ -65,8 +65,8 @@ export const ClaudeEditToolUI: ToolCallContentPartComponent = ({ args, result })
   const statusColor = isRunning
     ? "text-terminal-muted"
     : hasError
-      ? "text-red-600"
-      : "text-emerald-600";
+      ? "text-red-600 dark:text-red-400"
+      : "text-emerald-600 dark:text-emerald-400";
 
   // Build diff from args
   const diffLines: string[] = [];
@@ -92,7 +92,7 @@ export const ClaudeEditToolUI: ToolCallContentPartComponent = ({ args, result })
   const removals = diffLines.filter(l => l.startsWith("- ")).length;
 
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 font-mono text-xs overflow-hidden">
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -106,9 +106,9 @@ export const ClaudeEditToolUI: ToolCallContentPartComponent = ({ args, result })
 
         {(additions > 0 || removals > 0) && (
           <span className="ml-auto shrink-0 text-terminal-muted">
-            {additions > 0 && <span className="text-emerald-600">+{additions}</span>}
+            {additions > 0 && <span className="text-emerald-600 dark:text-emerald-400">+{additions}</span>}
             {additions > 0 && removals > 0 && " "}
-            {removals > 0 && <span className="text-red-500">-{removals}</span>}
+            {removals > 0 && <span className="text-red-500 dark:text-red-400">-{removals}</span>}
           </span>
         )}
 
@@ -131,15 +131,16 @@ export const ClaudeEditToolUI: ToolCallContentPartComponent = ({ args, result })
 
           {diffLines.length > 0 && (
             <div className="space-y-2">
-              <div className="rounded bg-terminal-dark/5 p-2 overflow-x-auto">
-                <pre className="text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+              <div className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto">
+                <pre className="text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
                   {visibleDiffLines.map((line, i) => (
                     <span
                       key={i}
                       className={cn(
-                        "block",
-                        line.startsWith("+ ") && "text-emerald-700 bg-emerald-50/50",
-                        line.startsWith("- ") && "text-red-700 bg-red-50/50"
+                        "block rounded-sm px-1",
+                        line.startsWith("+ ") && "text-emerald-700 bg-emerald-100/60 border-l-2 border-emerald-500 dark:text-emerald-200 dark:bg-emerald-500/[0.15] dark:border-emerald-400",
+                        line.startsWith("- ") && "text-red-700 bg-red-100/60 border-l-2 border-red-500 dark:text-red-200 dark:bg-red-500/[0.15] dark:border-red-400",
+                        !line.startsWith("+ ") && !line.startsWith("- ") && "text-terminal-muted dark:text-terminal-muted/80"
                       )}
                     >
                       {line}
@@ -152,7 +153,7 @@ export const ClaudeEditToolUI: ToolCallContentPartComponent = ({ args, result })
                 <button
                   type="button"
                   onClick={() => setShowFullDiff(!showFullDiff)}
-                  className="text-[11px] text-blue-600 hover:text-blue-700 underline"
+                  className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
                 >
                   {showFullDiff ? "▲ Show less" : `▼ Show all (${diffLines.length} lines)`}
                 </button>

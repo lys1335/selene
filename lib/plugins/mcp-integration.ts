@@ -8,7 +8,7 @@
 
 import { MCPClientManager, resolveMCPConfig } from "@/lib/mcp/client-manager";
 import type { PluginMCPConfig, PluginMCPServerEntry } from "./types";
-import { getInstalledPlugins } from "./registry";
+import { getActivePluginMCPServers } from "./registry";
 
 /**
  * Connect MCP servers declared by a plugin.
@@ -78,27 +78,38 @@ export async function disconnectPluginMCPServers(
 }
 
 /**
- * Load and connect MCP servers from all active plugins for a user.
+ * Load and connect MCP servers from all active plugins.
+ * Uses the DB (plugin_mcp_servers) as source of truth so user-provided
+ * config overrides (e.g. URLs added via Settings) are respected.
  * Call on app startup or when switching agents.
  */
 export async function loadAllPluginMCPServers(
-  userId: string,
+  _userId: string,
   characterId?: string
 ): Promise<{ totalConnected: number; totalFailed: number }> {
-  const activePlugins = await getInstalledPlugins(userId, { status: "active" });
+  const rows = await getActivePluginMCPServers();
   let totalConnected = 0;
   let totalFailed = 0;
 
-  for (const plugin of activePlugins) {
-    if (plugin.components.mcpServers) {
-      const { connected, failed } = await connectPluginMCPServers(
-        plugin.name,
-        plugin.components.mcpServers,
-        characterId
-      );
-      totalConnected += connected.length;
-      totalFailed += failed.length;
+  // Group by plugin name for connectPluginMCPServers calls
+  const byPlugin = new Map<string, { config: PluginMCPConfig; cachePath?: string }>();
+  for (const row of rows) {
+    if (!byPlugin.has(row.pluginName)) {
+      byPlugin.set(row.pluginName, { config: {}, cachePath: row.cachePath || undefined });
     }
+    byPlugin.get(row.pluginName)!.config[row.serverName] =
+      row.config as unknown as PluginMCPServerEntry;
+  }
+
+  for (const [pluginName, { config, cachePath }] of byPlugin) {
+    const { connected, failed } = await connectPluginMCPServers(
+      pluginName,
+      config,
+      characterId,
+      cachePath
+    );
+    totalConnected += connected.length;
+    totalFailed += failed.length;
   }
 
   if (totalConnected > 0 || totalFailed > 0) {

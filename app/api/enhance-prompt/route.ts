@@ -116,7 +116,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           { runId: agentRun.id, sessionId, pipelineName: "enhance-prompt" },
           async () => {
             const llmOptions: LLMEnhancementOptions = {
-              timeoutMs: 45000, // 45s — search + LLM synthesis pipeline needs headroom
+              timeoutMs: 135000, // 135s — search + LLM synthesis pipeline needs headroom
               conversationContext,
               userId,
               sessionId,

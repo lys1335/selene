@@ -259,10 +259,20 @@ export function useBackgroundProcessing({
                     consecutiveErrorsRef.current += 1;
                     console.error("[Background Processing] Polling error:", error, `(${consecutiveErrorsRef.current}/${MAX_CONSECUTIVE_ERRORS})`);
 
-                    // Too many consecutive errors — run may have been deleted or server is unhealthy
+                    // Too many consecutive errors — likely a network outage.
+                    // Stop polling but keep processingRunId so the SSE reconnect
+                    // bridge can re-verify run state when connectivity returns.
+                    // Do NOT refreshMessages here — the server may still be
+                    // running the task and a premature refresh could cause a
+                    // ghost branch (stale DB snapshot pushed to thread while
+                    // the run is still mutating messages).
                     if (consecutiveErrorsRef.current >= MAX_CONSECUTIVE_ERRORS) {
-                        console.warn("[Background Processing] Too many consecutive polling errors — force-clearing");
-                        await clearTrackedRunState({ runId, refreshMessages: true });
+                        console.warn("[Background Processing] Too many consecutive polling errors — stopping polling, awaiting SSE reconnect to re-verify");
+                        if (pollingIntervalRef.current) {
+                            clearInterval(pollingIntervalRef.current);
+                            pollingIntervalRef.current = null;
+                        }
+                        activePollingRunIdRef.current = null;
                     }
                     return;
                 }
@@ -294,9 +304,15 @@ export function useBackgroundProcessing({
             } catch (error) {
                 consecutiveErrorsRef.current += 1;
                 console.error("[Background Processing] Polling error:", error, `(${consecutiveErrorsRef.current}/${MAX_CONSECUTIVE_ERRORS})`);
+                // Same as above: stop polling on persistent errors but keep
+                // processingRunId for SSE reconnect re-verification.
                 if (consecutiveErrorsRef.current >= MAX_CONSECUTIVE_ERRORS) {
-                    console.warn("[Background Processing] Too many consecutive exceptions — force-clearing");
-                    await clearTrackedRunState({ runId });
+                    console.warn("[Background Processing] Too many consecutive exceptions — stopping polling, awaiting reconnect");
+                    if (pollingIntervalRef.current) {
+                        clearInterval(pollingIntervalRef.current);
+                        pollingIntervalRef.current = null;
+                    }
+                    activePollingRunIdRef.current = null;
                 }
             }
         };

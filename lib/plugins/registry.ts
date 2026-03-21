@@ -5,7 +5,7 @@
  * with proper DB persistence and hook/MCP lifecycle management.
  */
 
-import { and, eq, desc, or, isNull } from "drizzle-orm";
+import { and, eq, desc, or, isNull, isNotNull } from "drizzle-orm";
 import { mkdir, writeFile, chmod } from "fs/promises";
 import path from "path";
 import { db } from "@/lib/db/sqlite-client";
@@ -315,6 +315,81 @@ export async function getPluginByName(
 }
 
 // =============================================================================
+// Plugin MCP Server Queries
+// =============================================================================
+
+/**
+ * Get all MCP servers from active plugins.
+ * Used by the MCP Settings UI to show plugin-provided servers alongside user-configured ones.
+ */
+export async function getActivePluginMCPServers(): Promise<
+  Array<{
+    serverName: string;
+    config: Record<string, unknown>;
+    pluginId: string;
+    pluginName: string;
+    pluginVersion: string;
+    cachePath: string | null;
+  }>
+> {
+  const rows = await db
+    .select({
+      serverName: pluginMcpServers.serverName,
+      config: pluginMcpServers.config,
+      pluginId: plugins.id,
+      pluginName: plugins.name,
+      pluginVersion: plugins.version,
+      cachePath: plugins.cachePath,
+    })
+    .from(pluginMcpServers)
+    .innerJoin(plugins, eq(pluginMcpServers.pluginId, plugins.id))
+    .where(eq(plugins.status, "active"));
+
+  return rows as Array<{
+    serverName: string;
+    config: Record<string, unknown>;
+    pluginId: string;
+    pluginName: string;
+    pluginVersion: string;
+    cachePath: string | null;
+  }>;
+}
+
+/**
+ * Update a plugin MCP server's config by merging a partial config patch.
+ * Used to let users provide missing fields (e.g. URL for SSE servers).
+ * Merges shallowly — only specified keys are overwritten, preserving type/headers/env.
+ */
+export async function updatePluginMCPServerConfig(
+  pluginId: string,
+  serverName: string,
+  configPatch: Record<string, unknown>
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: pluginMcpServers.id, config: pluginMcpServers.config })
+    .from(pluginMcpServers)
+    .where(
+      and(
+        eq(pluginMcpServers.pluginId, pluginId),
+        eq(pluginMcpServers.serverName, serverName)
+      )
+    )
+    .limit(1);
+
+  if (rows.length === 0) return false;
+
+  const existing = (rows[0].config as Record<string, unknown>) || {};
+  const merged = { ...existing, ...configPatch };
+
+  await db
+    .update(pluginMcpServers)
+    .set({ config: merged })
+    .where(eq(pluginMcpServers.id, rows[0].id));
+
+  return true;
+}
+
+// =============================================================================
 // Plugin Update / Uninstall
 // =============================================================================
 
@@ -492,7 +567,11 @@ export interface AgentPluginAssignment {
 
 /**
  * Get all available plugins for assignment to an agent.
- * Includes global plugins and character-scoped plugins for this character.
+ * Includes:
+ *  - Null-scoped plugins (available to all agents)
+ *  - Character-scoped plugins matching this character
+ *  - Plugins with an explicit agent_plugins assignment for this agent
+ *    (handles sub-agents that inherit plugins via enablePluginForAgent)
  */
 export async function getAvailablePluginsForAgent(
   userId: string,
@@ -526,9 +605,15 @@ export async function getAvailablePluginsForAgent(
       and(
         eq(plugins.userId, userId),
         eq(plugins.status, "active"),
-        characterId
-          ? or(isNull(plugins.characterId), eq(plugins.characterId, characterId))
-          : isNull(plugins.characterId)
+        or(
+          // Null-scoped plugins (self-contained plugins with own agents)
+          isNull(plugins.characterId),
+          // Character-scoped plugins for this specific agent
+          ...(characterId ? [eq(plugins.characterId, characterId)] : []),
+          // Plugins explicitly assigned to this agent via agent_plugins
+          // (covers sub-agents inheriting from parent-scoped plugins)
+          isNotNull(agentPlugins.enabled)
+        )
       )
     )
     .orderBy(desc(plugins.installedAt));

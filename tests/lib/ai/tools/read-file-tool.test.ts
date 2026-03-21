@@ -64,7 +64,7 @@ describe("readFile Tool", () => {
     expect(result.totalLines).toBe(3);
   });
 
-  it("should reject binary files", async () => {
+  it("should soft-redirect binary files", async () => {
     const tool = createReadFileTool({ sessionId: mockSessionId, characterId: mockCharacterId, userId: mockUserId });
 
     // Mock binary file check (return null byte)
@@ -78,8 +78,12 @@ describe("readFile Tool", () => {
 
     const result = await tool.execute({ filePath: "binary.bin" });
 
-    expect(result.status).toBe("error");
-    expect(result.error).toContain("appears to be binary");
+    // Binary files now return a soft (non-error) redirect so the UI
+    // doesn't show an error icon. The model is told to use the Read tool instead.
+    expect(result.status).toBe("success");
+    expect(result.isBinary).toBe(true);
+    expect(result.text).toContain("binary file");
+    expect(result.text).toContain("Read tool");
   });
 
   it("should support 'head' parameter", async () => {

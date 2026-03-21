@@ -13,7 +13,6 @@ import {
   Loader2Icon,
   CircleStopIcon,
   MicIcon,
-  MonitorIcon,
   PenLineIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -48,10 +47,6 @@ interface ComposerActionBarProps {
   // Attachment / send
   inputHasText: boolean;
   attachmentCount: number;
-  screenCaptureEnabled?: boolean;
-  screenCaptureShortcut?: string;
-  onScreenCapture?: () => void;
-  screenCaptureBusy?: boolean;
   // Enhance
   showEnhanceButton: boolean;
   isEnhancing: boolean;
@@ -86,10 +81,6 @@ export const ComposerActionBar: FC<ComposerActionBarProps> = ({
   onVoiceStop,
   inputHasText,
   attachmentCount,
-  screenCaptureEnabled = false,
-  screenCaptureShortcut,
-  onScreenCapture,
-  screenCaptureBusy = false,
   showEnhanceButton,
   isEnhancing,
   enhancedContext,
@@ -226,31 +217,6 @@ export const ComposerActionBar: FC<ComposerActionBarProps> = ({
         </TooltipContent>
       </Tooltip>
 
-      {screenCaptureEnabled && onScreenCapture && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={onScreenCapture}
-              disabled={isDeepResearchMode || screenCaptureBusy}
-              className="size-8 text-terminal-muted hover:text-terminal-dark hover:bg-terminal-dark/10"
-            >
-              {screenCaptureBusy ? (
-                <Loader2Icon className="size-4 animate-spin" />
-              ) : (
-                <MonitorIcon className="size-4" />
-              )}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent className="bg-terminal-dark text-terminal-cream font-mono text-xs">
-            {screenCaptureShortcut
-              ? t("tooltips.captureScreenShortcut", { shortcut: screenCaptureShortcut })
-              : t("tooltips.captureScreen")}
-          </TooltipContent>
-        </Tooltip>
-      )}
 
       {onToggleEditorMode && (
         <Tooltip>

@@ -57,10 +57,12 @@ interface ReadFileResult {
   content?: string;
   truncated?: boolean;
   message?: string;
+  text?: string;
   error?: string;
   source?: "synced_folder" | "knowledge_base";
   documentTitle?: string;
   allowedFolders?: string[];
+  isBinary?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -352,23 +354,31 @@ export function createReadFileTool(options: ReadFileToolOptions) {
       const validPath = await isPathAllowed(filePath, syncedFolders);
       if (!validPath) {
         const suggestions = await findSimilarFiles(characterId, filePath);
-        const suggestionText = suggestions.length > 0
-          ? ` Did you mean: ${suggestions.map(s => `"${s}"`).join(", ")}?`
-          : "";
-
+        // Keep hard error when suggestions exist (likely a typo the model can fix).
+        // Use soft redirect when no suggestions — the file is simply outside synced
+        // folders and the model should use its built-in Read tool instead.
+        if (suggestions.length > 0) {
+          const suggestionText = ` Did you mean: ${suggestions.map(s => `"${s}"`).join(", ")}?`;
+          return {
+            status: "error",
+            error: `File not found in Knowledge Base or synced folders.${suggestionText}`,
+            allowedFolders: syncedFolders,
+          };
+        }
         return {
-          status: "error",
-          error: `File not found in Knowledge Base or synced folders.${suggestionText}`,
-          allowedFolders: syncedFolders,
+          status: "success",
+          text: `File not found in Knowledge Base or synced folders. Use the Read tool to read files from the filesystem directly.`,
         };
       }
 
-      // Binary Check
+      // Binary Check — soft redirect so the UI doesn't show an error icon.
+      // The model will retry with its built-in Read tool which handles images.
       if (await isBinaryFile(validPath)) {
         return {
-          status: "error",
-          error: `File "${basename(validPath)}" appears to be binary. Reading binary files is not supported to prevent context window pollution.`,
+          status: "success",
+          text: `File "${basename(validPath)}" is a binary file (image, compiled, etc). The readFile tool only supports text files. Use the Read tool to read binary/image files from the filesystem.`,
           filePath: validPath,
+          isBinary: true,
         };
       }
 

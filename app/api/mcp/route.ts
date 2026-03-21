@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadSettings, saveSettings } from "@/lib/settings/settings-manager";
 import { MCPClientManager } from "@/lib/mcp/client-manager";
 import { ToolRegistry } from "@/lib/ai/tool-registry/registry";
+import { getActivePluginMCPServers, updatePluginMCPServerConfig } from "@/lib/plugins/registry";
 import type { MCPConfig, MCPServerConfig } from "@/lib/mcp/types";
 
 /**
@@ -18,11 +19,11 @@ export async function GET() {
     try {
         const settings = loadSettings();
         const manager = MCPClientManager.getInstance();
-        
+
         // Mask headers in server configs
         const mcpServers = settings.mcpServers?.mcpServers || {};
         const maskedServers: Record<string, MCPServerConfig> = {};
-        
+
         for (const [name, config] of Object.entries(mcpServers)) {
             maskedServers[name] = {
                 ...config,
@@ -30,10 +31,64 @@ export async function GET() {
             };
         }
 
+        // Gather plugin-declared MCP servers with connection status
+        const allStatus = manager.getAllStatus();
+        const statusByName = new Map(allStatus.map(s => [s.serverName, s]));
+
+        let pluginServers: Array<{
+            namespacedName: string;
+            serverName: string;
+            pluginName: string;
+            pluginId: string;
+            pluginVersion: string;
+            connected: boolean;
+            toolCount: number;
+            tools: string[];
+            lastError?: string;
+            config: Record<string, unknown>;
+            incomplete?: boolean;
+            incompleteReason?: string;
+        }> = [];
+
+        try {
+            const pluginMcpRows = await getActivePluginMCPServers();
+            pluginServers = pluginMcpRows.map(row => {
+                const namespacedName = `plugin:${row.pluginName}:${row.serverName}`;
+                const status = statusByName.get(namespacedName);
+                const cfg = row.config as { command?: string; url?: string; type?: string };
+
+                // Detect incomplete configs: SSE/HTTP transport without a URL
+                const transportType = cfg.command ? "stdio" : (cfg.type || "sse");
+                const needsUrl = transportType === "sse" || transportType === "http";
+                const incomplete = needsUrl && !cfg.url;
+
+                return {
+                    namespacedName,
+                    serverName: row.serverName,
+                    pluginName: row.pluginName,
+                    pluginId: row.pluginId,
+                    pluginVersion: row.pluginVersion,
+                    connected: status?.connected ?? false,
+                    toolCount: status?.toolCount ?? 0,
+                    tools: status?.tools ?? [],
+                    lastError: incomplete ? undefined : status?.lastError,
+                    config: row.config,
+                    incomplete: incomplete || undefined,
+                    incompleteReason: incomplete
+                        ? `This server uses ${transportType} transport but has no URL configured.`
+                        : undefined,
+                };
+            });
+        } catch (error) {
+            // Non-critical — settings page still works without plugin server data
+            console.warn("[MCP API] Failed to load plugin MCP servers:", error);
+        }
+
         return NextResponse.json({
             config: { mcpServers: maskedServers },
             environment: maskEnvironment(settings.mcpEnvironment || {}),
-            status: manager.getAllStatus(),
+            status: allStatus,
+            pluginServers,
         });
     } catch (error) {
         console.error("[MCP API] Error:", error);
@@ -136,6 +191,69 @@ export async function PUT(request: NextRequest) {
     } catch (error) {
         console.error("[MCP API] Error:", error);
         return NextResponse.json({ error: "Failed to save MCP config" }, { status: 500 });
+    }
+}
+
+/**
+ * PATCH /api/mcp
+ * Update a plugin MCP server's config (e.g. add a missing URL for SSE servers).
+ * Body: { pluginId: string; serverName: string; url: string }
+ */
+export async function PATCH(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const { pluginId, serverName, url } = body as {
+            pluginId?: string;
+            serverName?: string;
+            url?: string;
+        };
+
+        if (!pluginId || !serverName) {
+            return NextResponse.json(
+                { error: "pluginId and serverName are required" },
+                { status: 400 }
+            );
+        }
+
+        if (!url || !url.trim()) {
+            return NextResponse.json(
+                { error: "url is required" },
+                { status: 400 }
+            );
+        }
+
+        // Validate URL format and protocol
+        try {
+            const parsed = new URL(url);
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+                return NextResponse.json(
+                    { error: "Only http and https URLs are supported" },
+                    { status: 400 }
+                );
+            }
+        } catch {
+            return NextResponse.json(
+                { error: "Invalid URL format. Provide a full URL (e.g. https://example.com/sse)" },
+                { status: 400 }
+            );
+        }
+
+        const updated = await updatePluginMCPServerConfig(pluginId, serverName, { url });
+
+        if (!updated) {
+            return NextResponse.json(
+                { error: "Plugin MCP server not found" },
+                { status: 404 }
+            );
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error("[MCP API] PATCH error:", error);
+        return NextResponse.json(
+            { error: "Failed to update plugin server config" },
+            { status: 500 }
+        );
     }
 }
 

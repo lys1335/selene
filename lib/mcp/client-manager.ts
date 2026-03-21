@@ -161,7 +161,10 @@ class MCPClientManager {
             } else {
                 // HTTP/SSE transport
                 if (!config.url) {
-                    throw new Error("HTTP/SSE transport requires 'url' to be specified");
+                    throw new Error(
+                        `MCP server "${serverName}" uses ${config.type || "sse"} transport but has no URL configured. ` +
+                        `Add a URL to this server's configuration to connect.`
+                    );
                 }
 
                 console.log(`[MCP] Connecting to SSE endpoint: ${config.url}`);

@@ -43,9 +43,9 @@ const ACTION_ICONS = {
 } as const;
 
 const ACTION_COLORS = {
-  update: "text-blue-600",
-  create: "text-emerald-600",
-  delete: "text-red-600",
+  update: "text-blue-600 dark:text-blue-400",
+  create: "text-emerald-600 dark:text-emerald-400",
+  delete: "text-red-600 dark:text-red-400",
 } as const;
 
 export const PatchFileToolUI: ToolCallContentPartComponent = ({
@@ -79,13 +79,13 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
   const statusColor = !result
     ? "text-terminal-muted"
     : result.status === "success"
-      ? "text-emerald-600"
+      ? "text-emerald-600 dark:text-emerald-400"
       : result.status === "partial"
-        ? "text-amber-600"
-        : "text-red-600";
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-red-600 dark:text-red-400";
 
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 font-mono text-xs overflow-hidden">
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
       {/* Header */}
       <button
         type="button"
@@ -94,7 +94,7 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
       >
         <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", statusColor)} />
         <span className="text-terminal-muted">{t("patchLabel")}</span>
-        <span className="font-medium text-terminal-dark">
+        <span className="font-medium text-terminal-dark dark:text-terminal-dark/90">
           {t("fileCount", { count: opCount })}
         </span>
 
@@ -136,27 +136,39 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
               <div key={i} className="py-0.5">
                 <div className="flex items-center gap-2">
                   <Icon className={cn("h-3 w-3 shrink-0", color)} />
-                  <span className="truncate text-terminal-dark" title={op.filePath}>
+                  <span className="truncate text-terminal-dark dark:text-terminal-dark/90" title={op.filePath}>
                     {fileName}
                   </span>
                   <span className={cn("text-[11px] shrink-0", color)}>{action}</span>
                   {success === true && (
-                    <CheckCircleIcon className="h-3 w-3 shrink-0 text-emerald-600 ml-auto" />
+                    <CheckCircleIcon className="h-3 w-3 shrink-0 text-emerald-600 dark:text-emerald-400 ml-auto" />
                   )}
                   {success === false && (
-                    <XCircleIcon className="h-3 w-3 shrink-0 text-red-600 ml-auto" />
+                    <XCircleIcon className="h-3 w-3 shrink-0 text-red-600 dark:text-red-400 ml-auto" />
                   )}
                 </div>
                 {/* Show full error message on separate line */}
                 {success === false && error && (
-                  <div className="text-[11px] text-red-600 mt-0.5 ml-5 whitespace-pre-wrap break-words">
+                  <div className="text-[11px] text-red-600 dark:text-red-400 mt-0.5 ml-5 whitespace-pre-wrap break-words">
                     {error}
                   </div>
                 )}
                 {diff && (
-                  <div className="rounded bg-terminal-dark/5 p-2 mt-1 ml-5">
-                    <pre className="text-[11px] text-terminal-dark whitespace-pre-wrap break-all">
-                      {visibleDiff}
+                  <div className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 mt-1 ml-5">
+                    <pre className="text-[11px] text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all">
+                      {(isDiffTruncated && !isDiffExpanded ? diffLines.slice(0, maxDiffLines) : diffLines).map((line, j) => (
+                        <span
+                          key={j}
+                          className={cn(
+                            "block rounded-sm px-1",
+                            line.startsWith("+ ") && "text-emerald-700 bg-emerald-100/60 border-l-2 border-emerald-500 dark:text-emerald-200 dark:bg-emerald-500/[0.15] dark:border-emerald-400",
+                            line.startsWith("- ") && "text-red-700 bg-red-100/60 border-l-2 border-red-500 dark:text-red-200 dark:bg-red-500/[0.15] dark:border-red-400",
+                            !line.startsWith("+ ") && !line.startsWith("- ") && "text-terminal-muted dark:text-terminal-muted/80"
+                          )}
+                        >
+                          {line}
+                        </span>
+                      ))}
                     </pre>
                     {isDiffTruncated && (
                       <button
@@ -164,7 +176,7 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
                         onClick={() =>
                           setShowFullDiff((prev) => ({ ...prev, [i]: !prev[i] }))
                         }
-                        className="text-[11px] text-blue-600 hover:text-blue-700 underline mt-1"
+                        className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline mt-1"
                       >
                         {isDiffExpanded
                           ? t("showLess")
@@ -217,7 +229,7 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
             ].join('\n');
             
             return (
-              <div key={i} className="rounded bg-terminal-dark/5 p-2 mt-1 space-y-2">
+              <div key={i} className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 mt-1 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="text-[11px] text-terminal-muted">
                     {t("diagnostics", { tool })}
@@ -225,34 +237,34 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
                   {hasMultipleIssues && (
                     <div className="text-[11px] flex gap-2">
                       {errors > 0 && (
-                        <span className="text-red-600 font-medium">
+                        <span className="text-red-600 dark:text-red-400 font-medium">
                           {t("errors", { count: errors })}
                         </span>
                       )}
                       {warnings > 0 && (
-                        <span className="text-amber-600 font-medium">
+                        <span className="text-amber-600 dark:text-amber-400 font-medium">
                           {t("warnings", { count: warnings })}
                         </span>
                       )}
                     </div>
                   )}
                 </div>
-                
+
                 <div className="relative">
-                  <pre 
+                  <pre
                     className={cn(
-                      "text-[11px] text-terminal-dark whitespace-pre-wrap break-all overflow-y-auto",
+                      "text-[11px] text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all overflow-y-auto",
                       isExpanded ? "max-h-none" : "max-h-[300px]"
                     )}
                   >
                     {sortedOutput}
                   </pre>
-                  
+
                   {outputLines.length > 20 && (
                     <button
                       type="button"
                       onClick={() => setShowFullDiagnostics(prev => ({ ...prev, [i]: !prev[i] }))}
-                      className="text-[11px] text-blue-600 hover:text-blue-700 underline mt-1"
+                      className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline mt-1"
                     >
                       {isExpanded ? t("showLess") : t("showAll", { count: outputLines.length })}
                     </button>

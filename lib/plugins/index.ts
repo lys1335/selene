@@ -30,6 +30,8 @@ export {
   getInstalledPlugins,
   getPluginById,
   getPluginByName,
+  getActivePluginMCPServers,
+  updatePluginMCPServerConfig,
   updatePluginStatus,
   uninstallPlugin,
   addMarketplace,

@@ -1108,16 +1108,32 @@ export default function ChatInterface({
     }, [bg.processingRunId, reloadSessionMessages, sessionId, bg.startPollingForCompletion]);
 
     // ── SSE reconnect bridge: re-check when task store reconciles ──
+    // Always verify active-run state after reconnect, even if processingRunId
+    // is already set. The tracked run may have completed on the server while
+    // we were disconnected, and polling may have stopped (consecutive errors).
+    // checkActiveRunRef.current() handles both cases:
+    //  - run still active → re-arms polling (idempotent via isSameTrackedRun)
+    //  - run completed    → clears stale UI via clearTerminalRunUi
+    const reconnectCheckDebounceRef = useRef<NodeJS.Timeout | null>(null);
     useEffect(() => {
         if (typeof window === "undefined" || !sessionId) return;
         const handleReconciled = () => {
-            if (!bg.processingRunId) {
+            // Debounce to coalesce rapid reconnects (e.g. SSE flapping)
+            if (reconnectCheckDebounceRef.current) clearTimeout(reconnectCheckDebounceRef.current);
+            reconnectCheckDebounceRef.current = setTimeout(() => {
+                reconnectCheckDebounceRef.current = null;
                 void checkActiveRunRef.current();
-            }
+            }, 300);
         };
         window.addEventListener("sse-tasks-reconciled", handleReconciled);
-        return () => window.removeEventListener("sse-tasks-reconciled", handleReconciled);
-    }, [sessionId, bg.processingRunId]);
+        return () => {
+            window.removeEventListener("sse-tasks-reconciled", handleReconciled);
+            if (reconnectCheckDebounceRef.current) {
+                clearTimeout(reconnectCheckDebounceRef.current);
+                reconnectCheckDebounceRef.current = null;
+            }
+        };
+    }, [sessionId]);
 
     // ── Zustand task store bridge: catch tasks that arrived via SSE ──
     // If the unified store has a running task for this session but we don't

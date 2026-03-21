@@ -351,43 +351,41 @@ export async function POST(request: NextRequest) {
       initiatorMetadata = (initiator.metadata as Record<string, unknown> | null) ?? null;
     }
 
-    if (parsed.components.agents.length > 0 && !characterId) {
-      return NextResponse.json(
-        {
-          error:
-            "This plugin defines agents. Select an existing main agent before installing so sub-agents can be assigned to a workflow.",
-        },
-        { status: 400 }
-      );
-    }
+    // When the plugin ships its own agents, install the plugin row without
+    // character-scoping (characterId = null). This ensures sub-agents created
+    // by the plugin can see the plugin via the `IS NULL` path in
+    // getAvailablePluginsForAgent, and hooks/MCP resolve correctly for every
+    // agent in the workflow — not just the initiator.
+    const pluginCharacterId = parsed.components.agents.length > 0
+      ? undefined                       // self-contained → null-scoped
+      : (characterId || undefined);     // legacy → scope to selected agent
 
     const plugin = await installPlugin({
       userId: dbUser.id,
-      characterId: characterId || undefined,
+      characterId: pluginCharacterId,
       parsed,
       scope,
       marketplaceName: marketplaceName || undefined,
     });
 
-    // Auto-enable the plugin for the installing agent.
+    // Auto-enable the plugin for the installing agent (when one was selected).
     // With `enabledForAgent` defaulting to false for unassigned plugins,
     // we must explicitly create the assignment so the plugin is active.
     if (characterId) {
       await enablePluginForAgent(characterId, plugin.id);
     }
 
-    // Link auxiliary files (references, scripts, etc.) to the agent's workspace
-    const workspaceLink: WorkspaceLinkResult = characterId
-      ? await linkPluginAuxiliaryFilesToWorkspace(plugin, parsed).catch(
-          (err) => {
-            console.warn(
-              `[PluginImport:${requestId}] Failed to link auxiliary files (non-fatal):`,
-              err,
-            );
-            return { linkedPath: null, auxiliaryFileCount: 0, workspaceRegistered: false };
-          },
-        )
-      : { linkedPath: null, auxiliaryFileCount: 0, workspaceRegistered: false };
+    // Link auxiliary files (references, scripts, etc.) to the workspace.
+    // Always attempt this — auxiliary files are useful even for standalone installs.
+    const workspaceLink: WorkspaceLinkResult = await linkPluginAuxiliaryFilesToWorkspace(plugin, parsed).catch(
+      (err) => {
+        console.warn(
+          `[PluginImport:${requestId}] Failed to link auxiliary files (non-fatal):`,
+          err,
+        );
+        return { linkedPath: null, auxiliaryFileCount: 0, workspaceRegistered: false };
+      },
+    );
 
     const inheritedConfig = buildInheritedConfig(initiatorMetadata);
 

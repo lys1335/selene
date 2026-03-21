@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { getElectronAPI, type UnifiedCaptureTriggerPayload, UNIFIED_CAPTURE_DEBOUNCE_MARKER } from "@/lib/electron/types";
 import { optimizeScreenshot } from "@/lib/voice-screen/image-optimization";
+import { showPermissionToast } from "@/lib/electron/permission-toast";
 
 /**
  * Hook that listens for unified capture events from the Electron main process.
@@ -97,7 +98,9 @@ export function useUnifiedCapture(options: {
               toast.error(message);
             }
           } else if (payload.screenshotError) {
-            if (!payload.screenshotError?.includes(UNIFIED_CAPTURE_DEBOUNCE_MARKER)) {
+            if (payload.permissionStatus === "denied" || payload.permissionStatus === "restricted") {
+              showPermissionToast("screen");
+            } else if (!payload.screenshotError?.includes(UNIFIED_CAPTURE_DEBOUNCE_MARKER)) {
               toast.warning(payload.screenshotError);
             }
           } else if (isDeepResearchMode && payload.screenshot) {

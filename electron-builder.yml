@@ -140,7 +140,7 @@ extraResources:
 asar: true
 compression: "normal"
 
-afterSign: "scripts/notarize.js"
+# afterSign: "scripts/notarize.js"  # temporarily disabled
 
 # Disable npm rebuild - we handle this in electron:rebuild-standalone
 npmRebuild: false
@@ -148,6 +148,7 @@ npmRebuild: false
 # macOS specific configuration
 mac:
   category: "public.app-category.entertainment"
+  identity: null  # temporarily disable signing
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: "build-resources/entitlements.mac.plist"
@@ -159,6 +160,7 @@ mac:
   extendInfo:
     NSCameraUsageDescription: "This app requires access to your camera for image capture."
     NSMicrophoneUsageDescription: "This app requires access to your microphone for audio capture."
+    NSScreenCaptureUsageDescription: "Selene captures your screen to attach screenshots to conversations."
     NSUserNotificationAlertStyle: "alert"
 
 # Windows specific configuration

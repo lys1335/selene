@@ -303,6 +303,13 @@ const electronAPI = {
     requestAccessibility: (): Promise<boolean> => {
       return ipcRenderer.invoke("permission:request-accessibility");
     },
+    onScreenPermissionRequired: (callback: () => void): (() => void) | undefined => {
+      const handler = () => callback();
+      ipcRenderer.on("permission:screen-required", handler);
+      return () => {
+        ipcRenderer.removeListener("permission:screen-required", handler);
+      };
+    },
   },
 
   // ComfyUI local backend operations
@@ -563,13 +570,13 @@ const electronAPI = {
     },
     on: (channel: string, callback: (...args: unknown[]) => void): void => {
       // Whitelist of allowed channels
-      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:toggle-recording", "overlay:session-updated", "overlay:compose-inject", "overlay:add-screenshot"];
+      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:toggle-recording", "overlay:session-updated", "overlay:compose-inject", "overlay:add-screenshot", "permission:screen-required"];
       if (validChannels.includes(channel)) {
         ipcRenderer.on(channel, (_event, ...args) => callback(...args));
       }
     },
     removeAllListeners: (channel: string): void => {
-      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:toggle-recording", "overlay:session-updated", "overlay:compose-inject", "overlay:add-screenshot"];
+      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:toggle-recording", "overlay:session-updated", "overlay:compose-inject", "overlay:add-screenshot", "permission:screen-required"];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeAllListeners(channel);
       }

@@ -592,6 +592,7 @@
         "agentProviderFallback": "bu ajanın {provider} sağlayıcı zinciri",
         "globalFallback": "{provider} için global/sağlayıcı fallback zinciri",
         "customModel": "özel model",
+        "manualOption": "Manuel model ID",
         "roles": {
           "chat": {
             "label": "Ana sohbet modeli",
@@ -1005,9 +1006,7 @@
       "voiceInput": "Sesle yaz",
       "voiceInputHold": "Kaydetmek için basılı tut",
       "stopVoiceInput": "Kaydı durdur",
-      "transcribingAudio": "Ses yazıya dönüştürülüyor...",
-      "captureScreen": "Ekran goruntusu al",
-      "captureScreenShortcut": "Ekran goruntusu al ({shortcut})"
+      "transcribingAudio": "Ses yazıya dönüştürülüyor..."
     },
     "prevBranch": "Önceki dal",
     "nextBranch": "Sonraki dal",
@@ -1136,6 +1135,7 @@
       "skillResults": "{count, plural, one {# sonuç} other {# sonuç}}",
       "selectAgentFirst": "Becerileri içe aktarmadan önce lütfen bir ajan seçin",
       "confirmInstall": "Bu eklenti paketini \"{name}\" için yükleyip keşfedilen alt ajanları bu iş akışına ekleyecek misiniz?",
+      "confirmStandaloneInstall": "Bu eklenti paketini yükle? Eklenti tarafından oluşturulan ajanlar kendi iş akışlarını oluşturacak.",
       "skillImported": "Beceri başarıyla içe aktarıldı",
       "pluginInstalled": "Eklenti yüklendi",
       "viewSkills": "Becerilere Git",
@@ -2735,6 +2735,14 @@
       "addCustomServer": "Özel sunucu ekle",
       "cancelAdd": "İptal",
       "noServersYet": "Henüz sunucu eklenmedi. Başlamak için bir tane ekleyin.",
+      "pluginServers": "Eklenti tarafından sağlanan sunucular",
+      "pluginServerSource": "{plugin} v{version} ile",
+      "pluginServerManaged": "Eklenti tarafından yönetiliyor",
+      "pluginServerReconnect": "Yeniden bağlan",
+      "pluginServerIncomplete": "Yapılandırma gerekli",
+      "pluginServerMissingConfig": "Eksik yapılandırma",
+      "pluginServerUrlHint": "Bağlanmak için sunucu URL'sini girin.",
+      "pluginServerUrlInvalid": "Geçerli bir URL girin (ör. https://example.com/sse)",
       "connectionFailedTitle": "Bağlantı başarısız",
       "activeTools": "{count} aktif araç",
       "environmentVariables": "Ortam değişkenleri",
@@ -2892,7 +2900,10 @@
     "updateFailed": "Model güncellenemedi",
     "roleUpdated": "{role} modeli güncellendi",
     "switchProviderFailed": "Sağlayıcı değiştirilemedi",
-    "providerSwitched": "{name} sağlayıcısına geçildi"
+    "providerSwitched": "{name} sağlayıcısına geçildi",
+    "manualUse": "Kullan",
+    "manualSessionHint": "Bir sağlayıcı model ID'si girin ve bu oturumun sohbet modeli olarak uygulayın.",
+    "manualBlackboxHint": "Geçerli katalogda henüz görünmese bile herhangi bir BlackBox AI model ID'si girin."
   },
   "comfyui": {
     "workflows": {
@@ -4115,7 +4126,7 @@
     "title": "Eklentiler",
     "description": "Yüklenebilir eklentilerle ajana yeni yetenekler ekleyin.",
     "confirmInstallTitle": "Eklenti kurulumunu onayla",
-    "confirmInstallDesc": "Bu eklenti için ana ajanı seçin. İçe aktarılan alt ajanlar, araçlar ve paylaşılan klasörler bu iş akışına bağlanacaktır.",
+    "confirmInstallDesc": "İsteğe bağlı olarak bir ana ajan atayın. Kendi ajanlarını içeren eklentiler bağımsız olarak yüklenebilir.",
     "filesLabel": "Dosyalar",
     "filesSelected": "{count, plural, one {# dosya seçildi} other {# dosya seçildi}}",
     "moreFiles": " +{count} daha",
@@ -4212,6 +4223,9 @@
     "automationHooks": "Otomasyon kancaları",
     "installing": "Yükleniyor...",
     "installAndAssign": "Yükle ve ata",
+    "installPlugin": "Eklenti yükle",
+    "standaloneInstallOption": "Ajan yok (bağımsız)",
+    "agentOptionalHint": "Kendi ajanlarını içeren eklentiler için seçimsiz bırakın.",
     "install": "Eklenti Yükle",
     "detail": {
       "viewSource": "Kaynağı Görüntüle",

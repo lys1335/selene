@@ -12,16 +12,10 @@
  */
 
 import type { AgentModelConfig, LLMProvider } from "@/components/model-bag/model-bag.types";
-import { BLACKBOX_ALL_MODEL_IDS } from "@/lib/auth/blackboxai-models";
 
 // ---------------------------------------------------------------------------
 // Provider-specific model ID sets (imported dynamically to avoid circular deps)
 // ---------------------------------------------------------------------------
-
-// BlackBox's full catalogue (400+ models), pre-lowercased for fast lookups.
-// Checked BEFORE the cross-provider rejection so that IDs like "claude-sonnet-4.5"
-// (which overlap with Anthropic's prefix) are accepted when BlackBox is the provider.
-const BLACKBOX_MODEL_SET = new Set(BLACKBOX_ALL_MODEL_IDS.map(m => m.toLowerCase()));
 
 // Antigravity uses exact model ID matching to avoid ambiguity with Anthropic's
 // "claude-" prefix (Antigravity has short IDs like "claude-sonnet-4-6")
@@ -63,7 +57,7 @@ const MODEL_PREFIXES: Record<LLMProvider, string[]> = {
  * - Claude Code: claude-opus-4*, claude-sonnet-4*, claude-haiku-4* (also accepts Anthropic claude-* models)
  * - Codex: gpt-5*, codex*
  * - Kimi: kimi-*, moonshot-*
- * - BlackBox AI: provider-prefixed format (e.g., "anthropic/claude-*"), rejects bare IDs from other providers
+ * - BlackBox AI: accepts any non-empty model ID so newly released models can be used before the catalog is updated
  * - Ollama: accepts any model
  * - OpenRouter: accepts anything with "/" or non-provider-specific bare IDs
  */
@@ -111,22 +105,9 @@ export function isModelCompatibleWithProvider(
     return MODEL_PREFIXES.minimax.some((p) => lowerModel.startsWith(p));
   }
 
-  // BlackBox AI: multi-model router, but reject bare IDs claimed by other providers.
-  // BlackBox uses provider-prefixed format (e.g., "anthropic/claude-sonnet-4.5").
-  // Bare IDs like "gpt-5.4-high" (Codex) would fail at the BlackBox API.
+  // BlackBox AI frequently exposes new IDs before the local catalogue is refreshed.
+  // Accept any non-empty string here and let the provider API validate the final ID.
   if (provider === "blackboxai") {
-    if (lowerModel.includes("/")) return true;
-    // Accept any model in BlackBox's known catalogue (even if the ID overlaps another provider)
-    if (BLACKBOX_MODEL_SET.has(lowerModel)) return true;
-    if (
-      isModelCompatibleWithProvider(lowerModel, "antigravity") ||
-      isModelCompatibleWithProvider(lowerModel, "codex") ||
-      isModelCompatibleWithProvider(lowerModel, "anthropic") ||
-      isModelCompatibleWithProvider(lowerModel, "kimi") ||
-      isModelCompatibleWithProvider(lowerModel, "minimax")
-    ) {
-      return false;
-    }
     return true;
   }
 

@@ -121,7 +121,7 @@ export const EditFileToolUI: ToolCallContentPartComponent = ({
         : "text-destructive";
 
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 font-mono text-xs overflow-hidden">
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
       {/* Header */}
       <button
         type="button"
@@ -182,9 +182,21 @@ export const EditFileToolUI: ToolCallContentPartComponent = ({
           {/* Show backend-provided diff first, fallback to args-derived diff */}
           {diffText && (
             <div className="space-y-2">
-              <div className="rounded bg-terminal-dark/5 p-2 overflow-x-auto">
-                <pre className="text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
-                  {visibleDiffLines.join("\n")}
+              <div className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto">
+                <pre className="text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
+                  {visibleDiffLines.map((line, i) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        "block rounded-sm px-1",
+                        line.startsWith("+ ") && "text-emerald-700 bg-emerald-100/60 border-l-2 border-emerald-500 dark:text-emerald-200 dark:bg-emerald-500/[0.15] dark:border-emerald-400",
+                        line.startsWith("- ") && "text-red-700 bg-red-100/60 border-l-2 border-red-500 dark:text-red-200 dark:bg-red-500/[0.15] dark:border-red-400",
+                        !line.startsWith("+ ") && !line.startsWith("- ") && "text-terminal-muted dark:text-terminal-muted/80"
+                      )}
+                    >
+                      {line}
+                    </span>
+                  ))}
                 </pre>
               </div>
 
@@ -192,7 +204,7 @@ export const EditFileToolUI: ToolCallContentPartComponent = ({
                 <button
                   type="button"
                   onClick={() => setShowFullDiff(!showFullDiff)}
-                  className="text-[11px] text-accent hover:text-accent/80 underline"
+                  className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
                 >
                   {showFullDiff ? `▲ ${t("showLess")}` : `▼ ${t("showAll", { count: diffLines.length })}`}
                 </button>
@@ -237,7 +249,7 @@ export const EditFileToolUI: ToolCallContentPartComponent = ({
             ].join('\n');
             
             return (
-              <div className="rounded bg-terminal-dark/5 p-2 space-y-2">
+              <div className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="text-[11px] text-terminal-muted">
                     {t("diagnosticsLabel", { tool })}
@@ -261,7 +273,7 @@ export const EditFileToolUI: ToolCallContentPartComponent = ({
                 <div className="relative">
                   <pre 
                     className={cn(
-                      "text-[11px] text-terminal-dark whitespace-pre-wrap break-all overflow-y-auto",
+                      "text-[11px] text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all overflow-y-auto",
                       showFullDiagnostics ? "max-h-none" : "max-h-[300px]"
                     )}
                   >
@@ -272,7 +284,7 @@ export const EditFileToolUI: ToolCallContentPartComponent = ({
                     <button
                       type="button"
                       onClick={() => setShowFullDiagnostics(!showFullDiagnostics)}
-                      className="text-[11px] text-blue-600 hover:text-blue-700 underline mt-1"
+                      className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline mt-1"
                     >
                       {showFullDiagnostics ? `▲ ${t("showLess")}` : `▼ ${t("showAll", { count: outputLines.length })}`}
                     </button>

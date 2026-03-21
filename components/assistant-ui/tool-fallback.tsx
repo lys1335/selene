@@ -8,6 +8,7 @@ import { resilientFetch } from "@/lib/utils/resilient-fetch";
 import { getToolIcon } from "@/components/ui/tool-icon-map";
 import { getCanonicalToolName } from "./tool-name-utils";
 import { useToolExpansion } from "./tool-expansion-context";
+import { stripXmlStatusTags } from "./claude-code-tools/parse-text-result";
 // Define the tool call component type manually since it's no longer exported
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -489,6 +490,21 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
     const fileName = readResult.filePath
       ? readResult.filePath.split("/").pop() || readResult.filePath
       : "file";
+
+    // Handle binary file soft-redirect or text-only responses (no content field)
+    if (!readResult.content && readResult.text) {
+      return (
+        <div className={cn("font-mono", TOOL_RESULT_TEXT_CLASS)}>
+          <div className="flex items-center gap-2 mb-2 text-terminal-dark">
+            <span className="font-medium">{fileName}</span>
+          </div>
+          <p className="text-xs text-terminal-muted">
+            {readResult.text}
+          </p>
+        </div>
+      );
+    }
+
     const sourceLabel = readResult.source === "knowledge_base"
       ? ` (Knowledge Base${readResult.documentTitle ? `: ${readResult.documentTitle}` : ""})`
       : "";
@@ -738,8 +754,10 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
   }
 
   // Fallback for generic text/content results (e.g., MCP tools like take_snapshot)
-  const textContent = normalizedResult.text || (normalizedResult as { content?: string }).content;
-  if (textContent && typeof textContent === "string") {
+  const rawTextContent = normalizedResult.text || (normalizedResult as { content?: string }).content;
+  if (rawTextContent && typeof rawTextContent === "string") {
+    // Strip XML status tags (e.g., <retrieval_status>timeout</retrieval_status>)
+    const { cleanText: textContent } = stripXmlStatusTags(rawTextContent);
     // Truncate very long results for display (full result is still available to AI)
     const displayText = textContent.length > 2000
       ? textContent.substring(0, 2000) + `\n\n... [${textContent.length - 2000} more characters]`
@@ -755,11 +773,16 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
 
   // Final defensive fallback: render unknown object-shaped outputs so the UI
   // never appears empty when a tool completed but returned an unrecognized schema.
+  // Only use summary as the sole output when the result has no other substantive fields.
   const genericSummary =
     typeof (normalizedResult as { summary?: unknown }).summary === "string"
       ? ((normalizedResult as { summary?: string }).summary ?? "")
       : "";
-  if (genericSummary.trim().length > 0) {
+  const hasSubstantiveFields = Object.keys(normalizedResult).some(
+    (k) => !["status", "summary", "metadata", "success", "isError"].includes(k)
+  );
+
+  if (!hasSubstantiveFields && genericSummary.trim().length > 0) {
     return (
       <div className={cn("mt-2", TOOL_RESULT_TEXT_CLASS)}>
         <pre className={cn("max-h-64", TOOL_RESULT_PRE_CLASS)}>

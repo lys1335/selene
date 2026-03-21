@@ -37,7 +37,7 @@ import { extname, basename } from "path";
 // =============================================================================
 
 export interface LLMEnhancementOptions {
-  /** Maximum time to wait for LLM enhancement (default: 45000ms) */
+  /** Maximum time to wait for LLM enhancement (default: 135000ms) */
   timeoutMs?: number;
   /** Recent conversation messages for context */
   conversationContext?: Array<{ role: string; content: string }>;
@@ -68,7 +68,7 @@ export interface LLMEnhancementResult {
 // Configuration
 // =============================================================================
 
-const DEFAULT_TIMEOUT_MS = 45000; // 45 seconds — allows for search + LLM synthesis pipeline
+const DEFAULT_TIMEOUT_MS = 135000; // 135 seconds — allows for search + LLM synthesis pipeline
 const MAX_SEARCH_RESULTS = 25;
 const MIN_SEARCH_SCORE = 0.05;
 

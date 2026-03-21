@@ -57,8 +57,8 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
   const statusColor = isRunning
     ? "text-terminal-muted"
     : hasError
-      ? "text-red-600"
-      : "text-emerald-600";
+      ? "text-red-600 dark:text-red-400"
+      : "text-emerald-600 dark:text-emerald-400";
 
   const maxContentLines = 100;
   const contentLines = fileContent.split("\n");
@@ -68,7 +68,7 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
     : fileContent;
 
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 font-mono text-xs overflow-hidden">
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -84,7 +84,7 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
 
         {lineCount > 0 && (
           <span className="text-terminal-muted ml-auto shrink-0">
-            <span className="text-emerald-600">+{lineCount}</span>
+            <span className="text-emerald-600 dark:text-emerald-400">+{lineCount}</span>
           </span>
         )}
 
@@ -103,7 +103,7 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
 
           {fileContent && (
             <div className="space-y-2">
-              <pre className="rounded bg-terminal-dark/5 p-2 overflow-x-auto max-h-96 overflow-y-auto text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+              <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-96 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
                 {visibleContent}
               </pre>
 
@@ -111,7 +111,7 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
                 <button
                   type="button"
                   onClick={() => setShowFullContent(!showFullContent)}
-                  className="text-[11px] text-blue-600 hover:text-blue-700 underline"
+                  className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
                 >
                   {showFullContent ? "▲ Show less" : `▼ Show all (${contentLines.length} lines)`}
                 </button>

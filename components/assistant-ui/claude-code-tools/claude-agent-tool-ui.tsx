@@ -4,7 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, BotIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
-import { parseTextResult } from "./parse-text-result";
+import { parseTextResult, parseTextResultWithStatus } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -52,14 +52,14 @@ export const ClaudeAgentToolUI: ToolCallContentPartComponent = ({ args, result }
   const model = args?.model;
   const isRunning = result === undefined;
   const hasError = isErrorResult(result);
-  const content = parseTextResult(result);
+  const { text: content, statuses: xmlStatuses } = parseTextResultWithStatus(result);
 
   const StatusIcon = isRunning ? null : hasError ? XCircleIcon : CheckCircleIcon;
   const statusColor = isRunning
     ? "text-terminal-muted"
     : hasError
-      ? "text-red-600"
-      : "text-emerald-600";
+      ? "text-red-600 dark:text-red-400"
+      : "text-emerald-600 dark:text-emerald-400";
 
   // Truncate result for display
   const DISPLAY_LIMIT = 10_000;
@@ -68,7 +68,7 @@ export const ClaudeAgentToolUI: ToolCallContentPartComponent = ({ args, result }
     : content;
 
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 font-mono text-xs overflow-hidden">
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -83,7 +83,7 @@ export const ClaudeAgentToolUI: ToolCallContentPartComponent = ({ args, result }
         <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={description}>{description}</span>
 
         {subagentType && (
-          <span className="text-[10px] text-terminal-muted shrink-0 bg-terminal-dark/5 rounded px-1 py-0.5">
+          <span className="text-[10px] text-terminal-muted shrink-0 bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] rounded px-1 py-0.5">
             {subagentType}
           </span>
         )}
@@ -106,7 +106,7 @@ export const ClaudeAgentToolUI: ToolCallContentPartComponent = ({ args, result }
           {args?.prompt && (
             <div className="space-y-1">
               <div className="text-[10px] text-terminal-muted uppercase tracking-wider">Prompt</div>
-              <pre className="rounded bg-terminal-dark/5 p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+              <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
                 {args.prompt.length > 2000
                   ? args.prompt.substring(0, 2000) + `\n\n... [${(args.prompt.length - 2000).toLocaleString()} more characters]`
                   : args.prompt}
@@ -117,14 +117,14 @@ export const ClaudeAgentToolUI: ToolCallContentPartComponent = ({ args, result }
           {displayContent && (
             <div className="space-y-1">
               <div className="text-[10px] text-terminal-muted uppercase tracking-wider">Result</div>
-              <pre className="rounded bg-terminal-dark/5 p-2 overflow-x-auto max-h-96 overflow-y-auto text-terminal-dark whitespace-pre-wrap break-all font-mono text-[11px]">
+              <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-96 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
                 {displayContent}
               </pre>
             </div>
           )}
 
           {hasError && content && (
-            <div className="text-[11px] text-red-600">{content.slice(0, 500)}</div>
+            <div className="text-[11px] text-red-600 dark:text-red-400">{content.slice(0, 500)}</div>
           )}
 
           {isRunning && (

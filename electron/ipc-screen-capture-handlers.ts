@@ -21,8 +21,20 @@ function normalizeEnabled(value: unknown): boolean {
 }
 
 export async function emitCapturedScreen(ctx: IpcHandlerContext) {
-  const result = await captureDisplay({ mediaDir: ctx.mediaDir });
   const win = ctx.mainWindow();
+
+  // Pre-check: notify renderer about missing permission so it can show an
+  // actionable prompt instead of a generic error toast.
+  const permStatus = getScreenCapturePermissionStatus();
+  if (permStatus !== "granted" && permStatus !== "not-determined") {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("permission:screen-required");
+    }
+    // Still go through the normal capture path so existing listeners receive
+    // the result (with success=false) and can handle it.
+  }
+
+  const result = await captureDisplay({ mediaDir: ctx.mediaDir });
   if (!win || win.isDestroyed()) {
     return result;
   }

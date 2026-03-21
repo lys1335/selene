@@ -592,6 +592,7 @@
         "agentProviderFallback": "this agent's {provider} provider chain",
         "globalFallback": "the global/provider fallback chain for {provider}",
         "customModel": "custom model",
+        "manualOption": "Manual model ID",
         "roles": {
           "chat": {
             "label": "Main chat model",
@@ -1002,9 +1003,7 @@
       "voiceInput": "Voice input",
       "voiceInputHold": "Hold to record",
       "stopVoiceInput": "Stop recording",
-      "transcribingAudio": "Transcribing audio...",
-      "captureScreen": "Capture screen",
-      "captureScreenShortcut": "Capture screen ({shortcut})"
+      "transcribingAudio": "Transcribing audio..."
     },
     "prevBranch": "Previous branch",
     "nextBranch": "Next branch",
@@ -1133,6 +1132,7 @@
       "skillResults": "{count, plural, one {# result} other {# results}}",
       "selectAgentFirst": "Please select an agent before importing skills",
       "confirmInstall": "Install this plugin package for \"{name}\" and attach discovered sub-agents to this workflow?",
+      "confirmStandaloneInstall": "Install this plugin package? Plugin-created agents will form their own workflow.",
       "skillImported": "Skill imported successfully",
       "pluginInstalled": "Plugin installed",
       "viewSkills": "View Skills",
@@ -2203,6 +2203,14 @@
       "addCustomServer": "Add custom server",
       "cancelAdd": "Cancel",
       "noServersYet": "No servers added yet. Add one to get started.",
+      "pluginServers": "Plugin-provided servers",
+      "pluginServerSource": "via {plugin} v{version}",
+      "pluginServerManaged": "Managed by plugin",
+      "pluginServerReconnect": "Reconnect",
+      "pluginServerIncomplete": "Needs configuration",
+      "pluginServerMissingConfig": "Missing configuration",
+      "pluginServerUrlHint": "Enter the server URL to connect.",
+      "pluginServerUrlInvalid": "Please enter a valid URL (e.g. https://example.com/sse)",
       "connectionFailedTitle": "Connection failed",
       "activeTools": "{count} active tools",
       "environmentVariables": "Environment variables",
@@ -2743,6 +2751,14 @@
         "clearingBtn": "Clearing...",
         "clearSuccess": "Deleted {count} screenshot(s)"
       },
+      "permissions": {
+        "screenRequired": "Screen Recording permission is required to capture your display.",
+        "screenAction": "Open System Settings",
+        "screenManual": "Open System Settings → Privacy & Security → Screen Recording, then enable Selene.",
+        "micRequired": "Microphone access is required for voice capture.",
+        "accessibilityRequired": "Accessibility permission is required for global shortcuts.",
+        "accessibilityManual": "Open System Settings → Privacy & Security → Accessibility, then enable Selene."
+      },
       "miniOverlay": {
         "title": "Mini overlay",
         "description": "A lightweight floating assistant that handles voice queries without opening the main window.",
@@ -2876,7 +2892,10 @@
     "updateFailed": "Failed to update model",
     "roleUpdated": "{role} model updated",
     "switchProviderFailed": "Failed to switch provider",
-    "providerSwitched": "Switched to {name}"
+    "providerSwitched": "Switched to {name}",
+    "manualUse": "Use",
+    "manualSessionHint": "Enter a provider model ID and apply it as this session's chat model.",
+    "manualBlackboxHint": "Enter any BlackBox AI model ID."
   },
   "comfyui": {
     "workflows": {
@@ -4120,7 +4139,7 @@
     "subtitle": "Extend your agent with skills, hooks, MCP servers, and more.",
     "description": "Add new capabilities to your agent with installable plugins.",
     "confirmInstallTitle": "Confirm plugin install",
-    "confirmInstallDesc": "Choose the main agent for this plugin. Imported sub-agents, tools, and shared folders will be linked to that workflow.",
+    "confirmInstallDesc": "Optionally assign a main agent. Plugins with built-in agents can be installed standalone.",
     "filesLabel": "Files",
     "filesSelected": "{count, plural, one {# file selected} other {# files selected}}",
     "moreFiles": " +{count} more",
@@ -4129,6 +4148,9 @@
     "install": "Install Plugin",
     "installing": "Installing...",
     "installAndAssign": "Install and assign",
+    "installPlugin": "Install plugin",
+    "standaloneInstallOption": "No agent (standalone)",
+    "agentOptionalHint": "Leave unselected for plugins that include their own agents.",
     "uninstall": "Uninstall",
     "uninstallConfirm": "Uninstall plugin \"{name}\"? This cannot be undone.",
     "enable": "Enable",

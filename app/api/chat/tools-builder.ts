@@ -326,26 +326,34 @@ export async function buildToolsForRequest(
   }
 
   // Load MCP servers from scoped plugins (namespaced as plugin:name:server).
-  // Note: scopedPlugins are resolved by the caller; we receive allowedPluginNames as the pre-built set.
-  // We need the full plugin list to connect MCP servers — load them fresh here.
+  // Uses DB (plugin_mcp_servers) as source of truth so user-provided config overrides are respected.
   try {
     const { connectPluginMCPServers } = await import(
       "@/lib/plugins/mcp-integration"
     );
-    const { getInstalledPlugins } = await import("@/lib/plugins/registry");
-    const allPlugins = await getInstalledPlugins(userId, { status: "active" });
-    const scopedForMCP = allPlugins.filter((p) => allowedPluginNames.has(p.name));
+    const { getActivePluginMCPServers } = await import("@/lib/plugins/registry");
+    const pluginMcpRows = await getActivePluginMCPServers();
+    // Filter to only plugins in scope
+    const scopedRows = pluginMcpRows.filter((r) => allowedPluginNames.has(r.pluginName));
+
+    // Group by plugin name
+    const byPlugin = new Map<string, { config: Record<string, unknown>; cachePath?: string }>();
+    for (const row of scopedRows) {
+      if (!byPlugin.has(row.pluginName)) {
+        byPlugin.set(row.pluginName, { config: {}, cachePath: row.cachePath || undefined });
+      }
+      byPlugin.get(row.pluginName)!.config[row.serverName] = row.config;
+    }
 
     let totalConnected = 0;
     let totalFailed = 0;
 
-    for (const plugin of scopedForMCP) {
-      if (!plugin.components.mcpServers) continue;
-
+    for (const [pluginName, { config, cachePath }] of byPlugin) {
       const result = await connectPluginMCPServers(
-        plugin.name,
-        plugin.components.mcpServers,
-        characterId || undefined
+        pluginName,
+        config as Record<string, import("@/lib/plugins/types").PluginMCPServerEntry>,
+        characterId || undefined,
+        cachePath
       );
       totalConnected += result.connected.length;
       totalFailed += result.failed.length;
@@ -414,6 +422,7 @@ export async function buildToolsForRequest(
   // lifecycle completes (UI shows "completed"). Loop prevention is handled
   // in route.ts via stopWhen(1) for claudecode provider.
   const sdkPassthroughNames = new Set<string>();
+  const mcpPassthroughNames = new Set<string>();
 
   if (ctx.provider === "claudecode") {
     const createSdkPassthroughTool = (registeredToolName: string): Tool =>
@@ -456,7 +465,11 @@ export async function buildToolsForRequest(
 
           const bridge = mcpContextStore.getStore()?.sdkToolResultBridge;
           if (bridge && toolCallId) {
-            const isLongRunningSdkTool =
+            // MCP tools (delegateToSubagent, etc.) are executed by the MCP
+            // server and can run arbitrarily long — never time them out.
+            // SDK agent tools (Task, Agent, etc.) also run long.
+            const isLongRunningTool =
+              mcpPassthroughNames.has(registeredToolName) ||
               registeredToolName === "Task" ||
               registeredToolName === "Agent" ||
               registeredToolName === "TaskCreate" ||
@@ -466,9 +479,9 @@ export async function buildToolsForRequest(
 
             try {
               const resolved = await bridge.waitFor(toolCallId, {
-                // Claude SDK Task/Agent calls can run well beyond the default 5-minute
-                // passthrough timeout while sub-agents complete; keep waiting unless aborted.
-                timeoutMs: isLongRunningSdkTool ? null : 300_000,
+                // Long-running tools (SDK agents, MCP tools) can run well beyond
+                // the default 5-minute passthrough timeout; keep waiting unless aborted.
+                timeoutMs: isLongRunningTool ? null : 300_000,
                 abortSignal,
               });
               if (resolved) {
@@ -526,6 +539,7 @@ export async function buildToolsForRequest(
       if (sdkPassthroughNames.has(name)) continue;
       allToolsWithMCP[name] = createSdkPassthroughTool(name);
       sdkPassthroughNames.add(name);
+      mcpPassthroughNames.add(name);
     }
   }
 

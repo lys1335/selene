@@ -16,3 +16,4 @@ export {
   ClaudeTaskOutputToolUI,
   ClaudeTaskStopToolUI,
 } from "./claude-lightweight-tools";
+export { DelegationToolUI } from "./delegation-tool-ui";
