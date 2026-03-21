@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { loadSettings, saveSettings } from "@/lib/settings/settings-manager";
 import { MCPClientManager } from "@/lib/mcp/client-manager";
 import { ToolRegistry } from "@/lib/ai/tool-registry/registry";
-import { getActivePluginMCPServers } from "@/lib/plugins/registry";
+import { getActivePluginMCPServers, updatePluginMCPServerConfig } from "@/lib/plugins/registry";
 import type { MCPConfig, MCPServerConfig } from "@/lib/mcp/types";
 
 /**
@@ -191,6 +191,69 @@ export async function PUT(request: NextRequest) {
     } catch (error) {
         console.error("[MCP API] Error:", error);
         return NextResponse.json({ error: "Failed to save MCP config" }, { status: 500 });
+    }
+}
+
+/**
+ * PATCH /api/mcp
+ * Update a plugin MCP server's config (e.g. add a missing URL for SSE servers).
+ * Body: { pluginId: string; serverName: string; url: string }
+ */
+export async function PATCH(request: NextRequest) {
+    try {
+        const body = await request.json();
+        const { pluginId, serverName, url } = body as {
+            pluginId?: string;
+            serverName?: string;
+            url?: string;
+        };
+
+        if (!pluginId || !serverName) {
+            return NextResponse.json(
+                { error: "pluginId and serverName are required" },
+                { status: 400 }
+            );
+        }
+
+        if (!url || !url.trim()) {
+            return NextResponse.json(
+                { error: "url is required" },
+                { status: 400 }
+            );
+        }
+
+        // Validate URL format and protocol
+        try {
+            const parsed = new URL(url);
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+                return NextResponse.json(
+                    { error: "Only http and https URLs are supported" },
+                    { status: 400 }
+                );
+            }
+        } catch {
+            return NextResponse.json(
+                { error: "Invalid URL format. Provide a full URL (e.g. https://example.com/sse)" },
+                { status: 400 }
+            );
+        }
+
+        const updated = await updatePluginMCPServerConfig(pluginId, serverName, { url });
+
+        if (!updated) {
+            return NextResponse.json(
+                { error: "Plugin MCP server not found" },
+                { status: 404 }
+            );
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error("[MCP API] PATCH error:", error);
+        return NextResponse.json(
+            { error: "Failed to update plugin server config" },
+            { status: 500 }
+        );
     }
 }
 

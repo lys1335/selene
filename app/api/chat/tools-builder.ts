@@ -326,26 +326,34 @@ export async function buildToolsForRequest(
   }
 
   // Load MCP servers from scoped plugins (namespaced as plugin:name:server).
-  // Note: scopedPlugins are resolved by the caller; we receive allowedPluginNames as the pre-built set.
-  // We need the full plugin list to connect MCP servers — load them fresh here.
+  // Uses DB (plugin_mcp_servers) as source of truth so user-provided config overrides are respected.
   try {
     const { connectPluginMCPServers } = await import(
       "@/lib/plugins/mcp-integration"
     );
-    const { getInstalledPlugins } = await import("@/lib/plugins/registry");
-    const allPlugins = await getInstalledPlugins(userId, { status: "active" });
-    const scopedForMCP = allPlugins.filter((p) => allowedPluginNames.has(p.name));
+    const { getActivePluginMCPServers } = await import("@/lib/plugins/registry");
+    const pluginMcpRows = await getActivePluginMCPServers();
+    // Filter to only plugins in scope
+    const scopedRows = pluginMcpRows.filter((r) => allowedPluginNames.has(r.pluginName));
+
+    // Group by plugin name
+    const byPlugin = new Map<string, { config: Record<string, unknown>; cachePath?: string }>();
+    for (const row of scopedRows) {
+      if (!byPlugin.has(row.pluginName)) {
+        byPlugin.set(row.pluginName, { config: {}, cachePath: row.cachePath || undefined });
+      }
+      byPlugin.get(row.pluginName)!.config[row.serverName] = row.config;
+    }
 
     let totalConnected = 0;
     let totalFailed = 0;
 
-    for (const plugin of scopedForMCP) {
-      if (!plugin.components.mcpServers) continue;
-
+    for (const [pluginName, { config, cachePath }] of byPlugin) {
       const result = await connectPluginMCPServers(
-        plugin.name,
-        plugin.components.mcpServers,
-        characterId || undefined
+        pluginName,
+        config as Record<string, import("@/lib/plugins/types").PluginMCPServerEntry>,
+        characterId || undefined,
+        cachePath
       );
       totalConnected += result.connected.length;
       totalFailed += result.failed.length;

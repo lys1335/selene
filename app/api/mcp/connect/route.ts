@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
                     if ((pluginTransport === "sse" || pluginTransport === "http") && !cfg.url) {
                         results[namespacedName] = {
                             success: false,
-                            error: `Plugin server "${serverName}" (from ${pluginName}) uses ${pluginTransport} transport but has no URL configured. The plugin needs to provide a server URL.`,
+                            error: `Server "${serverName}" uses ${pluginTransport} transport but has no URL configured. Add a URL in Settings → MCP Servers.`,
                         };
                         continue;
                     }

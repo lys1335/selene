@@ -355,6 +355,40 @@ export async function getActivePluginMCPServers(): Promise<
   }>;
 }
 
+/**
+ * Update a plugin MCP server's config by merging a partial config patch.
+ * Used to let users provide missing fields (e.g. URL for SSE servers).
+ * Merges shallowly — only specified keys are overwritten, preserving type/headers/env.
+ */
+export async function updatePluginMCPServerConfig(
+  pluginId: string,
+  serverName: string,
+  configPatch: Record<string, unknown>
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: pluginMcpServers.id, config: pluginMcpServers.config })
+    .from(pluginMcpServers)
+    .where(
+      and(
+        eq(pluginMcpServers.pluginId, pluginId),
+        eq(pluginMcpServers.serverName, serverName)
+      )
+    )
+    .limit(1);
+
+  if (rows.length === 0) return false;
+
+  const existing = (rows[0].config as Record<string, unknown>) || {};
+  const merged = { ...existing, ...configPatch };
+
+  await db
+    .update(pluginMcpServers)
+    .set({ config: merged })
+    .where(eq(pluginMcpServers.id, rows[0].id));
+
+  return true;
+}
+
 // =============================================================================
 // Plugin Update / Uninstall
 // =============================================================================

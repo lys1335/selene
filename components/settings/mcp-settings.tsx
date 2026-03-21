@@ -19,7 +19,7 @@ import {
     Terminal, Globe, AlertCircle, Info, Edit2, Key
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { resilientFetch, resilientPut, resilientPost } from "@/lib/utils/resilient-fetch";
+import { resilientFetch, resilientPut, resilientPost, resilientPatch } from "@/lib/utils/resilient-fetch";
 import type { MCPServerConfig } from "@/lib/mcp/types";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
@@ -62,6 +62,11 @@ export function MCPSettings() {
     const [isLoading, setIsLoading] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [connectingState, setConnectingState] = useState<Record<string, boolean>>({});
+
+    // Plugin server URL editing state
+    const [pluginUrlInputs, setPluginUrlInputs] = useState<Record<string, string>>({});
+    const [pluginUrlSaving, setPluginUrlSaving] = useState<Record<string, boolean>>({});
+    const [pluginUrlErrors, setPluginUrlErrors] = useState<Record<string, string>>({});
 
     // UI State
     const [showJsonMode, setShowJsonMode] = useState(false);
@@ -108,6 +113,17 @@ export function MCPSettings() {
             setEnvironment(data.environment || {});
             setStatus(data.status || []);
             setPluginServers(data.pluginServers || []);
+            // Seed URL inputs for incomplete or errored plugin servers
+            const urlSeeds: Record<string, string> = {};
+            for (const ps of data.pluginServers || []) {
+                const cfg = ps.config as { url?: string; command?: string; type?: string };
+                const transport = cfg.command ? "stdio" : (cfg.type || "sse");
+                const needsUrl = transport === "sse" || transport === "http";
+                if (needsUrl && (ps.incomplete || ps.lastError)) {
+                    urlSeeds[ps.namespacedName] = cfg.url || "";
+                }
+            }
+            setPluginUrlInputs(prev => ({ ...prev, ...urlSeeds }));
         }
         if (error) {
             console.error("Failed to load MCP config:", error);
@@ -162,6 +178,43 @@ export function MCPSettings() {
             toast.error(error ? t("connectionFailed", { error }) : t("connectionFailedUnknown"));
         }
         setConnectingState(prev => ({ ...prev, [serverName]: false }));
+    };
+
+    // Save URL for an incomplete plugin server, then auto-reconnect
+    const handleSavePluginUrl = async (ps: PluginServerInfo) => {
+        const url = pluginUrlInputs[ps.namespacedName]?.trim();
+        if (!url) {
+            setPluginUrlErrors(prev => ({ ...prev, [ps.namespacedName]: t("pluginServerUrlInvalid") }));
+            return;
+        }
+        try {
+            new URL(url);
+        } catch {
+            setPluginUrlErrors(prev => ({ ...prev, [ps.namespacedName]: t("pluginServerUrlInvalid") }));
+            return;
+        }
+
+        setPluginUrlSaving(prev => ({ ...prev, [ps.namespacedName]: true }));
+        setPluginUrlErrors(prev => { const n = { ...prev }; delete n[ps.namespacedName]; return n; });
+
+        const { error } = await resilientPatch("/api/mcp", {
+            pluginId: ps.pluginId,
+            serverName: ps.serverName,
+            url,
+        });
+
+        if (error) {
+            setPluginUrlErrors(prev => ({ ...prev, [ps.namespacedName]: error }));
+            setPluginUrlSaving(prev => ({ ...prev, [ps.namespacedName]: false }));
+            return;
+        }
+
+        // URL saved, now reconnect
+        try {
+            await connectServer(ps.namespacedName);
+        } finally {
+            setPluginUrlSaving(prev => ({ ...prev, [ps.namespacedName]: false }));
+        }
     };
 
     // Handle form save (for both add and edit)
@@ -372,6 +425,15 @@ export function MCPSettings() {
                     <div className="grid gap-3">
                         {pluginServers.map((ps) => {
                             const isConnecting = connectingState[ps.namespacedName];
+                            const isSavingUrl = pluginUrlSaving[ps.namespacedName];
+                            const isBusy = isConnecting || isSavingUrl;
+
+                            // Determine transport type and whether URL editor should show
+                            const cfg = ps.config as { command?: string; url?: string; type?: string };
+                            const transportType = cfg.command ? "stdio" : (cfg.type || "sse");
+                            const needsUrl = transportType === "sse" || transportType === "http";
+                            const showUrlEditor = needsUrl && (ps.incomplete || ps.lastError);
+
                             const StatusIcon = ps.incomplete
                                 ? AlertCircle
                                 : ps.connected ? Check : ps.lastError ? X : AlertCircle;
@@ -401,7 +463,7 @@ export function MCPSettings() {
                                             <div className="flex items-center gap-2">
                                                 <h4 className="font-mono font-semibold text-terminal-dark">{ps.serverName}</h4>
                                                 <Badge variant="outline" className="text-[10px] h-5 px-1.5 font-normal text-terminal-muted">
-                                                    {(ps.config as { type?: string }).type || ((ps.config as { command?: string }).command ? "stdio" : "sse")}
+                                                    {transportType}
                                                 </Badge>
                                                 <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal bg-purple-50 text-purple-700 border-purple-200">
                                                     <Plug className="h-3 w-3 mr-1" />
@@ -414,14 +476,53 @@ export function MCPSettings() {
                                                 )}
                                             </div>
 
-                                            {ps.incomplete ? (
-                                                <Alert className="mt-2 border-yellow-200 bg-yellow-50/50">
-                                                    <AlertCircle className="h-4 w-4 text-yellow-600" />
-                                                    <AlertTitle className="text-yellow-800 text-xs">{t("pluginServerMissingConfig")}</AlertTitle>
-                                                    <AlertDescription className="text-xs font-mono text-yellow-700">
-                                                        {ps.incompleteReason}
-                                                    </AlertDescription>
-                                                </Alert>
+                                            {showUrlEditor ? (
+                                                <div className="mt-2 space-y-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <Globe className="h-4 w-4 text-terminal-muted shrink-0" aria-hidden="true" />
+                                                        <Input
+                                                            value={pluginUrlInputs[ps.namespacedName] || ""}
+                                                            onChange={(e) => setPluginUrlInputs(prev => ({
+                                                                ...prev,
+                                                                [ps.namespacedName]: e.target.value,
+                                                            }))}
+                                                            placeholder="https://your-server.example.com/sse"
+                                                            className="flex-1 font-mono text-xs"
+                                                            disabled={isBusy}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === "Enter") handleSavePluginUrl(ps);
+                                                            }}
+                                                            autoFocus={ps.incomplete}
+                                                            aria-label={`Server URL for ${ps.serverName}`}
+                                                        />
+                                                        <Button
+                                                            size="sm"
+                                                            onClick={() => handleSavePluginUrl(ps)}
+                                                            disabled={isBusy || !pluginUrlInputs[ps.namespacedName]?.trim()}
+                                                            className="shrink-0"
+                                                            aria-label={`Save URL for ${ps.serverName}`}
+                                                        >
+                                                            {isBusy ? (
+                                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                                            ) : (
+                                                                <Check className="h-4 w-4" />
+                                                            )}
+                                                        </Button>
+                                                    </div>
+                                                    {pluginUrlErrors[ps.namespacedName] ? (
+                                                        <p className="text-xs text-red-600 font-mono pl-6">
+                                                            {pluginUrlErrors[ps.namespacedName]}
+                                                        </p>
+                                                    ) : ps.incomplete ? (
+                                                        <p className="text-xs text-yellow-700 dark:text-yellow-500 font-mono pl-6">
+                                                            {t("pluginServerUrlHint")}
+                                                        </p>
+                                                    ) : ps.lastError ? (
+                                                        <p className="text-xs text-red-600 font-mono pl-6 line-clamp-2" title={ps.lastError}>
+                                                            {ps.lastError}
+                                                        </p>
+                                                    ) : null}
+                                                </div>
                                             ) : ps.lastError ? (
                                                 <Alert variant="destructive" className="mt-2">
                                                     <AlertCircle className="h-4 w-4" />
@@ -451,9 +552,8 @@ export function MCPSettings() {
                                             variant="ghost"
                                             className={cn("h-8 px-2", isConnecting && "animate-pulse")}
                                             onClick={() => connectServer(ps.namespacedName)}
-                                            disabled={isConnecting || ps.incomplete}
+                                            disabled={isBusy || Boolean(showUrlEditor && !pluginUrlInputs[ps.namespacedName]?.trim())}
                                             aria-label={t("pluginServerReconnect")}
-                                            title={ps.incomplete ? t("pluginServerMissingConfig") : undefined}
                                         >
                                             {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4 text-terminal-muted hover:text-terminal-dark" />}
                                         </Button>
