@@ -927,9 +927,10 @@ export function getProviderDisplayName(): string {
  * Check if the current provider supports a specific feature.
  */
 export function providerSupportsFeature(
-  feature: "tools" | "streaming" | "images"
+  feature: "tools" | "streaming" | "images",
+  providerOverride?: LLMProvider,
 ): boolean {
-  const provider = getConfiguredProvider();
+  const provider = providerOverride ?? getConfiguredProvider();
 
   const featureSupport: Record<LLMProvider, Record<string, boolean>> = {
     anthropic: { tools: true, streaming: true, images: true },
@@ -941,7 +942,7 @@ export function providerSupportsFeature(
     minimax: { tools: true, streaming: true, images: false },
     blackboxai: { tools: true, streaming: true, images: false },
     ollama: { tools: false, streaming: true, images: false },
-    vllm: { tools: true, streaming: true, images: false },
+    vllm: { tools: false, streaming: true, images: false },
   };
 
   return featureSupport[provider]?.[feature] ?? false;
