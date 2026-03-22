@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   recoverStuckSyncingFolders: vi.fn(),
   getAllSyncFolders: vi.fn(),
   cleanupOrphanedVectorTables: vi.fn(),
+  cleanupOrphanedSyncFolders: vi.fn(),
+  cleanupOrphanedInheritedFolders: vi.fn(),
   isDangerousPath: vi.fn(),
   stopAllWatchers: vi.fn(),
   compactAllAgentTables: vi.fn(),
@@ -25,6 +27,8 @@ vi.mock("@/lib/vectordb/sync-service", () => ({
   recoverStuckSyncingFolders: mocks.recoverStuckSyncingFolders,
   getAllSyncFolders: mocks.getAllSyncFolders,
   cleanupOrphanedVectorTables: mocks.cleanupOrphanedVectorTables,
+  cleanupOrphanedSyncFolders: mocks.cleanupOrphanedSyncFolders,
+  cleanupOrphanedInheritedFolders: mocks.cleanupOrphanedInheritedFolders,
 }));
 
 vi.mock("@/lib/vectordb/dangerous-paths", () => ({
@@ -82,6 +86,8 @@ describe("initializeVectorSync integration", () => {
     mocks.recoverStuckSyncingFolders.mockResolvedValue(0);
     mocks.getAllSyncFolders.mockResolvedValue([]);
     mocks.cleanupOrphanedVectorTables.mockResolvedValue(undefined);
+    mocks.cleanupOrphanedSyncFolders.mockResolvedValue({ removed: [], kept: 0 });
+    mocks.cleanupOrphanedInheritedFolders.mockResolvedValue({ removed: [], kept: 0 });
     mocks.isDangerousPath.mockReturnValue(null);
     mocks.stopAllWatchers.mockResolvedValue(undefined);
     mocks.compactAllAgentTables.mockResolvedValue({

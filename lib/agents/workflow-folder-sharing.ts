@@ -140,13 +140,15 @@ async function propagateOwnFolderRemoved(characterId: string, folderId: string, 
     return;
   }
 
-  const rowIds = inheritedRows.map((r) => r.id);
-  await db
-    .delete(agentSyncFolders)
-    .where(inArray(agentSyncFolders.id, rowIds));
-
+  // Use removeSyncFolder for proper cleanup (watchers, vector DB, etc.)
+  // Dynamic import avoids circular dependency with sync-service.ts
+  const { removeSyncFolder } = await import("@/lib/vectordb/sync-service");
   for (const row of inheritedRows) {
-    notifyFolderChange(row.characterId, { type: "removed", folderId: row.id, wasPrimary: false });
+    try {
+      await removeSyncFolder(row.id);
+    } catch (err) {
+      console.error(`[WorkflowFolderSharing] Failed to remove inherited folder ${row.id}:`, err);
+    }
   }
 
   await touchWorkflowSharedResources(context.membership.workflow.id, context.membership.workflow.initiatorId);
