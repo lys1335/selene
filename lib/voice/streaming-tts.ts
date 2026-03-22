@@ -3,6 +3,9 @@
  * then synthesizes and plays them sequentially with prefetching.
  */
 
+import { stripMarkdown } from "@/lib/utils/strip-markdown";
+export { stripMarkdown };
+
 // ---------------------------------------------------------------------------
 // StableStreamingLifecycle
 // ---------------------------------------------------------------------------
@@ -314,42 +317,7 @@ function findSentenceEnd(text: string): number {
   return punctIdx;
 }
 
-/**
- * Strip common markdown formatting so TTS gets clean plaintext.
- * Handles: headers (#), bold/italic (* / **), inline code (`),
- * links [text](url), images ![alt](url).
- */
-function stripMarkdown(text: string): string {
-  let out = text;
 
-  // Remove images ![alt](url)
-  out = out.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1");
-
-  // Replace links [text](url) with just the text
-  out = out.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1");
-
-  // Remove header markers
-  out = out.replace(/^#{1,6}\s+/gm, "");
-
-  // Remove bold/italic markers (order matters: ** before *)
-  out = out.replace(/\*\*\*(.+?)\*\*\*/g, "$1");
-  out = out.replace(/\*\*(.+?)\*\*/g, "$1");
-  out = out.replace(/\*(.+?)\*/g, "$1");
-  out = out.replace(/___(.+?)___/g, "$1");
-  out = out.replace(/__(.+?)__/g, "$1");
-  out = out.replace(/_(.+?)_/g, "$1");
-
-  // Remove inline code backticks
-  out = out.replace(/`([^`]*)`/g, "$1");
-
-  // Remove strikethrough
-  out = out.replace(/~~(.+?)~~/g, "$1");
-
-  // Collapse multiple spaces
-  out = out.replace(/ {2,}/g, " ");
-
-  return out.trim();
-}
 
 // ---------------------------------------------------------------------------
 // StreamingTTSQueue

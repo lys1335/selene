@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/local-auth";
 import { isTTSAvailable, synthesizeSpeech } from "@/lib/tts/manager";
+import { stripMarkdown } from "@/lib/utils/strip-markdown";
 
 interface SpeakRequestBody {
   text?: string;
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     await requireAuth(req);
 
     const body = (await req.json()) as SpeakRequestBody;
-    const text = typeof body.text === "string" ? body.text.trim() : "";
+    const text = typeof body.text === "string" ? stripMarkdown(body.text) : "";
     const voice = typeof body.voice === "string" && body.voice.trim() ? body.voice.trim() : undefined;
     const speed = typeof body.speed === "number" ? body.speed : undefined;
 
