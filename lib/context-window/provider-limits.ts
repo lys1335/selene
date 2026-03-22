@@ -92,6 +92,7 @@ export const PROVIDER_DEFAULT_LIMITS: Record<LLMProvider, number> = {
   minimax: 80000, // MiniMax M2.1 models with 80K context
   blackboxai: 128000, // BlackBox AI default context
   ollama: 32000, // Local models typically have smaller context
+  vllm: 32000, // vLLM models vary; conservative default, override per model
 };
 
 // ---------------------------------------------------------------------------

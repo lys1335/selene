@@ -62,6 +62,10 @@ import {
   invalidateOllamaClient,
 } from "@/lib/ai/providers/ollama-client";
 import {
+  getVllmClient,
+  invalidateVllmClient,
+} from "@/lib/ai/providers/vllm-client";
+import {
   getMiniMaxClient,
   getMiniMaxApiKey,
   invalidateMiniMaxClient,
@@ -84,6 +88,7 @@ export {
 export { getOpenRouterApiKey, getOpenRouterClient } from "@/lib/ai/providers/openrouter-client";
 export { getKimiApiKey, getKimiClient } from "@/lib/ai/providers/kimi-client";
 export { getOllamaClient, getOllamaBaseUrl } from "@/lib/ai/providers/ollama-client";
+export { getVllmClient, getVllmBaseUrl, getVllmApiKey } from "@/lib/ai/providers/vllm-client";
 export { getMiniMaxApiKey, getMiniMaxClient } from "@/lib/ai/providers/minimax-client";
 export { getBlackBoxApiKey, getBlackBoxClient } from "@/lib/ai/providers/blackboxai-client";
 
@@ -98,7 +103,8 @@ export type LLMProvider =
   | "ollama"
   | "claudecode"
   | "minimax"
-  | "blackboxai";
+  | "blackboxai"
+  | "vllm";
 
 // ---- Model Sets & Defaults ---------------------------------------------------
 
@@ -123,6 +129,7 @@ export const DEFAULT_MODELS: Record<LLMProvider, string> = {
   minimax: "MiniMax-M2.1", // MiniMax flagship with 80K context
   blackboxai: "claude-sonnet-4.5",
   ollama: "llama3.1:8b",
+  vllm: "default",
 };
 
 // Utility models - fast/cheap models for background tasks
@@ -136,6 +143,7 @@ export const UTILITY_MODELS: Record<LLMProvider, string> = {
   minimax: "MiniMax-M2.1-lightning", // Fast MiniMax model for utility tasks
   blackboxai: "gpt-4o-mini",
   ollama: "llama3.1:8b",
+  vllm: "default",
 };
 
 // ---- Lazy provider singletons ------------------------------------------------
@@ -463,6 +471,9 @@ function invalidateProviderClient(provider: LLMProvider): void {
     case "ollama":
       invalidateOllamaClient();
       break;
+    case "vllm":
+      invalidateVllmClient();
+      break;
     case "anthropic":
       // Anthropic is stateless in this module (no cached client instance).
       break;
@@ -494,6 +505,7 @@ export function invalidateProviderCache(): void {
     "minimax",
     "blackboxai",
     "ollama",
+    "vllm",
   ]);
 }
 
@@ -584,6 +596,10 @@ export function getConfiguredProvider(): LLMProvider {
 
   if (provider === "ollama") {
     return "ollama";
+  }
+
+  if (provider === "vllm") {
+    return "vllm";
   }
 
   return "anthropic";
@@ -683,6 +699,9 @@ export function getLanguageModelForProvider(
 
     case "ollama":
       return getOllamaClient()(model);
+
+    case "vllm":
+      return getVllmClient()(model);
 
     case "blackboxai": {
       const apiKey = getBlackBoxApiKey();
@@ -894,6 +913,8 @@ export function getProviderDisplayName(): string {
       return `BlackBox AI (${model})`;
     case "ollama":
       return `Ollama (${model})`;
+    case "vllm":
+      return `vLLM (${model})`;
     case "openrouter":
       return `OpenRouter (${model})`;
     case "anthropic":
@@ -920,6 +941,7 @@ export function providerSupportsFeature(
     minimax: { tools: true, streaming: true, images: false },
     blackboxai: { tools: true, streaming: true, images: false },
     ollama: { tools: false, streaming: true, images: false },
+    vllm: { tools: true, streaming: true, images: false },
   };
 
   return featureSupport[provider]?.[feature] ?? false;

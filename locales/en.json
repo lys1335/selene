@@ -151,6 +151,7 @@
         "anthropic": "Anthropic Claude",
         "openrouter": "OpenRouter",
         "ollama": "Ollama",
+        "vllm": "vLLM",
         "kimi": "Moonshot Kimi",
         "codex": "OpenAI Codex",
         "claudeCode": "Claude Code",
@@ -2049,6 +2050,7 @@
       "minimax": "MiniMax",
       "blackboxai": "BlackBox AI",
       "ollama": "Ollama (local)",
+      "vllm": "vLLM (local)",
       "keysTitle": "Provider keys",
       "auth": {
         "pasteInstructions": "A browser tab has been opened. After authorizing, copy the code shown on the page and paste it below.",
@@ -2143,6 +2145,16 @@
           "label": "Ollama URL",
           "placeholder": "http://localhost:11434/v1",
           "helper": "Use the URL of your local Ollama OpenAI-compatible endpoint."
+        },
+        "vllm": {
+          "label": "vLLM Base URL",
+          "placeholder": "http://localhost:8000/v1",
+          "helper": "OpenAI-compatible endpoint of your vLLM server."
+        },
+        "vllmApiKey": {
+          "label": "API Key (optional)",
+          "placeholder": "token-...",
+          "helper": "Only needed if your vLLM server requires authentication."
         },
         "openai": {
           "label": "OpenAI API Key",

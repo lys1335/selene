@@ -149,6 +149,7 @@
     --terminal-bg: 222 47% 8%;
     --terminal-green: 199 89% 58%;
     --terminal-amber: 199 89% 48%;
+    --terminal-text: 213 20% 90%;
     --terminal-muted: 215 20% 55%;
     --terminal-border: 215 20% 22%;
     --background: 222 47% 11%;
@@ -208,6 +209,7 @@
     --terminal-bg: 150 25% 7%;
     --terminal-green: 142 71% 45%;
     --terminal-amber: 80 60% 45%;
+    --terminal-text: 40 25% 90%;
     --terminal-muted: 140 10% 50%;
     --terminal-border: 150 15% 22%;
     --background: 150 20% 10%;
@@ -269,6 +271,7 @@
     --terminal-bg: 0 0% 6%;
     --terminal-green: 0 0% 55%;
     --terminal-amber: 0 0% 65%;
+    --terminal-text: 0 0% 90%;
     --terminal-muted: 0 0% 50%;
     --terminal-border: 0 0% 22%;
     --background: 0 0% 9%;
@@ -330,6 +333,7 @@
     --terminal-bg: 200 55% 7%;
     --terminal-green: 24 95% 53%;
     --terminal-amber: 38 92% 50%;
+    --terminal-text: 195 20% 90%;
     --terminal-muted: 200 15% 50%;
     --terminal-border: 200 25% 22%;
     --background: 200 50% 10%;
@@ -389,6 +393,7 @@
     --terminal-bg: 260 35% 7%;
     --terminal-green: 263 70% 65%;
     --terminal-amber: 280 50% 55%;
+    --terminal-text: 270 20% 90%;
     --terminal-muted: 260 15% 52%;
     --terminal-border: 260 20% 24%;
     --background: 260 30% 10%;
@@ -448,6 +453,7 @@
     --terminal-bg: 345 30% 7%;
     --terminal-green: 330 80% 60%;
     --terminal-amber: 350 65% 55%;
+    --terminal-text: 350 20% 90%;
     --terminal-muted: 345 12% 52%;
     --terminal-border: 345 18% 24%;
     --background: 345 25% 10%;
@@ -507,6 +513,7 @@
     --terminal-bg: 200 40% 6%;
     --terminal-green: 168 76% 50%;
     --terminal-amber: 172 66% 50%;
+    --terminal-text: 168 20% 90%;
     --terminal-muted: 180 12% 50%;
     --terminal-border: 190 20% 22%;
     --background: 200 35% 9%;

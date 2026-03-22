@@ -337,6 +337,7 @@ const DEFAULT_MODELS: Record<LLMProvider, string> = {
   minimax: "MiniMax-M2.1",
   blackboxai: "anthropic/claude-sonnet-4.5",
   ollama: "llama3.1:8b",
+  vllm: "default",
 };
 
 // ---------------------------------------------------------------------------
@@ -433,7 +434,7 @@ export function buildModelCatalog(
     { provider: "minimax", models: getMiniMaxModels() },
     { provider: "blackboxai", models: getBlackBoxModels() },
     { provider: "openrouter", models: openrouterModels },
-    // ollama is free-text — handled separately in UI
+    // ollama and vllm are free-text — handled separately in UI
   ];
 
   for (const { provider, models } of allSources) {

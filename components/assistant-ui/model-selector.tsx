@@ -27,6 +27,7 @@ const PROVIDER_COLORS: Record<string, { bg: string; text: string; border: string
   minimax: { bg: "bg-rose-500/10", text: "text-rose-700", border: "border-rose-500/30" },
   blackboxai: { bg: "bg-emerald-500/10", text: "text-emerald-700", border: "border-emerald-500/30" },
   ollama: { bg: "bg-gray-500/10", text: "text-gray-700", border: "border-gray-500/30" },
+  vllm: { bg: "bg-indigo-500/10", text: "text-indigo-700", border: "border-indigo-500/30" },
 };
 
 const PROVIDER_NAMES: Record<string, string> = {
@@ -39,9 +40,10 @@ const PROVIDER_NAMES: Record<string, string> = {
   minimax: "MiniMax",
   blackboxai: "BlackBox AI",
   ollama: "Ollama",
+  vllm: "vLLM",
 };
 
-const MANUAL_MODEL_PROVIDERS = new Set(["openrouter", "blackboxai", "ollama"]);
+const MANUAL_MODEL_PROVIDERS = new Set(["openrouter", "blackboxai", "ollama", "vllm"]);
 
 function formatModelName(modelId: string): string {
   const stripped = modelId.includes("/") ? modelId.split("/").pop()! : modelId;
@@ -80,7 +82,12 @@ function formatModelName(modelId: string): string {
 }
 
 function getManualModelPlaceholder(provider: string): string {
-  return provider === "blackboxai" ? "anthropic/claude-sonnet-4.6" : "x-ai/grok-4.1-fast";
+  switch (provider) {
+    case "blackboxai": return "anthropic/claude-sonnet-4.6";
+    case "vllm": return "Qwen/Qwen3.5-35B-A3B";
+    case "ollama": return "llama3.1:8b";
+    default: return "x-ai/grok-4.1-fast";
+  }
 }
 
 interface ModelSelectorProps {

@@ -5,6 +5,7 @@ import {
   createSpeechMediaRecorder,
   transcribeRecordedSpeech,
 } from "@/lib/voice/browser-stt";
+import { stripMarkdown } from "@/lib/utils/strip-markdown";
 
 // Re-export for convenience
 export type { MiniOverlayPhase };
@@ -460,6 +461,12 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           return;
         }
 
+        const ttsText = stripMarkdown(accumulated);
+        if (!ttsText) {
+          setPhase("done");
+          return;
+        }
+
         setPhase("speaking");
 
         // --- TTS ---
@@ -468,7 +475,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           const ttsRes = await fetch("/api/voice/speak", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: accumulated }),
+            body: JSON.stringify({ text: ttsText }),
             signal: ttsAbortRef.current.signal,
           });
           if (!ttsRes.ok) throw new Error(`TTS failed: ${ttsRes.status}`);

@@ -16,7 +16,8 @@ export type LLMProvider =
   | "minimax"
   | "blackboxai"
   | "ollama"
-  | "claudecode";
+  | "claudecode"
+  | "vllm";
 
 /** The 4 model roles that map to settings-manager.ts fields */
 export type ModelRole = "chat" | "research" | "vision" | "utility";

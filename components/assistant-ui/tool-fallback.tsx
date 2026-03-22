@@ -171,8 +171,8 @@ function isToolErrorResult(result?: ToolResult): boolean {
 }
 
 const TOOL_RESULT_TEXT_CLASS = "text-sm text-terminal-muted font-mono transition-opacity duration-150 [overflow-wrap:anywhere]";
-const TOOL_RESULT_PRE_CLASS = "overflow-x-auto rounded bg-terminal-dark/5 p-2 text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-terminal-dark";
-const TOOL_RESULT_ERROR_PRE_CLASS = "overflow-x-auto rounded bg-red-50 p-2 text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-red-600";
+const TOOL_RESULT_PRE_CLASS = "overflow-x-auto rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-terminal-dark dark:text-terminal-dark/90";
+const TOOL_RESULT_ERROR_PRE_CLASS = "overflow-x-auto rounded bg-red-50 dark:bg-red-900/20 p-2 text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-red-600 dark:text-red-400";
 const TOOL_ARGS_PREVIEW_MAX_CHARS = 2_000;
 
 // Memoized Icon Component with Phosphor Icons

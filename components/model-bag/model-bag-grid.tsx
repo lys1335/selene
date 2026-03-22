@@ -16,9 +16,9 @@ interface ModelBagGridProps {
   isSaving: boolean;
 }
 
-const MANUAL_MODEL_PROVIDERS: ReadonlySet<LLMProvider> = new Set(["openrouter", "ollama", "blackboxai"]);
+const MANUAL_MODEL_PROVIDERS: ReadonlySet<LLMProvider> = new Set(["openrouter", "ollama", "blackboxai", "vllm"]);
 
-function isManualModelProvider(provider: LLMProvider): provider is "openrouter" | "ollama" | "blackboxai" {
+function isManualModelProvider(provider: LLMProvider): provider is "openrouter" | "ollama" | "blackboxai" | "vllm" {
   return MANUAL_MODEL_PROVIDERS.has(provider);
 }
 
@@ -28,6 +28,8 @@ function getManualModelPlaceholder(provider: LLMProvider): string {
       return "anthropic/claude-sonnet-4.6";
     case "openrouter":
       return "x-ai/grok-4.1-fast";
+    case "vllm":
+      return "Qwen/Qwen3.5-35B-A3B";
     default:
       return "llama3.1:8b";
   }

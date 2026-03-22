@@ -92,14 +92,18 @@ Patch applied after initial release — included in updated installers.
 - Fixed reconnect leaving Claude Code tasks permanently stuck in active state after network outage
 - Fixed settings not persisting for browser launch mode, TTS code blocks, and mini overlay preferences — six fields were accepted by the UI but discarded by the API save handler
 - Fixed newly added plugins not taking effect in active agent sessions until app restart
-- Fixed dark mode rendering Claude Code tool panels nearly invisible — containers, code blocks, diff colors, and status badges all lacked dark variants
+- Fixed dark mode rendering Claude Code tool panels nearly invisible — containers, code blocks, diff colors, status badges, and copy actions now all have proper dark variants
+- Fixed Claude Code SDK tool outputs leaking raw XML status tags into the chat UI
 - Fixed MCP servers with missing URL config crashing on connection instead of showing a "configuration required" state
+- Fixed `readFile` hard-failing on binary or out-of-scope paths — it now returns a soft redirect response the UI can handle cleanly
 - Fixed apply_patch rejecting valid absolute paths that resolve inside the workspace boundary
 - Fixed interactive tool calls (plan mode, user questions) not rendering after page reload in background mode
 - Fixed Shift+E shortcut for expanding tool results blocking normal typing of capital E — changed to Cmd/Ctrl+Shift+E
 - Fixed TTS discarding buffered speech when encountering an unclosed code fence
 - Fixed plugin import not including asset directories alongside plugin structure files
-- Added plugin-declared MCP servers to the Settings panel with connection status, tool counts, and plugin attribution
+- Removed the redundant screen capture button from the composer now that shortcut-driven capture is the primary flow
+- Added plugin-declared MCP servers to the Settings panel with connection status, tool counts, plugin attribution, and inline URL editing for plugin-managed server configs
+- Added support for entering manual BlackBox AI model IDs when a model is available upstream but not yet listed in the fetched catalog
 - Added centralized macOS permission prompts for screen capture — actionable toasts with "Open System Settings" deep-links replace generic error messages
 
 ## Platform

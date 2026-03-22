@@ -38,6 +38,7 @@ const MODEL_PREFIXES: Record<LLMProvider, string[]> = {
   blackboxai: ["blackbox-", "blackboxai/"], // used by openrouter exclusion check
   antigravity: [], // uses exact match
   ollama: [],      // accepts any model name
+  vllm: [],        // accepts any model name (serves whatever model is loaded)
   openrouter: [],  // accepts anything
 };
 
@@ -113,6 +114,9 @@ export function isModelCompatibleWithProvider(
 
   // Ollama: accepts any model name
   if (provider === "ollama") return true;
+
+  // vLLM: accepts any model name (serves whatever model is loaded)
+  if (provider === "vllm") return true;
 
   // OpenRouter: accepts anything with "/" or non-provider-specific bare IDs
   if (provider === "openrouter") {
