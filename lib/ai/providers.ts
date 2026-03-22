@@ -924,12 +924,14 @@ export function getProviderDisplayName(): string {
 }
 
 /**
- * Check if the current provider supports a specific feature.
+ * Check if a provider supports a specific feature.
+ * Pass an explicit provider to avoid falling back to the global default.
  */
 export function providerSupportsFeature(
-  feature: "tools" | "streaming" | "images"
+  feature: "tools" | "streaming" | "images",
+  providerOverride?: LLMProvider
 ): boolean {
-  const provider = getConfiguredProvider();
+  const provider = providerOverride ?? getConfiguredProvider();
 
   const featureSupport: Record<LLMProvider, Record<string, boolean>> = {
     anthropic: { tools: true, streaming: true, images: true },

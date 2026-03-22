@@ -995,7 +995,7 @@ export async function POST(req: Request) {
               }),
           ...(injectContext && { system: systemPromptValue }),
           messages: cachedMessages,
-          ...(providerSupportsFeature("tools") ? {
+          ...(providerSupportsFeature("tools", provider) ? {
             tools: allToolsWithMCP,
             activeTools: initialActiveToolNames as (keyof typeof allToolsWithMCP)[],
             toolChoice: AI_CONFIG.toolChoice,
@@ -1007,7 +1007,7 @@ export async function POST(req: Request) {
           stopWhen: stepCountIs(provider === "claudecode" ? 1 : AI_CONFIG.maxSteps),
           temperature: await getSessionProviderTemperatureForSession(
             sessionMetadata,
-            providerSupportsFeature("tools") && initialActiveToolNames.length > 0 ? AI_CONFIG.toolTemperature : AI_CONFIG.temperature,
+            providerSupportsFeature("tools", provider) && initialActiveToolNames.length > 0 ? AI_CONFIG.toolTemperature : AI_CONFIG.temperature,
             { characterId, settings: appSettings },
           ),
           prepareStep: async ({ stepNumber, messages: stepMessages }) => {
