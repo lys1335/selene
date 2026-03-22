@@ -69,6 +69,7 @@ import {
   DelegationToolUI,
 } from "./claude-code-tools";
 import { useOptionalVoice } from "./voice-context";
+import { stripMarkdown } from "@/lib/utils/strip-markdown";
 import { YouTubeInlinePreview } from "./youtube-inline";
 import { TooltipIconButton } from "./tooltip-icon-button";
 import { useCharacter, DEFAULT_CHARACTER } from "./character-context";
@@ -663,7 +664,7 @@ export const AssistantActionBar: FC<{ ttsEnabled?: boolean; messageText?: string
   const voiceCtx = useOptionalVoice();
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioUrlRef = useRef<string | null>(null);
-  const sanitizedMessageText = (messageText || "").trim();
+  const sanitizedMessageText = stripMarkdown((messageText || "").trim());
   const handleCopyClick = useCallback(() => {
     toast.success(t("toast.copied"));
   }, [t]);

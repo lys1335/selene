@@ -8,6 +8,7 @@
 import { tool, jsonSchema } from "ai";
 import { synthesizeSpeech, isTTSAvailable } from "@/lib/tts/manager";
 import { saveFile } from "@/lib/storage/local-storage";
+import { stripMarkdown } from "@/lib/utils/strip-markdown";
 
 interface SpeakAloudInput {
   text: string;
@@ -58,7 +59,7 @@ export function createSpeakAloudTool({ sessionId }: { sessionId: string }) {
       }
 
       try {
-        const result = await synthesizeSpeech({ text, voice, speed });
+        const result = await synthesizeSpeech({ text: stripMarkdown(text), voice, speed });
 
         // Determine file extension from mimeType
         const ext = result.mimeType === "audio/ogg" ? "ogg"
