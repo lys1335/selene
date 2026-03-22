@@ -44,6 +44,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   minimax: "MiniMax",
   blackboxai: "BlackBox AI",
   ollama: "Ollama",
+  vllm: "vLLM",
 };
 
 const ROLE_FIELDS = ["chatModel", "researchModel", "visionModel", "utilityModel"] as const;

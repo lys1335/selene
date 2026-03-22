@@ -23,7 +23,7 @@ export type PostEditHooksPreset = "off" | "fast" | "strict";
 // — with love, Selene (https://github.com/tercumantanumut/selene)
 export interface AppSettings {
     // AI Provider settings
-    llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai";
+    llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
     anthropicApiKey?: string;
     openrouterApiKey?: string;
     kimiApiKey?: string;      // For Moonshot Kimi models
@@ -31,6 +31,8 @@ export interface AppSettings {
     blackboxaiApiKey?: string; // For BlackBox AI models
     openaiApiKey?: string;    // For OpenAI Whisper STT, TTS, and other OpenAI-direct services
     ollamaBaseUrl?: string;
+    vllmBaseUrl?: string;     // For vLLM OpenAI-compatible server
+    vllmApiKey?: string;      // Optional API key for secured vLLM deployments
     tavilyApiKey?: string;    // For Deep Research web search
     firecrawlApiKey?: string; // For web scraping with Firecrawl
     webScraperProvider?: "firecrawl" | "local"; // Web scraping provider selection
@@ -303,6 +305,7 @@ export interface AppSettings {
 const DEFAULT_SETTINGS: AppSettings = {
     llmProvider: "anthropic",
     ollamaBaseUrl: "http://localhost:11434/v1",
+    vllmBaseUrl: "http://localhost:8000/v1",
     localUserId: crypto.randomUUID(),
     localUserEmail: "local@zlutty.ai",
     theme: "dark",
@@ -583,6 +586,16 @@ function updateEnvFromSettings(settings: AppSettings): void {
     } else {
         delete process.env.OLLAMA_BASE_URL;
     }
+    if (settings.vllmBaseUrl !== undefined) {
+        process.env.VLLM_BASE_URL = settings.vllmBaseUrl;
+    } else {
+        delete process.env.VLLM_BASE_URL;
+    }
+    if (settings.vllmApiKey) {
+        process.env.VLLM_API_KEY = settings.vllmApiKey;
+    } else {
+        delete process.env.VLLM_API_KEY;
+    }
     if (settings.tavilyApiKey !== undefined) {
         const nextTavilyApiKey = settings.tavilyApiKey.trim();
         if (nextTavilyApiKey.length > 0) {
@@ -760,6 +773,10 @@ export function hasRequiredApiKeys(): boolean {
     }
     // Ollama runs locally and does not require an API key
     if (settings.llmProvider === "ollama") {
+        return true;
+    }
+    // vLLM doesn't require an API key (optional for secured deployments)
+    if (settings.llmProvider === "vllm") {
         return true;
     }
 

@@ -5,7 +5,7 @@ import {
 } from "@/lib/chat/workspace-mode";
 
 export interface AppSettings {
-  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai";
+  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
   anthropicApiKey?: string;
   openrouterApiKey?: string;
   kimiApiKey?: string;
@@ -13,6 +13,8 @@ export interface AppSettings {
   blackboxaiApiKey?: string;
   openaiApiKey?: string;
   ollamaBaseUrl?: string;
+  vllmBaseUrl?: string;
+  vllmApiKey?: string;
   tavilyApiKey?: string;
   firecrawlApiKey?: string;
   webScraperProvider?: "firecrawl" | "local";
@@ -95,7 +97,7 @@ export interface AppSettings {
 export type SettingsSection = "api-keys" | "models" | "vector-search" | "comfyui" | "preferences" | "memory" | "mcp" | "plugins" | "voice";
 
 export interface FormState {
-  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai";
+  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
   anthropicApiKey: string;
   openrouterApiKey: string;
   kimiApiKey: string;
@@ -103,6 +105,8 @@ export interface FormState {
   blackboxaiApiKey: string;
   openaiApiKey: string;
   ollamaBaseUrl: string;
+  vllmBaseUrl: string;
+  vllmApiKey: string;
   tavilyApiKey: string;
   firecrawlApiKey: string;
   webScraperProvider: "firecrawl" | "local";
@@ -237,6 +241,8 @@ export const DEFAULT_FORM_STATE: FormState = {
   blackboxaiApiKey: "",
   openaiApiKey: "",
   ollamaBaseUrl: "http://localhost:11434/v1",
+  vllmBaseUrl: "http://localhost:8000/v1",
+  vllmApiKey: "",
   tavilyApiKey: "",
   firecrawlApiKey: "",
   webScraperProvider: "local",
@@ -364,6 +370,8 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     blackboxaiApiKey: data.blackboxaiApiKey || "",
     openaiApiKey: data.openaiApiKey || "",
     ollamaBaseUrl: data.ollamaBaseUrl || "http://localhost:11434/v1",
+    vllmBaseUrl: data.vllmBaseUrl || "http://localhost:8000/v1",
+    vllmApiKey: data.vllmApiKey || "",
     tavilyApiKey: data.tavilyApiKey || "",
     firecrawlApiKey: data.firecrawlApiKey || "",
     webScraperProvider: data.webScraperProvider || "local",

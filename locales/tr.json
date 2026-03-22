@@ -151,6 +151,7 @@
         "anthropic": "Anthropic Claude",
         "openrouter": "OpenRouter",
         "ollama": "Ollama",
+        "vllm": "vLLM",
         "kimi": "Moonshot Kimi",
         "codex": "OpenAI Codex",
         "claudeCode": "Claude Code",
@@ -2048,6 +2049,7 @@
       "kimi": "Moonshot Kimi",
       "blackboxai": "BlackBox AI",
       "ollama": "Ollama (yerel)",
+      "vllm": "vLLM (yerel)",
       "keysTitle": "API Anahtarları",
       "auth": {
         "pasteInstructions": "Bir tarayıcı sekmesi açıldı. Yetkilendirdikten sonra sayfada gösterilen kodu kopyalayın ve aşağıya yapıştırın.",
@@ -2142,6 +2144,16 @@
           "label": "Ollama URL",
           "placeholder": "http://localhost:11434/v1",
           "helper": "Yerel Ollama OpenAI uyumlu uç nokta URL'sini kullanın."
+        },
+        "vllm": {
+          "label": "vLLM Sunucu URL'si",
+          "placeholder": "http://localhost:8000/v1",
+          "helper": "vLLM sunucunuzun OpenAI uyumlu uç noktası."
+        },
+        "vllmApiKey": {
+          "label": "API Anahtarı (isteğe bağlı)",
+          "placeholder": "token-...",
+          "helper": "Yalnızca vLLM sunucunuz kimlik doğrulama gerektiriyorsa gereklidir."
         },
         "openai": {
           "label": "OpenAI API Anahtarı",

@@ -26,7 +26,8 @@ type LLMProvider =
   | "minimax"
   | "blackboxai"
   | "ollama"
-  | "claudecode";
+  | "claudecode"
+  | "vllm";
 
 const ANTIGRAVITY_EXACT_MODELS = new Set([
   "gemini-3-pro-high",
@@ -48,6 +49,7 @@ const MODEL_PREFIXES: Record<LLMProvider, string[]> = {
   antigravity: [],
   ollama: [],
   openrouter: [],
+  vllm: [],
 };
 
 function isModelCompatibleWithProvider(
@@ -74,6 +76,7 @@ function isModelCompatibleWithProvider(
   }
   if (provider === "kimi") return MODEL_PREFIXES.kimi.some((p) => lowerModel.startsWith(p));
   if (provider === "ollama") return true;
+  if (provider === "vllm") return true;
   if (provider === "openrouter") {
     if (lowerModel.includes("/")) return true;
     if (
