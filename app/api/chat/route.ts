@@ -8,7 +8,7 @@ import {
   type UIMessageChunk,
   type UserModelMessage,
 } from "ai";
-import { ensureAntigravityTokenValid, ensureClaudeCodeTokenValid, ensureCodexTokenValid } from "@/lib/ai/providers";
+import { ensureAntigravityTokenValid, ensureClaudeCodeTokenValid, ensureCodexTokenValid, providerSupportsFeature } from "@/lib/ai/providers";
 import { registerAllTools } from "@/lib/ai/tool-registry";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { getPrimarySyncFolder } from "@/lib/vectordb/sync-folder-crud";
@@ -995,8 +995,11 @@ export async function POST(req: Request) {
               }),
           ...(injectContext && { system: systemPromptValue }),
           messages: cachedMessages,
-          tools: allToolsWithMCP,
-          activeTools: initialActiveToolNames as (keyof typeof allToolsWithMCP)[],
+          ...(providerSupportsFeature("tools") ? {
+            tools: allToolsWithMCP,
+            activeTools: initialActiveToolNames as (keyof typeof allToolsWithMCP)[],
+            toolChoice: AI_CONFIG.toolChoice,
+          } : {}),
           abortSignal: streamAbortSignal,
           // For claudecode: stop after step 0 to prevent the passthrough tool
           // execute results from triggering a new SDK query (infinite loop).
@@ -1004,10 +1007,9 @@ export async function POST(req: Request) {
           stopWhen: stepCountIs(provider === "claudecode" ? 1 : AI_CONFIG.maxSteps),
           temperature: await getSessionProviderTemperatureForSession(
             sessionMetadata,
-            initialActiveToolNames.length > 0 ? AI_CONFIG.toolTemperature : AI_CONFIG.temperature,
+            providerSupportsFeature("tools") && initialActiveToolNames.length > 0 ? AI_CONFIG.toolTemperature : AI_CONFIG.temperature,
             { characterId, settings: appSettings },
           ),
-          toolChoice: AI_CONFIG.toolChoice,
           prepareStep: async ({ stepNumber, messages: stepMessages }) => {
             let activeToolSet: Set<string>;
             if (useDeferredLoading) {

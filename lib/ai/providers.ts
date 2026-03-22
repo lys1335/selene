@@ -941,7 +941,7 @@ export function providerSupportsFeature(
     minimax: { tools: true, streaming: true, images: false },
     blackboxai: { tools: true, streaming: true, images: false },
     ollama: { tools: false, streaming: true, images: false },
-    vllm: { tools: true, streaming: true, images: false },
+    vllm: { tools: false, streaming: true, images: false },
   };
 
   return featureSupport[provider]?.[feature] ?? false;

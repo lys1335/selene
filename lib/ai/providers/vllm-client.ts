@@ -16,9 +16,21 @@ import { loadSettings } from "@/lib/settings/settings-manager";
 
 const VLLM_DEFAULT_BASE_URL = "http://localhost:8000/v1";
 
+function normalizeVllmUrl(url: string): string {
+  // Strip trailing slash
+  let normalized = url.replace(/\/+$/, "");
+  // Auto-append /v1 if not present — createOpenAICompatible constructs
+  // paths as ${baseURL}/chat/completions, so /v1 must be in the base URL.
+  if (!normalized.endsWith("/v1")) {
+    normalized += "/v1";
+  }
+  return normalized;
+}
+
 export function getVllmBaseUrl(): string {
   const settings = loadSettings();
-  return settings.vllmBaseUrl || process.env.VLLM_BASE_URL || VLLM_DEFAULT_BASE_URL;
+  const raw = settings.vllmBaseUrl || process.env.VLLM_BASE_URL || VLLM_DEFAULT_BASE_URL;
+  return normalizeVllmUrl(raw);
 }
 
 export function getVllmApiKey(): string {
