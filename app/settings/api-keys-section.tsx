@@ -115,6 +115,23 @@ export function ApiKeysSection({
             <input
               type="radio"
               name="llmProvider"
+              value="vllm"
+              checked={formState.llmProvider === "vllm"}
+              onChange={(e) => {
+                updateField("llmProvider", e.target.value as FormState["llmProvider"]);
+                updateField("chatModel", "");
+                updateField("researchModel", "");
+                updateField("visionModel", "");
+                updateField("utilityModel", "");
+              }}
+              className="size-4 accent-terminal-green"
+            />
+            <span className="font-mono text-terminal-dark">{t("api.vllm")}</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="radio"
+              name="llmProvider"
               value="kimi"
               checked={formState.llmProvider === "kimi"}
               onChange={(e) => {
@@ -393,6 +410,37 @@ export function ApiKeysSection({
             <p className="mt-1 font-mono text-xs text-terminal-muted">
               {t("api.fields.ollama.helper")}
             </p>
+          </div>
+        )}
+
+        {formState.llmProvider === "vllm" && (
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.vllm.label")}</label>
+              <input
+                type="text"
+                value={formState.vllmBaseUrl}
+                onChange={(e) => updateField("vllmBaseUrl", e.target.value)}
+                placeholder={t("api.fields.vllm.placeholder")}
+                className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+              />
+              <p className="mt-1 font-mono text-xs text-terminal-muted">
+                {t("api.fields.vllm.helper")}
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.vllmApiKey.label")}</label>
+              <input
+                type="password"
+                value={formState.vllmApiKey}
+                onChange={(e) => updateField("vllmApiKey", e.target.value)}
+                placeholder={t("api.fields.vllmApiKey.placeholder")}
+                className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+              />
+              <p className="mt-1 font-mono text-xs text-terminal-muted">
+                {t("api.fields.vllmApiKey.helper")}
+              </p>
+            </div>
           </div>
         )}
 

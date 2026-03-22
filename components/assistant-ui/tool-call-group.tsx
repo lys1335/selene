@@ -81,19 +81,24 @@ function getResultCount(result: unknown): number | null {
 }
 
 function getStatus(part: ToolCallPartLike): ToolCallBadgeStatus {
-  if (part.status?.type === "incomplete") return "error";
-  if (part.status?.type === "running" || part.status?.type === "requires-action") {
-    return "running";
-  }
-
   const result = part.result as Record<string, unknown> | undefined;
   const status = typeof result?.status === "string" ? result.status.toLowerCase() : undefined;
+  const resultIndicatesError =
+    status === "error" || status === "failed" || status === "denied" || typeof result?.error === "string";
 
-  if (part.isError || status === "error" || status === "failed" || status === "denied" || typeof result?.error === "string") {
-    return "error";
+  // When a result exists, trust the result content over framework-level signals.
+  // part.status.type === "incomplete" means the *stream* was interrupted, not
+  // that the *tool* failed.  If we already have the result, the tool is done.
+  if (result !== undefined) {
+    if (part.isError || resultIndicatesError) return "error";
+    if (status === "processing") return "running";
+    return "completed";
   }
-  if (part.result === undefined || status === "processing") return "running";
-  return "completed";
+
+  // No result yet — fall back to framework signals
+  if (part.status?.type === "incomplete") return "error";
+  if (part.status?.type === "running" || part.status?.type === "requires-action") return "running";
+  return "running";
 }
 
 function extractMediaFromResult(result: unknown): Array<{ type: "image" | "video"; url: string }> {

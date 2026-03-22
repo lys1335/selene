@@ -3,7 +3,7 @@
 
 appId: "ai.zlutty.app"
 productName: "Selene"
-copyright: "Copyright © 2024-2025 Zlutty.AI"
+copyright: "Copyright © 2025-2026 Selene"
 icon: "build-resources/icon.png"
 
 # Directories
@@ -140,7 +140,7 @@ extraResources:
 asar: true
 compression: "normal"
 
-# afterSign: "scripts/notarize.js"  # temporarily disabled
+# afterSign: "scripts/notarize.js"  # TEMPORARILY DISABLED
 
 # Disable npm rebuild - we handle this in electron:rebuild-standalone
 npmRebuild: false
@@ -148,11 +148,11 @@ npmRebuild: false
 # macOS specific configuration
 mac:
   category: "public.app-category.entertainment"
-  identity: null  # temporarily disable signing
-  hardenedRuntime: true
+  identity: null  # TEMPORARILY DISABLED - skip code signing
+  hardenedRuntime: false
   gatekeeperAssess: false
-  entitlements: "build-resources/entitlements.mac.plist"
-  entitlementsInherit: "build-resources/entitlements.mac.inherit.plist"
+  # entitlements: "build-resources/entitlements.mac.plist"       # TEMPORARILY DISABLED
+  # entitlementsInherit: "build-resources/entitlements.mac.inherit.plist"  # TEMPORARILY DISABLED
   # Build only for current architecture by default (use CLI flags to override)
   target:
     - target: "dir"

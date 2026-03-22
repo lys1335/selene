@@ -80,6 +80,13 @@ export const PROVIDER_THEME: Record<
     iconEmoji: "",
     authType: "local",
   },
+  vllm: {
+    accentColor: "border-indigo-500",
+    bgColor: "bg-indigo-500/5",
+    badgeColor: "bg-indigo-500/20",
+    iconEmoji: "",
+    authType: "local",
+  },
 };
 
 /** Display names for providers */
@@ -93,6 +100,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<LLMProvider, string> = {
   minimax: "MiniMax",
   blackboxai: "BlackBox AI",
   ollama: "Ollama",
+  vllm: "vLLM",
 };
 
 /** Role display metadata */
