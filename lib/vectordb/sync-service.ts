@@ -144,6 +144,15 @@ export async function removeSyncFolder(folderId: string): Promise<void> {
   }
 
   notifyFolderChange(characterId, { type: "removed", folderId, wasPrimary, folderPath: folder.folderPath });
+
+  // Propagate removal to workflow sub-agents so their inherited copies are cleaned up.
+  // Dynamic import avoids circular dependency (workflow-folder-sharing → sync-service).
+  try {
+    const { propagateWorkflowFolderChange } = await import("@/lib/agents/workflow-folder-sharing");
+    await propagateWorkflowFolderChange(characterId, { type: "removed", folderId, folderPath: folder.folderPath });
+  } catch (err) {
+    console.error(`[SyncService] Non-fatal: failed to propagate folder removal to workflow sub-agents:`, err);
+  }
 }
 
 /**
