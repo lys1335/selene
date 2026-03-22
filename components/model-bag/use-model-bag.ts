@@ -105,6 +105,39 @@ export function useModelBag() {
       assignments,
     );
 
+    // Auto-probe vLLM server for available models
+    if (data.llmProvider === "vllm") {
+      try {
+        const { data: probeData } = await resilientFetch<{ models: string[] }>("/api/vllm/models");
+        if (probeData?.models?.length) {
+          const existingIds = new Set(catalog.map((m) => m.id));
+          for (const modelId of probeData.models) {
+            if (!existingIds.has(modelId)) {
+              catalog.push({
+                id: modelId,
+                name: modelId,
+                provider: "vllm",
+                providerDisplayName: PROVIDER_DISPLAY_NAMES.vllm,
+                tier: "standard",
+                capabilities: {
+                  vision: false,
+                  thinking: false,
+                  toolUse: true,
+                  streaming: true,
+                  speed: "standard",
+                },
+                assignedRoles: [],
+                isAvailable: true,
+                isDefault: true,
+              });
+            }
+          }
+        }
+      } catch {
+        // vLLM server unreachable — no models to auto-discover
+      }
+    }
+
     const providers: ProviderStatus[] = ALL_PROVIDERS.map((id) => ({
       id,
       displayName: PROVIDER_DISPLAY_NAMES[id],

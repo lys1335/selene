@@ -129,7 +129,7 @@ export const DEFAULT_MODELS: Record<LLMProvider, string> = {
   minimax: "MiniMax-M2.1", // MiniMax flagship with 80K context
   blackboxai: "claude-sonnet-4.5",
   ollama: "llama3.1:8b",
-  vllm: "default",
+  vllm: "", // Discovered from /v1/models at runtime
 };
 
 // Utility models - fast/cheap models for background tasks
@@ -143,7 +143,7 @@ export const UTILITY_MODELS: Record<LLMProvider, string> = {
   minimax: "MiniMax-M2.1-lightning", // Fast MiniMax model for utility tasks
   blackboxai: "gpt-4o-mini",
   ollama: "llama3.1:8b",
-  vllm: "default",
+  vllm: "", // Same as chat model — vLLM typically serves one model
 };
 
 // ---- Lazy provider singletons ------------------------------------------------

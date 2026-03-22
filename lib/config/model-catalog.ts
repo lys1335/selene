@@ -337,7 +337,7 @@ const DEFAULT_MODELS: Record<LLMProvider, string> = {
   minimax: "MiniMax-M2.1",
   blackboxai: "anthropic/claude-sonnet-4.5",
   ollama: "llama3.1:8b",
-  vllm: "default",
+  vllm: "",
 };
 
 // ---------------------------------------------------------------------------
@@ -452,6 +452,27 @@ export function buildModelCatalog(
         isAvailable: authStatus[provider] ?? false,
         isDefault: model.id === DEFAULT_MODELS[provider],
       });
+    }
+  }
+
+  // Synthetic entries for assigned models not in catalog.
+  // Handles free-text providers (ollama, vllm, openrouter, blackboxai)
+  // where users can enter arbitrary model IDs.
+  const catalogIds = new Set(catalog.map((m) => m.id));
+  for (const modelId of Object.values(currentAssignments)) {
+    if (modelId && !catalogIds.has(modelId)) {
+      catalog.push({
+        id: modelId,
+        name: modelId,
+        provider: activeProvider,
+        providerDisplayName: PROVIDER_DISPLAY_NAMES[activeProvider],
+        tier: "standard",
+        capabilities: { ...DEFAULT_CAPABILITIES },
+        assignedRoles: roleInverse[modelId] ?? [],
+        isAvailable: authStatus[activeProvider] ?? false,
+        isDefault: false,
+      });
+      catalogIds.add(modelId);
     }
   }
 
