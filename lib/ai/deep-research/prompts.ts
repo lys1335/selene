@@ -17,7 +17,7 @@ Given the user's query, you must:
 3. Define the scope and boundaries of the research
 4. Outline expected sections for the final report
 
-Respond in JSON format:
+Respond ONLY with a valid JSON object. Do not include any explanation, preamble, or text outside the JSON.
 {
   "clarifiedQuery": "The expanded, clarified version of the user's query",
   "researchQuestions": ["Question 1", "Question 2", ...],
@@ -39,7 +39,7 @@ Guidelines:
 - Consider different phrasings to capture diverse sources
 - Prioritize queries that will find authoritative sources (academic, official, expert)
 
-Respond in JSON format:
+Respond ONLY with a valid JSON object. Do not include any explanation, preamble, or text outside the JSON.
 {
   "queries": ["search query 1", "search query 2", "search query 3"]
 }`;
@@ -56,7 +56,7 @@ For each set of search results, you must:
 3. Note any conflicting information or gaps
 4. Summarize the findings concisely
 
-Respond in JSON format:
+Respond ONLY with a valid JSON object. Do not include any explanation, preamble, or text outside the JSON.
 {
   "summary": "Concise summary of key findings",
   "keyFacts": ["Fact 1", "Fact 2", ...],
@@ -101,7 +101,7 @@ Analyze the draft and identify:
 3. Sections that need more depth
 4. Areas where clarity could be improved
 
-Respond in JSON format:
+Respond ONLY with a valid JSON object. Do not include any explanation, preamble, or text outside the JSON.
 {
   "informationGaps": ["Gap 1 - what specific information is missing", ...],
   "weakClaims": ["Claim that needs more evidence", ...],
