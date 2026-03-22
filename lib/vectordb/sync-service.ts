@@ -30,6 +30,7 @@ import {
 } from "./sync-mode-resolver";
 import { onFolderChange, notifyFolderChange, type FolderChangeEvent } from "./folder-events";
 import { resolveRegistryPath, getSubscriberCount } from "./shared-folder-registry";
+import { propagateWorkflowFolderChange } from "@/lib/agents/workflow-folder-sharing";
 export { onFolderChange, notifyFolderChange };
 export type { FolderChangeEvent };
 
@@ -144,6 +145,7 @@ export async function removeSyncFolder(folderId: string): Promise<void> {
   }
 
   notifyFolderChange(characterId, { type: "removed", folderId, wasPrimary, folderPath: folder.folderPath });
+  await propagateWorkflowFolderChange(characterId, { type: "removed", folderId, folderPath: folder.folderPath });
 }
 
 /**
@@ -775,6 +777,55 @@ export async function cleanupOrphanedVectorTables(): Promise<{ removed: string[]
 
   if (removed.length > 0) {
     console.log(`[SyncService] Cleaned up ${removed.length} orphaned vector table(s): ${removed.join(", ")}`);
+  }
+  return { removed, kept };
+}
+
+/**
+ * Remove orphaned agent_sync_folders DB rows — rows whose characterId no longer
+ * maps to a live character.  This catches sub-agent folders that weren't cleaned
+ * up when the owning character was deleted outside the normal DELETE endpoint
+ * (e.g. direct SQL, workflow teardown, crash mid-delete).
+ *
+ * For each orphaned folder this function:
+ *   1. Stops the file watcher (if running).
+ *   2. Cancels any in-flight sync.
+ *   3. Deletes the agentSyncFiles rows (FK cascade handles this, but we do it
+ *      explicitly so the watcher/sync cancellation happens first).
+ *   4. Deletes the agentSyncFolders row.
+ *
+ * Vector table cleanup for the same characterId is left to
+ * cleanupOrphanedVectorTables(), which should be called in the same pass.
+ */
+export async function cleanupOrphanedSyncFolders(): Promise<{ removed: string[]; kept: number }> {
+  const allFolders = await db.select().from(agentSyncFolders);
+  if (allFolders.length === 0) return { removed: [], kept: 0 };
+
+  const rows = await db.select({ id: characters.id }).from(characters);
+  const validIds = new Set(rows.map(row => row.id));
+
+  const orphaned = allFolders.filter(f => !validIds.has(f.characterId));
+  const kept = allFolders.length - orphaned.length;
+  const removed: string[] = [];
+
+  for (const folder of orphaned) {
+    try {
+      if (isSyncing(folder.id)) {
+        await cancelSyncById(folder.id);
+      }
+      if (isWatching(folder.id)) {
+        await stopWatching(folder.id);
+      }
+      await db.delete(agentSyncFiles).where(eq(agentSyncFiles.folderId, folder.id));
+      await db.delete(agentSyncFolders).where(eq(agentSyncFolders.id, folder.id));
+      removed.push(folder.id);
+    } catch (err) {
+      console.error(`[SyncService] Failed to remove orphaned sync folder ${folder.id}:`, err);
+    }
+  }
+
+  if (removed.length > 0) {
+    console.log(`[SyncService] Cleaned up ${removed.length} orphaned sync folder(s) for deleted characters`);
   }
   return { removed, kept };
 }

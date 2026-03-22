@@ -1581,7 +1581,14 @@
     "errorRemoveWorkspaceFolders": "Removed some workspace folders, but {failed} of {total} failed.",
     "errorSyncFolder": "Failed to sync folder",
     "errorSetPrimary": "Failed to set primary folder",
-    "errorUpdateSettings": "Failed to update folder settings"
+    "errorUpdateSettings": "Failed to update folder settings",
+    "pathMissingBadge": "Missing",
+    "pathMissingTitle": "This folder path no longer exists on disk",
+    "removeStaleFolders": "Remove missing folders",
+    "removeStaleFoldersTitle": "Remove folders with missing paths?",
+    "removeStaleFoldersDescription": "This will remove {count} folder(s) whose path no longer exists on disk. Indexed data for these folders will also be cleaned up.",
+    "confirmRemoveStaleFolders": "Remove missing folders",
+    "errorRemoveStaleFolders": "Removed some stale folders, but {failed} of {total} failed."
   },
   "vectorSearchPhase": {
     "idle": "Ready",

@@ -18,6 +18,7 @@ import { DEFAULT_IGNORE_PATTERNS } from "@/lib/vectordb/ignore-patterns";
 import { db } from "@/lib/db/sqlite-client";
 import { agentSyncFolders } from "@/lib/db/sqlite-character-schema";
 import { eq } from "drizzle-orm";
+import { existsSync } from "fs";
 
 const VALID_SYNC_MODES = ["auto", "manual", "scheduled", "triggered"] as const;
 const VALID_INDEXING_MODES = ["auto", "full", "files-only"] as const;
@@ -57,9 +58,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const characterId = searchParams.get("characterId");
 
-    const folders = characterId
+    const rawFolders = characterId
       ? await getSyncFolders(characterId)
       : await (await import("@/lib/vectordb/sync-service")).getAllSyncFolders();
+
+    // Annotate each folder with a cheap filesystem existence check so the UI
+    // can highlight stale paths without a separate round-trip.
+    const folders = rawFolders.map((folder) => ({
+      ...folder,
+      pathExists: existsSync(folder.folderPath),
+    }));
 
     return NextResponse.json({ folders });
   } catch (error) {
@@ -414,6 +422,20 @@ export async function POST(request: NextRequest) {
       });
 
       return NextResponse.json({ success: true });
+    }
+
+    if (action === "remove-stale") {
+      const { characterId } = body;
+      if (!characterId) {
+        return NextResponse.json({ error: "characterId is required" }, { status: 400 });
+      }
+      const allFolders = await getSyncFolders(characterId);
+      const staleFolders = allFolders.filter((f) => !existsSync(f.folderPath));
+      const results = await Promise.allSettled(
+        staleFolders.map((f) => removeSyncFolder(f.id))
+      );
+      const failed = results.filter((r) => r.status === "rejected").length;
+      return NextResponse.json({ removed: staleFolders.length - failed, failed, success: true });
     }
 
     return NextResponse.json(

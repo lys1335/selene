@@ -1584,7 +1584,14 @@
     "errorRemoveWorkspaceFolders": "Bazı çalışma alanı klasörleri kaldırıldı, ancak {total} içinden {failed} tanesi kaldırılamadı.",
     "errorSyncFolder": "Klasör senkronize edilemedi",
     "errorSetPrimary": "Birincil klasör ayarlanamadı",
-    "errorUpdateSettings": "Klasör ayarları güncellenemedi"
+    "errorUpdateSettings": "Klasör ayarları güncellenemedi",
+    "pathMissingBadge": "Eksik",
+    "pathMissingTitle": "Bu klasör yolu artık diskte mevcut değil",
+    "removeStaleFolders": "Eksik klasörleri kaldır",
+    "removeStaleFoldersTitle": "Yolu eksik olan klasörler kaldırılsın mı?",
+    "removeStaleFoldersDescription": "Yolu artık diskte bulunmayan {count} klasör kaldırılacak. Bu klasörlere ait indekslenmiş veriler de temizlenecek.",
+    "confirmRemoveStaleFolders": "Eksik klasörleri kaldır",
+    "errorRemoveStaleFolders": "Bazı bayat klasörler kaldırıldı, ancak {total} içinden {failed} tanesi kaldırılamadı."
   },
   "vectorSearchPhase": {
     "idle": "Hazır",

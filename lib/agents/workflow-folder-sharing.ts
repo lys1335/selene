@@ -5,11 +5,8 @@ import {
   agentWorkflowMembers,
 } from "@/lib/db/sqlite-workflows-schema";
 import { agentSyncFolders } from "@/lib/db/sqlite-character-schema";
-import { notifyFolderChange, onFolderChange, type FolderChangeEvent } from "@/lib/vectordb/folder-events";
+import { notifyFolderChange, type FolderChangeEvent } from "@/lib/vectordb/folder-events";
 import { refreshWorkflowSharedResources } from "./workflow-db-helpers";
-
-let workflowFolderPropagationRegistered = false;
-let unsubscribeFolderPropagation: (() => void) | null = null;
 
 function cloneFolderForMember(
   folder: typeof agentSyncFolders.$inferSelect,
@@ -239,32 +236,6 @@ export async function propagateWorkflowFolderChange(characterId: string, event: 
   if (event.type === "primary_changed") return propagateOwnFolderPrimaryChanged(characterId);
 }
 
-
-export function registerWorkflowFolderPropagation(): void {
-  if (workflowFolderPropagationRegistered) return;
-  workflowFolderPropagationRegistered = true;
-
-  unsubscribeFolderPropagation = onFolderChange(async (characterId, event: FolderChangeEvent) => {
-    if (event.type === "mcp_reload_started" || event.type === "mcp_reload_completed" || event.type === "mcp_reload_failed") {
-      return;
-    }
-
-    try {
-      await propagateWorkflowFolderChange(characterId, event);
-    } catch (error) {
-      console.error("[WorkflowFolders] Propagation failed:", { characterId, event, error });
-    }
-  });
-}
-
-export function resetWorkflowFolderPropagationForTests(): void {
-  if (unsubscribeFolderPropagation) {
-    unsubscribeFolderPropagation();
-    unsubscribeFolderPropagation = null;
-  }
-  workflowFolderPropagationRegistered = false;
-}
-
 export interface SyncSharedFoldersInput {
   userId: string;
   initiatorId: string;
@@ -465,12 +436,18 @@ export async function syncOwnFoldersToWorkflowMembers(input: {
 
 /**
  * Remove inherited folder copies when a member leaves.
+ *
+ * Uses removeSyncFolder for each folder so that in-flight syncs are cancelled,
+ * file watchers are stopped, and vector DB data is cleaned up properly. A raw
+ * db.delete would skip all of that.
  */
 export async function cleanupInheritedFoldersOnRemoval(input: {
   workflowId: string;
   leavingAgentId: string;
   remainingMemberIds: string[];
 }): Promise<void> {
+  const { removeSyncFolder } = await import("@/lib/vectordb/sync-service");
+
   const leavingAgentInherited = await db
     .select({ id: agentSyncFolders.id })
     .from(agentSyncFolders)
@@ -481,19 +458,8 @@ export async function cleanupInheritedFoldersOnRemoval(input: {
       )
     );
 
-  if (leavingAgentInherited.length > 0) {
-    await db
-      .delete(agentSyncFolders)
-      .where(
-        and(
-          eq(agentSyncFolders.characterId, input.leavingAgentId),
-          eq(agentSyncFolders.inheritedFromWorkflowId, input.workflowId)
-        )
-      );
-
-    for (const { id } of leavingAgentInherited) {
-      notifyFolderChange(input.leavingAgentId, { type: "removed", folderId: id, wasPrimary: false });
-    }
+  for (const { id } of leavingAgentInherited) {
+    await removeSyncFolder(id);
   }
 
   if (input.remainingMemberIds.length > 0) {
@@ -508,26 +474,8 @@ export async function cleanupInheritedFoldersOnRemoval(input: {
         )
       );
 
-    if (otherMembersInherited.length > 0) {
-      await db
-        .delete(agentSyncFolders)
-        .where(
-          and(
-            inArray(agentSyncFolders.characterId, input.remainingMemberIds),
-            eq(agentSyncFolders.inheritedFromWorkflowId, input.workflowId),
-            eq(agentSyncFolders.inheritedFromAgentId, input.leavingAgentId)
-          )
-        );
-
-      const affectedAgents = new Set(otherMembersInherited.map((row) => row.characterId));
-      for (const agentId of affectedAgents) {
-        const folderIds = otherMembersInherited
-          .filter((row) => row.characterId === agentId)
-          .map((row) => row.id);
-        for (const folderId of folderIds) {
-          notifyFolderChange(agentId, { type: "removed", folderId, wasPrimary: false });
-        }
-      }
+    for (const { id } of otherMembersInherited) {
+      await removeSyncFolder(id);
     }
   }
 }

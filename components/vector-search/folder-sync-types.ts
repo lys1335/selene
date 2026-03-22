@@ -33,6 +33,8 @@ export interface SyncFolder {
   inheritedFromWorkflowId?: string | null;
   inheritedFromAgentId?: string | null;
   inheritedFromFolderId?: string | null;
+  // Annotated by the GET endpoint — true when the path exists on disk at fetch time.
+  pathExists?: boolean;
 }
 
 export interface FolderAnalysis {
