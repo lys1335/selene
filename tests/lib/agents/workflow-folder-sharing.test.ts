@@ -177,6 +177,12 @@ vi.mock("@/lib/agents/workflow-db-helpers", () => ({
   refreshWorkflowSharedResources: mocks.refreshWorkflowSharedResources,
 }));
 
+vi.mock("@/lib/vectordb/sync-service", () => ({
+  removeSyncFolder: async (folderId: string) => {
+    mocks.state.folders = mocks.state.folders.filter((row) => row.id !== folderId);
+  },
+}));
+
 vi.mock("@/lib/agents/workflows", () => ({
   getWorkflowByAgentId: mocks.getWorkflowByAgentId,
   getWorkflowMembers: mocks.getWorkflowMembers,
@@ -307,10 +313,8 @@ describe("workflow folder propagation", () => {
     await propagateWorkflowFolderChange("agent-a", { type: "removed", folderId: "source-folder", folderPath: "C:/repo" });
 
     expect(mocks.state.folders.map((row) => row.id)).toEqual(["own-b"]);
-    expect(mocks.state.notifications).toContainEqual({
-      characterId: "agent-b",
-      event: { type: "removed", folderId: "copy-1", wasPrimary: false },
-    });
+    // removeSyncFolder handles its own notifications internally,
+    // so we only verify the folder was removed and workflow resources refreshed.
     expect(mocks.refreshWorkflowSharedResources).toHaveBeenCalledWith("wf-1", "agent-a", mocks.getWorkflowById);
   });
 
