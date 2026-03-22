@@ -8,8 +8,7 @@ export type ToolDependency =
   | "flux2Klein4bEnabled"
   | "flux2Klein9bEnabled"
   | "localGrepEnabled"
-  | "devWorkspaceEnabled"
-  | "screenCaptureEnabled";
+  | "devWorkspaceEnabled";
 
 export type CharacterToolCatalogItem = {
   id: string;
@@ -42,7 +41,6 @@ export const CHARACTER_TOOL_CATALOG: CharacterToolCatalogItem[] = [
   { id: "firecrawlCrawl", category: "search", dependencies: ["webScraper"] },
   { id: "assembleVideo", category: "video-generation" },
   { id: "describeImage", category: "analysis" },
-  { id: "screenCapture", category: "analysis", dependencies: ["screenCaptureEnabled"], displayName: "Screen Capture", description: "Capture the active display and attach it to the current message" },
   { id: "showProductImages", category: "utility" },
   { id: "executeCommand", category: "utility", dependencies: ["syncedFolders"] },
   { id: "scheduleTask", category: "scheduling" },
