@@ -929,7 +929,7 @@ export function getProviderDisplayName(): string {
  */
 export function providerSupportsFeature(
   feature: "tools" | "streaming" | "images",
-  providerOverride?: LLMProvider
+  providerOverride?: LLMProvider,
 ): boolean {
   const provider = providerOverride ?? getConfiguredProvider();
 

@@ -3,6 +3,7 @@ import {
   createUIMessageStreamResponse,
   streamText,
   stepCountIs,
+  wrapLanguageModel,
   type ModelMessage,
   type Tool,
   type UIMessageChunk,
@@ -102,6 +103,7 @@ import {
 } from "./tool-schema-recovery";
 import { tagIntermediateDelegationParts } from "./delegation-scope-tagging";
 import { createThinkTagFilter, shouldFilterThinkTags } from "@/lib/ai/streaming/think-tag-filter";
+import { thinkTagMiddleware, hasThinkTags } from "@/lib/ai/utils/think-tag-stream";
 import { detectEmotion } from "@/lib/emotion";
 import {
   isUiChunkCommittable,
@@ -983,8 +985,11 @@ export async function POST(req: Request) {
         mcpCtx,
         () => withRunContext(
         { runId, sessionId, pipelineName: "chat", characterId: characterId || undefined },
-        async () => streamText({
-          model: hasUserImageInput
+        async () => {
+          // Resolve the model, then conditionally wrap with think-tag middleware
+          // for providers that emit raw <think>...</think> tags (vLLM, Ollama).
+          // The middleware transforms think tags into proper reasoning stream parts.
+          let resolvedModel = hasUserImageInput
             ? await resolveSessionVisionModelForSession(sessionMetadata, {
                 characterId,
                 settings: appSettings,
@@ -992,8 +997,20 @@ export async function POST(req: Request) {
             : await resolveSessionLanguageModelForSession(sessionMetadata, {
                 characterId,
                 settings: appSettings,
-              }),
-          ...(injectContext && { system: systemPromptValue }),
+              });
+
+          if (hasThinkTags(provider)) {
+            // Cast needed: resolvers return LanguageModel (union), wrapLanguageModel expects LanguageModelV3.
+            // Safe because resolvers always return actual model objects, never string IDs.
+            resolvedModel = wrapLanguageModel({
+              model: resolvedModel as Parameters<typeof wrapLanguageModel>[0]["model"],
+              middleware: thinkTagMiddleware,
+            });
+          }
+
+          return streamText({
+            model: resolvedModel,
+            ...(injectContext && { system: systemPromptValue }),
           messages: cachedMessages,
           ...(providerSupportsFeature("tools", provider) ? {
             tools: allToolsWithMCP,
@@ -1240,7 +1257,8 @@ export async function POST(req: Request) {
             return createOnFinishCallback(callbackCtx)(event);
           },
           onAbort: createOnAbortCallback(callbackCtx) as any,
-        })
+        });
+        }
       )
     );
 
