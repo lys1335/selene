@@ -116,7 +116,9 @@ export function TerminalBlock({
   return (
     <div
       className={cn(
-        "rounded-lg bg-terminal-bg/80 border border-terminal-border shadow-sm p-4 font-mono",
+        "rounded-lg border shadow-sm p-4 font-mono",
+        "bg-terminal-bg/80 border-terminal-border",
+        "dark:bg-card/85 dark:border-border/60 dark:backdrop-blur-sm",
         className
       )}
     >
