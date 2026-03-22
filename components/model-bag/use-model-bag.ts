@@ -49,6 +49,7 @@ const ALL_PROVIDERS: LLMProvider[] = [
   "minimax",
   "blackboxai",
   "ollama",
+  "vllm",
 ];
 
 export function useModelBag() {
@@ -88,6 +89,7 @@ export function useModelBag() {
       minimax: !!data.minimaxApiKey,
       blackboxai: !!data.blackboxaiApiKey,
       ollama: true,
+      vllm: true,
     };
 
     const assignments: Record<string, string> = {

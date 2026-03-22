@@ -16,6 +16,7 @@ const DEFAULT_PROVIDER_LIMITS: Record<LLMProvider, number> = {
   minimax: 80000,      // MiniMax M2.1 80K context
   blackboxai: 128000,  // BlackBox AI default context
   ollama: 8192,        // Llama 3 default (conservative)
+  vllm: 32000,         // vLLM models vary; conservative default
 };
 
 /**

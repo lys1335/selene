@@ -24,6 +24,7 @@ export async function GET() {
       huggingFaceToken: settings.huggingFaceToken ? maskApiKey(settings.huggingFaceToken) : undefined,
       elevenLabsApiKey: settings.elevenLabsApiKey ? maskApiKey(settings.elevenLabsApiKey) : undefined,
       openaiApiKey: settings.openaiApiKey ? maskApiKey(settings.openaiApiKey) : undefined,
+      vllmApiKey: settings.vllmApiKey ? maskApiKey(settings.vllmApiKey) : undefined,
     };
     return NextResponse.json(maskedSettings);
   } catch (error) {
@@ -53,6 +54,7 @@ export async function PUT(request: NextRequest) {
       ...currentSettings,
       llmProvider: newProvider,
       ollamaBaseUrl: body.ollamaBaseUrl !== undefined ? body.ollamaBaseUrl : currentSettings.ollamaBaseUrl,
+      vllmBaseUrl: body.vllmBaseUrl !== undefined ? body.vllmBaseUrl : currentSettings.vllmBaseUrl,
       theme: body.theme ?? currentSettings.theme,
       chatWorkspaceMode:
         body.chatWorkspaceMode === "browser-tabs" || body.chatWorkspaceMode === "sidebar"
@@ -231,6 +233,9 @@ export async function PUT(request: NextRequest) {
     }
     if (body.openaiApiKey && !body.openaiApiKey.includes("•")) {
       updatedSettings.openaiApiKey = body.openaiApiKey;
+    }
+    if (body.vllmApiKey && !body.vllmApiKey.includes("•")) {
+      updatedSettings.vllmApiKey = body.vllmApiKey;
     }
 
     const embeddingConfigChanged = (
