@@ -2162,6 +2162,16 @@
           "placeholder": "token-...",
           "helper": "Yalnızca vLLM sunucunuz kimlik doğrulama gerektiriyorsa gereklidir."
         },
+        "vllmContextWindow": {
+          "label": "Bağlam Penceresi Boyutu",
+          "placeholder": "ör. 256K, 131072, 1M",
+          "helper": "Modelin bağlam penceresi boyutunu geçersiz kılın. 256K, 131072 veya 1M gibi değerler kabul eder. Varsayılan (32K) için boş bırakın."
+        },
+        "ollamaContextWindow": {
+          "label": "Bağlam Penceresi Boyutu",
+          "placeholder": "ör. 128K, 8192, 32K",
+          "helper": "Modelin bağlam penceresi boyutunu geçersiz kılın. 128K, 8192 veya 32K gibi değerler kabul eder. Varsayılan (32K) için boş bırakın."
+        },
         "openai": {
           "label": "OpenAI API Anahtarı",
           "placeholder": "sk-...",

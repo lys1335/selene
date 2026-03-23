@@ -15,7 +15,7 @@ const DEFAULT_PROVIDER_LIMITS: Record<LLMProvider, number> = {
   kimi: 128000,        // Kimi standard
   minimax: 80000,      // MiniMax M2.1 80K context
   blackboxai: 128000,  // BlackBox AI default context
-  ollama: 8192,        // Llama 3 default (conservative)
+  ollama: 32000,       // Conservative default; override via Settings > Context Window Size
   vllm: 32000,         // vLLM models vary; conservative default
 };
 
@@ -57,17 +57,40 @@ function resolveMetadataModelId(modelId: string, provider: LLMProvider): string 
   return baseModelId;
 }
 
+/**
+ * Check for user-configured context window override via env vars.
+ */
+function getCustomContextWindowOverride(provider: LLMProvider): number | null {
+  const envVarMap: Partial<Record<LLMProvider, string>> = {
+    vllm: "VLLM_CONTEXT_WINDOW",
+    ollama: "OLLAMA_CONTEXT_WINDOW",
+  };
+
+  const envVar = envVarMap[provider];
+  if (!envVar) return null;
+
+  const value = process.env[envVar]?.trim();
+  if (!value) return null;
+
+  const parsed = parseContextWindow(value);
+  return parsed && parsed > 0 ? parsed : null;
+}
+
 export function getModelContextLimit(modelId: string, provider: LLMProvider): number {
+  // 1. Check user-configured override (vLLM / Ollama settings)
+  const customOverride = getCustomContextWindowOverride(provider);
+  if (customOverride !== null) return customOverride;
+
   const resolvedModelId = resolveMetadataModelId(modelId, provider);
 
-  // 1. Check specific model metadata
+  // 2. Check specific model metadata
   const meta = MODEL_METADATA[modelId] ?? MODEL_METADATA[resolvedModelId];
   if (meta?.capabilities?.contextWindow) {
     const parsed = parseContextWindow(meta.capabilities.contextWindow);
     if (parsed) return parsed;
   }
 
-  // 2. Check provider default
+  // 3. Check provider default
   return DEFAULT_PROVIDER_LIMITS[provider] ?? 128000;
 }
 

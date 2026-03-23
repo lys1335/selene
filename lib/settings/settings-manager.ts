@@ -33,6 +33,8 @@ export interface AppSettings {
     ollamaBaseUrl?: string;
     vllmBaseUrl?: string;     // For vLLM OpenAI-compatible server
     vllmApiKey?: string;      // Optional API key for secured vLLM deployments
+    vllmContextWindow?: string;  // Custom context window size (e.g. "256K", "262144")
+    ollamaContextWindow?: string; // Custom context window size for Ollama models
     tavilyApiKey?: string;    // For Deep Research web search
     firecrawlApiKey?: string; // For web scraping with Firecrawl
     webScraperProvider?: "firecrawl" | "local"; // Web scraping provider selection
@@ -595,6 +597,16 @@ function updateEnvFromSettings(settings: AppSettings): void {
         process.env.VLLM_API_KEY = settings.vllmApiKey;
     } else {
         delete process.env.VLLM_API_KEY;
+    }
+    if (settings.vllmContextWindow) {
+        process.env.VLLM_CONTEXT_WINDOW = settings.vllmContextWindow;
+    } else {
+        delete process.env.VLLM_CONTEXT_WINDOW;
+    }
+    if (settings.ollamaContextWindow) {
+        process.env.OLLAMA_CONTEXT_WINDOW = settings.ollamaContextWindow;
+    } else {
+        delete process.env.OLLAMA_CONTEXT_WINDOW;
     }
     if (settings.tavilyApiKey !== undefined) {
         const nextTavilyApiKey = settings.tavilyApiKey.trim();

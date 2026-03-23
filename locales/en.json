@@ -2163,6 +2163,16 @@
           "placeholder": "token-...",
           "helper": "Only needed if your vLLM server requires authentication."
         },
+        "vllmContextWindow": {
+          "label": "Context Window Size",
+          "placeholder": "e.g. 256K, 131072, 1M",
+          "helper": "Override the model's context window size. Accepts values like 256K, 131072, or 1M. Leave empty for default (32K)."
+        },
+        "ollamaContextWindow": {
+          "label": "Context Window Size",
+          "placeholder": "e.g. 128K, 8192, 32K",
+          "helper": "Override the model's context window size. Accepts values like 128K, 8192, or 32K. Leave empty for default (32K)."
+        },
         "openai": {
           "label": "OpenAI API Key",
           "placeholder": "sk-...",

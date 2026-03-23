@@ -411,13 +411,50 @@ function resolveContextConfigModelId(modelId: string, provider?: LLMProvider): s
   return baseModelId;
 }
 
+/**
+ * Check for user-configured context window override via env vars.
+ * Returns the parsed token count, or null if no override is set.
+ */
+function getCustomContextWindowOverride(provider?: LLMProvider): number | null {
+  if (!provider) return null;
+
+  const envVarMap: Partial<Record<LLMProvider, string>> = {
+    vllm: "VLLM_CONTEXT_WINDOW",
+    ollama: "OLLAMA_CONTEXT_WINDOW",
+  };
+
+  const envVar = envVarMap[provider];
+  if (!envVar) return null;
+
+  const value = process.env[envVar]?.trim();
+  if (!value) return null;
+
+  const parsed = parseContextWindowString(value);
+  // parseContextWindowString returns 128000 on invalid input; only accept if the
+  // raw value actually looks intentional (non-empty, didn't fall through to default).
+  return parsed > 0 ? parsed : null;
+}
+
 export function getContextWindowConfig(
   modelId: string,
   provider?: LLMProvider
 ): ContextWindowConfig {
+  // 1. Check for user-configured override (vLLM / Ollama settings)
+  const customOverride = getCustomContextWindowOverride(provider);
+  if (customOverride !== null) {
+    return {
+      ...DEFAULT_CONTEXT_CONFIG,
+      maxTokens: customOverride,
+      // Use wider thresholds for large context windows
+      ...(customOverride >= 200_000
+        ? { warningThreshold: 0.80, criticalThreshold: 0.92, hardLimit: 0.97 }
+        : {}),
+    };
+  }
+
   const resolvedModelId = resolveContextConfigModelId(modelId, provider);
 
-  // Check for model-specific config
+  // 2. Check for model-specific config
   const modelConfig = MODEL_CONTEXT_CONFIGS[modelId] ?? MODEL_CONTEXT_CONFIGS[resolvedModelId];
 
   if (modelConfig) {
@@ -427,7 +464,7 @@ export function getContextWindowConfig(
     };
   }
 
-  // Fall back to provider default
+  // 3. Fall back to provider default
   if (provider) {
     const providerMaxTokens = PROVIDER_DEFAULT_LIMITS[provider];
     return {
@@ -436,7 +473,7 @@ export function getContextWindowConfig(
     };
   }
 
-  // Return default config
+  // 4. Return default config
   return DEFAULT_CONTEXT_CONFIG;
 }
 

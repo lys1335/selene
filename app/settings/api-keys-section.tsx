@@ -398,18 +398,33 @@ export function ApiKeysSection({
         <h2 className="font-mono text-lg font-semibold text-terminal-dark">{t("api.keysTitle")}</h2>
 
         {formState.llmProvider === "ollama" && (
-          <div>
-            <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.ollama.label")}</label>
-            <input
-              type="text"
-              value={formState.ollamaBaseUrl}
-              onChange={(e) => updateField("ollamaBaseUrl", e.target.value)}
-              placeholder={t("api.fields.ollama.placeholder")}
-              className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
-            />
-            <p className="mt-1 font-mono text-xs text-terminal-muted">
-              {t("api.fields.ollama.helper")}
-            </p>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.ollama.label")}</label>
+              <input
+                type="text"
+                value={formState.ollamaBaseUrl}
+                onChange={(e) => updateField("ollamaBaseUrl", e.target.value)}
+                placeholder={t("api.fields.ollama.placeholder")}
+                className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+              />
+              <p className="mt-1 font-mono text-xs text-terminal-muted">
+                {t("api.fields.ollama.helper")}
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.ollamaContextWindow.label")}</label>
+              <input
+                type="text"
+                value={formState.ollamaContextWindow}
+                onChange={(e) => updateField("ollamaContextWindow", e.target.value)}
+                placeholder={t("api.fields.ollamaContextWindow.placeholder")}
+                className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+              />
+              <p className="mt-1 font-mono text-xs text-terminal-muted">
+                {t("api.fields.ollamaContextWindow.helper")}
+              </p>
+            </div>
           </div>
         )}
 
@@ -439,6 +454,19 @@ export function ApiKeysSection({
               />
               <p className="mt-1 font-mono text-xs text-terminal-muted">
                 {t("api.fields.vllmApiKey.helper")}
+              </p>
+            </div>
+            <div>
+              <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.vllmContextWindow.label")}</label>
+              <input
+                type="text"
+                value={formState.vllmContextWindow}
+                onChange={(e) => updateField("vllmContextWindow", e.target.value)}
+                placeholder={t("api.fields.vllmContextWindow.placeholder")}
+                className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+              />
+              <p className="mt-1 font-mono text-xs text-terminal-muted">
+                {t("api.fields.vllmContextWindow.helper")}
               </p>
             </div>
           </div>
