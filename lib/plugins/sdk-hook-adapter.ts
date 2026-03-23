@@ -8,7 +8,12 @@
  * into that shape.
  *
  * PreToolUse hooks can block tool execution by returning a deny decision.
- * PostToolUse and Stop hooks are fire-and-forget.
+ * PostToolUse hooks are fire-and-forget.
+ *
+ * Stop hooks are NOT registered here — they are dispatched by the shared
+ * onFinish/catch callbacks in stream-callbacks.ts and route.ts, which cover
+ * all providers uniformly. Registering Stop here too would double-fire for
+ * Agent SDK runs.
  */
 
 import type {
@@ -16,7 +21,7 @@ import type {
   HookCallbackMatcher,
   HookEvent,
 } from "@anthropic-ai/claude-agent-sdk";
-import { runPreToolUseHooks, runPostToolUseHooks, runStopHooks } from "./hook-integration";
+import { runPreToolUseHooks, runPostToolUseHooks } from "./hook-integration";
 import { getRegisteredHooks } from "./hooks-engine";
 
 /**
@@ -77,14 +82,7 @@ export function buildSdkHooksFromSelene(
     hooks.PostToolUse = [{ hooks: [postToolUseHook] }];
   }
 
-  // ── Stop → cleanup ────────────────────────────────────────────────────────
-  if (getRegisteredHooks("Stop").length > 0) {
-    const stopHook: HookCallback = async () => {
-      runStopHooks(sessionId, "completed", allowedPluginNames, pluginRoots);
-      return {};
-    };
-    hooks.Stop = [{ hooks: [stopHook] }];
-  }
+  // Stop hooks are intentionally omitted — see module doc comment.
 
   return hooks;
 }

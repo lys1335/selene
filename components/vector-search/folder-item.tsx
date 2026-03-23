@@ -13,6 +13,7 @@ import {
   StarIcon,
   XCircleIcon,
   TrashIcon,
+  FolderXIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -120,13 +121,26 @@ export function FolderItem({
             ? t("lastRunReasonScheduledCheck")
             : null;
 
+  const isMissing = folder.pathExists === false;
+  const isRemoving =
+    removingFolderId === folder.id ||
+    (removingFolderId === "__bulk_stale__" && isMissing);
+
   return (
     <div
       key={folder.id}
-      className="rounded border border-terminal-border bg-terminal-cream/50 p-3"
+      className={cn(
+        "rounded border bg-terminal-cream/50 p-3",
+        isMissing
+          ? "border-destructive/40 bg-destructive/5 opacity-75"
+          : "border-terminal-border"
+      )}
     >
       <div className="flex flex-wrap items-start gap-2 md:flex-nowrap md:items-center md:gap-3">
-        <FolderIcon className="w-5 h-5 text-terminal-green flex-shrink-0" />
+        {isMissing
+          ? <FolderXIcon className="w-5 h-5 text-destructive flex-shrink-0" />
+          : <FolderIcon className="w-5 h-5 text-terminal-green flex-shrink-0" />
+        }
         <div className="flex-1 min-w-0 overflow-hidden">
           <div className="flex items-center gap-2 mb-0.5">
             <p className="font-mono text-sm text-terminal-dark truncate">
@@ -144,6 +158,16 @@ export function FolderItem({
                 aria-label={t("sharedFromWorkflow")}
               >
                 {t("workflowBadge")}
+              </span>
+            )}
+            {isMissing && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] bg-destructive/10 text-destructive border border-destructive/30 px-1.5 py-0 rounded font-mono uppercase font-bold tracking-wider"
+                title={t("pathMissingTitle")}
+                aria-label={t("pathMissingTitle")}
+              >
+                <FolderXIcon className="w-2.5 h-2.5" />
+                {t("pathMissingBadge")}
               </span>
             )}
           </div>
@@ -196,7 +220,7 @@ export function FolderItem({
               variant="ghost"
               size="icon"
               onClick={() => onSync(folder.id)}
-              disabled={syncingFolderId === folder.id || folder.status === "paused"}
+              disabled={isRemoving || syncingFolderId === folder.id || folder.status === "paused"}
               title={folder.status === "paused" ? t("resumeFirst") : undefined}
               className="h-8 w-8 shrink-0"
             >
@@ -208,7 +232,7 @@ export function FolderItem({
               variant="outline"
               size="sm"
               onClick={() => onPauseResume(folder)}
-              disabled={updatingFolderId === folder.id}
+              disabled={isRemoving || updatingFolderId === folder.id}
               title={folder.status === "paused" ? t("resumeUpdates") : t("pauseUpdates")}
               aria-label={folder.status === "paused" ? t("resumeUpdates") : t("pauseUpdates")}
               className="h-8 px-2 font-mono text-[10px] whitespace-nowrap"
@@ -221,7 +245,7 @@ export function FolderItem({
               variant="outline"
               size="sm"
               onClick={() => onApplySimpleDefaults(folder)}
-              disabled={updatingFolderId === folder.id}
+              disabled={isRemoving || updatingFolderId === folder.id}
               className="h-8 px-2 font-mono text-[10px] whitespace-nowrap"
             >
               {updatingFolderId === folder.id ? <Loader2Icon className="w-3 h-3 animate-spin" /> : t("applySimpleDefaultsShort")}
@@ -231,10 +255,10 @@ export function FolderItem({
             variant="ghost"
             size="icon"
             onClick={() => onRemove(folder.id)}
-            disabled={removingFolderId === folder.id}
+            disabled={isRemoving}
             className="h-8 w-8 shrink-0 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
           >
-            {removingFolderId === folder.id ? (
+            {isRemoving ? (
               <Loader2Icon className="w-4 h-4 animate-spin" />
             ) : (
               <TrashIcon className="w-4 h-4" />

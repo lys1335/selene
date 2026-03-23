@@ -45,6 +45,7 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
   const [expandedFolderId, setExpandedFolderId] = useState<string | null>(null);
   const [confirmRemoveFolder, setConfirmRemoveFolder] = useState<SyncFolder | null>(null);
   const [confirmRemoveWorkspaceFolders, setConfirmRemoveWorkspaceFolders] = useState<SyncFolder[] | null>(null);
+  const [confirmRemoveStaleFolders, setConfirmRemoveStaleFolders] = useState<SyncFolder[] | null>(null);
 
   // New folder form state
   const [newFolderPath, setNewFolderPath] = useState("");
@@ -311,6 +312,31 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
   const isWorkspaceFolder = (folder: SyncFolder) =>
     (folder.displayName?.startsWith("Workspace:") ?? false) || /[/\\]worktrees[/\\]/.test(folder.folderPath);
 
+  const isStalePath = (folder: SyncFolder) => folder.pathExists === false;
+
+  const handleRemoveStaleFolders = () => {
+    const staleFolders = folders.filter(isStalePath);
+    if (staleFolders.length === 0) return;
+    setConfirmRemoveStaleFolders(staleFolders);
+  };
+
+  const executeRemoveStaleFolders = async () => {
+    setRemovingFolderId("__bulk_stale__");
+    setError(null);
+    try {
+      const { data, error } = await resilientPost<{ removed?: number; failed?: number; error?: string }>(
+        "/api/vector-sync",
+        { action: "remove-stale", characterId }
+      );
+      if (error || data?.failed) {
+        setError(t("errorRemoveStaleFolders", { failed: data?.failed ?? 0, total: folders.filter(isStalePath).length }));
+      }
+      await loadFolders();
+    } finally {
+      setRemovingFolderId(null);
+    }
+  };
+
   const handleRemoveFolder = (folderId: string) => {
     const folder = folders.find((item) => item.id === folderId);
     if (!folder) return;
@@ -461,13 +487,28 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
           <span className="font-mono text-xs text-terminal-muted">
             {t("transparencyHint")}
           </span>
+          {folders.some(isStalePath) && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRemoveStaleFolders}
+              disabled={removingFolderId === "__bulk_stale__"}
+              className="ml-auto h-7 px-2 font-mono text-[10px] text-destructive border-destructive/30 hover:bg-destructive/10"
+            >
+              {removingFolderId === "__bulk_stale__" ? (
+                <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                t("removeStaleFolders")
+              )}
+            </Button>
+          )}
           {folders.some(isWorkspaceFolder) && (
             <Button
               variant="outline"
               size="sm"
               onClick={handleRemoveWorkspaceFolders}
               disabled={removingFolderId === "__bulk_workspace__"}
-              className="ml-auto h-7 px-2 font-mono text-[10px]"
+              className={cn("h-7 px-2 font-mono text-[10px]", !folders.some(isStalePath) && "ml-auto")}
             >
               {removingFolderId === "__bulk_workspace__" ? (
                 <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
@@ -635,6 +676,36 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
               }}
             >
               {t("confirmRemoveWorkspaceFolders")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={Boolean(confirmRemoveStaleFolders)}
+        onOpenChange={(open) => {
+          if (!open) setConfirmRemoveStaleFolders(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("removeStaleFoldersTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("removeStaleFoldersDescription", {
+                count: confirmRemoveStaleFolders?.length ?? 0,
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                await executeRemoveStaleFolders();
+                setConfirmRemoveStaleFolders(null);
+              }}
+            >
+              {t("confirmRemoveStaleFolders")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

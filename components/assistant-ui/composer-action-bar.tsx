@@ -56,6 +56,8 @@ interface ComposerActionBarProps {
   // Editor mode
   isEditorMode?: boolean;
   onToggleEditorMode?: () => void;
+  // Message limit
+  isOverMessageLimit?: boolean;
   // Cancel / send
   onCancel: () => void;
   onSubmit: () => void;
@@ -88,6 +90,7 @@ export const ComposerActionBar: FC<ComposerActionBarProps> = ({
   onEnhance,
   isEditorMode = false,
   onToggleEditorMode,
+  isOverMessageLimit = false,
   onCancel,
   onSubmit,
 }) => {
@@ -293,7 +296,7 @@ export const ComposerActionBar: FC<ComposerActionBarProps> = ({
                   ? "bg-terminal-amber hover:bg-terminal-amber/90"
                   : "bg-terminal-dark hover:bg-terminal-dark/90"
             )}
-            disabled={(!inputHasText && attachmentCount === 0) || isDeepResearchLoading}
+            disabled={(!inputHasText && attachmentCount === 0) || isDeepResearchLoading || isOverMessageLimit}
           >
             {isDeepResearchLoading ? (
               <RefreshCwIcon className="size-4 animate-spin" />

@@ -83,20 +83,77 @@ function emitPhaseChange(emit: EventEmitter, phase: DeepResearchState['currentPh
 }
 
 /**
+ * Extract the first complete JSON object or array from a string.
+ * Uses brace/bracket counting to find the matching closing delimiter,
+ * handling nested structures and strings with escaped characters.
+ */
+function extractJson(text: string): string {
+  const startIdx = text.search(/[{\[]/);
+  if (startIdx === -1) {
+    throw new SyntaxError('No JSON object or array found in response');
+  }
+
+  const openChar = text[startIdx];
+  const closeChar = openChar === '{' ? '}' : ']';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = startIdx; i < text.length; i++) {
+    const ch = text[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (ch === '\\' && inString) {
+      escaped = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === openChar) depth++;
+    else if (ch === closeChar) {
+      depth--;
+      if (depth === 0) {
+        return text.slice(startIdx, i + 1);
+      }
+    }
+  }
+
+  throw new SyntaxError(
+    `Unterminated JSON structure in response (started at index ${startIdx}): ${text.slice(startIdx, startIdx + 80)}…`
+  );
+}
+
+/**
  * Parse JSON from LLM response, handling markdown code blocks
+ * and trailing commentary text that breaks JSON.parse.
  */
 function parseJsonResponse<T>(text: string): T {
-  // Remove markdown code blocks if present
   let cleaned = text.trim();
-  if (cleaned.startsWith('```json')) {
-    cleaned = cleaned.slice(7);
-  } else if (cleaned.startsWith('```')) {
-    cleaned = cleaned.slice(3);
+
+  // Strip markdown code fences if present
+  const fenceMatch = cleaned.match(/```\w*\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    cleaned = fenceMatch[1].trim();
   }
-  if (cleaned.endsWith('```')) {
-    cleaned = cleaned.slice(0, -3);
+
+  // Fast path: try direct parse first (works when LLM is well-behaved)
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    // Slow path: extract the first JSON object/array by bracket matching
+    const jsonStr = extractJson(cleaned);
+    return JSON.parse(jsonStr);
   }
-  return JSON.parse(cleaned.trim());
 }
 
 /**

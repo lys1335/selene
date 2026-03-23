@@ -196,6 +196,9 @@ export async function PUT(request: NextRequest) {
       everMemOSServerUrl: body.everMemOSServerUrl !== undefined ? body.everMemOSServerUrl : currentSettings.everMemOSServerUrl,
       // First-visit modals
       hasSeenThemeChooser: body.hasSeenThemeChooser !== undefined ? body.hasSeenThemeChooser : currentSettings.hasSeenThemeChooser,
+      // Custom context window overrides for local providers
+      vllmContextWindow: body.vllmContextWindow !== undefined ? body.vllmContextWindow : currentSettings.vllmContextWindow,
+      ollamaContextWindow: body.ollamaContextWindow !== undefined ? body.ollamaContextWindow : currentSettings.ollamaContextWindow,
     };
 
     // Only update API keys if they're provided and not masked

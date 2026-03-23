@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
-  const folderEventListeners: Array<(characterId: string, event: any) => void | Promise<void>> = [];
-
   const state = {
     folders: [] as any[],
     workflowByAgentId: new Map<string, any>(),
@@ -17,7 +15,6 @@ const mocks = vi.hoisted(() => {
     state.membersByWorkflowId.clear();
     state.workflowById.clear();
     state.notifications = [];
-    folderEventListeners.length = 0;
   };
 
   const cloneRow = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -114,7 +111,6 @@ const mocks = vi.hoisted(() => {
   };
 
   return {
-    folderEventListeners,
     state,
     resetState,
     cloneRow,
@@ -161,13 +157,6 @@ vi.mock("@/lib/db/sqlite-workflows-schema", () => ({
 }));
 
 vi.mock("@/lib/vectordb/folder-events", () => ({
-  onFolderChange: (listener: any) => {
-    mocks.folderEventListeners.push(listener);
-    return () => {
-      const index = mocks.folderEventListeners.indexOf(listener);
-      if (index >= 0) mocks.folderEventListeners.splice(index, 1);
-    };
-  },
   notifyFolderChange: (characterId: string, event: any) => {
     mocks.state.notifications.push({ characterId, event });
   },
@@ -175,6 +164,12 @@ vi.mock("@/lib/vectordb/folder-events", () => ({
 
 vi.mock("@/lib/agents/workflow-db-helpers", () => ({
   refreshWorkflowSharedResources: mocks.refreshWorkflowSharedResources,
+}));
+
+vi.mock("@/lib/vectordb/sync-service", () => ({
+  removeSyncFolder: async (folderId: string) => {
+    mocks.state.folders = mocks.state.folders.filter((row) => row.id !== folderId);
+  },
 }));
 
 vi.mock("@/lib/agents/workflows", () => ({
@@ -233,8 +228,6 @@ vi.mock("@/lib/db/sqlite-client", () => ({
 
 import {
   propagateWorkflowFolderChange,
-  registerWorkflowFolderPropagation,
-  resetWorkflowFolderPropagationForTests,
 } from "@/lib/agents/workflow-folder-sharing";
 
 describe("workflow folder propagation", () => {
@@ -244,7 +237,6 @@ describe("workflow folder propagation", () => {
     mocks.getWorkflowByAgentId.mockClear();
     mocks.getWorkflowMembers.mockClear();
     mocks.getWorkflowById.mockClear();
-    resetWorkflowFolderPropagationForTests();
   });
 
   it("propagates newly added own folder to other workflow members", async () => {
@@ -307,10 +299,8 @@ describe("workflow folder propagation", () => {
     await propagateWorkflowFolderChange("agent-a", { type: "removed", folderId: "source-folder", folderPath: "C:/repo" });
 
     expect(mocks.state.folders.map((row) => row.id)).toEqual(["own-b"]);
-    expect(mocks.state.notifications).toContainEqual({
-      characterId: "agent-b",
-      event: { type: "removed", folderId: "copy-1", wasPrimary: false },
-    });
+    // removeSyncFolder handles its own notifications internally,
+    // so we only verify the folder was removed and workflow resources refreshed.
     expect(mocks.refreshWorkflowSharedResources).toHaveBeenCalledWith("wf-1", "agent-a", mocks.getWorkflowById);
   });
 
@@ -340,10 +330,4 @@ describe("workflow folder propagation", () => {
     expect(mocks.refreshWorkflowSharedResources).toHaveBeenCalledWith("wf-1", "agent-a", mocks.getWorkflowById);
   });
 
-  it("registers a single folder-change listener once", async () => {
-    registerWorkflowFolderPropagation();
-    registerWorkflowFolderPropagation();
-
-    expect(mocks.folderEventListeners).toHaveLength(1);
-  });
 });

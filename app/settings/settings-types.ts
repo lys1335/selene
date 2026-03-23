@@ -15,6 +15,8 @@ export interface AppSettings {
   ollamaBaseUrl?: string;
   vllmBaseUrl?: string;
   vllmApiKey?: string;
+  vllmContextWindow?: string;  // Custom context window size (e.g. "256K", "262144")
+  ollamaContextWindow?: string; // Custom context window size for Ollama models
   tavilyApiKey?: string;
   firecrawlApiKey?: string;
   webScraperProvider?: "firecrawl" | "local";
@@ -107,6 +109,8 @@ export interface FormState {
   ollamaBaseUrl: string;
   vllmBaseUrl: string;
   vllmApiKey: string;
+  vllmContextWindow: string;
+  ollamaContextWindow: string;
   tavilyApiKey: string;
   firecrawlApiKey: string;
   webScraperProvider: "firecrawl" | "local";
@@ -243,6 +247,8 @@ export const DEFAULT_FORM_STATE: FormState = {
   ollamaBaseUrl: "http://localhost:11434/v1",
   vllmBaseUrl: "http://localhost:8000/v1",
   vllmApiKey: "",
+  vllmContextWindow: "",
+  ollamaContextWindow: "",
   tavilyApiKey: "",
   firecrawlApiKey: "",
   webScraperProvider: "local",
@@ -372,6 +378,8 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     ollamaBaseUrl: data.ollamaBaseUrl || "http://localhost:11434/v1",
     vllmBaseUrl: data.vllmBaseUrl || "http://localhost:8000/v1",
     vllmApiKey: data.vllmApiKey || "",
+    vllmContextWindow: data.vllmContextWindow || "",
+    ollamaContextWindow: data.ollamaContextWindow || "",
     tavilyApiKey: data.tavilyApiKey || "",
     firecrawlApiKey: data.firecrawlApiKey || "",
     webScraperProvider: data.webScraperProvider || "local",

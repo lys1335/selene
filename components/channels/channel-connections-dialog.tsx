@@ -44,7 +44,7 @@ const CHANNEL_ICONS: Record<ChannelType, typeof Phone> = {
 
 const STATUS_STYLES: Record<ChannelStatus, string> = {
   connected: "bg-emerald-500/15 text-emerald-700 border border-emerald-500/30",
-  connecting: "bg-amber-500/15 text-amber-700 border border-amber-500/30",
+  connecting: "bg-amber-500/15 text-emerald-700 border border-emerald-500/30",
   disconnected: "bg-terminal-dark/10 text-terminal-muted border border-terminal-dark/20",
   error: "bg-red-500/15 text-red-700 border border-red-500/30",
 };
@@ -465,7 +465,17 @@ export function ChannelConnectionsDialog({
                     />
                     {isEditing ? (
                       <p className="text-xs font-mono text-terminal-muted">{t("form.keepExisting")}</p>
-                    ) : null}
+                    ) : (
+                      <div className="space-y-2 rounded-md border border-terminal-border/30 bg-terminal-cream/70 p-3 text-xs font-mono text-terminal-muted">
+                        <p className="font-semibold text-terminal-dark">Get your bot token:</p>
+                        <ol className="list-decimal space-y-1.5 pl-4">
+                          <li>Open <code className="bg-terminal-dark/20 px-1 rounded">@Botfather</code> on Telegram</li>
+                          <li>Send <code className="bg-terminal-dark/20 px-1 rounded">/newbot</code> and follow the prompts</li>
+                          <li>Copy the API token Botfather gives you</li>
+                        </ol>
+                        <p className="mt-2 text-red-400">⚠️ Keep your token private - never share it!</p>
+                      </div>
+                    )}
                   </div>
                 )}
 

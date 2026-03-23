@@ -19,8 +19,8 @@ describe("content-sanitizer text length limits", () => {
     vi.clearAllMocks();
   });
 
-  it("uses a 25,000 character limit", () => {
-    expect(MAX_TEXT_CONTENT_LENGTH).toBe(25_000);
+  it("uses a 75,000 character limit", () => {
+    expect(MAX_TEXT_CONTENT_LENGTH).toBe(75_000);
   });
 
   it("does not truncate text at exactly the limit", () => {
@@ -47,19 +47,20 @@ describe("content-sanitizer text length limits", () => {
     );
     expect(output.length).toBeGreaterThan(MAX_TEXT_CONTENT_LENGTH);
     expect(output).toContain("CONTENT TRUNCATED");
-    expect(output).toContain("25,000");
+    expect(output).toContain("75,000");
     expect(output).toContain('contentId="trunc_test_123"');
   });
 
   it("truncates with fallback notice when sessionId is missing", () => {
     const chunk = "Another long content block with natural language and spaces. ";
+    // Use +500 buffer to account for .trim() inside stripFakeToolCallJson
     const input = chunk
-      .repeat(Math.ceil((MAX_TEXT_CONTENT_LENGTH + 1) / chunk.length))
-      .slice(0, MAX_TEXT_CONTENT_LENGTH + 1);
+      .repeat(Math.ceil((MAX_TEXT_CONTENT_LENGTH + 500) / chunk.length))
+      .slice(0, MAX_TEXT_CONTENT_LENGTH + 500);
     const output = sanitizeTextContent(input, "unit-test");
 
     expect(storeFullContent).not.toHaveBeenCalled();
-    expect(output).toContain("Content truncated at 25,000 chars");
+    expect(output).toContain("Content truncated at 75,000 chars");
   });
 });
 

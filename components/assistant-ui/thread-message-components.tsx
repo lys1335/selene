@@ -68,6 +68,7 @@ import {
   ClaudeTaskStopToolUI,
   DelegationToolUI,
 } from "./claude-code-tools";
+import { ReasoningPart } from "./reasoning-part";
 import { useOptionalVoice } from "./voice-context";
 import { stripMarkdown } from "@/lib/utils/strip-markdown";
 import { YouTubeInlinePreview } from "./youtube-inline";
@@ -571,6 +572,7 @@ export const AssistantMessage: FC<{ ttsEnabled?: boolean }> = ({ ttsEnabled = fa
           <MessagePrimitive.Content
             components={{
               Text: MarkdownText,
+              Reasoning: ReasoningPart,
               ToolGroup: ToolCallGroup,
               tools: {
                 by_name: mcpAwareToolMap({

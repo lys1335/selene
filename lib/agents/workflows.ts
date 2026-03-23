@@ -5,7 +5,6 @@ import {
   agentWorkflowMembers,
 } from "@/lib/db/sqlite-workflows-schema";
 import { agentSyncFolders } from "@/lib/db/sqlite-character-schema";
-import { notifyFolderChange } from "@/lib/vectordb/folder-events";
 import {
   cleanupInheritedFoldersOnRemoval,
   shareFolderToWorkflowSubagents,
@@ -521,7 +520,10 @@ export async function deleteWorkflow(workflowId: string, userId: string): Promis
   const workflow = await getWorkflowById(workflowId, userId);
   if (!workflow) throw new Error("Workflow not found");
 
-  // Clean up all inherited sync folders for every member before deleting the workflow
+  // Clean up all inherited sync folders for every member before deleting the workflow.
+  // removeSyncFolder handles cancelling in-flight syncs, stopping watchers, and
+  // deleting vector DB data — a raw db.delete would skip all of that.
+  const { removeSyncFolder } = await import("@/lib/vectordb/sync-service");
   const members = await getWorkflowMembers(workflowId);
   for (const member of members) {
     const inherited = await db
@@ -534,18 +536,8 @@ export async function deleteWorkflow(workflowId: string, userId: string): Promis
         )
       );
 
-    if (inherited.length > 0) {
-      await db
-        .delete(agentSyncFolders)
-        .where(
-          and(
-            eq(agentSyncFolders.characterId, member.agentId),
-            eq(agentSyncFolders.inheritedFromWorkflowId, workflowId)
-          )
-        );
-      for (const { id } of inherited) {
-        notifyFolderChange(member.agentId, { type: "removed", folderId: id, wasPrimary: false });
-      }
+    for (const { id } of inherited) {
+      await removeSyncFolder(id);
     }
   }
 

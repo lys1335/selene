@@ -9,7 +9,7 @@
 
 import { db } from "@/lib/db/sqlite-client";
 import { agentSyncFolders, agentSyncFiles, characters, type AgentSyncFolder } from "@/lib/db/sqlite-character-schema";
-import { eq, and, sql, or } from "drizzle-orm";
+import { eq, and, sql, or, isNotNull } from "drizzle-orm";
 import { removeFileFromVectorDB, removeFolderFromVectorDB } from "./indexing";
 import { DEFAULT_IGNORE_PATTERNS, createIgnoreMatcher } from "./ignore-patterns";
 import { deleteAgentTable, listAgentTables } from "./collections";
@@ -144,6 +144,15 @@ export async function removeSyncFolder(folderId: string): Promise<void> {
   }
 
   notifyFolderChange(characterId, { type: "removed", folderId, wasPrimary, folderPath: folder.folderPath });
+
+  // Propagate removal to workflow sub-agents so their inherited copies are cleaned up.
+  // Dynamic import avoids circular dependency (workflow-folder-sharing → sync-service).
+  try {
+    const { propagateWorkflowFolderChange } = await import("@/lib/agents/workflow-folder-sharing");
+    await propagateWorkflowFolderChange(characterId, { type: "removed", folderId, folderPath: folder.folderPath });
+  } catch (err) {
+    console.error(`[SyncService] Non-fatal: failed to propagate folder removal to workflow sub-agents:`, err);
+  }
 }
 
 /**
@@ -775,6 +784,104 @@ export async function cleanupOrphanedVectorTables(): Promise<{ removed: string[]
 
   if (removed.length > 0) {
     console.log(`[SyncService] Cleaned up ${removed.length} orphaned vector table(s): ${removed.join(", ")}`);
+  }
+  return { removed, kept };
+}
+
+/**
+ * Remove orphaned agent_sync_folders DB rows — rows whose characterId no longer
+ * maps to a live character.  This catches sub-agent folders that weren't cleaned
+ * up when the owning character was deleted outside the normal DELETE endpoint
+ * (e.g. direct SQL, workflow teardown, crash mid-delete).
+ *
+ * For each orphaned folder this function:
+ *   1. Stops the file watcher (if running).
+ *   2. Cancels any in-flight sync.
+ *   3. Deletes the agentSyncFiles rows (FK cascade handles this, but we do it
+ *      explicitly so the watcher/sync cancellation happens first).
+ *   4. Deletes the agentSyncFolders row.
+ *
+ * Vector table cleanup for the same characterId is left to
+ * cleanupOrphanedVectorTables(), which should be called in the same pass.
+ */
+export async function cleanupOrphanedSyncFolders(): Promise<{ removed: string[]; kept: number }> {
+  const allFolders = await db.select().from(agentSyncFolders);
+  if (allFolders.length === 0) return { removed: [], kept: 0 };
+
+  const rows = await db.select({ id: characters.id }).from(characters);
+  const validIds = new Set(rows.map(row => row.id));
+
+  const orphaned = allFolders.filter(f => !validIds.has(f.characterId));
+  const kept = allFolders.length - orphaned.length;
+  const removed: string[] = [];
+
+  for (const folder of orphaned) {
+    try {
+      if (isSyncing(folder.id)) {
+        await cancelSyncById(folder.id);
+      }
+      if (isWatching(folder.id)) {
+        await stopWatching(folder.id);
+      }
+      await db.delete(agentSyncFiles).where(eq(agentSyncFiles.folderId, folder.id));
+      await db.delete(agentSyncFolders).where(eq(agentSyncFolders.id, folder.id));
+      removed.push(folder.id);
+    } catch (err) {
+      console.error(`[SyncService] Failed to remove orphaned sync folder ${folder.id}:`, err);
+    }
+  }
+
+  if (removed.length > 0) {
+    console.log(`[SyncService] Cleaned up ${removed.length} orphaned sync folder(s) for deleted characters`);
+  }
+  return { removed, kept };
+}
+
+/**
+ * Remove inherited sync folders whose source folder no longer exists.
+ *
+ * Inherited folders (created by workflow propagation) have an
+ * `inheritedFromFolderId` pointing to the source folder on the initiator.
+ * If that source folder was deleted (workspace cleanup, manual removal, etc.)
+ * but the propagation failed to cascade, the inherited copy becomes orphaned.
+ *
+ * This function finds those orphans and removes them via removeSyncFolder()
+ * so watchers, vector DB data, and DB rows are all cleaned up properly.
+ */
+export async function cleanupOrphanedInheritedFolders(): Promise<{ removed: string[]; kept: number }> {
+  // Get all inherited folders (those with a non-null inheritedFromFolderId)
+  const inheritedFolders = await db
+    .select({
+      id: agentSyncFolders.id,
+      inheritedFromFolderId: agentSyncFolders.inheritedFromFolderId,
+      folderPath: agentSyncFolders.folderPath,
+      characterId: agentSyncFolders.characterId,
+    })
+    .from(agentSyncFolders)
+    .where(isNotNull(agentSyncFolders.inheritedFromFolderId));
+
+  if (inheritedFolders.length === 0) return { removed: [], kept: 0 };
+
+  // Get the set of all existing folder IDs to check source existence
+  const allFolderIds = new Set(
+    (await db.select({ id: agentSyncFolders.id }).from(agentSyncFolders)).map(r => r.id)
+  );
+
+  const orphaned = inheritedFolders.filter(f => !allFolderIds.has(f.inheritedFromFolderId!));
+  const kept = inheritedFolders.length - orphaned.length;
+  const removed: string[] = [];
+
+  for (const folder of orphaned) {
+    try {
+      await removeSyncFolder(folder.id);
+      removed.push(folder.id);
+    } catch (err) {
+      console.error(`[SyncService] Failed to remove orphaned inherited folder ${folder.id} (${folder.folderPath}):`, err);
+    }
+  }
+
+  if (removed.length > 0) {
+    console.log(`[SyncService] Cleaned up ${removed.length} orphaned inherited folder(s) (source folder deleted)`);
   }
   return { removed, kept };
 }
