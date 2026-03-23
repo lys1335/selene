@@ -69,6 +69,10 @@ import {
   type RewardSuggestion,
 } from "@/lib/rewards/reward-calculator";
 
+// Maximum message length — matches server-side MAX_TEXT_CONTENT_LENGTH.
+// Messages exceeding this are blocked on the client before send.
+const MAX_MESSAGE_LENGTH = 75_000;
+
 // Interface for queued messages
 interface QueuedMessage {
   id: string;
@@ -233,6 +237,9 @@ export const Composer: FC<{
   // temporarily hidden the background banner (e.g. interactive wait states).
   const hasTrackedBackgroundRun = typeof activeRunId === "string" && activeRunId.length > 0;
   const isQueueBlocked = isOperationRunning || isBackgroundTaskRunning || hasTrackedBackgroundRun;
+
+  // Block sending when message exceeds the server-side content limit
+  const isOverMessageLimit = inputValue.length > MAX_MESSAGE_LENGTH;
 
   const isProcessingQueue = useRef(false);
   const isAwaitingRunStart = useRef(false);
@@ -604,6 +611,11 @@ export const Composer: FC<{
       const hasText = inputValue.trim().length > 0;
       const hasAttachments = attachmentCount > 0;
       if (!hasText && !hasAttachments) return;
+
+      if (inputValue.length > MAX_MESSAGE_LENGTH) {
+        toast.error(`Message too long (${inputValue.length.toLocaleString()} / ${MAX_MESSAGE_LENGTH.toLocaleString()} chars)`);
+        return;
+      }
 
       if (isDeepResearchMode && deepResearch && hasText && !isQueueBlocked) {
         deepResearch.startResearch(inputValue.trim());
@@ -1451,6 +1463,7 @@ export const Composer: FC<{
                 onEnhance={handleEnhance}
                 isEditorMode={isEditorMode}
                 onToggleEditorMode={toggleEditorMode}
+                isOverMessageLimit={isOverMessageLimit}
                 onCancel={handleCancel}
                 onSubmit={() => {
                   const parts = tiptapRef.current?.getContentArray();
@@ -1535,12 +1548,19 @@ export const Composer: FC<{
               onEnhance={handleEnhance}
               isEditorMode={isEditorMode}
               onToggleEditorMode={toggleEditorMode}
+              isOverMessageLimit={isOverMessageLimit}
               onCancel={handleCancel}
               onSubmit={handleSubmit}
             />
           </div>
         )}
       </ComposerPrimitive.Root>
+
+      {isOverMessageLimit && (
+        <div className="px-3 py-1.5 text-xs font-mono text-red-600 dark:text-red-400">
+          Message too long — {inputValue.length.toLocaleString()} / {MAX_MESSAGE_LENGTH.toLocaleString()} chars
+        </div>
+      )}
 
       <div className="mt-1.5 w-full px-1 flex items-center gap-2">
         <div className="flex-1 min-w-0">
