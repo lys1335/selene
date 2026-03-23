@@ -122,6 +122,9 @@ export function FolderItem({
             : null;
 
   const isMissing = folder.pathExists === false;
+  const isRemoving =
+    removingFolderId === folder.id ||
+    (removingFolderId === "__bulk_stale__" && isMissing);
 
   return (
     <div
@@ -217,7 +220,7 @@ export function FolderItem({
               variant="ghost"
               size="icon"
               onClick={() => onSync(folder.id)}
-              disabled={syncingFolderId === folder.id || folder.status === "paused"}
+              disabled={isRemoving || syncingFolderId === folder.id || folder.status === "paused"}
               title={folder.status === "paused" ? t("resumeFirst") : undefined}
               className="h-8 w-8 shrink-0"
             >
@@ -229,7 +232,7 @@ export function FolderItem({
               variant="outline"
               size="sm"
               onClick={() => onPauseResume(folder)}
-              disabled={updatingFolderId === folder.id}
+              disabled={isRemoving || updatingFolderId === folder.id}
               title={folder.status === "paused" ? t("resumeUpdates") : t("pauseUpdates")}
               aria-label={folder.status === "paused" ? t("resumeUpdates") : t("pauseUpdates")}
               className="h-8 px-2 font-mono text-[10px] whitespace-nowrap"
@@ -242,7 +245,7 @@ export function FolderItem({
               variant="outline"
               size="sm"
               onClick={() => onApplySimpleDefaults(folder)}
-              disabled={updatingFolderId === folder.id}
+              disabled={isRemoving || updatingFolderId === folder.id}
               className="h-8 px-2 font-mono text-[10px] whitespace-nowrap"
             >
               {updatingFolderId === folder.id ? <Loader2Icon className="w-3 h-3 animate-spin" /> : t("applySimpleDefaultsShort")}
@@ -252,10 +255,10 @@ export function FolderItem({
             variant="ghost"
             size="icon"
             onClick={() => onRemove(folder.id)}
-            disabled={removingFolderId === folder.id}
+            disabled={isRemoving}
             className="h-8 w-8 shrink-0 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
           >
-            {removingFolderId === folder.id ? (
+            {isRemoving ? (
               <Loader2Icon className="w-4 h-4 animate-spin" />
             ) : (
               <TrashIcon className="w-4 h-4" />

@@ -4,6 +4,7 @@ import { getOrCreateLocalUser } from "@/lib/db/queries";
 import { loadSettings } from "@/lib/settings/settings-manager";
 import {
   cleanupOrphanedSyncFolders,
+  cleanupOrphanedInheritedFolders,
   cleanupOrphanedVectorTables,
 } from "@/lib/vectordb/sync-service";
 
@@ -23,15 +24,18 @@ export async function POST(req: NextRequest) {
     const settings = loadSettings();
     await getOrCreateLocalUser(userId, settings.localUserEmail);
 
-    const [foldersResult, tablesResult] = await Promise.all([
-      cleanupOrphanedSyncFolders(),
-      cleanupOrphanedVectorTables(),
-    ]);
+    // Run in sequence to mirror startup: orphaned folders first, then
+    // inherited copies, then stale vector tables.
+    const foldersResult = await cleanupOrphanedSyncFolders();
+    const inheritedResult = await cleanupOrphanedInheritedFolders();
+    const tablesResult = await cleanupOrphanedVectorTables();
 
     return NextResponse.json({
       removedFolders: foldersResult.removed,
+      removedInherited: inheritedResult.removed,
       removedTables: tablesResult.removed,
       keptFolders: foldersResult.kept,
+      keptInherited: inheritedResult.kept,
       keptTables: tablesResult.kept.length,
     });
   } catch (error) {

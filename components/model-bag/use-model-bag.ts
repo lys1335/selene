@@ -113,6 +113,7 @@ export function useModelBag() {
           const existingIds = new Set(catalog.map((m) => m.id));
           for (const modelId of probeData.models) {
             if (!existingIds.has(modelId)) {
+              existingIds.add(modelId);
               catalog.push({
                 id: modelId,
                 name: modelId,
@@ -128,7 +129,7 @@ export function useModelBag() {
                 },
                 assignedRoles: [],
                 isAvailable: true,
-                isDefault: true,
+                isDefault: false,
               });
             }
           }

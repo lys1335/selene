@@ -431,11 +431,21 @@ export async function POST(request: NextRequest) {
       }
       const allFolders = await getSyncFolders(characterId);
       const staleFolders = allFolders.filter((f) => !existsSync(f.folderPath));
-      const results = await Promise.allSettled(
-        staleFolders.map((f) => removeSyncFolder(f.id))
-      );
-      const failed = results.filter((r) => r.status === "rejected").length;
-      return NextResponse.json({ removed: staleFolders.length - failed, failed, success: true });
+      // Serialize removals — removeSyncFolder queries remaining folders after
+      // each delete to decide promotions and table cleanup, so parallel calls
+      // race on stale state.
+      let removed = 0;
+      let failed = 0;
+      for (const folder of staleFolders) {
+        try {
+          await removeSyncFolder(folder.id);
+          removed += 1;
+        } catch (error) {
+          failed += 1;
+          console.error(`[VectorSync] Failed to remove stale folder ${folder.id}:`, error);
+        }
+      }
+      return NextResponse.json({ removed, failed, success: true });
     }
 
     return NextResponse.json(
