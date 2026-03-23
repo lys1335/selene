@@ -19,7 +19,7 @@ import {
     listBackgroundProcesses,
     cleanupBackgroundProcesses,
 } from "@/lib/command-execution";
-import { readTerminalLog } from "@/lib/command-execution/log-manager";
+import { readTerminalLog, truncateOutput } from "@/lib/command-execution/log-manager";
 import type {
     ExecuteCommandToolOptions,
     ExecuteCommandInput,
@@ -287,10 +287,22 @@ The tool returns immediately with a processId. Poll with processId to check stat
                         error: `Log with ID '${logId}' not found. It may have been cleaned up or never existed.`,
                     };
                 }
+
+                // Apply smart middle-truncation to prevent the stream guard
+                // from blocking the readLog result (which would create an
+                // infinite loop: readLog → blocked → suggests readLog → ∞)
+                const truncated = truncateOutput(fullLog, 500);
+
                 return {
                     status: "success",
-                    stdout: fullLog,
-                    message: `Retrieved full log for ID '${logId}'.`,
+                    stdout: truncated.content,
+                    message: truncated.isTruncated
+                        ? `Retrieved log '${logId}' (truncated: showing 500 of ${truncated.originalLineCount} lines — head + tail with middle omitted).`
+                        : `Retrieved full log for ID '${logId}'.`,
+                    ...(truncated.isTruncated ? {
+                        isTruncated: true,
+                        originalLineCount: truncated.originalLineCount,
+                    } : {}),
                 };
             }
 

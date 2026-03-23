@@ -359,31 +359,6 @@ app.whenReady().then(async () => {
   });
   debugLog("[App] Main window created");
 
-  // Initialize system tray (keeps app running when main window is closed)
-  initTray({
-    onShowMainWindow: () => {
-      const { mainWindow: mw } = require("./window-manager") as typeof import("./window-manager");
-      if (mw && !mw.isDestroyed()) {
-        mw.show();
-        mw.focus();
-      } else {
-        createWindow({
-          isDev,
-          dataDir,
-          mediaDir,
-          prodServerPort: PROD_SERVER_PORT,
-          prodUseHttps: useH2,
-          preloadPath: path.join(__dirname, "preload.js"),
-          devServerUrl: process.env.ELECTRON_DEV_URL || devProxyUrl,
-          waitForServer: waitForServerReady,
-        });
-      }
-    },
-    onQuit: () => {
-      app.quit();
-    },
-  });
-
   // Shared IPC context for hotkey callbacks that need to capture + focus window
   const captureCtx = {
     mainWindow: () => {
@@ -487,6 +462,82 @@ app.whenReady().then(async () => {
   } catch (error) {
     debugError("[App] Unified capture hotkey registration failed:", error);
   }
+
+  // -------------------------------------------------------------------------
+  // Initialize system tray (keeps app running when main window is closed)
+  // -------------------------------------------------------------------------
+
+  const windowOpts = {
+    isDev,
+    dataDir,
+    mediaDir,
+    prodServerPort: PROD_SERVER_PORT,
+    prodUseHttps: useH2,
+    preloadPath: path.join(__dirname, "preload.js"),
+    devServerUrl: process.env.ELECTRON_DEV_URL || devProxyUrl,
+    waitForServer: waitForServerReady,
+  };
+
+  const baseUrl = isDev
+    ? (process.env.ELECTRON_DEV_URL || devProxyUrl)
+    : `${useH2 ? "https" : "http"}://localhost:${PROD_SERVER_PORT}`;
+
+  /** Show and focus the main window, or create it if destroyed. */
+  function getOrCreateMainWindow(): void {
+    const { mainWindow: mw } = require("./window-manager") as typeof import("./window-manager");
+    if (mw && !mw.isDestroyed()) {
+      mw.show();
+      mw.focus();
+    } else {
+      createWindow(windowOpts);
+    }
+  }
+
+  /** Show the main window and navigate it to the given path. */
+  function showMainWindowAt(urlPath: string): void {
+    const { mainWindow: mw } = require("./window-manager") as typeof import("./window-manager");
+    if (mw && !mw.isDestroyed()) {
+      mw.loadURL(`${baseUrl}${urlPath}`);
+      mw.show();
+      mw.focus();
+    } else {
+      // Create the window — it will load the default URL, then navigate
+      createWindow(windowOpts);
+      // After creation, navigate to the requested path
+      const { mainWindow: newMw } = require("./window-manager") as typeof import("./window-manager");
+      if (newMw && !newMw.isDestroyed()) {
+        newMw.webContents.once("did-finish-load", () => {
+          newMw.loadURL(`${baseUrl}${urlPath}`);
+        });
+      }
+    }
+  }
+
+  initTray({
+    onShowMainWindow: getOrCreateMainWindow,
+    onQuit: () => app.quit(),
+    onVoiceSession: createVoiceOverlayTrigger(captureCtx),
+    onVoiceScreenshot: createUnifiedCaptureTrigger(captureCtx),
+    onScreenshot: () => {
+      // Same logic as screen capture hotkey: route to overlay if active, else to main window
+      const overlay = getOverlay();
+      if (overlay && !overlay.isDestroyed() && overlay.isVisible() && !overlay.webContents.isCrashed()) {
+        captureDisplay({ mediaDir })
+          .then((result) => {
+            if (result.success && result.imageUrl) {
+              overlay.webContents.send("overlay:add-screenshot", result.imageUrl);
+            }
+          })
+          .catch((err: unknown) => {
+            debugError("[App] Failed to capture screenshot for overlay:", err);
+          });
+      } else {
+        void emitCapturedScreen(captureCtx);
+      }
+    },
+    onNewChat: () => showMainWindowAt("/chat?new=true"),
+    onOpenSettings: () => showMainWindowAt("/settings"),
+  });
 
   // On macOS, handle dock icon click / app reactivation.
   // With hide-to-tray enabled, the main window may be hidden (not destroyed)

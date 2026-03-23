@@ -34,6 +34,33 @@ interface ResearchGenerationConfig {
   temperature: number;
 }
 
+interface JsonParseDebugInfo {
+  rawResponsePreview: string;
+  extractedJsonPreview?: string;
+  parseMessage: string;
+}
+
+class DeepResearchPlanError extends Error {
+  code: string;
+  failedPhase: Exclude<DeepResearchState['currentPhase'], 'idle' | 'complete' | 'error'>;
+  phaseMessage: string;
+  debug: JsonParseDebugInfo;
+
+  constructor(message: string, options: {
+    code: string;
+    failedPhase: Exclude<DeepResearchState['currentPhase'], 'idle' | 'complete' | 'error'>;
+    phaseMessage: string;
+    debug: JsonParseDebugInfo;
+  }) {
+    super(message);
+    this.name = 'DeepResearchPlanError';
+    this.code = options.code;
+    this.failedPhase = options.failedPhase;
+    this.phaseMessage = options.phaseMessage;
+    this.debug = options.debug;
+  }
+}
+
 async function resolveResearchGenerationConfig(config: Partial<DeepResearchConfig>): Promise<ResearchGenerationConfig> {
   let model = getResearchModel();
   if (config.researchModel) {
@@ -88,56 +115,73 @@ function emitPhaseChange(emit: EventEmitter, phase: DeepResearchState['currentPh
  * handling nested structures and strings with escaped characters.
  */
 function extractJson(text: string): string {
-  const startIdx = text.search(/[{\[]/);
-  if (startIdx === -1) {
+  const candidateStarts = Array.from(text.matchAll(/[{\[]/g), (match) => match.index ?? -1)
+    .filter((index) => index >= 0);
+
+  if (candidateStarts.length === 0) {
     throw new SyntaxError('No JSON object or array found in response');
   }
 
-  const openChar = text[startIdx];
-  const closeChar = openChar === '{' ? '}' : ']';
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
+  let lastError: Error | undefined;
 
-  for (let i = startIdx; i < text.length; i++) {
-    const ch = text[i];
+  for (const startIdx of candidateStarts) {
+    const openChar = text[startIdx];
+    const closeChar = openChar === '{' ? '}' : ']';
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
 
-    if (escaped) {
-      escaped = false;
-      continue;
-    }
+    for (let i = startIdx; i < text.length; i++) {
+      const ch = text[i];
 
-    if (ch === '\\' && inString) {
-      escaped = true;
-      continue;
-    }
-
-    if (ch === '"') {
-      inString = !inString;
-      continue;
-    }
-
-    if (inString) continue;
-
-    if (ch === openChar) depth++;
-    else if (ch === closeChar) {
-      depth--;
-      if (depth === 0) {
-        return text.slice(startIdx, i + 1);
+      if (escaped) {
+        escaped = false;
+        continue;
       }
+
+      if (ch === '\\' && inString) {
+        escaped = true;
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) continue;
+
+      if (ch === openChar) depth++;
+      else if (ch === closeChar) {
+        depth--;
+        if (depth === 0) {
+          const candidate = text.slice(startIdx, i + 1);
+          try {
+            JSON.parse(candidate);
+            return candidate;
+          } catch (error) {
+            lastError = error instanceof Error ? error : new SyntaxError('Invalid JSON candidate');
+            break;
+          }
+        }
+      }
+    }
+
+    if (!lastError) {
+      lastError = new SyntaxError(
+        `Unterminated JSON structure in response (started at index ${startIdx}): ${text.slice(startIdx, startIdx + 80)}...`
+      );
     }
   }
 
-  throw new SyntaxError(
-    `Unterminated JSON structure in response (started at index ${startIdx}): ${text.slice(startIdx, startIdx + 80)}…`
-  );
+  throw lastError ?? new SyntaxError('No valid JSON object or array found in response');
 }
 
 /**
  * Parse JSON from LLM response, handling markdown code blocks
  * and trailing commentary text that breaks JSON.parse.
  */
-function parseJsonResponse<T>(text: string): T {
+function parseJsonResponse<T>(text: string): { value: T; debug: JsonParseDebugInfo } {
   let cleaned = text.trim();
 
   // Strip markdown code fences if present
@@ -146,14 +190,86 @@ function parseJsonResponse<T>(text: string): T {
     cleaned = fenceMatch[1].trim();
   }
 
-  // Fast path: try direct parse first (works when LLM is well-behaved)
   try {
-    return JSON.parse(cleaned);
-  } catch {
-    // Slow path: extract the first JSON object/array by bracket matching
-    const jsonStr = extractJson(cleaned);
-    return JSON.parse(jsonStr);
+    return {
+      value: JSON.parse(cleaned) as T,
+      debug: {
+        rawResponsePreview: cleaned.slice(0, 500),
+        parseMessage: 'Parsed full response as JSON.',
+      },
+    };
+  } catch (directParseError) {
+    let jsonStr: string | undefined;
+
+    try {
+      jsonStr = extractJson(cleaned);
+      return {
+        value: JSON.parse(jsonStr) as T,
+        debug: {
+          rawResponsePreview: cleaned.slice(0, 500),
+          extractedJsonPreview: jsonStr.slice(0, 500),
+          parseMessage: directParseError instanceof Error
+            ? directParseError.message
+            : 'Direct JSON parse failed.',
+        },
+      };
+    } catch (extractionError) {
+      const parseMessage = extractionError instanceof Error
+        ? extractionError.message
+        : 'Failed to parse JSON response.';
+      const directMessage = directParseError instanceof Error
+        ? directParseError.message
+        : 'Direct JSON parse failed.';
+      throw new DeepResearchPlanError('Deep Research planner returned malformed JSON.', {
+        code: 'DEEP_RESEARCH_PLAN_INVALID_JSON',
+        failedPhase: 'planning',
+        phaseMessage: 'Research plan generation failed.',
+        debug: {
+          rawResponsePreview: cleaned.slice(0, 500),
+          extractedJsonPreview: jsonStr?.slice(0, 500),
+          parseMessage: `${directMessage} | ${parseMessage}`,
+        },
+      });
+    }
   }
+}
+
+function isNonEmptyStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string' && item.trim().length > 0);
+}
+
+function validateResearchPlan(plan: unknown, originalQuery: string, debug: JsonParseDebugInfo): ResearchPlan {
+  if (!plan || typeof plan !== 'object') {
+    throw new DeepResearchPlanError('Deep Research planner returned an invalid plan payload.', {
+      code: 'DEEP_RESEARCH_PLAN_INVALID_SHAPE',
+      failedPhase: 'planning',
+      phaseMessage: 'Research plan generation failed.',
+      debug,
+    });
+  }
+
+  const candidate = plan as Partial<Omit<ResearchPlan, 'originalQuery'>>;
+  if (
+    typeof candidate.clarifiedQuery !== 'string'
+    || !isNonEmptyStringArray(candidate.researchQuestions)
+    || typeof candidate.scope !== 'string'
+    || !isNonEmptyStringArray(candidate.expectedSections)
+  ) {
+    throw new DeepResearchPlanError('Deep Research planner returned an incomplete plan payload.', {
+      code: 'DEEP_RESEARCH_PLAN_INVALID_SHAPE',
+      failedPhase: 'planning',
+      phaseMessage: 'Research plan generation failed.',
+      debug,
+    });
+  }
+
+  return {
+    originalQuery,
+    clarifiedQuery: candidate.clarifiedQuery,
+    researchQuestions: candidate.researchQuestions,
+    scope: candidate.scope,
+    expectedSections: candidate.expectedSections,
+  };
 }
 
 /**
@@ -179,12 +295,89 @@ async function planResearch(
     abortSignal,
   });
 
-  const plan = parseJsonResponse<Omit<ResearchPlan, 'originalQuery'>>(text);
+  const { value, debug } = parseJsonResponse<Omit<ResearchPlan, 'originalQuery'>>(text);
+  return validateResearchPlan(value, state.userQuery, debug);
+}
+
+function validateQueryGenerationResult(result: unknown, debug: JsonParseDebugInfo): { queries: string[] } {
+  if (!result || typeof result !== 'object' || !isNonEmptyStringArray((result as { queries?: unknown }).queries)) {
+    throw new DeepResearchPlanError('Deep Research query generator returned an invalid payload.', {
+      code: 'DEEP_RESEARCH_QUERY_INVALID_SHAPE',
+      failedPhase: 'planning',
+      phaseMessage: 'Research query generation failed.',
+      debug,
+    });
+  }
 
   return {
-    originalQuery: state.userQuery,
-    ...plan,
+    queries: (result as { queries: unknown }).queries as string[],
   };
+}
+
+function validateRefinementAnalysis(
+  result: unknown,
+  debug: JsonParseDebugInfo
+): { informationGaps: string[]; suggestedSearches: string[] } {
+  if (!result || typeof result !== 'object') {
+    throw new DeepResearchPlanError('Deep Research refinement analysis returned an invalid payload.', {
+      code: 'DEEP_RESEARCH_REFINEMENT_INVALID_SHAPE',
+      failedPhase: 'refining',
+      phaseMessage: 'Research refinement failed.',
+      debug,
+    });
+  }
+
+  const candidate = result as { informationGaps?: unknown; suggestedSearches?: unknown };
+  if (!Array.isArray(candidate.informationGaps) || !Array.isArray(candidate.suggestedSearches)) {
+    throw new DeepResearchPlanError('Deep Research refinement analysis returned an incomplete payload.', {
+      code: 'DEEP_RESEARCH_REFINEMENT_INVALID_SHAPE',
+      failedPhase: 'refining',
+      phaseMessage: 'Research refinement failed.',
+      debug,
+    });
+  }
+
+  return {
+    informationGaps: candidate.informationGaps.filter((item): item is string => typeof item === 'string'),
+    suggestedSearches: candidate.suggestedSearches.filter((item): item is string => typeof item === 'string'),
+  };
+}
+
+function buildDeepResearchErrorEvent(error: unknown, fallbackMessage: string): DeepResearchEvent {
+  if (error instanceof DeepResearchPlanError) {
+    return {
+      type: 'error',
+      error: error.message,
+      failedPhase: error.failedPhase,
+      phaseMessage: error.phaseMessage,
+      code: error.code,
+      debug: error.debug,
+      timestamp: new Date(),
+    };
+  }
+
+  return {
+    type: 'error',
+    error: fallbackMessage,
+    timestamp: new Date(),
+  };
+}
+
+function logDeepResearchError(error: unknown, state: DeepResearchState): void {
+  if (error instanceof DeepResearchPlanError) {
+    console.error('[DEEP-RESEARCH] Structured failure:', {
+      code: error.code,
+      failedPhase: error.failedPhase,
+      phaseMessage: error.phaseMessage,
+      parseMessage: error.debug.parseMessage,
+      rawResponsePreview: error.debug.rawResponsePreview,
+      extractedJsonPreview: error.debug.extractedJsonPreview,
+      userQuery: state.userQuery,
+    });
+    return;
+  }
+
+  console.error('[DEEP-RESEARCH] Failure:', error);
 }
 
 /**
@@ -218,7 +411,8 @@ async function generateSearchQueries(
       abortSignal,
     });
 
-    const result = parseJsonResponse<{ queries: string[] }>(text);
+    const { value, debug } = parseJsonResponse<{ queries: string[] }>(text);
+    const result = validateQueryGenerationResult(value, debug);
     allQueries.push(...result.queries);
   }
 
@@ -345,10 +539,11 @@ Analyze this draft and identify gaps and areas for improvement.`,
     abortSignal,
   });
 
-  const analysis = parseJsonResponse<{
+  const { value, debug } = parseJsonResponse<{
     informationGaps: string[];
     suggestedSearches: string[];
   }>(text);
+  const analysis = validateRefinementAnalysis(value, debug);
 
   emit({
     type: 'refinement_update',
@@ -536,11 +731,8 @@ export async function runDeepResearch(
     state.error = error instanceof Error ? error.message : 'Unknown error';
 
     if (!isCancelled) {
-      emit({
-        type: 'error',
-        error: state.error,
-        timestamp: new Date(),
-      });
+      logDeepResearchError(error, state);
+      emit(buildDeepResearchErrorEvent(error, state.error));
     }
 
     throw error;

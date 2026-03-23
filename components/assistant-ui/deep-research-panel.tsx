@@ -153,8 +153,11 @@ export const DeepResearchPanel: FC<DeepResearchPanelProps> = ({
 
       {/* Error Display */}
       {error && (
-        <div className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-600 font-mono dark:bg-red-950/40 dark:border-red-800 dark:text-red-400">
-          {error}
+        <div className="space-y-2 rounded border border-red-200 bg-red-50 p-3 text-xs font-mono text-red-700 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+          <div className="font-semibold uppercase tracking-wide text-[11px]">
+            Research planning failed
+          </div>
+          <div>{error}</div>
         </div>
       )}
 

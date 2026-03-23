@@ -20,6 +20,7 @@ const ALWAYS_BLOCKED_ENV_KEYS = new Set([
     "ELECTRON_NO_ATTACH_CONSOLE",
     "ELECTRON_ENABLE_LOGGING",
     "SELENE_PRODUCTION_BUILD",
+    "TURBOPACK",
     "NEXT_RUNTIME",
     "NEXT_DEPLOYMENT_ID",
     "PORT",
@@ -45,11 +46,11 @@ const PROCESS_ENV_FALLBACK_BLOCKED_KEYS = new Set([
  * Leaking them causes child Next.js processes to use Selene's config instead
  * of their own, which crashes with path resolution errors.
  *
- * Note: We intentionally do NOT block NEXT_PUBLIC_* (no double underscore)
- * because those are user-facing env vars. NEXT_RUNTIME and NEXT_DEPLOYMENT_ID
- * are handled explicitly above.
+ * Note: We intentionally do NOT block NEXT_PUBLIC_* or generic NEXT_* vars,
+ * because those may be user-facing env vars. We only strip known Next.js
+ * runtime internals via __NEXT_* and NEXT_PRIVATE_* prefixes.
  */
-const BLOCKED_ENV_PREFIXES = ["__NEXT_"];
+const BLOCKED_ENV_PREFIXES = ["__NEXT_", "NEXT_PRIVATE_"];
 
 export function sanitizeEnvironment(
     env: Record<string, string | undefined>,

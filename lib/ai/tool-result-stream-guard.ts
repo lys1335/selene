@@ -105,7 +105,11 @@ function buildOversizedToolResult(
 
   error +=
     safeToolName === "executeCommand"
-      ? "Narrow the command scope (filters, head/tail, specific paths) and retry."
+      ? "To fix: (1) Run specific test files instead of the full suite " +
+        "(e.g., npm test -- path/to/specific.test.ts), " +
+        "(2) Pipe through head/tail to limit output lines, or " +
+        "(3) Use a compact reporter (--reporter=dot for Vitest, --reporters=dot for Jest). " +
+        "Do NOT retry the same command — it will produce the same oversized output."
       : "Refine the request and retry with a smaller result scope.";
 
   return {
