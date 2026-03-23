@@ -4,7 +4,7 @@
 # Plays a random lightsaber swing after each tool use.
 # Every tool call is a strike in the duel.
 #
-# 50/50 between swing-1 and swing-2
+# Rotates between swing-1, swing-2, and clash
 #
 
 PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,11 +15,14 @@ if [ "$(uname -s)" != "Darwin" ]; then
   exit 0
 fi
 
-# 50/50 random between two swings
-if [ $((RANDOM % 2)) -eq 0 ]; then
+# 1-in-3 random between three sounds
+ROLL=$((RANDOM % 3))
+if [ $ROLL -eq 0 ]; then
   SOUND_FILE="swing-1.wav"
-else
+elif [ $ROLL -eq 1 ]; then
   SOUND_FILE="swing-2.wav"
+else
+  SOUND_FILE="clash.wav"
 fi
 
 if [ -f "$SOUNDS_DIR/$SOUND_FILE" ]; then

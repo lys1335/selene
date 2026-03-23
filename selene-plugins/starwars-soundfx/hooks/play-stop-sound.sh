@@ -3,7 +3,7 @@
 # Star Wars Sound FX — Stop Hook
 # Plays different sounds based on how the session ended:
 #
-#   completed → swing-2 (triumphant swing)
+#   completed → power-down (lightsaber deactivates — session ends)
 #   error     → sith-clash (dark side hit)
 #   aborted   → clash (disengage)
 #
@@ -28,8 +28,8 @@ fi
 
 case "$STOP_REASON" in
   "completed")
-    if [ -f "$SOUNDS_DIR/swing-2.wav" ]; then
-      afplay "$SOUNDS_DIR/swing-2.wav" &>/dev/null &
+    if [ -f "$SOUNDS_DIR/power-down.wav" ]; then
+      afplay "$SOUNDS_DIR/power-down.wav" &>/dev/null &
     fi
     ;;
   "error")
