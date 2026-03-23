@@ -941,9 +941,9 @@ export function providerSupportsFeature(
     claudecode: { tools: true, streaming: true, images: true },
     kimi: { tools: true, streaming: true, images: true },
     minimax: { tools: true, streaming: true, images: false },
-    blackboxai: { tools: true, streaming: true, images: false },
-    ollama: { tools: false, streaming: true, images: false },
-    vllm: { tools: false, streaming: true, images: false },
+    blackboxai: { tools: true, streaming: true, images: true },
+    ollama: { tools: true, streaming: true, images: true },
+    vllm: { tools: true, streaming: true, images: true },
   };
 
   return featureSupport[provider]?.[feature] ?? false;
