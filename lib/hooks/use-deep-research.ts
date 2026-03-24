@@ -300,6 +300,7 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
   const applyPersistedState = useCallback((state: PersistedDeepResearchState) => {
     const nextErrorState = buildErrorStateFromPersisted(state);
     setPhase(state.phase);
+    phaseRef.current = state.phase;
     setPhaseMessage(
       state.phase === 'error'
         ? getUserFacingPhaseMessage(nextErrorState, state.phaseMessage || 'Deep Research failed.')
@@ -336,6 +337,7 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
     setIsActive(false);
     setIsLoading(false);
     setPhase('idle');
+    phaseRef.current = 'idle';
     setPhaseMessage('');
     setProgress(null);
     setFindings([]);
@@ -366,6 +368,7 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
     setIsActive(false);
     setIsLoading(false);
     setPhase('idle');
+    phaseRef.current = 'idle';
     setPhaseMessage('Research cancelled');
     clearDeepResearchErrorState(setErrorState, setError);
   }, [stopPolling]);
@@ -476,6 +479,7 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
       case 'phase_change':
         clearDeepResearchErrorState(setErrorState, setError);
         setPhase(event.phase);
+        phaseRef.current = event.phase;
         setPhaseMessage(event.message);
         break;
       case 'search_progress':
@@ -488,6 +492,7 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
         clearDeepResearchErrorState(setErrorState, setError);
         setFinalReport(event.report);
         setPhase('complete');
+        phaseRef.current = 'complete';
         setPhaseMessage('Research complete');
         setIsActive(false);
         setIsLoading(false);
@@ -497,6 +502,7 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
         const nextErrorState = buildErrorStateFromEvent(event);
         applyDeepResearchErrorState(nextErrorState, setErrorState, setError);
         setPhase('error');
+        phaseRef.current = 'error';
         setPhaseMessage(getUserFacingPhaseMessage(nextErrorState, event.phaseMessage ?? 'Deep Research failed.'));
         setIsActive(false);
         setIsLoading(false);
@@ -507,11 +513,14 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
         onErrorRef.current?.(getUserFacingErrorMessage(nextErrorState) ?? event.error);
         break;
       }
-      case 'complete':
-        setPhase((prev) => prev === 'error' ? prev : 'complete');
+      case 'complete': {
+        const nextPhase: ResearchPhase = phaseRef.current === 'error' ? 'error' : 'complete';
+        phaseRef.current = nextPhase;
+        setPhase(nextPhase);
         setIsActive(false);
         setIsLoading(false);
         break;
+      }
     }
   }, []);
 
