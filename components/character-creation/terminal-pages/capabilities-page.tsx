@@ -140,6 +140,8 @@ export function CapabilitiesPage({
     localGrepEnabled: boolean;
     devWorkspaceEnabled: boolean;
     screenCaptureEnabled: boolean;
+    runwayApiSecret: boolean;
+    vertexAIProjectId: boolean;
   }>({
     syncedFolders: false,
     embeddings: false,
@@ -152,6 +154,8 @@ export function CapabilitiesPage({
     localGrepEnabled: true,
     devWorkspaceEnabled: false,
     screenCaptureEnabled: true,
+    runwayApiSecret: false,
+    vertexAIProjectId: false,
   });
 
   type CapabilityDependencyKey = keyof typeof dependencyStatus;
@@ -195,6 +199,8 @@ export function CapabilitiesPage({
           localGrepEnabled: settingsData.localGrepEnabled !== false,
           devWorkspaceEnabled: settingsData.devWorkspaceEnabled === true,
           screenCaptureEnabled: settingsData.screenCaptureEnabled !== false,
+          runwayApiSecret: typeof settingsData.runwayApiSecret === "string" && settingsData.runwayApiSecret.trim().length > 0,
+          vertexAIProjectId: typeof settingsData.vertexAIProjectId === "string" && settingsData.vertexAIProjectId.trim().length > 0,
         }));
       } catch {
         // Settings fetch failed — only update syncedFolders if we got a valid count

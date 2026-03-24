@@ -128,6 +128,8 @@ function inferMediaService(toolName: string): string {
   if (toolName === "generateVideoWan22") return "WAN 2.2 Video";
   if (toolName === "editRoomImage") return "Gemini Image Edit";
   if (toolName === "assembleVideo") return "Video Assembly";
+  if (toolName === "generateVideoRunway") return "Runway Video";
+  if (toolName === "generateVideoVertexAI") return "Vertex AI Veo Video";
   return toolName || "Unknown";
 }
 

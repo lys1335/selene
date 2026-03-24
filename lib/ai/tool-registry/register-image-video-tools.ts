@@ -34,6 +34,8 @@ import {
   createFlux2Klein9BGenerateTool,
   createFlux2Klein9BReferenceTool,
 } from "../tools/flux2-klein-9b-generate-tool";
+import { createRunwayVideoTool } from "../tools/runway-video-tool";
+import { createVertexAIVideoTool } from "../tools/vertex-ai-video-tool";
 
 export function registerImageAndVideoTools(registry: ToolRegistry): void {
 // ============================================================
@@ -718,6 +720,71 @@ Automatically uses all media from the current session. Rendering may take time f
     requiresSession: true,
   } satisfies ToolMetadata,
   ({ sessionId }) => createVideoAssemblyTool(sessionId!)
+);
+
+// ============================================================================
+// RUNWAY VIDEO GENERATION TOOLS
+// Requires RUNWAYML_API_SECRET environment variable
+// ============================================================================
+
+registry.register(
+  "generateVideoRunway",
+  {
+    displayName: "Generate Video (Runway)",
+    category: "video-generation",
+    keywords: [
+      "video", "runway", "gen4", "gen4.5", "cinematic",
+      "text-to-video", "image-to-video", "animate", "motion",
+      "clip", "film", "generate video",
+    ],
+    shortDescription: "Generate cinematic videos with Runway Gen-4/Gen-4.5",
+    fullInstructions: `## Runway Video Generation
+
+Generate high-quality cinematic videos. Supports text-to-video and image-to-video.
+
+**Models:** gen4.5 (best quality), gen4_turbo (fast + good quality, default), gen3a_turbo (fastest, image-to-video only)
+**Duration:** 2-10 seconds
+**Ratios:** 1280:720 (landscape), 720:1280 (portrait), 960:960 (square), 1104:832, 832:1104, 1584:672
+**Tips:** Be descriptive about camera movement, lighting, and mood. Use seed for reproducibility.
+**Image-to-video:** Provide image_url to animate a still image. Omit for pure text-to-video.`,
+    loading: { deferLoading: true },
+    requiresSession: true,
+    enableEnvVar: "RUNWAYML_API_SECRET",
+  } satisfies ToolMetadata,
+  ({ sessionId }) => createRunwayVideoTool(sessionId!)
+);
+
+// ============================================================================
+// VERTEX AI VEO VIDEO GENERATION TOOLS
+// Requires VERTEX_AI_PROJECT_ID + Google Cloud credentials
+// ============================================================================
+
+registry.register(
+  "generateVideoVertexAI",
+  {
+    displayName: "Generate Video (Google Veo)",
+    category: "video-generation",
+    keywords: [
+      "video", "veo", "google", "vertex", "vertex-ai",
+      "text-to-video", "image-to-video", "animate", "motion",
+      "clip", "film", "generate video",
+    ],
+    shortDescription: "Generate videos with Google Veo via Vertex AI",
+    fullInstructions: `## Google Veo Video Generation
+
+Generate videos with Google's Veo models via Vertex AI.
+
+**Models:** veo-3.0-generate-001 (default), veo-3.1-generate-001 (latest), veo-3.0-fast-generate-001 (fast), veo-2.0-generate-001 (legacy)
+**Duration:** Veo 2: 5-8s, Veo 3: 4/6/8s
+**Aspect Ratio:** 16:9 (landscape), 9:16 (portrait)
+**Resolution:** 720p (default), 1080p (Veo 3+ only)
+**Features:** Audio generation (Veo 3+), negative prompts, deterministic seeds, multiple samples (1-4).
+**Image-to-video:** Provide image_url to animate a still image. Omit for pure text-to-video.`,
+    loading: { deferLoading: true },
+    requiresSession: true,
+    enableEnvVar: "VERTEX_AI_PROJECT_ID",
+  } satisfies ToolMetadata,
+  ({ sessionId }) => createVertexAIVideoTool(sessionId!)
 );
 
 }
