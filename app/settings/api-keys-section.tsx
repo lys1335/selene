@@ -672,6 +672,67 @@ export function ApiKeysSection({
           <p className="mt-1 font-mono text-xs text-terminal-muted">{t("api.fields.selene.helper")}</p>
         </div>
       </div>
+
+      {/* Video Generation */}
+      <div className="space-y-2">
+        <h2 className="font-mono text-lg font-semibold text-terminal-dark">{t("api.videoTitle")}</h2>
+        <p className="font-mono text-xs text-terminal-muted">{t("api.videoDescription")}</p>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.runway.label")}</label>
+          <input
+            type="password"
+            value={formState.runwayApiSecret}
+            onChange={(e) => updateField("runwayApiSecret", e.target.value)}
+            placeholder={t("api.fields.runway.placeholder")}
+            className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+          />
+          <p className="mt-1 font-mono text-xs text-terminal-muted">
+            {t("api.fields.runway.helper")}{" "}
+            <a href="https://app.runwayml.com/settings/api-keys" target="_blank" rel="noopener noreferrer" className="text-terminal-green underline hover:text-terminal-green/80">
+              runwayml.com
+            </a>
+          </p>
+        </div>
+
+        <div>
+          <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.vertexProjectId.label")}</label>
+          <input
+            type="text"
+            value={formState.vertexAIProjectId}
+            onChange={(e) => updateField("vertexAIProjectId", e.target.value)}
+            placeholder={t("api.fields.vertexProjectId.placeholder")}
+            className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+          />
+          <p className="mt-1 font-mono text-xs text-terminal-muted">{t("api.fields.vertexProjectId.helper")}</p>
+        </div>
+
+        <div>
+          <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.vertexLocation.label")}</label>
+          <input
+            type="text"
+            value={formState.vertexAILocation}
+            onChange={(e) => updateField("vertexAILocation", e.target.value)}
+            placeholder="us-central1"
+            className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+          />
+          <p className="mt-1 font-mono text-xs text-terminal-muted">{t("api.fields.vertexLocation.helper")}</p>
+        </div>
+
+        <div>
+          <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.googleCredentials.label")}</label>
+          <input
+            type="text"
+            value={formState.vertexAICredentialsPath}
+            onChange={(e) => updateField("vertexAICredentialsPath", e.target.value)}
+            placeholder={t("api.fields.googleCredentials.placeholder")}
+            className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+          />
+          <p className="mt-1 font-mono text-xs text-terminal-muted">{t("api.fields.googleCredentials.helper")}</p>
+        </div>
+      </div>
     </div>
   );
 }

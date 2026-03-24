@@ -2076,6 +2076,8 @@
       "ollama": "Ollama (yerel)",
       "vllm": "vLLM (yerel)",
       "keysTitle": "API Anahtarları",
+      "videoTitle": "Video oluşturma",
+      "videoDescription": "Video oluşturma sağlayıcıları için API anahtarlarını yapılandırın (Runway, Google Vertex AI Veo).",
       "auth": {
         "pasteInstructions": "Bir tarayıcı sekmesi açıldı. Yetkilendirdikten sonra sayfada gösterilen kodu kopyalayın ve aşağıya yapıştırın.",
         "codePlaceholder": "Yetkilendirme kodunu buraya yapıştırın...",
@@ -2164,6 +2166,26 @@
           "label": "Selene AI API Anahtarı",
           "placeholder": "Selene AI anahtarınızı girin",
           "helper": "Görsel/video üretimi için gerekli"
+        },
+        "runway": {
+          "label": "Runway API Anahtarı",
+          "placeholder": "rw_...",
+          "helper": "Runway video oluşturma (Gen-4, Gen-4.5) için gerekli."
+        },
+        "vertexProjectId": {
+          "label": "Vertex AI Proje ID",
+          "placeholder": "my-gcp-project-id",
+          "helper": "Vertex AI Veo video oluşturma için Google Cloud proje ID'niz."
+        },
+        "vertexLocation": {
+          "label": "Vertex AI Bölge",
+          "placeholder": "us-central1",
+          "helper": "Vertex AI bölgesi. Varsayılan: us-central1."
+        },
+        "googleCredentials": {
+          "label": "Google Servis Hesabı Kimlik Bilgileri",
+          "placeholder": "/dosya/yolu/service-account.json",
+          "helper": "Vertex AI kimlik doğrulaması için Google Cloud servis hesabı JSON dosyasının yolu."
         },
         "ollama": {
           "label": "Ollama URL",

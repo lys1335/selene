@@ -108,7 +108,7 @@ export async function PUT(request: NextRequest) {
       rtkEnabled: body.rtkEnabled !== undefined ? body.rtkEnabled : currentSettings.rtkEnabled,
       rtkVerbosity: body.rtkVerbosity !== undefined ? body.rtkVerbosity : currentSettings.rtkVerbosity,
       rtkUltraCompact: body.rtkUltraCompact !== undefined ? body.rtkUltraCompact : currentSettings.rtkUltraCompact,
-      // Runway Video Generation
+      // Vertex AI Video Generation
       vertexAIProjectId: body.vertexAIProjectId !== undefined ? body.vertexAIProjectId : currentSettings.vertexAIProjectId,
       vertexAILocation: body.vertexAILocation !== undefined ? body.vertexAILocation : currentSettings.vertexAILocation,
       vertexAICredentialsPath: body.vertexAICredentialsPath !== undefined ? body.vertexAICredentialsPath : currentSettings.vertexAICredentialsPath,

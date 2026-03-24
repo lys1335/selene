@@ -2077,6 +2077,8 @@
       "ollama": "Ollama (local)",
       "vllm": "vLLM (local)",
       "keysTitle": "Provider keys",
+      "videoTitle": "Video generation",
+      "videoDescription": "Configure API keys for video generation providers (Runway, Google Vertex AI Veo).",
       "auth": {
         "pasteInstructions": "A browser tab has been opened. After authorizing, copy the code shown on the page and paste it below.",
         "codePlaceholder": "Paste the authorization code here...",
@@ -2165,6 +2167,26 @@
           "label": "Selene media key",
           "placeholder": "Enter your Selene AI key",
           "helper": "Needed for image and video generation."
+        },
+        "runway": {
+          "label": "Runway API Secret",
+          "placeholder": "rw_...",
+          "helper": "Needed for Runway video generation (Gen-4, Gen-4.5)."
+        },
+        "vertexProjectId": {
+          "label": "Vertex AI Project ID",
+          "placeholder": "my-gcp-project-id",
+          "helper": "Your Google Cloud project ID for Vertex AI Veo video generation."
+        },
+        "vertexLocation": {
+          "label": "Vertex AI Location",
+          "placeholder": "us-central1",
+          "helper": "Region for Vertex AI. Defaults to us-central1."
+        },
+        "googleCredentials": {
+          "label": "Google Service Account Credentials",
+          "placeholder": "/path/to/service-account.json",
+          "helper": "Path to your Google Cloud service account JSON file for Vertex AI authentication."
         },
         "ollama": {
           "label": "Ollama URL",
