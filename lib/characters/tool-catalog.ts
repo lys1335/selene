@@ -8,7 +8,9 @@ export type ToolDependency =
   | "flux2Klein4bEnabled"
   | "flux2Klein9bEnabled"
   | "localGrepEnabled"
-  | "devWorkspaceEnabled";
+  | "devWorkspaceEnabled"
+  | "runwayApiSecret"
+  | "vertexAIProjectId";
 
 export type CharacterToolCatalogItem = {
   id: string;
@@ -80,6 +82,8 @@ export const CHARACTER_TOOL_CATALOG: CharacterToolCatalogItem[] = [
   { id: "generateImageFlux2Klein9B", category: "image-generation", dependencies: ["flux2Klein9bEnabled"] },
   { id: "editImageFlux2Klein9B", category: "image-editing", dependencies: ["flux2Klein9bEnabled"] },
   { id: "referenceImageFlux2Klein9B", category: "image-generation", dependencies: ["flux2Klein9bEnabled"] },
+  { id: "generateVideoRunway", category: "video-generation", dependencies: ["runwayApiSecret"] },
+  { id: "generateVideoVertexAI", category: "video-generation", dependencies: ["vertexAIProjectId"] },
 ];
 
 export function mergeCharacterToolCatalog(

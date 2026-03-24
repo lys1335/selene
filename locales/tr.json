@@ -651,7 +651,9 @@
         "flux2Klein9bEnabled": "FLUX.2 Klein 9B etkin olmalı",
         "localGrepEnabled": "Yerel Grep etkin olmalı",
         "devWorkspaceEnabled": "Geliştirici Çalışma Alanı etkin olmalı",
-        "screenCaptureEnabled": "Ekran Görüntüsü Yakalama etkin olmalı"
+        "screenCaptureEnabled": "Ekran Görüntüsü Yakalama etkin olmalı",
+        "runwayApiSecret": "Runway API anahtarı gerekli",
+        "vertexAIProjectId": "Vertex AI Proje Kimliği gerekli"
       }
     },
     "tools": {
@@ -702,6 +704,14 @@
       "generateVideoWan22": {
         "name": "Video Üretimi",
         "description": "Görselleri videoya dönüştürün"
+      },
+      "generateVideoRunway": {
+        "name": "Video Üretimi (Runway)",
+        "description": "Runway Gen-4/Gen-4.5 ile sinematik videolar oluşturun"
+      },
+      "generateVideoVertexAI": {
+        "name": "Video Üretimi (Google Veo)",
+        "description": "Vertex AI üzerinden Google Veo ile video oluşturun"
       },
       "generatePixelVideoWan22": {
         "name": "Piksel Animasyon (WAN 2.2)",
@@ -1054,6 +1064,8 @@
       "generateImageFlux2": "Flux2 Görsel Oluşturma",
       "generateImageWan22": "WAN 2.2 Görsel Oluşturma",
       "generateVideoWan22": "WAN 2.2 Video Oluşturma",
+      "generateVideoRunway": "Runway Video Oluşturma",
+      "generateVideoVertexAI": "Vertex AI Veo Video",
       "generatePixelVideoWan22": "WAN 2.2 Piksel Animasyonu",
       "assembleVideo": "Video Montajı",
       "showProductImages": "Ürün Galerisi",
@@ -1757,6 +1769,10 @@
         "editRoomImageDesc": "Görselleri düzenle, varyasyonlar oluştur, iki görselden öğeleri birleştir",
         "generateVideoWan22": "Video Oluşturma",
         "generateVideoWan22Desc": "Görselleri kısa videolara dönüştür",
+        "generateVideoRunway": "Video Üretimi (Runway)",
+        "generateVideoRunwayDesc": "Runway Gen-4/Gen-4.5 ile sinematik videolar oluştur",
+        "generateVideoVertexAI": "Video Üretimi (Google Veo)",
+        "generateVideoVertexAIDesc": "Vertex AI üzerinden Google Veo ile video oluştur",
         "generatePixelVideoWan22": "Piksel Animasyonu (WAN 2.2)",
         "generatePixelVideoWan22Desc": "Piksel sanatı karakter sprite animasyonları oluştur",
         "assembleVideo": "Video Montajı",
@@ -1857,7 +1873,9 @@
         "flux2Klein9bEnabled": "FLUX.2 Klein 9B etkin olmalı",
         "localGrepEnabled": "Yerel Grep etkin olmalı",
         "devWorkspaceEnabled": "Geliştirici Çalışma Alanı etkin olmalı",
-        "screenCaptureEnabled": "Ekran Görüntüsü Yakalama etkin olmalı"
+        "screenCaptureEnabled": "Ekran Görüntüsü Yakalama etkin olmalı",
+        "runwayApiSecret": "Runway API anahtarı gerekli",
+        "vertexAIProjectId": "Vertex AI Proje Kimliği gerekli"
       }
     },
     "style": {
