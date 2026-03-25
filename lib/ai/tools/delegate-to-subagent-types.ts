@@ -96,6 +96,13 @@ export interface ActiveDelegation {
   sessionId: string;
   /** The initiator's chat session ID — used to scope delegations per session. */
   initiatorSessionId: string;
+  /**
+   * The root session ID — the original channel/web session that started the
+   * delegation chain. Used by the channel bridge to route interactive questions
+   * back to the correct channel conversation when the subagent's own session
+   * has no channel_conversations mapping.
+   */
+  rootSessionId: string;
   delegateId: string;
   delegateName: string;
   delegatorId: string;

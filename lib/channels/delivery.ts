@@ -96,6 +96,18 @@ export async function deliverChannelReply(params: {
   await touchChannelConversation(conversation.id);
 }
 
+// Interactive tool names that block the AI while waiting for user input.
+// When a response contains one of these, the interactive bridge sends the
+// question to the channel directly. Text that appears *before* the question
+// in the same response is suppressed — it would only add noise. Text that
+// appears *after* the question (the AI's follow-up after the user answered)
+// is delivered normally.
+const INTERACTIVE_DELIVERY_SUPPRESSIONS = new Set([
+  "AskUserQuestion",
+  "AskFollowupQuestion",
+  "ExitPlanMode",
+]);
+
 async function buildOutgoingPayload(content: DBContentPart[]): Promise<{
   text: string;
   attachments: ChannelAttachment[];
@@ -104,8 +116,31 @@ async function buildOutgoingPayload(content: DBContentPart[]): Promise<{
   const attachments: ChannelAttachment[] = [];
   const imageUrls: string[] = [];
 
-  for (const part of content) {
-    if (part.type === "text" && part.text) {
+  // Find the last interactive tool-result to determine the text start index.
+  // Text before the interactive question is suppressed; text after it (the AI's
+  // follow-up once the user answered) is delivered.
+  const hasInteractiveToolCall = content.some(
+    (p) => p.type === "tool-call" && INTERACTIVE_DELIVERY_SUPPRESSIONS.has((p as { toolName?: string }).toolName ?? ""),
+  );
+  let textStartIndex = 0;
+  if (hasInteractiveToolCall) {
+    // Find the last tool-result for an interactive tool. Text after it is the
+    // AI's continuation once the question was answered — deliver that.
+    let lastInteractiveResultIndex = -1;
+    for (let i = content.length - 1; i >= 0; i--) {
+      const p = content[i];
+      if (p.type === "tool-result" && INTERACTIVE_DELIVERY_SUPPRESSIONS.has((p as { toolName?: string }).toolName ?? "")) {
+        lastInteractiveResultIndex = i;
+        break;
+      }
+    }
+    // If no result exists (question is still pending), suppress all text.
+    textStartIndex = lastInteractiveResultIndex >= 0 ? lastInteractiveResultIndex + 1 : content.length;
+  }
+
+  for (let i = 0; i < content.length; i++) {
+    const part = content[i];
+    if (part.type === "text" && part.text && i >= textStartIndex) {
       textChunks.push(part.text);
     }
     if (part.type === "image" && part.image) {

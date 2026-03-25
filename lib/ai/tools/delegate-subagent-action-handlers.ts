@@ -57,6 +57,46 @@ import {
 import { taskRegistry } from "@/lib/background-tasks/registry";
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Walk the active delegation chain to find the root session ID.
+ * In a multi-hop delegation (A → B → C), B's initiatorSessionId is A's session,
+ * and A might itself be a delegation from a channel session. This function
+ * traces back to the original session that has no parent delegation.
+ *
+ * WARNING: This function relies on intermediate delegations still being present
+ * in the `activeDelegations` in-memory map. If a delegation has been GC'd
+ * (e.g. via stop/cleanup), the chain walk will terminate early — returning the
+ * first session whose parent delegation is missing, not necessarily the true
+ * root. Currently safe because this is only called at delegation start time
+ * (before any cleanup). Future callers should be aware of this limitation.
+ */
+function resolveRootSessionId(initiatorSessionId: string): string {
+  let currentSessionId = initiatorSessionId;
+  const visited = new Set<string>();
+
+  while (true) {
+    if (visited.has(currentSessionId)) break; // cycle guard
+    visited.add(currentSessionId);
+
+    // Find any delegation whose subagent session matches currentSessionId
+    let parentFound = false;
+    for (const d of activeDelegations.values()) {
+      if (d.sessionId === currentSessionId) {
+        currentSessionId = d.initiatorSessionId;
+        parentFound = true;
+        break;
+      }
+    }
+    if (!parentFound) break;
+  }
+
+  return currentSessionId;
+}
+
+// ---------------------------------------------------------------------------
 // Action handlers
 // ---------------------------------------------------------------------------
 
@@ -297,6 +337,9 @@ async function handleStart(
   // NOTE: characterId MUST be in metadata — createSession's extractSessionMetadataColumns
   // promotes metadata.characterId to the DB column. Passing it only as a top-level field
   // gets overridden to null by the metadata extraction spread.
+  // Resolve root session ID early so we can embed it in session metadata
+  const rootSessionId = resolveRootSessionId(initiatorSessionId);
+
   const session = await createSession({
     title: `Delegation: ${task.slice(0, 50)}`,
     userId,
@@ -306,6 +349,7 @@ async function handleStart(
       workflowId: membership.workflow.id,
       characterId: resolution.candidate.agentId,
       characterName: resolution.candidate.agentName,
+      rootSessionId,
     },
   });
 
@@ -323,6 +367,7 @@ async function handleStart(
     id: delegationId,
     sessionId: session.id,
     initiatorSessionId,
+    rootSessionId,
     delegateId: resolution.candidate.agentId,
     delegateName: resolution.candidate.agentName,
     delegatorId: characterId,

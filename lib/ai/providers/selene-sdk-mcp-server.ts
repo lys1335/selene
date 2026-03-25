@@ -261,8 +261,18 @@ export function createSeleneSdkMcpServer(
     enableAnthropicToolReferences: false,
   };
 
+  // ── Tools handled natively by the Claude Agent SDK ──────────────────────
+  // These tools have SDK-native implementations with proper hooks (PreToolUse,
+  // PostToolUse) that handle interactive flows correctly. Exposing the Selene
+  // MCP version alongside the native one causes ambiguity — the model may call
+  // the MCP version which lacks the proper SDK hook integration.
+  const SDK_NATIVE_TOOL_SUPPRESSIONS = new Set(["askUserQuestion"]);
+
   // ── 1. Built-in ToolRegistry tools (non-MCP) ────────────────────────────
   for (const name of registry.getToolNames()) {
+    // Suppress tools that the SDK handles natively
+    if (SDK_NATIVE_TOOL_SUPPRESSIONS.has(name)) continue;
+
     const registeredTool = registry.get(name);
     if (!registeredTool) continue;
 
@@ -328,7 +338,10 @@ export function createSeleneSdkMcpServer(
               args = { ...args, mode: "background" };
             }
 
-            const result = await (toolInstance as any).execute?.(args, {});
+            // Generate a toolCallId so interactive tools (askUserQuestion,
+            // executeCommand progress, etc.) work correctly in the SDK path.
+            const toolCallId = `sdk_${name}_${Date.now()}`;
+            const result = await (toolInstance as any).execute?.(args, { toolCallId });
 
             // searchTools/listAllTools: the context-aware instance already adds
             // discovered tools to activatedTools via the shared discoveredTools
@@ -346,11 +359,10 @@ export function createSeleneSdkMcpServer(
               }
             }
 
-            // Rich output detection
+            // Rich output detection (reuses toolCallId generated above)
             if (ctx.onRichOutput) {
               const richUrls = extractRichOutputs(result);
               if (richUrls.length > 0) {
-                const toolCallId = `sdk_${name}_${Date.now()}`;
                 ctx.onRichOutput(toolCallId, name, result);
               }
             }

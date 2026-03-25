@@ -34,6 +34,7 @@ import {
 } from "@/lib/db/queries";
 import { nextOrderingIndex } from "@/lib/session/message-ordering";
 import { convertDBMessagesToUIMessages } from "@/lib/messages/converter";
+import { buildRetryMessage } from "@/lib/chat/client-retry";
 import { sanitizeMessagesForInit } from "@/components/chat-provider";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -548,9 +549,23 @@ describe("Stop Message Loss Prevention", () => {
       metadata: { interruptionType: "chat", interrupted: true },
     });
 
+    const retryMessage = buildRetryMessage([
+      {
+        id: userMsg1!.id,
+        role: "user",
+        parts: [{ type: "text", text: "Explain quantum computing" }],
+      } as any,
+    ]);
+    expect(retryMessage).toEqual({
+      id: userMsg1!.id,
+      role: "user",
+      parts: [{ type: "text", text: "Explain quantum computing" }],
+      messageId: userMsg1!.id,
+    });
+
     // ── Second attempt (retry same turn): also stopped ────────────────────
-    // In practice, assistant-ui sends the same user message again — but the
-    // frontend still knows about firstStoppedId from the previous stream.
+    // In practice, the client resends the same user message rather than
+    // regenerating an assistant row that may not exist yet.
 
     const secondStoppedId = crypto.randomUUID();
     await createMessage({

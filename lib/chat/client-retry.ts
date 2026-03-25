@@ -1,6 +1,13 @@
-import type { UIMessage } from "ai";
+import type { CreateUIMessage, UIMessage } from "ai";
 
 import { classifyRecoverability } from "@/lib/ai/retry/stream-recovery";
+
+export type RetryMessage = CreateUIMessage<UIMessage> & { messageId: string };
+
+function clonePart<T>(part: T): T {
+  if (!part || typeof part !== "object") return part;
+  return { ...(part as Record<string, unknown>) } as T;
+}
 
 function isMeaningfulAssistantPart(part: unknown): boolean {
   if (!part || typeof part !== "object") return false;
@@ -44,14 +51,30 @@ export function hasMeaningfulAssistantContent(message: UIMessage | undefined): b
   return Array.isArray(message.parts) && message.parts.some(isMeaningfulAssistantPart);
 }
 
-export function getLastUserMessageId(messages: UIMessage[]): string | undefined {
+export function getLastUserMessage(messages: UIMessage[]): UIMessage | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.role === "user") {
-      return message.id;
+      return message;
     }
   }
   return undefined;
+}
+
+export function getLastUserMessageId(messages: UIMessage[]): string | undefined {
+  return getLastUserMessage(messages)?.id;
+}
+
+export function buildRetryMessage(messages: UIMessage[]): RetryMessage | undefined {
+  const message = getLastUserMessage(messages);
+  if (!message?.id) return undefined;
+
+  return {
+    ...message,
+    role: "user",
+    parts: Array.isArray(message.parts) ? message.parts.map((part) => clonePart(part)) : [],
+    messageId: message.id,
+  };
 }
 
 export function shouldAutoRetryClientChat(args: {
@@ -67,8 +90,8 @@ export function shouldAutoRetryClientChat(args: {
 
   if (!classification.recoverable) return false;
 
-  const lastUserMessageId = getLastUserMessageId(messages);
-  if (!lastUserMessageId) return false;
+  const retryMessage = buildRetryMessage(messages);
+  if (!retryMessage) return false;
 
   const lastAssistantMessage = [...messages].reverse().find((message) => message.role === "assistant");
   return !hasMeaningfulAssistantContent(lastAssistantMessage);

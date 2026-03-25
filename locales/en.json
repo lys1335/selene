@@ -3250,7 +3250,7 @@
       "forceStop": "Force Stop"
     },
     "processingInBackground": "Agent is processing in background",
-    "processingInBackgroundHint": "Responses are streamed in 5 seconds intervals",
+    "processingInBackgroundHint": "Updates automatically when ready",
     "processingComplete": "Response ready",
     "contextWindow": {
       "status": {

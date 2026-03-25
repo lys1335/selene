@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildRetryMessage,
   getLastUserMessageId,
   hasMeaningfulAssistantContent,
   shouldAutoRetryClientChat,
@@ -45,6 +46,32 @@ describe("client retry helpers", () => {
         ] as any,
       }),
     ).toBe(true);
+  });
+
+  it("retries immediate-stop failures when only the user turn remains", () => {
+    expect(
+      shouldAutoRetryClientChat({
+        error: new Error("Streaming interrupted: server_error"),
+        messages: [
+          { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] },
+        ] as any,
+      }),
+    ).toBe(true);
+  });
+
+  it("builds a resendable retry message from the last user turn", () => {
+    expect(
+      buildRetryMessage([
+        { id: "u1", role: "user", metadata: { custom: { foo: "bar" } }, parts: [{ type: "text", text: "hi" }] },
+        { id: "a1", role: "assistant", parts: [] },
+      ] as any),
+    ).toEqual({
+      id: "u1",
+      role: "user",
+      metadata: { custom: { foo: "bar" } },
+      parts: [{ type: "text", text: "hi" }],
+      messageId: "u1",
+    });
   });
 
   it("does not retry once assistant content exists or error is non-recoverable", () => {

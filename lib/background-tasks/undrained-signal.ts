@@ -9,10 +9,17 @@
  * Lifecycle: set in onFinish/onAbort when drainLivePromptQueue returns entries,
  * consumed (and cleared) by the /consume-undrained-signal endpoint after the
  * frontend receives the run-end event.
+ *
+ * For channel sessions (Telegram, WhatsApp, etc.), there is no frontend to poll
+ * the signal. Instead, listeners on `undrainedEvents` can re-trigger processing
+ * when the signal fires.
  */
+
+import { EventEmitter } from "events";
 
 const globalForUndrainedSignal = globalThis as typeof globalThis & {
   undrainedSessions?: Set<string>;
+  undrainedEvents?: EventEmitter;
 };
 
 function getSet(): Set<string> {
@@ -22,9 +29,19 @@ function getSet(): Set<string> {
   return globalForUndrainedSignal.undrainedSessions;
 }
 
+/** Event emitter for undrained message signals. Listeners receive sessionId. */
+export function getUndrainedEvents(): EventEmitter {
+  if (!globalForUndrainedSignal.undrainedEvents) {
+    globalForUndrainedSignal.undrainedEvents = new EventEmitter();
+    globalForUndrainedSignal.undrainedEvents.setMaxListeners(20);
+  }
+  return globalForUndrainedSignal.undrainedEvents;
+}
+
 /** Mark a session as having undrained messages that need a new run. */
 export function signalUndrainedMessages(sessionId: string): void {
   getSet().add(sessionId);
+  getUndrainedEvents().emit("undrained", sessionId);
 }
 
 /**
