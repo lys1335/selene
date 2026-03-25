@@ -82,7 +82,7 @@
     "electron:dist:win32": "npm run typecheck && rimraf dist-electron && npm run electron:build && electron-builder --win --ia32 && npm run electron:verify-package",
     "embedding:test": "node scripts/embedding-test.mjs",
     "embedding:pipeline-test": "tsx scripts/embedding-pipeline-test.ts",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps && node scripts/patch-remotion-dylibs.js"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",
@@ -206,7 +206,7 @@
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "drizzle-kit": "^0.31.9",
-    "electron": "^39.2.4",
+    "electron": "^39.8.3",
     "electron-builder": "^26.0.12",
     "esbuild": "^0.25.12",
     "eslint": "^9.16.0",
