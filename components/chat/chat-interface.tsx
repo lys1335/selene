@@ -515,7 +515,7 @@ export default function ChatInterface({
             refreshMessages: options?.refreshMessages,
             clearTaskState: options?.clearTaskState,
         });
-    }, [bg, clearScheduledBanner]);
+    }, [bg.clearTrackedRunState, clearScheduledBanner]);
 
     // ── Session CRUD & list management ──
     const sm = useSessionManager({
@@ -1176,7 +1176,9 @@ export default function ChatInterface({
                 storeCheckDebounceRef.current = null;
             }
         };
-    }, [activeTasks, bg, reloadSessionMessages, sessionId]);
+    // bg.processingRunId is the only reactive bg value used in the guard.
+    // Setters & startPollingForCompletion are identity-stable.
+    }, [activeTasks, bg.processingRunId, reloadSessionMessages, sessionId]);
 
     useEffect(() => {
         if (activeScheduledTaskForSession?.type === "scheduled") {
@@ -1233,7 +1235,10 @@ export default function ChatInterface({
         bg.setProcessingRunId(activeDelegationTaskForSession.runId);
         bg.setIsZombieRun(false);
         bg.startPollingForCompletion(activeDelegationTaskForSession.runId);
-    }, [activeDelegationTaskForSession, bg]);
+    // Use specific deps — bg.processingRunId for the guard check,
+    // activeDelegationTaskForSession for the trigger.  Setters, refs,
+    // and startPollingForCompletion are identity-stable.
+    }, [activeDelegationTaskForSession, bg.processingRunId]);
 
     const handleCancelRun = useCallback(async () => {
         if (!activeRun || !sessionId) return;

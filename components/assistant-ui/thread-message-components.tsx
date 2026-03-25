@@ -317,6 +317,22 @@ export const ComposerAttachment: FC = () => {
   );
 };
 
+const UserFileContent: FC<{ type: "file"; data: string; mimeType: string; filename?: string }> = ({ data, mimeType, filename }) => {
+  if (mimeType?.startsWith("image/")) {
+    // data may be a URL (/api/media/...) or a base64 data URI
+    const src = data.startsWith("data:") || data.startsWith("/") || data.startsWith("http")
+      ? data
+      : `data:${mimeType};base64,${data}`;
+    return (
+      <div className="mt-1 max-w-xs overflow-hidden rounded-lg border border-border/30">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt={filename || "Uploaded image"} className="max-h-64 w-auto object-contain" />
+      </div>
+    );
+  }
+  return null;
+};
+
 export const UserMessage: FC = () => {
   return (
     <MessagePrimitive.Root
@@ -331,7 +347,7 @@ export const UserMessage: FC = () => {
             />
           </div>
           <div className="rounded-2xl rounded-tr-sm bg-terminal-dark px-4 py-2.5 text-terminal-cream font-mono text-sm [overflow-wrap:anywhere]">
-            <MessagePrimitive.Content components={{ Text: UserMarkdownText }} />
+            <MessagePrimitive.Content components={{ Text: UserMarkdownText, File: UserFileContent }} />
           </div>
         </div>
         <Avatar className="size-8 shadow-sm">

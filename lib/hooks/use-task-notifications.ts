@@ -398,6 +398,28 @@ function deriveProgressIndicators(event: TaskProgressEvent): {
   };
 }
 
+function isPersistentBackgroundChatTask(task: UnifiedTask): boolean {
+  if (isBackgroundLifecycleTask(task)) {
+    return true;
+  }
+
+  if (task.type !== "chat") {
+    return false;
+  }
+
+  const metadata =
+    task.metadata && typeof task.metadata === "object"
+      ? (task.metadata as Record<string, unknown>)
+      : {};
+
+  return (
+    metadata.deepResearch === true ||
+    metadata.suppressFromUI === true ||
+    metadata.taskSource === "channel" ||
+    typeof metadata.scheduledRunId === "string"
+  );
+}
+
 function deriveCompletionIndicators(task: UnifiedTask): SessionActivityIndicator[] {
   const indicators: SessionActivityIndicator[] = [];
 
@@ -502,17 +524,35 @@ export function reconcileTaskSnapshotWithStores(
   const serverRunIds = new Set(serverTasks.map((task) => task.runId));
   const sessionSyncState = useSessionSyncStore.getState();
 
+  const applyCompletionState = (
+    task: UnifiedTask,
+    completionTask: UnifiedTask,
+    event: Extract<TaskEvent, { eventType: "task:completed" }>,
+  ) => {
+    callbacks.completeTask(completionTask);
+    if (task.sessionId) {
+      sessionSyncState.setActiveRun(task.sessionId, null);
+      const previous = sessionSyncState.getSessionActivity(task.sessionId);
+      sessionSyncState.setSessionActivity(
+        task.sessionId,
+        buildActivityState(task.sessionId, completionTask.runId, deriveCompletionIndicators(completionTask), {
+          isRunning: false,
+          previous,
+        })
+      );
+    }
+    if (isBackgroundLifecycleTask(task)) {
+      callbacks.dispatchTaskReconciledEvent?.(event);
+    }
+  };
+
+  const reconciledRunIds = new Set<string>();
+
   for (const task of currentTasks) {
     if (!serverRunIds.has(task.runId)) {
       const reconciledCompletion = buildReconciledCompletionEvent(task);
-      callbacks.completeTask(reconciledCompletion.task);
-      if (task.sessionId) {
-        sessionSyncState.setActiveRun(task.sessionId, null);
-        sessionSyncState.setSessionActivity(task.sessionId, null);
-      }
-      if (isBackgroundLifecycleTask(task)) {
-        callbacks.dispatchTaskReconciledEvent?.(reconciledCompletion);
-      }
+      applyCompletionState(task, reconciledCompletion.task, reconciledCompletion);
+      reconciledRunIds.add(task.runId);
     }
   }
 
@@ -540,11 +580,22 @@ export function reconcileTaskSnapshotWithStores(
     }
   }
 
-  const currentActiveRuns = sessionSyncState.activeRuns;
-  for (const [sessionId] of currentActiveRuns) {
+  const currentActiveRuns = new Map(sessionSyncState.activeRuns);
+  for (const [sessionId, runId] of currentActiveRuns) {
+    if (reconciledRunIds.has(runId)) {
+      continue;
+    }
+
     if (!serverTasks.some((t) => t.sessionId === sessionId)) {
-      sessionSyncState.setActiveRun(sessionId, null);
-      sessionSyncState.setSessionActivity(sessionId, null);
+      const task = currentTasks.find((current) => current.runId === runId && current.sessionId === sessionId);
+      if (task && !isPersistentBackgroundChatTask(task)) {
+        const reconciledCompletion = buildReconciledCompletionEvent(task);
+        applyCompletionState(task, reconciledCompletion.task, reconciledCompletion);
+        reconciledRunIds.add(runId);
+      } else if (!task) {
+        sessionSyncState.setActiveRun(sessionId, null);
+        sessionSyncState.setSessionActivity(sessionId, null);
+      }
     }
   }
 }
@@ -590,6 +641,25 @@ export function useTaskNotifications() {
   const shouldShowChatToast = useCallback((task: UnifiedTask) => {
     if (typeof window === "undefined") return true;
     if (task.type !== "chat") return true;
+
+    const metadata =
+      task.metadata && typeof task.metadata === "object"
+        ? (task.metadata as Record<string, unknown>)
+        : {};
+
+    // Background chat work needs completion toasts even when the user is focused
+    // on the originating session. Foreground chat runs still suppress duplicate
+    // notifications for the active session.
+    if (
+      metadata.isDelegation === true ||
+      metadata.deepResearch === true ||
+      metadata.suppressFromUI === true ||
+      metadata.taskSource === "channel" ||
+      typeof metadata.scheduledRunId === "string"
+    ) {
+      return true;
+    }
+
     const { pathname, search } = window.location;
     if (!pathname.startsWith("/chat/")) return true;
     if (!task.sessionId) return true;

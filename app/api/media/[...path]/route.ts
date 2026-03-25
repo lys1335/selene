@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readLocalFile, fileExists, getFullPath } from "@/lib/storage/local-storage";
-import { readFileSync, statSync } from "fs";
-import { join } from "path";
+import { createReadStream, statSync } from "fs";
+import { Readable } from "stream";
 
 // Content type mapping
 const contentTypes: Record<string, string> = {
@@ -104,18 +104,10 @@ export async function GET(
         }
 
         const chunkSize = end - start + 1;
+        const fileStream = createReadStream(fullPath, { start, end });
+        const webStream = Readable.toWeb(fileStream) as ReadableStream;
 
-        // Read the requested chunk
-        const fileBuffer = readFileSync(fullPath);
-        const chunk = fileBuffer.subarray(start, end + 1);
-
-        // Convert to ArrayBuffer for Web Response
-        const arrayBuffer = chunk.buffer.slice(
-          chunk.byteOffset,
-          chunk.byteOffset + chunk.byteLength
-        ) as ArrayBuffer;
-
-        return new NextResponse(arrayBuffer, {
+        return new NextResponse(webStream, {
           status: 206, // Partial Content
           headers: {
             ...corsHeaders,
@@ -130,6 +122,22 @@ export async function GET(
     }
 
     // Full file response (for images or when no Range header)
+    if (isVideo) {
+      const fileStream = createReadStream(fullPath);
+      const webStream = Readable.toWeb(fileStream) as ReadableStream;
+
+      return new NextResponse(webStream, {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": contentType,
+          "Content-Length": fileSize.toString(),
+          "Accept-Ranges": "bytes",
+          "Cache-Control": "public, max-age=31536000, immutable",
+        },
+      });
+    }
+
     const fileBuffer = readLocalFile(relativePath);
 
     // Convert Node.js Buffer to ArrayBuffer for Web Response compatibility
@@ -144,12 +152,16 @@ export async function GET(
         ...corsHeaders,
         "Content-Type": contentType,
         "Content-Length": fileBuffer.length.toString(),
-        "Accept-Ranges": isVideo ? "bytes" : "none",
+        "Accept-Ranges": "none",
         "Cache-Control": "public, max-age=31536000, immutable",
       },
     });
   } catch (error) {
-    console.error("[Media API] Error serving file:", error);
+    console.error("[Media API] Error serving file", {
+      error,
+      requestUrl: request.url,
+      rangeHeader: request.headers.get("range"),
+    });
     return NextResponse.json(
       { error: "Failed to serve file" },
       { status: 500, headers: corsHeaders }
