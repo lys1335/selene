@@ -10,7 +10,7 @@
  */
 
 import { storeFullContent } from "./truncated-content-store";
-import { generateTruncationMarker } from "./truncation-utils";
+import { generateTruncationMarker, middleTruncateText } from "./truncation-utils";
 
 // ============================================================================
 // Configuration
@@ -227,8 +227,10 @@ export function limitToolOutput(
     };
   }
 
-  // Truncate to character limit
-  const truncatedText = primaryText.slice(0, maxChars);
+  // Truncate with head+tail middle-truncation to preserve both
+  // the beginning (setup, context) and end (results, errors, exit status)
+  const middleTruncated = middleTruncateText(primaryText, maxChars);
+  const truncatedText = middleTruncated.content;
 
   // Store full content if session provided AND no existing logId
   let contentId: string | undefined = existingLogId;

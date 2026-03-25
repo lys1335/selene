@@ -6,6 +6,56 @@
 
 export type TruncationIdType = "logId" | "contentId";
 
+// ============================================================================
+// Middle Truncation (Head + Tail)
+// ============================================================================
+
+export interface MiddleTruncateResult {
+  content: string;
+  truncated: boolean;
+  originalLength: number;
+}
+
+/**
+ * Truncate text by keeping head and tail, removing the middle.
+ * This preserves the beginning (setup, context) and end (results, errors, exit status)
+ * of command output, which is far more useful than head-only truncation.
+ */
+export function middleTruncateText(text: string, maxChars: number): MiddleTruncateResult {
+  if (!text || text.length <= maxChars) {
+    return { content: text || "", truncated: false, originalLength: text?.length ?? 0 };
+  }
+
+  // Reserve space for the truncation marker line
+  const markerReserve = 120;
+  const availableChars = Math.max(200, maxChars - markerReserve);
+
+  const headChars = Math.ceil(availableChars / 2);
+  const tailChars = availableChars - headChars;
+
+  // Snap to line boundaries to avoid cutting mid-line
+  const headEnd = text.lastIndexOf("\n", headChars);
+  const tailStart = tailChars > 0 ? text.indexOf("\n", text.length - tailChars) : text.length;
+
+  const actualHeadEnd = headEnd > 0 ? headEnd : headChars;
+  const actualTailStart = tailStart >= 0 && tailStart < text.length ? tailStart + 1 : text.length - tailChars;
+
+  const head = text.slice(0, actualHeadEnd);
+  const tail = actualTailStart < text.length ? text.slice(actualTailStart) : "";
+
+  const omittedChars = text.length - head.length - tail.length;
+  // Estimate omitted lines (avg ~80 chars/line for terminal output)
+  const estimatedOmittedLines = Math.max(1, Math.round(omittedChars / 80));
+
+  const marker = `\n\n... [TRUNCATED ~${estimatedOmittedLines.toLocaleString()} LINES / ${omittedChars.toLocaleString()} CHARS — showing head + tail] ...\n\n`;
+
+  return {
+    content: head + marker + tail,
+    truncated: true,
+    originalLength: text.length,
+  };
+}
+
 export interface TruncationMarkerParams {
   originalLength: number;
   truncatedLength: number;
