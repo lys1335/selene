@@ -50,14 +50,15 @@ const delegateSchema = jsonSchema<DelegateToSubagentInput>({
   type: "object",
   title: "DelegateToSubagentInput",
   description:
-    "Delegate work to a sub-agent. By default blocks until completion and returns the final result. " +
-    "Launch multiple start calls in parallel for concurrent sub-agent work.",
+    "Delegate work to a sub-agent. 'start' returns immediately and runs the sub-agent in the background. " +
+    "Launch multiple start calls in parallel for concurrent sub-agent work. " +
+    "Use observe(delegationId, waitSeconds) to collect results once sub-agents settle.",
   properties: {
     action: {
       type: "string",
       enum: ["start", "observe", "continue", "answer", "stop", "list"],
       description:
-        "Action to perform: 'start' a new delegation (blocks by default), 'observe' progress of a background delegation, 'continue' with a follow-up message, 'answer' a pending interactive question from a sub-agent, 'stop' a running delegation, or 'list' available sub-agents and active delegations.",
+        "Action to perform: 'start' a new delegation (returns immediately), 'observe' progress and collect results, 'continue' with a follow-up message, 'answer' a pending interactive question from a sub-agent, 'stop' a running delegation, or 'list' available sub-agents and active delegations.",
     },
     agentId: {
       type: "string",
@@ -91,10 +92,10 @@ const delegateSchema = jsonSchema<DelegateToSubagentInput>({
     },
     mode: {
       type: "string",
-      enum: ["blocking", "background"],
+      enum: ["background"],
       description:
-        "Execution mode for 'start'. 'blocking' (default): waits for the sub-agent to complete and returns the final result directly. " +
-        "'background': returns immediately with a delegationId — use observe/continue/stop to manage.",
+        "Execution mode for 'start'. Always runs in background — returns immediately with a delegationId. " +
+        "Use observe/continue/stop to manage. Kept for backward compatibility.",
     },
     waitSeconds: {
       type: "number",
@@ -142,9 +143,9 @@ export function createDelegateToSubagentTool(
   return tool({
     description:
       "Delegate work to a sub-agent in your workflow team. " +
-      "By default, 'start' blocks until the sub-agent completes and returns the final result. " +
+      "'start' launches the sub-agent and returns immediately. " +
       "Launch multiple start calls in parallel for concurrent sub-agent work. " +
-      "Use mode='background' for manual management via observe/continue/stop.",
+      "Use observe(delegationId, waitSeconds) to collect results once sub-agents settle.",
     inputSchema: delegateSchema,
     execute: async (input: DelegateToSubagentInput): Promise<DelegateResult> => {
       const normalizedInput = normalizeCompatibilityInput(input);

@@ -67,11 +67,12 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function makeTool() {
+function makeTool(provider = "claudecode") {
   return createDelegateToSubagentTool({
     sessionId: "sess-main",
     userId: "user-1",
     characterId: "agent-init",
+    provider,
   });
 }
 
@@ -435,28 +436,25 @@ describe("delegate-to-subagent-tool", () => {
     expect(secondObserve.completed).toBe(true);
   });
 
-  it("start supports runInBackground=false by returning the blocking result shape", async () => {
+  it("start always returns immediately in background mode regardless of runInBackground flag", async () => {
     const tool = makeTool();
     const result = await (tool as any).execute({
       action: "start",
       agentName: "Research Analyst",
       task: "Investigate flaky tests",
       runInBackground: false,
-      waitSeconds: 0.2,
     });
 
     expect(result.success).toBe(true);
     expect(typeof result.delegationId).toBe("string");
-    expect(result.mode).toBe("blocking");
-    expect(result.completed).toBe(true);
-    expect(result.result).toBe("done");
-    expect(result.running).toBeUndefined();
-    expect(result.message).toBeUndefined();
-    expect(activeDelegations.has(result.delegationId!)).toBe(false);
+    expect(result.mode).toBe("background");
+    expect(result.message).toContain("background");
+    // Delegation stays in the registry for the model to observe later
+    expect(activeDelegations.has(result.delegationId!)).toBe(true);
   });
 
 
-  it("start returns pending interactive prompts when a sub-agent asks a question", async () => {
+  it("start returns immediately even when a sub-agent has pending interactive prompts", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
       body: {
@@ -484,18 +482,13 @@ describe("delegate-to-subagent-tool", () => {
       action: "start",
       agentName: "Research Analyst",
       task: "Run QA check",
-      waitSeconds: 0.2,
     });
 
+    // Start always returns immediately in background mode — interactive
+    // prompts are discovered via observe(), not blocking start()
     expect(result.success).toBe(true);
-    expect(result.completed).toBe(false);
-    expect(result.pendingInteractivePrompts).toEqual([
-      expect.objectContaining({
-        toolUseId: "toolu_123",
-        questions: [{ question: "Proceed?", options: [] }],
-      }),
-    ]);
-    expect(String(result.message || "")).toContain("interactive answer");
+    expect(result.mode).toBe("background");
+    expect(result.message).toContain("background");
   });
 
   it("start supports resume alias by mapping to continue semantics", async () => {

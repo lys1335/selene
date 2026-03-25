@@ -13,7 +13,18 @@ export function hasRunningDelegationsForSession(
   );
 }
 
-export function shouldStopClaudeCodeTurn(input: {
+export function hasDelegationsForSession(
+  characterId: string | null,
+  initiatorSessionId: string,
+): boolean {
+  if (!characterId) {
+    return false;
+  }
+
+  return getActiveDelegationsForCharacter(characterId, initiatorSessionId).length > 0;
+}
+
+export function shouldStopTurn(input: {
   characterId: string | null;
   initiatorSessionId: string;
   stepCount: number;
@@ -23,9 +34,14 @@ export function shouldStopClaudeCodeTurn(input: {
     return true;
   }
 
-  if (input.stepCount <= 0) {
-    return false;
-  }
-
-  return !hasRunningDelegationsForSession(input.characterId, input.initiatorSessionId);
+  // Never force-stop a turn due to delegation status. Delegations always run
+  // in background mode — the model needs follow-up steps to call observe()
+  // and collect results. The AI SDK loop ends naturally when the model stops
+  // making tool calls (outputs text-only response).
+  //
+  // Previously, force-stopping when all delegations settled caused a
+  // serialization regression: the model couldn't observe results if they
+  // settled between steps, and blocking mode inside the tool execute()
+  // serialized parallel delegations across multi-step model responses.
+  return false;
 }

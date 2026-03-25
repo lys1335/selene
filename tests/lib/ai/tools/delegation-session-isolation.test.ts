@@ -100,6 +100,7 @@ function makeToolForSession(sessionId: string) {
     sessionId,
     userId: "user-1",
     characterId: AGENT_ID,
+    provider: "claudecode",
   });
 }
 

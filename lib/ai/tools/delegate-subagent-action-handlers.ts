@@ -27,7 +27,6 @@ import {
   buildDelegationsSummary,
   startBackgroundExecution,
   extractTextFromContent,
-  extractFinalResponse,
   sleep,
   validateObserveWaitSeconds,
   truncateObservePreview,
@@ -99,21 +98,6 @@ function resolveRootSessionId(initiatorSessionId: string): string {
 // Action handlers
 // ---------------------------------------------------------------------------
 
-/** Default blocking timeout in seconds (5 minutes). */
-const DEFAULT_BLOCKING_TIMEOUT_SECONDS = 600;
-
-/**
- * Resolve the effective execution mode from input parameters.
- * Priority: explicit mode > legacy runInBackground > default (blocking).
- */
-function resolveExecutionMode(input: DelegateToSubagentInput): "blocking" | "background" {
-  if (input.mode === "background") return "background";
-  if (input.mode === "blocking") return "blocking";
-  // Legacy compat: runInBackground=true -> background
-  if (input.runInBackground === true) return "background";
-  // Default: blocking
-  return "blocking";
-}
 
 function getDelegationPendingInteractivePrompts(
   sessionId: string,
@@ -171,6 +155,7 @@ export async function handleStartAction(
   userId: string,
   characterId: string,
   initiatorSessionId: string,
+  provider?: string,
 ): Promise<DelegateResult> {
   // Compatibility mode: resume + start maps to continue with task as follow-up.
   if (input.resume) {
@@ -193,68 +178,27 @@ export async function handleStartAction(
     );
   }
 
-  const mode = resolveExecutionMode(input);
   const startResult = await handleStart(input, userId, characterId, initiatorSessionId);
 
   if (!startResult.success || !startResult.delegationId) {
     return startResult;
   }
 
-  // ── Background mode: return immediately ──────────────────────────────────
-  if (mode === "background") {
-    return {
-      ...startResult,
-      mode: "background",
-      message:
-        `Delegation started in background (${startResult.delegationId}). ` +
-        "Use observe/continue/stop with this delegationId to manage it.",
-    };
-  }
-
-  // ── Blocking mode (default): await completion, return compact result ─────
-  const delegation = activeDelegations.get(startResult.delegationId);
-  if (!delegation) {
-    return startResult;
-  }
-
-  const maxWaitMs = (input.waitSeconds ?? DEFAULT_BLOCKING_TIMEOUT_SECONDS) * 1000;
-  const pendingInteractivePrompts = await waitForDelegationPausePoint(delegation, maxWaitMs);
-
-  // Read the final response compactly — just the last assistant text
-  const result = await extractFinalResponse(delegation.sessionId);
-  const completed = delegation.settled;
-
-  // Build compact result — no allResponses, no preview counts, no observe noise
-  const compactResult: DelegateResult = {
-    success: true,
-    delegationId: startResult.delegationId,
-    sessionId: delegation.sessionId,
-    delegateAgent: delegation.delegateName,
-    mode: "blocking",
-    completed,
-    result,
-    elapsed: Date.now() - delegation.startedAt,
-    availableAgents: startResult.availableAgents,
-    ...(pendingInteractivePrompts.length > 0 ? { pendingInteractivePrompts } : {}),
+  // ── Always return immediately (background/non-blocking) ──────────────────
+  // Delegations run concurrently. The AI SDK's shouldStopTurn keeps the
+  // initiator's agentic loop alive while any delegations are running, so the
+  // model can call observe() to collect results once sub-agents settle.
+  //
+  // Previous "blocking" mode awaited completion inside the tool execute()
+  // function, which serialized parallel delegations when the model emitted
+  // start calls across multiple steps instead of batching them in one response.
+  return {
+    ...startResult,
+    mode: "background",
+    message:
+      `Delegation started in background (${startResult.delegationId}). ` +
+      "Use observe/continue/stop with this delegationId to manage it.",
   };
-
-  if (delegation.error) {
-    compactResult.error = `Delegation failed: ${delegation.error}`;
-  }
-
-  if (pendingInteractivePrompts.length > 0) {
-    compactResult.message =
-      "Sub-agent is waiting for an interactive answer. " +
-      "Use delegateToSubagent action='answer' with the delegationId, toolUseId, and answers to continue.";
-  } else if (!completed) {
-    compactResult.message =
-      "Sub-agent did not finish within the wait timeout. " +
-      "Use observe(delegationId) to check later, or stop(delegationId) to cancel.";
-  } else {
-    activeDelegations.delete(startResult.delegationId);
-  }
-
-  return compactResult;
 }
 
 async function handleStart(

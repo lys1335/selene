@@ -2,7 +2,6 @@ import { stat } from "node:fs/promises";
 import {
   createUIMessageStreamResponse,
   streamText,
-  stepCountIs,
   wrapLanguageModel,
   type ModelMessage,
   type Tool,
@@ -103,7 +102,7 @@ import {
   parseInvalidToolSchemaError,
 } from "./tool-schema-recovery";
 import { tagIntermediateDelegationParts } from "./delegation-scope-tagging";
-import { shouldStopClaudeCodeTurn } from "./delegation-waiting";
+import { shouldStopTurn, hasRunningDelegationsForSession } from "./delegation-waiting";
 import { createThinkTagFilter, shouldFilterThinkTags } from "@/lib/ai/streaming/think-tag-filter";
 import { thinkTagMiddleware, hasThinkTags } from "@/lib/ai/utils/think-tag-stream";
 import { detectEmotion } from "@/lib/emotion";
@@ -1022,18 +1021,16 @@ export async function POST(req: Request) {
             toolChoice: AI_CONFIG.toolChoice,
           } : {}),
           abortSignal: streamAbortSignal,
-          // Claude Code runs its internal agent loop inside the SDK fetch, but
-          // if the initiator still has live background delegations we must allow
-          // follow-up AI SDK steps so completion nudges can be consumed instead of
-          // terminating the user-facing turn immediately.
-          stopWhen: provider === "claudecode"
-            ? ({ steps }) => shouldStopClaudeCodeTurn({
-                characterId,
-                initiatorSessionId: sessionId,
-                stepCount: steps.length,
-                maxSteps: AI_CONFIG.maxSteps,
-              })
-            : stepCountIs(AI_CONFIG.maxSteps),
+          // Delegation-aware step control: only enforces maxSteps. Delegations
+          // always run in background mode and the model collects results via
+          // observe() — shouldStopTurn never force-stops mid-delegation so the
+          // model has steps available to observe and process sub-agent results.
+          stopWhen: ({ steps }) => shouldStopTurn({
+            characterId,
+            initiatorSessionId: sessionId,
+            stepCount: steps.length,
+            maxSteps: AI_CONFIG.maxSteps,
+          }),
           temperature: await getSessionProviderTemperatureForSession(
             sessionMetadata,
             providerSupportsFeature("tools", provider) && initialActiveToolNames.length > 0 ? AI_CONFIG.toolTemperature : AI_CONFIG.temperature,
@@ -1140,6 +1137,17 @@ export async function POST(req: Request) {
               return {
                 activeTools: currentActiveTools as string[],
                 messages: [...stepMessages, injectedUserMessage],
+              };
+            }
+
+            // Force the model to keep calling tools while delegations are running.
+            // Without this, the model outputs text ("Both are running...") and the
+            // AI SDK loop ends — nobody observes the delegation results.
+            if (stepNumber > 0 && hasRunningDelegationsForSession(characterId, sessionId)) {
+              return {
+                activeTools: currentActiveTools as string[],
+                toolChoice: "required" as const,
+                system: "You have active delegations still running. You MUST call observe() or delegateToSubagent with action='observe' to wait for and collect their results. Do NOT respond to the user until all delegations have completed and you have processed their results.",
               };
             }
 
