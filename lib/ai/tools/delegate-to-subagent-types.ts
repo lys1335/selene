@@ -81,6 +81,7 @@ export interface DelegateResult {
     delegateAgent: string;
     task: string;
     running: boolean;
+    completed?: boolean;
     elapsed: number;
   }>;
 }
@@ -101,6 +102,7 @@ export interface ActiveDelegation {
   workflowId: string;
   task: string;
   startedAt: number;
+  settledAt?: number;
   abortController: AbortController;
   streamPromise: Promise<void>;
   settled: boolean;

@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   appendToLivePromptQueueBySession: vi.fn(),
   hasStopIntent: vi.fn(),
   sanitizeLivePromptContent: vi.fn((s: string) => s),
+  addDelegationCompletion: vi.fn(),
 }));
 
 vi.mock("@/lib/agents/workflows", () => ({
@@ -65,6 +66,12 @@ vi.mock("@/lib/background-tasks/live-prompt-queue-registry", () => ({
 vi.mock("@/lib/background-tasks/live-prompt-helpers", () => ({
   hasStopIntent: mocks.hasStopIntent,
   sanitizeLivePromptContent: mocks.sanitizeLivePromptContent,
+}));
+
+vi.mock("@/lib/ai/tools/delegation-completion-store", () => ({
+  addDelegationCompletion: mocks.addDelegationCompletion,
+  drainDelegationCompletions: vi.fn(() => []),
+  hasPendingDelegationCompletions: vi.fn(() => false),
 }));
 
 const bridgeMocks = vi.hoisted(() => ({
@@ -151,6 +158,7 @@ function setupCommonMocks() {
   bridgeMocks.getPendingInteractivePrompts.mockReturnValue([]);
   bridgeMocks.resolveInteractiveWait.mockReturnValue(false);
   mocks.appendToLivePromptQueueBySession.mockReturnValue(false);
+  mocks.addDelegationCompletion.mockReset();
   mocks.hasStopIntent.mockReturnValue(false);
 
   // Keep the stream open so delegations stay unsettled (running).

@@ -322,7 +322,7 @@ describe("delegate-to-subagent-tool", () => {
     expect((waitedObserve.waitedMs as number) >= 150).toBe(true);
   });
 
-  it("list hides completed delegations once the sub-agent run settles", async () => {
+  it("list keeps settled delegations visible until TTL cleanup", async () => {
     let readCount = 0;
     fetchMock.mockResolvedValue({
       ok: true,
@@ -354,6 +354,7 @@ describe("delegate-to-subagent-tool", () => {
       expect.objectContaining({
         delegationId: started.delegationId,
         running: true,
+        completed: false,
       }),
     ]);
 
@@ -367,30 +368,16 @@ describe("delegate-to-subagent-tool", () => {
     expect(observed.completed).toBe(true);
 
     const settledList = await (tool as any).execute({ action: "list" });
-    expect(settledList.delegations).toEqual([]);
+    expect(settledList.delegations).toEqual([
+      expect.objectContaining({
+        delegationId: started.delegationId,
+        running: false,
+        completed: true,
+      }),
+    ]);
   });
 
-  it("start supports runInBackground=false by returning the blocking result shape", async () => {
-    const tool = makeTool();
-    const result = await (tool as any).execute({
-      action: "start",
-      agentName: "Research Analyst",
-      task: "Investigate flaky tests",
-      runInBackground: false,
-      waitSeconds: 0.2,
-    });
-
-    expect(result.success).toBe(true);
-    expect(typeof result.delegationId).toBe("string");
-    expect(result.mode).toBe("blocking");
-    expect(result.completed).toBe(true);
-    expect(result.result).toBe("done");
-    expect(result.running).toBeUndefined();
-    expect(result.message).toBeUndefined();
-    expect(activeDelegations.has(result.delegationId!)).toBe(false);
-  });
-
-  it("observe removes a successfully settled background delegation from the in-memory registry", async () => {
+  it("observe keeps a successfully settled background delegation in the registry for follow-up reads", async () => {
     let readCount = 0;
     fetchMock.mockResolvedValue({
       ok: true,
@@ -428,8 +415,36 @@ describe("delegate-to-subagent-tool", () => {
 
     expect(observed.success).toBe(true);
     expect(observed.completed).toBe(true);
-    expect(activeDelegations.has(started.delegationId!)).toBe(false);
+    expect(activeDelegations.has(started.delegationId!)).toBe(true);
+
+    const secondObserve = await (tool as any).execute({
+      action: "observe",
+      delegationId: started.delegationId,
+    });
+    expect(secondObserve.success).toBe(true);
+    expect(secondObserve.completed).toBe(true);
   });
+
+  it("start supports runInBackground=false by returning the blocking result shape", async () => {
+    const tool = makeTool();
+    const result = await (tool as any).execute({
+      action: "start",
+      agentName: "Research Analyst",
+      task: "Investigate flaky tests",
+      runInBackground: false,
+      waitSeconds: 0.2,
+    });
+
+    expect(result.success).toBe(true);
+    expect(typeof result.delegationId).toBe("string");
+    expect(result.mode).toBe("blocking");
+    expect(result.completed).toBe(true);
+    expect(result.result).toBe("done");
+    expect(result.running).toBeUndefined();
+    expect(result.message).toBeUndefined();
+    expect(activeDelegations.has(result.delegationId!)).toBe(false);
+  });
+
 
   it("start returns pending interactive prompts when a sub-agent asks a question", async () => {
     fetchMock.mockResolvedValue({

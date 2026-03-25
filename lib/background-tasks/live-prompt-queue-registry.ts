@@ -3,6 +3,11 @@ export interface LivePromptEntry {
   content: string;
   timestamp: number;
   stopIntent: boolean;
+  metadata?: {
+    kind?: "generic" | "delegation_completion";
+    delegationId?: string;
+    delegateName?: string;
+  };
 }
 
 const globalForLivePromptQueue = globalThis as typeof globalThis & {

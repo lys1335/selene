@@ -1,5 +1,16 @@
 import type { LivePromptEntry } from "./live-prompt-queue-registry";
 
+function sanitizeDelegationCompletionEntry(entry: LivePromptEntry): string {
+  const delegationId = entry.metadata?.delegationId || entry.id;
+  const delegateName = entry.metadata?.delegateName || "Sub-agent";
+  return [
+    `[Delegation completion notice — do not just acknowledge receipt]`,
+    `${delegateName} (${delegationId}) has finished in the background.`,
+    `Immediately call delegateToSubagent action="observe" delegationId="${delegationId}" to retrieve the result.`,
+    "After observing, integrate the sub-agent's actual result into your response instead of repeating a waiting message.",
+  ].join("\n");
+}
+
 const STOP_INTENT_PATTERNS = [
   /^stop\b/i,
   /^cancel\b/i,
@@ -35,6 +46,14 @@ export function sanitizeLivePromptContent(content: string): string {
  */
 export function buildUserInjectionContent(entries: LivePromptEntry[]): string {
   if (entries.length === 0) return "";
+
+  if (
+    entries.length === 1 &&
+    entries[0].metadata?.kind === "delegation_completion" &&
+    entries[0].metadata?.delegationId
+  ) {
+    return sanitizeDelegationCompletionEntry(entries[0]);
+  }
 
   const lines = entries
     .map(e => `- ${sanitizeLivePromptContent(e.content)}`)

@@ -431,10 +431,6 @@ export async function handleObserve(
   const isRunning = !delegation.settled;
   const waitedMs = Date.now() - observeStart;
 
-  if (delegation.settled && pendingInteractivePrompts.length === 0) {
-    activeDelegations.delete(delegationId);
-  }
-
   return {
     success: true,
     delegationId,
@@ -681,36 +677,7 @@ export async function handleList(
   const candidates = await buildSubagentCandidates(members, characterId);
   const availableAgents = toAvailableAgents(candidates);
 
-  const results: DelegateResult["delegations"] = [];
-
-  // Clean up stale entries and collect only delegations scoped to this session.
-  const staleIds: string[] = [];
-
-  for (const [id, del] of activeDelegations.entries()) {
-    if (del.delegatorId !== characterId) continue;
-    if (del.initiatorSessionId !== initiatorSessionId) continue;
-
-    if (del.settled) {
-      if (Date.now() - del.startedAt > 10 * 60 * 1000) {
-        staleIds.push(id);
-      }
-      continue;
-    }
-
-    results.push({
-      delegationId: id,
-      sessionId: del.sessionId,
-      delegateAgentId: del.delegateId,
-      delegateAgent: del.delegateName,
-      task: del.task.length > 100 ? del.task.slice(0, 100) + "..." : del.task,
-      running: true,
-      elapsed: Date.now() - del.startedAt,
-    });
-  }
-
-  for (const id of staleIds) {
-    activeDelegations.delete(id);
-  }
+  const results = buildDelegationsSummary(characterId, initiatorSessionId) ?? [];
 
   return {
     success: true,
@@ -718,7 +685,7 @@ export async function handleList(
     delegations: results,
     message:
       results.length === 0
-        ? `No active delegations. ${availableAgents.length} available sub-agent(s) listed.`
-        : `${results.length} active delegation(s) found. ${availableAgents.length} available sub-agent(s) listed.`,
+        ? `No delegations found. ${availableAgents.length} available sub-agent(s) listed.`
+        : `${results.length} delegation(s) found. ${availableAgents.length} available sub-agent(s) listed.`,
   };
 }

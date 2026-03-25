@@ -102,6 +102,7 @@ import {
   parseInvalidToolSchemaError,
 } from "./tool-schema-recovery";
 import { tagIntermediateDelegationParts } from "./delegation-scope-tagging";
+import { shouldStopClaudeCodeTurn } from "./delegation-waiting";
 import { createThinkTagFilter, shouldFilterThinkTags } from "@/lib/ai/streaming/think-tag-filter";
 import { thinkTagMiddleware, hasThinkTags } from "@/lib/ai/utils/think-tag-stream";
 import { detectEmotion } from "@/lib/emotion";
@@ -655,6 +656,7 @@ export async function POST(req: Request) {
     } = await buildSystemPromptForRequest({
       characterId,
       userId: dbUser.id,
+      sessionId,
       toolLoadingMode,
       useCaching,
       sessionMetadata,
@@ -1018,10 +1020,18 @@ export async function POST(req: Request) {
             toolChoice: AI_CONFIG.toolChoice,
           } : {}),
           abortSignal: streamAbortSignal,
-          // For claudecode: stop after step 0 to prevent the passthrough tool
-          // execute results from triggering a new SDK query (infinite loop).
-          // The SDK agent's entire multi-turn work happens inside step 0's fetch.
-          stopWhen: stepCountIs(provider === "claudecode" ? 1 : AI_CONFIG.maxSteps),
+          // Claude Code runs its internal agent loop inside the SDK fetch, but
+          // if the initiator still has live background delegations we must allow
+          // follow-up AI SDK steps so completion nudges can be consumed instead of
+          // terminating the user-facing turn immediately.
+          stopWhen: provider === "claudecode"
+            ? ({ steps }) => shouldStopClaudeCodeTurn({
+                characterId,
+                initiatorSessionId: sessionId,
+                stepCount: steps.length,
+                maxSteps: AI_CONFIG.maxSteps,
+              })
+            : stepCountIs(AI_CONFIG.maxSteps),
           temperature: await getSessionProviderTemperatureForSession(
             sessionMetadata,
             providerSupportsFeature("tools", provider) && initialActiveToolNames.length > 0 ? AI_CONFIG.toolTemperature : AI_CONFIG.temperature,
