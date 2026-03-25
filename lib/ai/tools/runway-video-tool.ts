@@ -29,7 +29,7 @@ const runwayVideoSchema = jsonSchema<{
     image_url: {
       type: "string",
       description:
-        "Optional reference image URL for image-to-video generation. Can be an HTTPS URL, a local /api/media/ path, or a data URI. If omitted, generates from text only.",
+        "Reference image to animate into video (image-to-video). Accepts /api/media/ URLs from previously generated images, HTTPS URLs, or data URIs. Omit for text-to-video.",
     },
     model: {
       type: "string",

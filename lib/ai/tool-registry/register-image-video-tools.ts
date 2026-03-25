@@ -746,7 +746,8 @@ Generate high-quality cinematic videos. Supports text-to-video and image-to-vide
 **Duration:** 2-10 seconds
 **Ratios:** 1280:720 (landscape), 720:1280 (portrait), 960:960 (square), 1104:832, 832:1104, 1584:672
 **Tips:** Be descriptive about camera movement, lighting, and mood. Use seed for reproducibility.
-**Image-to-video:** Provide image_url to animate a still image. Omit for pure text-to-video.`,
+**Image-to-video:** Provide image_url to animate a still image. Accepts /api/media/ URLs from previously generated images directly. Omit for pure text-to-video.
+**Continuing from video:** Extract a frame with ffmpeg (via executeCommand using the video's file path), save it alongside the video, then pass the corresponding /api/media/ URL as image_url.`,
     loading: { deferLoading: true },
     requiresSession: true,
     enableEnvVar: "RUNWAYML_API_SECRET",
@@ -779,7 +780,8 @@ Generate videos with Google's Veo models via Vertex AI.
 **Aspect Ratio:** 16:9 (landscape), 9:16 (portrait)
 **Resolution:** 720p (default), 1080p (Veo 3+ only)
 **Features:** Audio generation (Veo 3+), negative prompts, deterministic seeds, multiple samples (1-4).
-**Image-to-video:** Provide image_url to animate a still image. Omit for pure text-to-video.`,
+**Image-to-video:** Provide image_url to animate a still image. Accepts /api/media/ URLs from previously generated images directly. Omit for pure text-to-video.
+**Continuing from video:** Extract a frame with ffmpeg (via executeCommand using the video's file path), save it alongside the video, then pass the corresponding /api/media/ URL as image_url.`,
     loading: { deferLoading: true },
     requiresSession: true,
     enableEnvVar: "VERTEX_AI_PROJECT_ID",

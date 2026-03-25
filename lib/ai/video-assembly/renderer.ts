@@ -40,9 +40,27 @@ export interface RenderResult {
   height: number;
 }
 
-// Cache the bundle URL to avoid rebundling for each render
-let cachedBundleUrl: string | null = null;
-let bundlePromise: Promise<string> | null = null;
+// Use globalThis to persist across Next.js hot reloads (same pattern as file-watcher.ts)
+const _global = globalThis as typeof globalThis & {
+  remotionBundleCache?: string | null;
+  remotionBundlePromise?: Promise<string> | null;
+};
+
+function getCachedBundleUrl(): string | null {
+  return _global.remotionBundleCache ?? null;
+}
+
+function setCachedBundleUrl(url: string | null): void {
+  _global.remotionBundleCache = url;
+}
+
+function getBundlePromise(): Promise<string> | null {
+  return _global.remotionBundlePromise ?? null;
+}
+
+function setBundlePromise(promise: Promise<string> | null): void {
+  _global.remotionBundlePromise = promise;
+}
 
 /**
  * Dynamically import Remotion bundler
@@ -100,15 +118,17 @@ async function importRemotion() {
  * Get or create the Remotion bundle
  */
 async function getBundle(): Promise<string> {
-  if (cachedBundleUrl) {
-    return cachedBundleUrl;
+  const cached = getCachedBundleUrl();
+  if (cached) {
+    return cached;
   }
 
-  if (bundlePromise) {
-    return bundlePromise;
+  const existing = getBundlePromise();
+  if (existing) {
+    return existing;
   }
 
-  bundlePromise = (async () => {
+  const promise = (async () => {
     console.log("[VIDEO-RENDERER] Bundling Remotion composition...");
 
     const { bundle } = await importRemotion();
@@ -156,11 +176,12 @@ async function getBundle(): Promise<string> {
     });
 
     console.log("[VIDEO-RENDERER] Bundle created at:", bundleUrl);
-    cachedBundleUrl = bundleUrl;
+    setCachedBundleUrl(bundleUrl);
     return bundleUrl;
   })();
 
-  return bundlePromise;
+  setBundlePromise(promise);
+  return promise;
 }
 
 /**
@@ -189,6 +210,29 @@ function pathToUrl(outputPath: string, sessionId: string): string {
     : outputPath;
   const normalized = relativePath.replace(/\\/g, "/");
   return `/api/media/${normalized}`;
+}
+
+/**
+ * Retry helper for transient failures (does NOT retry user cancellations)
+ */
+async function withRetry<T>(fn: () => Promise<T>, maxAttempts: number, delayMs: number, label: string): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      // Never retry user cancellations
+      if (error instanceof Error && error.name === "AbortError") {
+        throw error;
+      }
+      if (attempt < maxAttempts) {
+        console.warn(`[VIDEO-RENDERER] ${label} failed (attempt ${attempt}/${maxAttempts}), retrying in ${delayMs}ms...`, error instanceof Error ? error.message : error);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+    }
+  }
+  throw lastError;
 }
 
 /**
@@ -253,38 +297,43 @@ export async function renderVideo(
   }
 
   try {
-    await renderMedia({
-      composition: compositionWithPlan,
-      serveUrl: bundleUrl,
-      codec: config.codec === "h264" ? "h264" : config.codec === "h265" ? "h265" : "vp8",
-      outputLocation: outputPath,
-      inputProps: { plan },
-      cancelSignal,
-      // Increase timeout for video asset loading (default is 30s, we allow 120s)
-      timeoutInMilliseconds: 120000,
-      onProgress: ({ renderedFrames }) => {
-        const percent = Math.round((renderedFrames / totalFrames) * 100);
+    await withRetry(
+      () => renderMedia({
+        composition: compositionWithPlan,
+        serveUrl: bundleUrl,
+        codec: config.codec === "h264" ? "h264" : config.codec === "h265" ? "h265" : "vp8",
+        outputLocation: outputPath,
+        inputProps: { plan },
+        cancelSignal,
+        // Increase timeout for video asset loading (default is 30s, we allow 300s / 5 minutes)
+        timeoutInMilliseconds: 300000,
+        onProgress: ({ renderedFrames }) => {
+          const percent = Math.round((renderedFrames / totalFrames) * 100);
 
-        // Calculate estimated time remaining
-        let estimatedTimeRemaining: number | undefined;
-        if (renderedFrames > lastRenderedFrames && renderedFrames > 0) {
-          const elapsedMs = Date.now() - startTime;
-          const framesPerMs = renderedFrames / elapsedMs;
-          const remainingFrames = totalFrames - renderedFrames;
-          estimatedTimeRemaining = Math.round(remainingFrames / framesPerMs / 1000);
-        }
-        lastRenderedFrames = renderedFrames;
+          // Calculate estimated time remaining
+          let estimatedTimeRemaining: number | undefined;
+          if (renderedFrames > lastRenderedFrames && renderedFrames > 0) {
+            const elapsedMs = Date.now() - startTime;
+            const framesPerMs = renderedFrames / elapsedMs;
+            const remainingFrames = totalFrames - renderedFrames;
+            estimatedTimeRemaining = Math.round(remainingFrames / framesPerMs / 1000);
+          }
+          lastRenderedFrames = renderedFrames;
 
-        if (onProgress) {
-          onProgress({
-            percent,
-            renderedFrames,
-            totalFrames,
-            estimatedTimeRemaining,
-          });
-        }
-      },
-    });
+          if (onProgress) {
+            onProgress({
+              percent,
+              renderedFrames,
+              totalFrames,
+              estimatedTimeRemaining,
+            });
+          }
+        },
+      }),
+      2,     // maxAttempts
+      2000,  // delayMs
+      "renderMedia"
+    );
   } catch (error) {
     if (isUserCancelledRender(error)) {
       const abortError = new Error("Video assembly cancelled");
@@ -317,7 +366,7 @@ export async function renderVideo(
  * Clear the bundle cache (useful for development)
  */
 export function clearBundleCache(): void {
-  cachedBundleUrl = null;
-  bundlePromise = null;
+  setCachedBundleUrl(null);
+  setBundlePromise(null);
 }
 
