@@ -1,10 +1,11 @@
 "use client";
 
-import { type FC, useEffect, useRef, useState } from "react";
+import { type FC, useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, BotIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
 import { parseTextResult, parseTextResultWithStatus } from "./parse-text-result";
+import { parseAgentSteps } from "../tool-live-status";
 
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -54,6 +55,25 @@ export const ClaudeAgentToolUI: ToolCallContentPartComponent = ({ args, result }
   const hasError = isErrorResult(result);
   const { text: content, statuses: xmlStatuses } = parseTextResultWithStatus(result);
 
+  // Live elapsed counter (approximate — starts from when this component mounts while running).
+  const startTimeRef = useRef(Date.now());
+  const [liveElapsedS, setLiveElapsedS] = useState(0);
+  useEffect(() => {
+    if (!isRunning) return;
+    startTimeRef.current = Date.now();
+    setLiveElapsedS(0);
+    const id = setInterval(() => {
+      setLiveElapsedS(Math.round((Date.now() - startTimeRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [isRunning]);
+
+  // Parse steps from the agent result for the expanded view.
+  const parsedSteps = useMemo(() => {
+    if (!content || isRunning) return [];
+    return parseAgentSteps(result).steps;
+  }, [content, isRunning, result]);
+
   const StatusIcon = isRunning ? null : hasError ? XCircleIcon : CheckCircleIcon;
   const statusColor = isRunning
     ? "text-terminal-muted"
@@ -94,6 +114,12 @@ export const ClaudeAgentToolUI: ToolCallContentPartComponent = ({ args, result }
           </span>
         )}
 
+        {isRunning && liveElapsedS > 0 && (
+          <span className="text-[10px] text-terminal-muted/70 shrink-0 tabular-nums">
+            {liveElapsedS}s
+          </span>
+        )}
+
         {expanded ? (
           <ChevronDownIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
         ) : (
@@ -111,6 +137,25 @@ export const ClaudeAgentToolUI: ToolCallContentPartComponent = ({ args, result }
                   ? args.prompt.substring(0, 2000) + `\n\n... [${(args.prompt.length - 2000).toLocaleString()} more characters]`
                   : args.prompt}
               </pre>
+            </div>
+          )}
+
+          {parsedSteps.length > 0 && (
+            <div className="space-y-1">
+              <div className="text-[10px] text-terminal-muted uppercase tracking-wider">
+                Steps
+                <span className="ml-1.5 rounded-full bg-terminal-dark/10 px-1.5 py-0.5 text-[10px] leading-none text-terminal-muted tabular-nums">
+                  {parsedSteps.length}
+                </span>
+              </div>
+              <ol className="space-y-1">
+                {parsedSteps.map((step, i) => (
+                  <li key={i} className="flex gap-2 text-[11px] text-terminal-dark dark:text-terminal-dark/90">
+                    <span className="shrink-0 w-4 text-right text-terminal-muted tabular-nums">{i + 1}.</span>
+                    <span className="[overflow-wrap:anywhere]">{step}</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           )}
 

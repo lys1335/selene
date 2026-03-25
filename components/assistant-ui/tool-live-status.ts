@@ -16,6 +16,14 @@ export interface LiveToolStatus {
   argsPreview?: string;
   outputPreview?: string;
   updatedAt: number;
+  /** Unix ms when the tool call began executing (Agent only). */
+  startedAt?: number;
+  /** Milliseconds elapsed from start to completion (Agent only, set on completion). */
+  elapsedMs?: number;
+  /** Parsed execution steps from the Agent result (numbered/bulleted lists). */
+  steps?: string[];
+  /** Count of parsed steps, used as the badge pill count. */
+  stepCount?: number;
 }
 
 interface ProgressToolPartLike {
@@ -484,6 +492,60 @@ export function summarizeToolOutputByName(toolName: string, value: unknown): str
   }
 }
 
+/**
+ * Extract raw text from an Agent tool result (handles MCP content arrays,
+ * normalized wrappers, plain strings, etc.).
+ */
+function extractAgentResultText(result: unknown): string | undefined {
+  if (!result) return undefined;
+  if (typeof result === "string") return result;
+  if (typeof result !== "object") return undefined;
+  const r = result as Record<string, unknown>;
+  if (Array.isArray(r.content)) {
+    const item = r.content.find(
+      (c: unknown) => !!c && typeof c === "object" && (c as { type?: unknown }).type === "text"
+    ) as { text?: string } | undefined;
+    if (typeof item?.text === "string") return item.text;
+  }
+  if (typeof r.content === "string") return r.content;
+  if (typeof r.text === "string") return r.text;
+  return undefined;
+}
+
+/**
+ * Parse an Agent tool result into discrete execution steps.
+ * Looks for numbered lists ("1. ..."), then bullet lists ("- ..."),
+ * then falls back to significant paragraphs.
+ */
+export function parseAgentSteps(result: unknown): { steps: string[]; count: number } {
+  const text = extractAgentResultText(result);
+  if (!text || text.length < 10) return { steps: [], count: 0 };
+
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  // Numbered list: "1. ...", "2. ..." etc.
+  const numbered = lines
+    .filter((l) => /^\d+\.\s/.test(l))
+    .map((l) => l.replace(/^\d+\.\s+/, "").slice(0, 120));
+  if (numbered.length >= 2) return { steps: numbered.slice(0, 12), count: numbered.length };
+
+  // Bullet list: "- ", "• ", "* "
+  const bullets = lines
+    .filter((l) => /^[-•*]\s/.test(l))
+    .map((l) => l.replace(/^[-•*]\s+/, "").slice(0, 120));
+  if (bullets.length >= 2) return { steps: bullets.slice(0, 12), count: bullets.length };
+
+  // Fallback: meaningful paragraphs (first line of each, 30+ chars)
+  const paragraphs = text
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter((p) => p.length >= 30)
+    .map((p) => p.split("\n")[0].slice(0, 120));
+  if (paragraphs.length >= 2) return { steps: paragraphs.slice(0, 8), count: paragraphs.length };
+
+  return { steps: [], count: 0 };
+}
+
 function asProgressToolPart(part: unknown): ProgressToolPartLike | null {
   if (!part || typeof part !== "object") return null;
   return part as ProgressToolPartLike;
@@ -540,6 +602,18 @@ function buildLiveStatusFromProgress(event: TaskProgressEvent): LiveToolStatus |
       rawStatus === "denied" ||
       typeof part.errorText === "string" ||
       typeof resultRecord?.error === "string";
+
+    // For Agent: parse steps from the result text
+    let steps: string[] | undefined;
+    let stepCount: number | undefined;
+    if (canonicalToolName === "Agent" && !isError) {
+      const parsed = parseAgentSteps(part.result ?? part.output);
+      if (parsed.count > 0) {
+        steps = parsed.steps;
+        stepCount = parsed.count;
+      }
+    }
+
     return {
       toolCallId: part.toolCallId,
       toolName: part.toolName,
@@ -549,6 +623,8 @@ function buildLiveStatusFromProgress(event: TaskProgressEvent): LiveToolStatus |
       detail: typeof part.errorText === "string" ? summarizeString(part.errorText, 120) : scopedDetail,
       outputPreview: summarizeToolOutputByName(canonicalToolName, part.result ?? part.output),
       updatedAt: Date.now(),
+      steps,
+      stepCount,
     };
   }
 
@@ -599,19 +675,37 @@ export function useLiveToolStatuses(sessionId: string | undefined) {
 
       setStatusByToolCallId((previous) => {
         const existing = previous[status.toolCallId!];
+
+        // For Agent tool calls: carry startedAt across updates, compute elapsedMs on completion.
+        let enriched = status;
+        if (status.canonicalToolName === "Agent") {
+          const now = Date.now();
+          if (status.phase === "preparing" || status.phase === "running") {
+            enriched = { ...status, startedAt: existing?.startedAt ?? now };
+          } else {
+            const startedAt = existing?.startedAt;
+            enriched = {
+              ...status,
+              startedAt,
+              elapsedMs: startedAt != null ? now - startedAt : undefined,
+            };
+          }
+        }
+
         if (
           existing &&
-          existing.phase === status.phase &&
-          existing.label === status.label &&
-          existing.detail === status.detail &&
-          existing.argsPreview === status.argsPreview &&
-          existing.outputPreview === status.outputPreview
+          existing.phase === enriched.phase &&
+          existing.label === enriched.label &&
+          existing.detail === enriched.detail &&
+          existing.argsPreview === enriched.argsPreview &&
+          existing.outputPreview === enriched.outputPreview &&
+          existing.elapsedMs === enriched.elapsedMs
         ) {
           return previous;
         }
         return {
           ...previous,
-          [status.toolCallId!]: status,
+          [enriched.toolCallId!]: enriched,
         };
       });
     };

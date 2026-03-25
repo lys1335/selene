@@ -42,6 +42,7 @@ import { ActiveDelegationsIndicator } from "./active-delegations-indicator";
 import FileMentionAutocomplete from "./file-mention-autocomplete";
 import { ComposerAttachment } from "./thread-message-components";
 import { ComposerActionBar } from "./composer-action-bar";
+import { buildSimpleComposerSubmission } from "./composer-submit";
 import {
   useVoiceRecording,
   usePromptEnhancement,
@@ -638,24 +639,11 @@ export const Composer: FC<{
       lastTranscriptRef.current = null;
       wasAiEnhancedRef.current = false;
 
-      let expandedMessage = enhancedContext || inputValue.trim();
-
-      // Prepend screen capture context if metadata is available from a unified session
-      if (captureSession.isUnifiedSession && captureSession.metadata) {
-        const meta = captureSession.metadata;
-        const contextParts: string[] = [];
-        if (meta.activeAppName && meta.activeWindowTitle) {
-          contextParts.push(`[Screen Context: ${meta.activeAppName} — ${meta.activeWindowTitle}]`);
-        } else if (meta.activeWindowTitle) {
-          contextParts.push(`[Screen Context: ${meta.activeWindowTitle}]`);
-        }
-        if (meta.browserUrl) {
-          contextParts.push(`[URL: ${meta.browserUrl}]`);
-        }
-        if (contextParts.length > 0) {
-          expandedMessage = contextParts.join("\n") + "\n\n" + expandedMessage;
-        }
-      }
+      const expandedMessage = buildSimpleComposerSubmission({
+        inputValue,
+        enhancedContext,
+        captureMetadata: captureSession.isUnifiedSession ? captureSession.metadata : null,
+      });
 
       if (isQueueBlocked) {
         if (hasText) {
@@ -713,7 +701,10 @@ export const Composer: FC<{
         clearDraft();
         updateCursorPosition(0);
         clearEnhancement();
-        // Reset unified capture session state after sending (metadata consumed, don't clear attachments — already sent)
+        // Belt-and-suspenders: send() clears attachments internally via
+        // _emptyTextAndAttachments(), but clear explicitly to match the
+        // Tiptap path and guard against future runtime changes.
+        if (hasAttachments) threadRuntime.composer.clearAttachments();
         if (captureSession.isUnifiedSession) {
           captureSession.endSession();
         }

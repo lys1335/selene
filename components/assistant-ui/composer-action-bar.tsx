@@ -254,7 +254,7 @@ export const ComposerActionBar: FC<ComposerActionBarProps> = ({
               variant="ghost"
               size="icon"
               onClick={onEnhance}
-              disabled={isEnhancing || isRunning || !inputHasText || isDeepResearchMode}
+              disabled={isEnhancing || !inputHasText || isDeepResearchMode}
               className={cn(
                 "size-8 relative",
                 enhancedContext

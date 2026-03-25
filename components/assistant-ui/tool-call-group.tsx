@@ -45,6 +45,21 @@ interface ToolSummaryItem {
   detail?: string;
   inputPreview?: string;
   outputPreview?: string;
+  /** Elapsed ms for Agent tool calls (from live status, set on completion). */
+  elapsedMs?: number;
+  /** Unix ms when Agent tool call began executing (for live ticker). */
+  startedAt?: number;
+  /** Parsed step list for Agent tool calls. */
+  steps?: string[];
+}
+
+/** Format elapsed milliseconds as a compact human-readable string. */
+function formatElapsed(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return rem > 0 ? `${m}m${rem}s` : `${m}m`;
 }
 
 const toolGroupExpansionState = new Map<string, boolean>();
@@ -241,26 +256,46 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
           ? t(part.toolName)
           : canonicalToolName;
       const canonicalStatus = getStatus(partLike);
-      const liveStatus = canonicalStatus === "running" && partLike.toolCallId
-        ? liveStatuses[partLike.toolCallId]
-        : undefined;
+      // Always read liveStatus — even for completed tools — so elapsedMs and steps survive past completion.
+      const liveStatus = partLike.toolCallId ? liveStatuses[partLike.toolCallId] : undefined;
       const phase = liveStatus?.phase ?? getFallbackToolPhase(part.result, canonicalStatus === "running");
       const detail = liveStatus?.detail;
       const inputPreview = liveStatus?.argsPreview ?? summarizeToolInputByName(canonicalToolName, partLike.input ?? partLike.args ?? partLike.argsText);
       const outputPreview = liveStatus?.outputPreview ?? summarizeToolOutputByName(canonicalToolName, part.result);
+
+      const isAgent = canonicalToolName === "Agent";
+      // For Agent: use parsed step count as pill count; carry elapsed and steps.
+      const resultCount = getResultCount(part.result);
+      const count = isAgent
+        ? (liveStatus?.stepCount ?? resultCount)
+        : resultCount;
 
       return {
         key: partLike.toolCallId ?? `${part.toolName}-${index}`,
         label,
         badgeStatus: liveStatus ? phaseToBadgeStatus(liveStatus.phase) : canonicalStatus,
         phase,
-        count: getResultCount(part.result),
+        count,
         detail,
         inputPreview,
         outputPreview,
+        elapsedMs: isAgent ? liveStatus?.elapsedMs : undefined,
+        startedAt: isAgent ? liveStatus?.startedAt : undefined,
+        steps: isAgent ? liveStatus?.steps : undefined,
       };
     });
   }, [liveStatuses, t, toolParts]);
+
+  // Live elapsed ticker: tick every second while any Agent tool is still running with a startedAt.
+  const [, setTickMs] = useState(0);
+  useEffect(() => {
+    const hasRunningAgent = summaryItems.some(
+      (item) => item.badgeStatus === "running" && item.startedAt != null
+    );
+    if (!hasRunningAgent) return;
+    const id = setInterval(() => setTickMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [summaryItems]);
 
   const hasMedia = mediaPreviews.length > 0;
   const hasCompactReveal = !isDetailedMode && summaryItems.some(
@@ -334,14 +369,21 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
         className="flex flex-wrap items-center gap-2 pb-1"
         onPointerDown={handleCompactPointerDown}
       >
-        {summaryItems.map((item) => (
-          <ToolCallBadge
-            key={item.key}
-            label={item.label}
-            status={item.badgeStatus}
-            count={item.count}
-          />
-        ))}
+        {summaryItems.map((item) => {
+          // Live elapsed: use startedAt tick while running, fall back to static elapsedMs on completion.
+          const liveElapsedMs = item.badgeStatus === "running" && item.startedAt != null
+            ? Date.now() - item.startedAt
+            : item.elapsedMs;
+          return (
+            <ToolCallBadge
+              key={item.key}
+              label={item.label}
+              status={item.badgeStatus}
+              count={item.count}
+              elapsed={liveElapsedMs != null && liveElapsedMs > 1000 ? formatElapsed(liveElapsedMs) : undefined}
+            />
+          );
+        })}
       </div>
 
       {showCompactReveal && (
@@ -364,13 +406,40 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate font-medium">{item.label}</span>
-                  <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] opacity-80">
-                    {phaseToStatusText(tStatus, item.phase)}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {(() => {
+                      const revealElapsedMs = item.badgeStatus === "running" && item.startedAt != null
+                        ? Date.now() - item.startedAt
+                        : item.elapsedMs;
+                      return revealElapsedMs != null && revealElapsedMs > 1000 ? (
+                        <span className="tabular-nums text-[10px] opacity-70">
+                          {formatElapsed(revealElapsedMs)}
+                        </span>
+                      ) : null;
+                    })()}
+                    <span className="text-[10px] uppercase tracking-[0.14em] opacity-80">
+                      {phaseToStatusText(tStatus, item.phase)}
+                    </span>
+                  </div>
                 </div>
-                <p className="mt-1 text-[11px] leading-relaxed opacity-90 [overflow-wrap:anywhere]">
-                  {previewText}
-                </p>
+                {previewText && (
+                  <p className="mt-1 text-[11px] leading-relaxed opacity-90 [overflow-wrap:anywhere]">
+                    {previewText}
+                  </p>
+                )}
+                {item.steps && item.steps.length > 0 && (
+                  <ol className="mt-1.5 space-y-0.5 text-[11px] leading-relaxed opacity-85">
+                    {item.steps.slice(0, 6).map((step, i) => (
+                      <li key={i} className="flex gap-1.5">
+                        <span className="shrink-0 tabular-nums opacity-50">{i + 1}.</span>
+                        <span className="[overflow-wrap:anywhere]">{step}</span>
+                      </li>
+                    ))}
+                    {item.steps.length > 6 && (
+                      <li className="opacity-50">+{item.steps.length - 6} more</li>
+                    )}
+                  </ol>
+                )}
               </div>
             );
           })}
