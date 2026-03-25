@@ -40,6 +40,7 @@ import {
   buildUserInjectionContent,
   buildStopSystemMessage,
 } from "@/lib/background-tasks/live-prompt-helpers";
+import { clearDelegationCompletions } from "@/lib/ai/tools/delegation-completion-store";
 
 import { createHeartbeatStream } from "@/lib/utils/heartbeat-stream";
 import {
@@ -905,6 +906,7 @@ export async function POST(req: Request) {
           if (activeSessionId) {
             handleUndrainedQueueMessages(agentRun.id, activeSessionId);
             removeLivePromptQueue(agentRun.id, activeSessionId);
+            clearDelegationCompletions(activeSessionId);
           }
           await completeAgentRun(agentRun.id, runStatus, shouldCancel
             ? { reason: "stream_interrupted" }
@@ -1565,6 +1567,7 @@ export async function POST(req: Request) {
         removeChatAbortController(agentRun.id);
         if (activeSessionId) {
           removeLivePromptQueue(agentRun.id, activeSessionId);
+          clearDelegationCompletions(activeSessionId);
         }
         await completeAgentRun(agentRun.id, runStatus, shouldCancel
           ? { reason: "stream_interrupted" }

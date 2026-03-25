@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getCharacterFull: vi.fn(),
   createSession: vi.fn(),
   getMessages: vi.fn(),
+  getObserveMessageSummary: vi.fn(),
   listAgentRunsBySession: vi.fn(),
   markRunAsCancelled: vi.fn(),
   abortChatRun: vi.fn(),
@@ -26,6 +27,7 @@ vi.mock("@/lib/characters/queries", () => ({
 vi.mock("@/lib/db/sqlite-queries", () => ({
   createSession: mocks.createSession,
   getMessages: mocks.getMessages,
+  getObserveMessageSummary: mocks.getObserveMessageSummary,
 }));
 
 vi.mock("@/lib/observability/queries", () => ({
@@ -131,6 +133,14 @@ describe("delegate-to-subagent-tool", () => {
     mocks.getMessages.mockResolvedValue([
       { role: "assistant", content: [{ type: "text", text: "done" }] },
     ]);
+    mocks.getObserveMessageSummary.mockResolvedValue({
+      recentAssistantMessages: [
+        { role: "assistant", content: [{ type: "text", text: "done" }] },
+      ],
+      assistantMessageCount: 1,
+      messageCount: 1,
+      toolMessageCount: 0,
+    });
     mocks.listAgentRunsBySession.mockResolvedValue([]);
     mocks.markRunAsCancelled.mockResolvedValue(undefined);
     mocks.abortChatRun.mockReturnValue(true);
@@ -633,18 +643,22 @@ describe("delegate-to-subagent-tool", () => {
   it("observe returns full lastResponse and bounded/truncated prior response previews", async () => {
     const longPrior = "P".repeat(1_450);
     const longLast = "L".repeat(9_200);
-    mocks.getMessages.mockResolvedValue([
-      { role: "assistant", content: [{ type: "text", text: "step-1" }] },
-      { role: "assistant", content: [{ type: "text", text: "step-2" }] },
-      { role: "assistant", content: [{ type: "text", text: longPrior }] },
-      { role: "assistant", content: [{ type: "text", text: "step-4" }] },
-      { role: "assistant", content: [{ type: "text", text: "step-5" }] },
-      { role: "assistant", content: [{ type: "text", text: "step-6" }] },
-      { role: "assistant", content: [{ type: "text", text: "step-7" }] },
-      { role: "assistant", content: [{ type: "text", text: "step-8" }] },
-      { role: "assistant", content: [{ type: "text", text: longLast }] },
-      { role: "tool", content: [{ type: "text", text: "tool output" }] },
-    ]);
+    // getObserveMessageSummary is asked for MAX_OBSERVE_PREVIEW_RESPONSES + 1 = 7
+    // recent assistant messages, so the mock should return exactly 7.
+    mocks.getObserveMessageSummary.mockResolvedValue({
+      recentAssistantMessages: [
+        { role: "assistant", content: [{ type: "text", text: longPrior }] },
+        { role: "assistant", content: [{ type: "text", text: "step-4" }] },
+        { role: "assistant", content: [{ type: "text", text: "step-5" }] },
+        { role: "assistant", content: [{ type: "text", text: "step-6" }] },
+        { role: "assistant", content: [{ type: "text", text: "step-7" }] },
+        { role: "assistant", content: [{ type: "text", text: "step-8" }] },
+        { role: "assistant", content: [{ type: "text", text: longLast }] },
+      ],
+      assistantMessageCount: 9,
+      messageCount: 10,
+      toolMessageCount: 1,
+    });
 
     fetchMock.mockResolvedValue({
       ok: true,

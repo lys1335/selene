@@ -77,6 +77,38 @@ describe("buildUserInjectionContent", () => {
     expect(result).toContain("integrate the sub-agent's actual result");
     expect(result).not.toContain("Please acknowledge and incorporate");
   });
+
+  it("preserves structured delegation instructions for multiple simultaneous completions", () => {
+    const result = buildUserInjectionContent([
+      {
+        id: "deleg-complete-del-1",
+        content: "[Delegation Complete] del-1 (\"Explore\") has finished.",
+        timestamp: 123,
+        stopIntent: false,
+        metadata: {
+          kind: "delegation_completion",
+          delegationId: "del-1",
+          delegateName: "Explore",
+        },
+      },
+      {
+        id: "deleg-complete-del-2",
+        content: "[Delegation Complete] del-2 (\"Reviewer\") has finished.",
+        timestamp: 124,
+        stopIntent: false,
+        metadata: {
+          kind: "delegation_completion",
+          delegationId: "del-2",
+          delegateName: "Reviewer",
+        },
+      },
+    ]);
+
+    expect(result).toContain('Immediately call delegateToSubagent action="observe" delegationId="del-1"');
+    expect(result).toContain('Immediately call delegateToSubagent action="observe" delegationId="del-2"');
+    expect(result).not.toContain("Please acknowledge and incorporate");
+    expect(result).toContain("Delegation completion notice");
+  });
 });
 
 describe("buildStopSystemMessage", () => {

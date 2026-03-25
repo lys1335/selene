@@ -59,16 +59,7 @@ const conversationQueues = new Map<string, Promise<void>>();
 
 const globalForChannelBridge = globalThis as typeof globalThis & {
   __channelBridgeListenersRegistered?: boolean;
-  __channelAnswerHandlerRegistered?: Set<string>;
 };
-
-// Track which connectionIds already have an interactive answer handler registered.
-// Avoids overwriting the handler on every "pending" event when concurrent questions
-// are in flight for the same connector.
-if (!globalForChannelBridge.__channelAnswerHandlerRegistered) {
-  globalForChannelBridge.__channelAnswerHandlerRegistered = new Set();
-}
-const registeredAnswerHandlers = globalForChannelBridge.__channelAnswerHandlerRegistered;
 
 if (!globalForChannelBridge.__channelBridgeListenersRegistered) {
   globalForChannelBridge.__channelBridgeListenersRegistered = true;
@@ -107,11 +98,10 @@ interactiveBridgeEvents.on("pending", async ({ sessionId, toolUseId, questions }
     const manager = getChannelManager();
     const connector = manager.getConnector(conversation.connectionId);
 
-    // Wire up the interactive answer handler for button callbacks — once per
-    // connector, not per question. The handler routes by toolUseId so a single
-    // registration handles all concurrent questions on the same connector.
-    if (connector?.setInteractiveAnswerHandler && !registeredAnswerHandlers.has(connection.id)) {
-      registeredAnswerHandlers.add(connection.id);
+    // Re-register the connector callback on each pending question event.
+    // Connectors store just one handler slot, so reassignment is cheap and avoids
+    // stale global connection IDs blocking new connector instances after reconnects.
+    if (connector?.setInteractiveAnswerHandler) {
       connector.setInteractiveAnswerHandler((data) => {
         const pending = findPendingQuestionByToolUseId(data.toolUseId);
         if (!pending) return;

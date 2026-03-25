@@ -197,6 +197,13 @@ function extractRichOutputs(result: unknown): string[] {
   return urls;
 }
 
+let sdkToolCallCounter = 0;
+
+function nextSdkToolCallId(toolName: string): string {
+  sdkToolCallCounter += 1;
+  return `sdk_${toolName}_${Date.now()}_${sdkToolCallCounter}`;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -340,7 +347,7 @@ export function createSeleneSdkMcpServer(
 
             // Generate a toolCallId so interactive tools (askUserQuestion,
             // executeCommand progress, etc.) work correctly in the SDK path.
-            const toolCallId = `sdk_${name}_${Date.now()}`;
+            const toolCallId = nextSdkToolCallId(name);
             const result = await (toolInstance as any).execute?.(args, { toolCallId });
 
             // searchTools/listAllTools: the context-aware instance already adds
@@ -433,7 +440,7 @@ export function createSeleneSdkMcpServer(
           if (ctx.onRichOutput) {
             const richUrls = extractRichOutputs(result);
             if (richUrls.length > 0) {
-              const toolCallId = `sdk_${toolId}_${Date.now()}`;
+              const toolCallId = nextSdkToolCallId(toolId);
               ctx.onRichOutput(toolCallId, toolId, result);
             }
           }

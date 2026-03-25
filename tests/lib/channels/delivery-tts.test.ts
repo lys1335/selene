@@ -349,6 +349,39 @@ describe("Channel Delivery with TTS", () => {
     expect(imageAttachments).toHaveLength(1);
     expect(audioAttachments).toHaveLength(0);
   });
+
+  it("suppresses pre-question text while an interactive tool is still waiting", async () => {
+    await deliverChannelReply({
+      sessionId: "sess-1",
+      messageId: "msg-1",
+      content: [
+        { type: "text", text: "Let me ask a quick question first." },
+        { type: "tool-call", toolName: "AskUserQuestion", toolCallId: "toolu-1", args: { questions: [] } } as any,
+      ],
+      sessionMetadata: { channelConversationId: "conv-1" },
+    });
+
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("delivers only post-answer text after an interactive tool result arrives", async () => {
+    await deliverChannelReply({
+      sessionId: "sess-1",
+      messageId: "msg-1",
+      content: [
+        { type: "text", text: "Let me ask a quick question first." },
+        { type: "tool-call", toolName: "AskUserQuestion", toolCallId: "toolu-1", args: { questions: [] } } as any,
+        { type: "tool-result", toolName: "AskUserQuestion", toolCallId: "toolu-1", result: { answers: { choice: "A" } } } as any,
+        { type: "text", text: "Thanks — here is the final answer." },
+      ],
+      sessionMetadata: { channelConversationId: "conv-1" },
+    });
+
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      "conn-1",
+      expect.objectContaining({ text: "Thanks — here is the final answer." }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

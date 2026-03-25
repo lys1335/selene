@@ -21,6 +21,7 @@ import { removeChatAbortController } from "@/lib/background-tasks/chat-abort-reg
 import { removeLivePromptQueue, drainLivePromptQueue } from "@/lib/background-tasks/live-prompt-queue-registry";
 import { signalUndrainedMessages } from "@/lib/background-tasks/undrained-signal";
 import { nextOrderingIndex } from "@/lib/session/message-ordering";
+import { clearDelegationCompletions } from "@/lib/ai/tools/delegation-completion-store";
 import { runStopHooks } from "@/lib/plugins/hook-integration";
 import { buildInterruptionMessage, buildInterruptionMetadata } from "@/lib/messages/interruption";
 import type { DBContentPart } from "@/lib/messages/converter";
@@ -128,7 +129,7 @@ export function createOnFinishCallback(ctx: StreamCallbackContext) {
       removeChatAbortController(ctx.agentRun.id);
       removeLivePromptQueue(ctx.agentRun.id, ctx.sessionId);
     }
-
+    clearDelegationCompletions(ctx.sessionId);
 
     // Finalize any tool calls that were streamed via deltas (OpenAI format)
     if (ctx.streamingState) {
@@ -449,6 +450,7 @@ export function createOnAbortCallback(ctx: StreamCallbackContext) {
       removeChatAbortController(ctx.agentRun.id);
       removeLivePromptQueue(ctx.agentRun.id, ctx.sessionId);
     }
+    clearDelegationCompletions(ctx.sessionId);
 
     try {
       const interruptionTimestamp = new Date();

@@ -11,7 +11,7 @@ import {
   getWorkflowByAgentId,
   getWorkflowMembers,
 } from "@/lib/agents/workflows";
-import { createSession } from "@/lib/db/sqlite-queries";
+import { createSession, getObserveMessageSummary } from "@/lib/db/sqlite-queries";
 import {
   activeDelegations,
   nextDelegationId,
@@ -36,7 +36,6 @@ import {
   resolveSubagentCandidate,
 } from "./delegate-to-subagent-handlers";
 import { getCharacterFull } from "@/lib/characters/queries";
-import { getMessages } from "@/lib/db/sqlite-queries";
 import { appendToLivePromptQueueBySession } from "@/lib/background-tasks/live-prompt-queue-registry";
 import {
   hasStopIntent,
@@ -449,29 +448,31 @@ export async function handleObserve(
     };
   }
 
-  // Query real data from DB
-  const messages = await getMessages(delegation.sessionId);
-  const assistantMessages = messages.filter((m) => m.role === "assistant");
-  const toolMessages = messages.filter((m) => m.role === "tool");
+  // Query bounded DB summary data instead of loading the full session history.
+  const observeSummary = await getObserveMessageSummary(
+    delegation.sessionId,
+    MAX_OBSERVE_PREVIEW_RESPONSES + 1,
+  );
 
-  // Extract all assistant responses.
   // Return the final response in full via `lastResponse` and keep `allResponses`
   // as a bounded preview list of prior assistant turns to avoid context blowups.
-  const assistantResponses = assistantMessages
-    .map((m) => extractTextFromContent(m.content))
-    .filter((t): t is string => !!t);
+  const assistantResponses = observeSummary.recentAssistantMessages
+    .map((message) => extractTextFromContent(message.content))
+    .filter((text): text is string => !!text);
   const lastResponse = assistantResponses[assistantResponses.length - 1];
   const priorResponses = assistantResponses.slice(0, -1);
-  const recentResponsePreviews = priorResponses.slice(-MAX_OBSERVE_PREVIEW_RESPONSES);
   let responsePreviewTruncatedCount = 0;
-  const allResponses = recentResponsePreviews.map((response) => {
+  const allResponses = priorResponses.map((response) => {
     const preview = truncateObservePreview(response);
     if (preview.truncated) {
       responsePreviewTruncatedCount += 1;
     }
     return preview.text;
   });
-  const responsePreviewOmittedCount = Math.max(0, priorResponses.length - recentResponsePreviews.length);
+  const responsePreviewOmittedCount = Math.max(
+    0,
+    (observeSummary.assistantMessageCount - 1) - allResponses.length,
+  );
 
   const isRunning = !delegation.settled;
   const waitedMs = Date.now() - observeStart;
@@ -486,11 +487,11 @@ export async function handleObserve(
     elapsed: Date.now() - delegation.startedAt,
     waitedMs,
     waitTimedOut: waitValidation.waitMs > 0 && isRunning,
-    messageCount: messages.length,
-    toolCallCount: toolMessages.length,
+    messageCount: observeSummary.messageCount,
+    toolCallCount: observeSummary.toolMessageCount,
     lastResponse,
     allResponses,
-    responseCount: assistantResponses.length,
+    responseCount: observeSummary.assistantMessageCount,
     responsePreviewCount: allResponses.length,
     responsePreviewOmittedCount,
     responsePreviewTruncatedCount,

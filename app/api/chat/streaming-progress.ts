@@ -18,6 +18,7 @@ import {
   buildProgressSignature,
   extractTextFromParts,
 } from "./streaming-state";
+import { INTERACTIVE_TOOL_NAME_SET } from "@/lib/interactive-tools/constants";
 
 function collectPersistedToolResultIds(parts: DBContentPart[]): Set<string> {
   const persistedToolResultIds = new Set<string>();
@@ -62,11 +63,7 @@ function emitDroppedToolCallTelemetry(
  * otherwise they vanish from the chat when the client reloads from DB
  * (background mode). See: https://github.com/seline/seline/issues/XXX
  */
-const INTERACTIVE_TOOL_NAMES = new Set([
-  "ExitPlanMode",
-  "AskUserQuestion",
-  "AskFollowupQuestion",
-]);
+const INTERACTIVE_TOOL_NAMES = INTERACTIVE_TOOL_NAME_SET;
 
 export function filterStreamingPartsForPersistence(
   streamingState: StreamingMessageState

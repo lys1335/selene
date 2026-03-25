@@ -14,6 +14,7 @@ import type { ChannelAttachment } from "./types";
 import { loadSettings } from "@/lib/settings/settings-manager";
 import { isTTSAvailable, synthesizeSpeech, shouldSummarizeForTTS, summarizeForTTS, getAudioForChannel } from "@/lib/tts/manager";
 import { parseTTSDirectives } from "@/lib/tts/directives";
+import { INTERACTIVE_TOOL_NAME_SET } from "@/lib/interactive-tools/constants";
 
 export async function deliverChannelReply(params: {
   sessionId: string;
@@ -96,17 +97,9 @@ export async function deliverChannelReply(params: {
   await touchChannelConversation(conversation.id);
 }
 
-// Interactive tool names that block the AI while waiting for user input.
-// When a response contains one of these, the interactive bridge sends the
-// question to the channel directly. Text that appears *before* the question
-// in the same response is suppressed — it would only add noise. Text that
-// appears *after* the question (the AI's follow-up after the user answered)
-// is delivered normally.
-const INTERACTIVE_DELIVERY_SUPPRESSIONS = new Set([
-  "AskUserQuestion",
-  "AskFollowupQuestion",
-  "ExitPlanMode",
-]);
+// Interactive tool calls are delivered directly by the channel bridge.
+// Text before the interactive question is suppressed to avoid duplicate noise.
+const INTERACTIVE_DELIVERY_SUPPRESSIONS = INTERACTIVE_TOOL_NAME_SET;
 
 async function buildOutgoingPayload(content: DBContentPart[]): Promise<{
   text: string;

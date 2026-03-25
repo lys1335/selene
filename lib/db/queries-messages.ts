@@ -84,6 +84,42 @@ export async function getMessages(sessionId: string) {
   });
 }
 
+export async function getObserveMessageSummary(sessionId: string, previewAssistantCount: number) {
+  const normalizedPreviewCount = Math.max(0, Math.trunc(previewAssistantCount));
+  const recentAssistantMessages = normalizedPreviewCount > 0
+    ? await db.query.messages.findMany({
+        where: and(
+          eq(messages.sessionId, sessionId),
+          eq(messages.role, "assistant"),
+        ),
+        orderBy: [desc(messages.orderingIndex), desc(messages.createdAt)],
+        limit: normalizedPreviewCount,
+      })
+    : [];
+
+  const [assistantCountRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(messages)
+    .where(and(eq(messages.sessionId, sessionId), eq(messages.role, "assistant")));
+
+  const [messageCountRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(messages)
+    .where(eq(messages.sessionId, sessionId));
+
+  const [toolCountRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(messages)
+    .where(and(eq(messages.sessionId, sessionId), eq(messages.role, "tool")));
+
+  return {
+    recentAssistantMessages: recentAssistantMessages.reverse(),
+    assistantMessageCount: assistantCountRow?.count ?? 0,
+    messageCount: messageCountRow?.count ?? 0,
+    toolMessageCount: toolCountRow?.count ?? 0,
+  };
+}
+
 export async function updateMessage(
   messageId: string,
   data: Partial<Pick<NewMessage, "content" | "metadata" | "model" | "tokenCount">>

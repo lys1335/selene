@@ -114,6 +114,9 @@ export interface ToolFactoryOptions {
   onExecuteCommandProgress?: import("@/lib/command-execution/types").ExecuteCommandProgressUpdate extends infer T
     ? (update: T) => void
     : never;
+
+  /** LLM provider name — forwarded to tools that need execution-strategy awareness. */
+  provider?: string;
 }
 
 /**
@@ -167,6 +170,9 @@ export interface ToolContext {
    * This enforces per-agent tool restrictions selected via the UI.
    */
   agentEnabledTools?: Set<string>;
+
+  /** LLM provider name — used by delegation tools to decide execution strategy. */
+  provider?: string;
 }
 
 /**

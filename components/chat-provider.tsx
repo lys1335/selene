@@ -56,6 +56,8 @@ function toError(error: unknown): Error {
 
 function isClientRetryStateError(error: Error): boolean {
   const message = (error.message || "").toLowerCase();
+  // @assistant-ui/store currently throws these exact tapClientLookup errors when
+  // its client-side message index gets out of sync during retries.
   return (
     message.includes("index out of bounds")
     || message.includes("tapclientlookup")
@@ -1041,6 +1043,8 @@ export const ChatProvider: FC<ChatProviderProps> = ({
   const autoRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTrackedUserMessageIdRef = useRef<string | undefined>(undefined);
   const MAX_CLIENT_AUTO_RETRIES = 2;
+  const recoverRetryStateRef = useRef<() => void>(() => {});
+  const scheduleRetryFromErrorRef = useRef<(error: Error, source: string) => boolean>(() => false);
 
   const chat = useChat({
     id: sessionId,
@@ -1057,39 +1061,13 @@ export const ChatProvider: FC<ChatProviderProps> = ({
         return;
       }
 
-      if (
-        autoRetryTimerRef.current == null &&
-        autoRetryAttemptRef.current < MAX_CLIENT_AUTO_RETRIES &&
-        shouldAutoRetryClientChat({ error, messages: chat.messages })
-      ) {
-        const retryMessage = buildRetryMessage(chat.messages);
-        if (retryMessage) {
-          const attempt = autoRetryAttemptRef.current + 1;
-          autoRetryAttemptRef.current = attempt;
-          const delayMs = Math.min(1500 * attempt, 4000);
-          console.warn("[ChatProvider] Auto-retrying recoverable chat error", {
-            attempt,
-            delayMs,
-            message: error.message,
-            messageId: retryMessage.messageId,
-          });
-          chat.clearError();
-          autoRetryTimerRef.current = setTimeout(() => {
-            autoRetryTimerRef.current = null;
-            void chat.sendMessage(retryMessage).catch((retryError) => {
-              const normalizedError = toError(retryError);
-              if (isClientRetryStateError(normalizedError)) {
-                console.warn("[ChatProvider] Recovering retry state after auto-retry failure", {
-                  message: normalizedError.message,
-                  messageId: retryMessage.messageId,
-                });
-                recoverRetryState();
-              }
-              console.error("[ChatProvider] Auto-retry request failed:", normalizedError);
-            });
-          }, delayMs);
-          return;
-        }
+      if (isClientRetryStateError(error)) {
+        recoverRetryStateRef.current();
+        return;
+      }
+
+      if (scheduleRetryFromErrorRef.current(error, "useChat.onError")) {
+        return;
       }
 
       console.error("[ChatProvider] useChat error:", error.message);
@@ -1127,6 +1105,7 @@ export const ChatProvider: FC<ChatProviderProps> = ({
           messageId: retryMessage.messageId,
         });
         recoverRetryState();
+        return false;
       }
       console.error("[ChatProvider] Client-side retry failed:", normalizedError);
       return false;
@@ -1166,16 +1145,18 @@ export const ChatProvider: FC<ChatProviderProps> = ({
   }, [chat, submitRetryMessage]);
 
   useEffect(() => {
-    if (chat.error) {
-      scheduleRetryFromError(chat.error, "chat-error-state");
-    }
-  }, [chat.error, scheduleRetryFromError]);
+    recoverRetryStateRef.current = recoverRetryState;
+    return () => {
+      recoverRetryStateRef.current = () => {};
+    };
+  }, [recoverRetryState]);
 
   useEffect(() => {
-    if (chat.status === "error" && chat.error && isClientRetryStateError(chat.error)) {
-      recoverRetryState();
-    }
-  }, [chat.error, chat.status, recoverRetryState]);
+    scheduleRetryFromErrorRef.current = scheduleRetryFromError;
+    return () => {
+      scheduleRetryFromErrorRef.current = () => false;
+    };
+  }, [scheduleRetryFromError]);
 
   useEffect(() => {
     if (transport instanceof AssistantChatTransport) {

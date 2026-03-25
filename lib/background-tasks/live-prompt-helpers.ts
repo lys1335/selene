@@ -11,6 +11,10 @@ function sanitizeDelegationCompletionEntry(entry: LivePromptEntry): string {
   ].join("\n");
 }
 
+function buildDelegationCompletionInstruction(entries: LivePromptEntry[]): string {
+  return entries.map((entry) => sanitizeDelegationCompletionEntry(entry)).join("\n\n");
+}
+
 const STOP_INTENT_PATTERNS = [
   /^stop\b/i,
   /^cancel\b/i,
@@ -47,12 +51,11 @@ export function sanitizeLivePromptContent(content: string): string {
 export function buildUserInjectionContent(entries: LivePromptEntry[]): string {
   if (entries.length === 0) return "";
 
-  if (
-    entries.length === 1 &&
-    entries[0].metadata?.kind === "delegation_completion" &&
-    entries[0].metadata?.delegationId
-  ) {
-    return sanitizeDelegationCompletionEntry(entries[0]);
+  const delegationCompletions = entries.filter(
+    (entry) => entry.metadata?.kind === "delegation_completion" && entry.metadata?.delegationId,
+  );
+  if (delegationCompletions.length > 0 && delegationCompletions.length === entries.length) {
+    return buildDelegationCompletionInstruction(delegationCompletions);
   }
 
   const lines = entries

@@ -374,8 +374,14 @@ export function resolveSubagentCandidate(
  */
 export async function extractFinalResponse(sessionId: string): Promise<string | undefined> {
   const messages = await getMessages(sessionId);
-  const assistantMessages = messages.filter((m) => m.role === "assistant");
+  if (!Array.isArray(messages)) return undefined;
+
+  const assistantMessages = messages.filter(
+    (message) =>
+      !!message && typeof message === "object" && "role" in message && (message as { role?: string }).role === "assistant",
+  );
   if (assistantMessages.length === 0) return undefined;
+
   const last = assistantMessages[assistantMessages.length - 1];
   return extractTextFromContent(last.content);
 }
