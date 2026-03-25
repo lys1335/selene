@@ -1,4 +1,66 @@
 import { getActiveDelegationsForCharacter } from "@/lib/ai/tools/delegate-to-subagent-tool";
+import { getBackgroundProcess } from "@/lib/command-execution";
+
+// ── Session-scoped background task registry ──────────────────────────────
+// Tracks which background process IDs were started in each session,
+// so prepareStep can keep the turn alive while they run.
+// Key: `${characterId}:${sessionId}`, Value: Set of processIds
+const sessionBackgroundTasks = new Map<string, Set<string>>();
+
+function sessionKey(characterId: string, sessionId: string): string {
+  return `${characterId}:${sessionId}`;
+}
+
+/**
+ * Register a background process ID as belonging to a session.
+ * Called from executeCommand tool after a background process starts.
+ */
+export function registerBackgroundTask(
+  characterId: string,
+  sessionId: string,
+  processId: string,
+): void {
+  const key = sessionKey(characterId, sessionId);
+  let tasks = sessionBackgroundTasks.get(key);
+  if (!tasks) {
+    tasks = new Set();
+    sessionBackgroundTasks.set(key, tasks);
+  }
+  tasks.add(processId);
+}
+
+/**
+ * Check if a session has any background processes still running.
+ * Cleans up finished processes from the registry as a side effect.
+ */
+export function hasRunningBackgroundTasksForSession(
+  characterId: string | null,
+  sessionId: string,
+): boolean {
+  if (!characterId) return false;
+
+  const key = sessionKey(characterId, sessionId);
+  const tasks = sessionBackgroundTasks.get(key);
+  if (!tasks || tasks.size === 0) return false;
+
+  // Check each registered process — clean up finished ones
+  for (const processId of tasks) {
+    const info = getBackgroundProcess(processId);
+    if (!info || !info.running) {
+      tasks.delete(processId);
+    }
+  }
+
+  // Clean up empty sets
+  if (tasks.size === 0) {
+    sessionBackgroundTasks.delete(key);
+    return false;
+  }
+
+  return true;
+}
+
+// ── Delegation helpers ───────────────────────────────────────────────────
 
 export function hasRunningDelegationsForSession(
   characterId: string | null,
@@ -24,6 +86,21 @@ export function hasDelegationsForSession(
   return getActiveDelegationsForCharacter(characterId, initiatorSessionId).length > 0;
 }
 
+// ── Turn control ─────────────────────────────────────────────────────────
+
+/**
+ * Check if the turn has async work (delegations or background tasks) still running.
+ */
+export function hasActiveAsyncWork(
+  characterId: string | null,
+  sessionId: string,
+): boolean {
+  return (
+    hasRunningDelegationsForSession(characterId, sessionId) ||
+    hasRunningBackgroundTasksForSession(characterId, sessionId)
+  );
+}
+
 export function shouldStopTurn(input: {
   characterId: string | null;
   initiatorSessionId: string;
@@ -34,14 +111,12 @@ export function shouldStopTurn(input: {
     return true;
   }
 
-  // Never force-stop a turn due to delegation status. Delegations always run
-  // in background mode — the model needs follow-up steps to call observe()
-  // and collect results. The AI SDK loop ends naturally when the model stops
+  // Never force-stop a turn due to async work status. Delegations and
+  // background tasks run asynchronously — the model needs follow-up steps
+  // to observe results. The AI SDK loop ends naturally when the model stops
   // making tool calls (outputs text-only response).
   //
-  // Previously, force-stopping when all delegations settled caused a
-  // serialization regression: the model couldn't observe results if they
-  // settled between steps, and blocking mode inside the tool execute()
-  // serialized parallel delegations across multi-step model responses.
+  // To prevent premature turn ending, prepareStep sets toolChoice="required"
+  // while async work is in-flight, forcing the model to keep calling tools.
   return false;
 }

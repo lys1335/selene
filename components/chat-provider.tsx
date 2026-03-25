@@ -292,7 +292,9 @@ export function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
           if (
             partToolName === "ExitPlanMode" ||
             partToolName === "AskUserQuestion" ||
-            partToolName === "AskFollowupQuestion"
+            partToolName === "AskFollowupQuestion" ||
+            partToolName === "askUserQuestion" ||
+            partToolName === "askFollowupQuestion"
           ) {
             return true;
           }

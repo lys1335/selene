@@ -20,6 +20,7 @@ import {
     cleanupBackgroundProcesses,
 } from "@/lib/command-execution";
 import { readTerminalLog, truncateOutput } from "@/lib/command-execution/log-manager";
+import { registerBackgroundTask } from "@/app/api/chat/delegation-waiting";
 import type {
     ExecuteCommandToolOptions,
     ExecuteCommandInput,
@@ -433,6 +434,11 @@ The tool returns immediately with a processId. Poll with processId to check stat
 
                     if (bgResult.error) {
                         return { status: "error", error: bgResult.error };
+                    }
+
+                    // Register with session so prepareStep keeps the turn alive
+                    if (characterId && sessionId) {
+                        registerBackgroundTask(characterId, sessionId, bgResult.processId);
                     }
 
                     console.log(`[executeCommand] Background process started: ${bgResult.processId}`);

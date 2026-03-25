@@ -102,7 +102,7 @@ import {
   parseInvalidToolSchemaError,
 } from "./tool-schema-recovery";
 import { tagIntermediateDelegationParts } from "./delegation-scope-tagging";
-import { shouldStopTurn, hasRunningDelegationsForSession } from "./delegation-waiting";
+import { shouldStopTurn, hasRunningDelegationsForSession, hasActiveAsyncWork } from "./delegation-waiting";
 import { createThinkTagFilter, shouldFilterThinkTags } from "@/lib/ai/streaming/think-tag-filter";
 import { thinkTagMiddleware, hasThinkTags } from "@/lib/ai/utils/think-tag-stream";
 import { detectEmotion } from "@/lib/emotion";
@@ -1140,14 +1140,18 @@ export async function POST(req: Request) {
               };
             }
 
-            // Force the model to keep calling tools while delegations are running.
+            // Force the model to keep calling tools while async work is in-flight.
             // Without this, the model outputs text ("Both are running...") and the
-            // AI SDK loop ends — nobody observes the delegation results.
-            if (stepNumber > 0 && hasRunningDelegationsForSession(characterId, sessionId)) {
+            // AI SDK loop ends — nobody observes the results.
+            if (stepNumber > 0 && hasActiveAsyncWork(characterId, sessionId)) {
+              const hasDelegations = hasRunningDelegationsForSession(characterId, sessionId);
+              const systemMsg = hasDelegations
+                ? "You have active delegations still running. You MUST call observe() or delegateToSubagent with action='observe' to wait for and collect their results. Do NOT respond to the user until all delegations have completed and you have processed their results."
+                : "You have background processes still running. You MUST call executeCommand with the processId to check their status, or wait for them to complete. Do NOT respond to the user until you have checked on all running processes.";
               return {
                 activeTools: currentActiveTools as string[],
                 toolChoice: "required" as const,
-                system: "You have active delegations still running. You MUST call observe() or delegateToSubagent with action='observe' to wait for and collect their results. Do NOT respond to the user until all delegations have completed and you have processed their results.",
+                system: systemMsg,
               };
             }
 
