@@ -137,7 +137,7 @@ const delegateSchema = jsonSchema<DelegateToSubagentInput>({
 export function createDelegateToSubagentTool(
   options: DelegateToSubagentToolOptions,
 ) {
-  const { sessionId: initiatorSessionId, userId, characterId } = options;
+  const { sessionId: initiatorSessionId, userId, characterId, provider } = options;
 
   return tool({
     description:
@@ -151,7 +151,7 @@ export function createDelegateToSubagentTool(
 
       switch (normalizedInput.action) {
         case "start":
-          return handleStartAction(normalizedInput, userId, characterId, initiatorSessionId);
+          return handleStartAction(normalizedInput, userId, characterId, initiatorSessionId, provider);
         case "observe":
           return handleObserve(normalizedInput, characterId, initiatorSessionId);
         case "continue":

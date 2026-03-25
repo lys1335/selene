@@ -15,6 +15,8 @@ export interface DelegateToSubagentToolOptions {
   sessionId: string;
   userId: string;
   characterId: string;
+  /** LLM provider name — determines whether background delegations can use async completion notifications. */
+  provider?: string;
 }
 
 export type DelegateAction = "start" | "observe" | "continue" | "answer" | "stop" | "list";

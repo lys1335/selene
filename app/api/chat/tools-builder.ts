@@ -147,6 +147,7 @@ export async function buildToolsForRequest(
     characterAppearanceDescription: characterAppearanceDescription || undefined,
     includeDeferredTools: false,
     agentEnabledTools,
+    provider: ctx.provider,
   });
   const initialActiveTools = new Set(Object.keys(nonDeferredTools));
 
@@ -159,6 +160,7 @@ export async function buildToolsForRequest(
     characterAppearanceDescription: characterAppearanceDescription || undefined,
     agentEnabledTools,
     includeDeferredTools: true,
+    provider: ctx.provider,
   });
 
   // Mutable set to track tools discovered via searchTools during this request.
