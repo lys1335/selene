@@ -22,6 +22,8 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
+const DATA_URI_RE = /^data:([^;]+);base64,(.+)$/s;
+
 const MAX_BASE64_BYTES = 4.5 * 1024 * 1024;
 const BASE64_OVERHEAD = 1.37;
 const MAX_ATTACHMENT_TEXT_CHARS = 20_000;
@@ -40,11 +42,30 @@ type ModelContentPart = {
   type: string;
   text?: string;
   image?: string;
+  mediaType?: string;
   toolCallId?: string;
   toolName?: string;
   input?: unknown;
   output?: unknown;
 };
+
+/**
+ * Build an image content part safe for the AI SDK.
+ *
+ * The AI SDK's `downloadAssets` parses string values through `new URL()`.
+ * A full data-URI (data:mime;base64,...) is a valid URL with protocol "data:"
+ * which then fails the http/https scheme check in `validateDownloadUrl`.
+ *
+ * To avoid this, we split data URIs into raw base64 + mediaType so the SDK
+ * treats the string as opaque base64 content and never tries to download it.
+ */
+function makeImagePart(imageValue: string): ModelContentPart {
+  const match = imageValue.match(DATA_URI_RE);
+  if (match) {
+    return { type: "image", image: match[2].trim(), mediaType: match[1] };
+  }
+  return { type: "image", image: imageValue };
+}
 
 type MessageInput = {
   role?: string;
@@ -231,7 +252,7 @@ function maybePreserveImageReference(
   includeUrlHelpers: boolean,
 ) {
   if (!shouldConvert && !includeUrlHelpers) {
-    contentParts.push({ type: "image", image: imageUrl });
+    contentParts.push(makeImagePart(imageUrl));
   }
 }
 
@@ -367,7 +388,7 @@ async function appendImagePart(
   const finalImageUrl = shouldConvert ? await imageUrlToBase64(url) : url;
 
   if (shouldConvert) {
-    contentParts.push({ type: "image", image: finalImageUrl });
+    contentParts.push(makeImagePart(finalImageUrl));
   }
 
   if (includeUrlHelpers) {
@@ -536,19 +557,27 @@ export async function extractContent(
 
         if (output?.images && output.images.length > 0) {
           const urlList = output.images
-            .map((img, idx) => `  ${idx + 1}. ${img.url}${img.localPath ? ` (localPath: ${img.localPath})` : ""}${img.filePath ? ` (filePath: ${img.filePath})` : ""}`)
+            .map((img, idx) => {
+              let line = `  ${idx + 1}. ${img.url}`;
+              if (img.filePath) line += `\n     file: ${img.filePath}`;
+              return line;
+            })
             .join("\n");
           contentParts.push({
             type: "text",
-            text: `Previously generated ${output.images.length} image(s) using ${toolName}:\n${urlList}\nUse these URLs for EDITING requests. For NEW image generation, call the tool.`,
+            text: `Previously generated ${output.images.length} image(s) using ${toolName}:\n${urlList}\n/api/media/ URLs work directly as source_image_url, reference_image_url, or image_url in any image/video tool. File paths are for CLI tools like ffmpeg.`,
           });
         } else if (output?.videos && output.videos.length > 0) {
           const urlList = output.videos
-            .map((vid, idx) => `  ${idx + 1}. ${vid.url}${vid.localPath ? ` (localPath: ${vid.localPath})` : ""}${vid.filePath ? ` (filePath: ${vid.filePath})` : ""}`)
+            .map((vid, idx) => {
+              let line = `  ${idx + 1}. ${vid.url}`;
+              if (vid.filePath) line += `\n     file: ${vid.filePath}`;
+              return line;
+            })
             .join("\n");
           contentParts.push({
             type: "text",
-            text: `Previously generated ${output.videos.length} video(s) using ${toolName}:\n${urlList}\nUse these URLs for EDITING requests. For NEW video generation, call the tool.`,
+            text: `Previously generated ${output.videos.length} video(s) using ${toolName}:\n${urlList}\nTo extract a frame: use ffmpeg via executeCommand with the file path, save output alongside it, then pass the corresponding /api/media/ URL to image/video tools.`,
           });
         } else {
           const resultObj = output as { truncated?: boolean; truncatedContentId?: string } | null;
@@ -643,7 +672,11 @@ export async function extractContent(
     if (!hasExplicitTextPart) {
       const directContent = getStringContent(msg.content, sessionId);
       const trimmedDirectContent = directContent.trim();
-      if (trimmedDirectContent) {
+      // When msg.content was raw base64 image data, sanitizeTextContent replaces it
+      // with a placeholder. Drop it when we already have image/file parts — the actual
+      // image is already in contentParts from the structured parts/attachments.
+      const isBase64Placeholder = trimmedDirectContent === "[Base64 image data removed - use image URL instead]";
+      if (trimmedDirectContent && !isBase64Placeholder) {
         contentParts.unshift({ type: "text", text: trimmedDirectContent });
       }
     }

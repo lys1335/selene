@@ -223,6 +223,13 @@ ${areas.length > 0 ? `\nPay special attention to: ${areas.join(", ")}` : ""}`;
     const visionModel = getVisionModel();
     console.log(`[describeImage] Calling vision model...`);
 
+    // Split data URIs into raw base64 + mediaType so the AI SDK doesn't
+    // try to download them (data: scheme is rejected by validateDownloadUrl).
+    const dataUriMatch = imageDataUrl.match(/^data:([^;]+);base64,(.+)$/s);
+    const imagePart: { type: "image"; image: string; mediaType?: string } = dataUriMatch
+      ? { type: "image", image: dataUriMatch[2].trim(), mediaType: dataUriMatch[1] }
+      : { type: "image", image: imageDataUrl };
+
     const result = await generateText({
       model: visionModel,
       system: systemPrompt,
@@ -230,7 +237,7 @@ ${areas.length > 0 ? `\nPay special attention to: ${areas.join(", ")}` : ""}`;
         {
           role: "user",
           content: [
-            { type: "image", image: imageDataUrl },
+            imagePart,
             { type: "text", text: userPrompt },
           ],
         },
