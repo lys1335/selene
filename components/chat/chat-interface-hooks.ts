@@ -193,6 +193,9 @@ export function useBackgroundProcessing({
     useEffect(() => { refreshMessagesRef.current = refreshMessages; }, [refreshMessages]);
 
     const consecutiveErrorsRef = useRef<number>(0);
+    // Holds the most recent pollOnce closure so the visibility-change handler
+    // can trigger an immediate poll without restarting the interval.
+    const pollOnceRef = useRef<(() => Promise<void>) | null>(null);
 
     const clearTrackedRunState = useCallback(async (options: ClearTrackedRunStateOptions = {}) => {
         const runId = options.runId ?? processingRunId;
@@ -337,12 +340,40 @@ export function useBackgroundProcessing({
             }
         };
 
+        // Expose pollOnce so the visibility-change handler can trigger an
+        // immediate poll without restarting the interval.
+        pollOnceRef.current = pollOnce;
+
         // Poll immediately — don't wait for the first interval tick.
         // If the run already completed, this clears the state right away
         // instead of showing "processing" for up to 2 seconds.
         void pollOnce();
         pollingIntervalRef.current = setInterval(pollOnce, pollIntervalMs);
     }, []);
+
+    // When the user returns to this tab while a background run is active, reset
+    // the consecutive-error counter (network may be back) and either restart the
+    // polling interval (if it was killed by too many errors) or trigger an
+    // immediate poll (if the interval is still alive) so the UI updates right away
+    // instead of waiting up to 2 s for the next tick.
+    useEffect(() => {
+        if (!isProcessingInBackground || !processingRunId) return;
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState !== "visible") return;
+            consecutiveErrorsRef.current = 0;
+            if (!pollingIntervalRef.current) {
+                // Polling was killed (e.g. by a network outage) — restart it.
+                startPollingForCompletion(processingRunId);
+            } else if (pollOnceRef.current) {
+                // Interval is alive — just do an immediate poll to avoid lag.
+                void pollOnceRef.current();
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }, [isProcessingInBackground, processingRunId, startPollingForCompletion]);
 
     // Clear polling interval on unmount to prevent stale updates after navigation
     useEffect(() => {

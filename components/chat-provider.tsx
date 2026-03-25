@@ -13,7 +13,7 @@ if (process.env.NODE_ENV !== "production") {
   };
 }
 
-import { Component, createContext, type ErrorInfo, type FC, type MutableRefObject, type ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { Component, createContext, type ErrorInfo, type FC, type MutableRefObject, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   AssistantRuntimeProvider,
   type AttachmentAdapter,
@@ -37,7 +37,7 @@ import {
   parseTransportErrorResponse,
   shouldIgnoreUseChatError,
 } from "@/lib/chat/transport-errors";
-import { getLastUserMessageId, shouldAutoRetryClientChat } from "@/lib/chat/client-retry";
+import { buildRetryMessage, getLastUserMessageId, shouldAutoRetryClientChat } from "@/lib/chat/client-retry";
 import { parseChatPreflightResponse } from "@/lib/chat/preflight";
 import {
   CHAT_ATTACHMENT_ACCEPT,
@@ -54,8 +54,31 @@ function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+function isClientRetryStateError(error: Error): boolean {
+  const message = (error.message || "").toLowerCase();
+  return (
+    message.includes("index out of bounds")
+    || message.includes("tapclientlookup")
+    || message.includes("message not found")
+  );
+}
+
+function hasUserMessage(messages: UIMessage[]): boolean {
+  return messages.some((message) => message.role === "user");
+}
+
+function cloneMessages(messages: UIMessage[]): UIMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    parts: Array.isArray(message.parts)
+      ? message.parts.map((part) => ({ ...part }))
+      : message.parts,
+  }));
+}
+
 function isRecoverableStreamingError(error: Error): boolean {
   if (error.name === "AbortError") return true;
+  if (isClientRetryStateError(error)) return true;
   const msg = error.message || "";
   if (msg.includes("aborted")) return true;
   const classification = classifyRecoverability({
@@ -1039,8 +1062,8 @@ export const ChatProvider: FC<ChatProviderProps> = ({
         autoRetryAttemptRef.current < MAX_CLIENT_AUTO_RETRIES &&
         shouldAutoRetryClientChat({ error, messages: chat.messages })
       ) {
-        const retryMessageId = getLastUserMessageId(chat.messages);
-        if (retryMessageId) {
+        const retryMessage = buildRetryMessage(chat.messages);
+        if (retryMessage) {
           const attempt = autoRetryAttemptRef.current + 1;
           autoRetryAttemptRef.current = attempt;
           const delayMs = Math.min(1500 * attempt, 4000);
@@ -1048,12 +1071,21 @@ export const ChatProvider: FC<ChatProviderProps> = ({
             attempt,
             delayMs,
             message: error.message,
+            messageId: retryMessage.messageId,
           });
           chat.clearError();
           autoRetryTimerRef.current = setTimeout(() => {
             autoRetryTimerRef.current = null;
-            void chat.regenerate({ messageId: retryMessageId }).catch((retryError) => {
-              console.error("[ChatProvider] Auto-retry request failed:", retryError);
+            void chat.sendMessage(retryMessage).catch((retryError) => {
+              const normalizedError = toError(retryError);
+              if (isClientRetryStateError(normalizedError)) {
+                console.warn("[ChatProvider] Recovering retry state after auto-retry failure", {
+                  message: normalizedError.message,
+                  messageId: retryMessage.messageId,
+                });
+                recoverRetryState();
+              }
+              console.error("[ChatProvider] Auto-retry request failed:", normalizedError);
             });
           }, delayMs);
           return;
@@ -1069,6 +1101,81 @@ export const ChatProvider: FC<ChatProviderProps> = ({
     adapters: { attachments: attachmentAdapter },
     toCreateMessage: toCreateMessageWithAttachmentMetadata,
   });
+
+  const recoverRetryState = useCallback(() => {
+    chat.setMessages((prev) => {
+      const recovered = sanitizeMessagesForInit(cloneMessages(prev));
+      return hasUserMessage(recovered) ? recovered : prev;
+    });
+    chat.clearError();
+  }, [chat]);
+
+  const submitRetryMessage = useCallback(async (reason: string, retryMessage = buildRetryMessage(chat.messages)) => {
+    if (!retryMessage) {
+      return false;
+    }
+
+    try {
+      await chat.sendMessage(retryMessage);
+      return true;
+    } catch (retryError) {
+      const normalizedError = toError(retryError);
+      if (isClientRetryStateError(normalizedError)) {
+        console.warn("[ChatProvider] Recovering retry state after client-side failure", {
+          reason,
+          message: normalizedError.message,
+          messageId: retryMessage.messageId,
+        });
+        recoverRetryState();
+      }
+      console.error("[ChatProvider] Client-side retry failed:", normalizedError);
+      return false;
+    }
+  }, [chat, recoverRetryState]);
+
+  const scheduleRetryFromError = useCallback((error: Error, source: string) => {
+    if (
+      autoRetryTimerRef.current != null
+      || autoRetryAttemptRef.current >= MAX_CLIENT_AUTO_RETRIES
+      || !shouldAutoRetryClientChat({ error, messages: chat.messages })
+    ) {
+      return false;
+    }
+
+    const retryMessage = buildRetryMessage(chat.messages);
+    if (!retryMessage) {
+      return false;
+    }
+
+    const attempt = autoRetryAttemptRef.current + 1;
+    autoRetryAttemptRef.current = attempt;
+    const delayMs = Math.min(1500 * attempt, 4000);
+    console.warn("[ChatProvider] Scheduling client-side retry", {
+      source,
+      attempt,
+      delayMs,
+      message: error.message,
+      messageId: retryMessage.messageId,
+    });
+    chat.clearError();
+    autoRetryTimerRef.current = setTimeout(() => {
+      autoRetryTimerRef.current = null;
+      void submitRetryMessage(source, retryMessage);
+    }, delayMs);
+    return true;
+  }, [chat, submitRetryMessage]);
+
+  useEffect(() => {
+    if (chat.error) {
+      scheduleRetryFromError(chat.error, "chat-error-state");
+    }
+  }, [chat.error, scheduleRetryFromError]);
+
+  useEffect(() => {
+    if (chat.status === "error" && chat.error && isClientRetryStateError(chat.error)) {
+      recoverRetryState();
+    }
+  }, [chat.error, chat.status, recoverRetryState]);
 
   useEffect(() => {
     if (transport instanceof AssistantChatTransport) {
@@ -1101,54 +1208,15 @@ export const ChatProvider: FC<ChatProviderProps> = ({
     };
   }, []);
 
-  useEffect(() => {
-    if (chat.status !== "error") {
-      return;
-    }
-    if (autoRetryTimerRef.current) {
-      return;
-    }
-    if (autoRetryAttemptRef.current >= MAX_CLIENT_AUTO_RETRIES) {
-      return;
-    }
-    if (!chat.error) {
-      return;
-    }
-    if (!shouldAutoRetryClientChat({ error: chat.error, messages: chat.messages })) {
-      return;
-    }
-
-    const retryMessageId = getLastUserMessageId(chat.messages);
-    if (!retryMessageId) {
-      return;
-    }
-
-    const attempt = autoRetryAttemptRef.current + 1;
-    autoRetryAttemptRef.current = attempt;
-    const delayMs = Math.min(1500 * attempt, 4000);
-    console.warn("[ChatProvider] Scheduling client-side retry from chat error state", {
-      attempt,
-      delayMs,
-      message: chat.error.message,
-    });
-    chat.clearError();
-    autoRetryTimerRef.current = setTimeout(() => {
-      autoRetryTimerRef.current = null;
-      void chat.regenerate({ messageId: retryMessageId }).catch((retryError) => {
-        console.error("[ChatProvider] Client-side retry failed:", retryError);
-      });
-    }, delayMs);
-  }, [chat, chat.error, chat.messages, chat.status]);
-
   const recoveryRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     recoveryRef.current = () => {
-      chat.setMessages((prev) => sanitizeMessagesForInit(prev));
+      recoverRetryState();
     };
     return () => {
       recoveryRef.current = null;
     };
-  }, [chat]);
+  }, [recoverRetryState]);
 
   const lastStreamingRef = useRef<number>(0);
   if (chat.status === "streaming" || chat.status === "submitted") {

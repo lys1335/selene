@@ -80,6 +80,23 @@ export function filterStreamingPartsForPersistence(
 
     const hasCompleteArgs = part.args !== undefined;
     const isStillStreaming = part.state === "input-streaming";
+
+    // Interactive tools (AskUserQuestion, ExitPlanMode, AskFollowupQuestion) block
+    // the SDK while waiting for user input. The SDK fires PreToolUse *before*
+    // emitting content_block_stop, so args may not be complete yet when
+    // filterStreamingPartsForPersistence is first called. We must persist them
+    // early — as long as there's any argument content — so the UI shows the
+    // pending question while the user is deciding. The non-result check below
+    // is intentionally skipped for these tools.
+    if (INTERACTIVE_TOOL_NAMES.has(part.toolName)) {
+      const hasArgContent =
+        hasCompleteArgs ||
+        (typeof part.argsText === "string" && part.argsText.length > 0);
+      if (hasArgContent) return true;
+      // Nothing to render yet (streaming just started) — suppress until content arrives.
+      return false;
+    }
+
     if (isStillStreaming && !hasCompleteArgs) {
       emitDroppedToolCallTelemetry(streamingState, part, "input-streaming", persistedToolResultIds);
       return false;
@@ -95,13 +112,6 @@ export function filterStreamingPartsForPersistence(
     }
 
     if (!persistedToolResultIds.has(part.toolCallId)) {
-      // Interactive tools block the SDK waiting for user input. They must
-      // persist so the UI can render them when the client reloads from DB
-      // (e.g. background mode page return or polling refresh).
-      if (INTERACTIVE_TOOL_NAMES.has(part.toolName) && hasCompleteArgs) {
-        return true;
-      }
-
       emitDroppedToolCallTelemetry(
         streamingState,
         part,

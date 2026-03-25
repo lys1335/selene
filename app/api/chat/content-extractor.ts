@@ -7,6 +7,7 @@ import { extractTextFromDocument } from "@/lib/documents/parser";
 import { getFullPathFromMediaRef } from "@/lib/storage/local-storage";
 
 import {
+  BASE64_IMAGE_PLACEHOLDER,
   sanitizeTextContent,
   stripFakeToolCallJson,
   extractPasteBlocks,
@@ -129,7 +130,7 @@ async function resizeImageIfNeeded(
   }
 }
 
-async function imageUrlToBase64(imageUrl: string): Promise<string> {
+async function imageUrlToBase64(imageUrl: string): Promise<string | null> {
   if (imageUrl.startsWith("data:") || imageUrl.startsWith("http")) {
     return imageUrl;
   }
@@ -141,7 +142,7 @@ async function imageUrlToBase64(imageUrl: string): Promise<string> {
       const filePath = path.resolve(mediaRoot, relativePath);
       if (!filePath.startsWith(mediaRoot + path.sep) && filePath !== mediaRoot) {
         console.warn(`[CHAT API] Path traversal blocked: ${imageUrl}`);
-        return imageUrl;
+        return null;
       }
 
       let fileBuffer = await fs.readFile(filePath);
@@ -160,11 +161,14 @@ async function imageUrlToBase64(imageUrl: string): Promise<string> {
       console.log(`[CHAT API] Converted image to base64: ${imageUrl} (${mimeType}, ${Math.round(base64.length / 1024)}KB)`);
       return `data:${mimeType};base64,${base64}`;
     } catch (error) {
-      console.error(`[CHAT API] Failed to convert image to base64: ${imageUrl}`, error);
+      const code = (error as NodeJS.ErrnoException).code;
+      console.warn(`[CHAT API] Image file not accessible: ${imageUrl} (${code ?? error})`);
+      return null;
     }
   }
 
-  return imageUrl;
+  // Unknown URL scheme — not a valid image reference
+  return null;
 }
 
 function normalizeAttachmentString(value: string | undefined): string | undefined {
@@ -252,7 +256,16 @@ function maybePreserveImageReference(
   includeUrlHelpers: boolean,
 ) {
   if (!shouldConvert && !includeUrlHelpers) {
-    contentParts.push(makeImagePart(imageUrl));
+    // Only preserve references that are actual image data or resolvable URLs.
+    // Raw /api/media/ paths are valid for DB persistence (will be converted on
+    // next load). Reject anything that isn't a known scheme.
+    if (
+      imageUrl.startsWith("data:") ||
+      imageUrl.startsWith("http") ||
+      imageUrl.startsWith("/api/media/")
+    ) {
+      contentParts.push(makeImagePart(imageUrl));
+    }
   }
 }
 
@@ -388,7 +401,15 @@ async function appendImagePart(
   const finalImageUrl = shouldConvert ? await imageUrlToBase64(url) : url;
 
   if (shouldConvert) {
-    contentParts.push(makeImagePart(finalImageUrl));
+    if (finalImageUrl) {
+      contentParts.push(makeImagePart(finalImageUrl));
+    } else {
+      // Image file no longer available (temp file cleaned up, etc.)
+      // Add a text note instead of a broken image part so the model
+      // knows the image existed but can't be displayed.
+      const safeName = fallbackName.replace(/[\[\]]/g, "").slice(0, 80);
+      contentParts.push({ type: "text", text: `[Image previously shared: ${safeName} - file no longer available]` });
+    }
   }
 
   if (includeUrlHelpers) {
@@ -675,7 +696,7 @@ export async function extractContent(
       // When msg.content was raw base64 image data, sanitizeTextContent replaces it
       // with a placeholder. Drop it when we already have image/file parts — the actual
       // image is already in contentParts from the structured parts/attachments.
-      const isBase64Placeholder = trimmedDirectContent === "[Base64 image data removed - use image URL instead]";
+      const isBase64Placeholder = trimmedDirectContent === BASE64_IMAGE_PLACEHOLDER;
       if (trimmedDirectContent && !isBase64Placeholder) {
         contentParts.unshift({ type: "text", text: trimmedDirectContent });
       }

@@ -4,8 +4,30 @@ import {
   sanitizeMessagesForInit,
   toCreateMessageWithAttachmentMetadata,
 } from "@/components/chat-provider";
+import { buildRetryMessage } from "@/lib/chat/client-retry";
 
 describe("sanitizeMessagesForInit", () => {
+  it("preserves the stopped user turn for resend-based retries", () => {
+    const messages = [
+      {
+        id: "user-stop",
+        role: "user",
+        metadata: { custom: { attachments: [{ name: "brief.txt" }] } },
+        parts: [{ type: "text", text: "Please continue" }],
+      },
+    ] as any;
+
+    const sanitized = sanitizeMessagesForInit(messages);
+    expect(sanitized).toEqual(messages);
+    expect(buildRetryMessage(sanitized as any)).toEqual({
+      id: "user-stop",
+      role: "user",
+      metadata: { custom: { attachments: [{ name: "brief.txt" }] } },
+      parts: [{ type: "text", text: "Please continue" }],
+      messageId: "user-stop",
+    });
+  });
+
   it("keeps active tool calls that are explicitly marked as streaming-active", () => {
     const messages = [
       {
