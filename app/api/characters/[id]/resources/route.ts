@@ -111,31 +111,34 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
     }
 
-    return NextResponse.json({
-      resources: {
-        skills: {
-          count: stats?.skillCount ?? 0,
+    return NextResponse.json(
+      {
+        resources: {
+          skills: {
+            count: stats?.skillCount ?? 0,
+          },
+          tools: {
+            enabledCount: enabledTools.length,
+          },
+          mcp: {
+            enabledToolCount: enabledMcpTools.length,
+            pluginServerCount: pluginMcpServerCount,
+          },
+          plugins: {
+            totalCount: pluginRows.length,
+            enabledCount: enabledPluginRows.length,
+            skillCount: pluginSkillCount,
+            hookHandlerCount,
+          },
+          workflows: {
+            customComfyUIWorkflowCount: customComfyUIWorkflowIds.length,
+            active: workflow,
+          },
         },
-        tools: {
-          enabledCount: enabledTools.length,
-        },
-        mcp: {
-          enabledToolCount: enabledMcpTools.length,
-          pluginServerCount: pluginMcpServerCount,
-        },
-        plugins: {
-          totalCount: pluginRows.length,
-          enabledCount: enabledPluginRows.length,
-          skillCount: pluginSkillCount,
-          hookHandlerCount,
-        },
-        workflows: {
-          customComfyUIWorkflowCount: customComfyUIWorkflowIds.length,
-          active: workflow,
-        },
+        plugins: pluginRows,
       },
-      plugins: pluginRows,
-    });
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error) {
     if (
       error instanceof Error &&

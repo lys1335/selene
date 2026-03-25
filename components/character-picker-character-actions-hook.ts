@@ -18,6 +18,15 @@ const EMPTY_AGENT_MODEL_CONFIG: AgentModelConfigDraft = {
   utilityModel: "",
 };
 
+function sortAssignablePlugins<T extends { enabledForAgent: boolean; name: string }>(plugins: T[]): T[] {
+  return [...plugins].sort((a, b) => {
+    const aEnabled = a.enabledForAgent ? 1 : 0;
+    const bEnabled = b.enabledForAgent ? 1 : 0;
+    if (aEnabled !== bEnabled) return bEnabled - aEnabled;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export function useCharacterActions(
   t: ReturnType<typeof useTranslations>,
   loadCharacters: () => Promise<void>,
@@ -249,17 +258,12 @@ export function useCharacterActions(
           version: string;
           enabledForAgent: boolean;
         }>;
-      }>(`/api/characters/${character.id}/plugins`);
+      }>(`/api/characters/${character.id}/plugins`, {
+        cache: "no-store",
+      });
 
       if (error || !data) throw new Error(error || "Failed to load plugins");
-      setAgentPlugins(
-        (data.plugins || []).sort((a, b) => {
-          const aEnabled = a.enabledForAgent ? 1 : 0;
-          const bEnabled = b.enabledForAgent ? 1 : 0;
-          if (aEnabled !== bEnabled) return bEnabled - aEnabled;
-          return a.name.localeCompare(b.name);
-        })
-      );
+      setAgentPlugins(sortAssignablePlugins(data.plugins || []));
     } catch (error) {
       console.error("Failed to load agent plugins:", error);
       toast.error(t("plugins.loadFailed"));
@@ -273,27 +277,21 @@ export function useCharacterActions(
     if (!pluginEditingCharacter) return;
     setSavingPluginId(pluginId);
     try {
-      const { error } = await resilientPost(`/api/characters/${pluginEditingCharacter.id}/plugins`, {
+      const { data, error } = await resilientPost<{
+        plugins?: Array<{
+          id: string;
+          name: string;
+          description: string;
+          version: string;
+          enabledForAgent: boolean;
+        }>;
+      }>(`/api/characters/${pluginEditingCharacter.id}/plugins`, {
         pluginId,
         enabled,
       });
-      if (error) throw new Error(error);
+      if (error || !data?.plugins) throw new Error(error || "Failed to update plugin");
 
-      let nextPlugins = agentPlugins;
-      setAgentPlugins((prev) => {
-        nextPlugins = prev.map((plugin) =>
-          plugin.id === pluginId ? { ...plugin, enabledForAgent: enabled } : plugin
-        );
-        return nextPlugins;
-      });
-
-      const enabledPlugins = nextPlugins
-        .filter((plugin) => plugin.enabledForAgent)
-        .map((plugin) => plugin.id);
-
-      await resilientPatch(`/api/characters/${pluginEditingCharacter.id}`, {
-        metadata: { enabledPlugins },
-      });
+      setAgentPlugins(sortAssignablePlugins(data.plugins));
     } catch (error) {
       console.error("Failed to update agent plugin:", error);
       toast.error(t("plugins.updateFailed"));

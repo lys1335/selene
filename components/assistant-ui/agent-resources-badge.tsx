@@ -83,7 +83,9 @@ export function AgentResourcesBadge() {
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/characters/${character.id}/resources`);
+      const response = await fetch(`/api/characters/${character.id}/resources`, {
+        cache: "no-store",
+      });
       if (!response.ok) {
         return;
       }
@@ -136,6 +138,7 @@ export function AgentResourcesBadge() {
     try {
       const response = await fetch(`/api/characters/${character.id}/plugins`, {
         method: "POST",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pluginId: plugin.id, enabled }),
       });
