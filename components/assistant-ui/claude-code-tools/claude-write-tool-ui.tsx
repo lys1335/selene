@@ -4,6 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, PlusIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
+import { DiffStyledPre } from "../diff-styled-pre";
 import { parseTextResult } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
@@ -103,9 +104,10 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
 
           {fileContent && (
             <div className="space-y-2">
-              <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-96 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
-                {visibleContent}
-              </pre>
+              <DiffStyledPre
+                lines={visibleContent.split("\n").map(line => `+ ${line}`)}
+                className="max-h-96 overflow-y-auto"
+              />
 
               {isContentTruncated && (
                 <button

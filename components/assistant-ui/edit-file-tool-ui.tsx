@@ -1,10 +1,11 @@
 "use client";
 
-import { FC, useEffect, useRef, useState } from "react";
+import { FC, useEffect, useMemo, useRef, useState } from "react";
 import { FileIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon, ChevronDownIcon, ChevronRightIcon, PlusIcon, PencilIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { useToolExpansion } from "./tool-expansion-context";
+import { DiffStyledPre } from "./diff-styled-pre";
 
 interface DiagnosticResult {
   tool: string;
@@ -41,11 +42,41 @@ type ToolCallContentPartComponent = FC<{
   result?: EditFileResult | WriteFileResult;
 }>;
 
+/**
+ * Unwrap MCP-wrapped tool results.
+ * MCP tools return `{ content: [{ type: "text", text: JSON.stringify(actual) }] }`.
+ * This extracts the actual result object so fields like `diff`, `status`, etc. are accessible.
+ */
+function unwrapResult(raw: unknown): (EditFileResult | WriteFileResult) | undefined {
+  if (!raw) return undefined;
+  if (typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  // Already unwrapped — has expected fields directly
+  if (r.diff !== undefined || r.status === "success" || r.status === "error" || r.status === "warning") {
+    return raw as EditFileResult;
+  }
+  // MCP content array wrapper: { content: [{ type: "text", text: "..." }] }
+  if (Array.isArray(r.content)) {
+    const textItem = (r.content as Array<Record<string, unknown>>).find(
+      (item) => item?.type === "text" && typeof item.text === "string"
+    );
+    if (textItem?.text && typeof textItem.text === "string") {
+      try { return JSON.parse(textItem.text); } catch { /* fall through */ }
+    }
+  }
+  // Normalized string content wrapper
+  if (typeof r.content === "string") {
+    try { return JSON.parse(r.content); } catch { /* fall through */ }
+  }
+  return raw as EditFileResult;
+}
+
 export const EditFileToolUI: ToolCallContentPartComponent = ({
   toolName,
   args,
-  result,
+  result: rawResult,
 }) => {
+  const result = useMemo(() => unwrapResult(rawResult), [rawResult]);
   const t = useTranslations("assistantUi.editFileTool");
   const [expanded, setExpanded] = useState(false);
   const [showFullDiff, setShowFullDiff] = useState(false);
@@ -182,23 +213,7 @@ export const EditFileToolUI: ToolCallContentPartComponent = ({
           {/* Show backend-provided diff first, fallback to args-derived diff */}
           {diffText && (
             <div className="space-y-2">
-              <div className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto">
-                <pre className="text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
-                  {visibleDiffLines.map((line, i) => (
-                    <span
-                      key={i}
-                      className={cn(
-                        "block rounded-sm px-1",
-                        line.startsWith("+ ") && "text-emerald-700 bg-emerald-100/60 border-l-2 border-emerald-500 dark:text-emerald-200 dark:bg-emerald-500/[0.15] dark:border-emerald-400",
-                        line.startsWith("- ") && "text-red-700 bg-red-100/60 border-l-2 border-red-500 dark:text-red-200 dark:bg-red-500/[0.15] dark:border-red-400",
-                        !line.startsWith("+ ") && !line.startsWith("- ") && "text-terminal-muted dark:text-terminal-muted/80"
-                      )}
-                    >
-                      {line}
-                    </span>
-                  ))}
-                </pre>
-              </div>
+              <DiffStyledPre lines={visibleDiffLines} />
 
               {isDiffTruncated && (
                 <button
