@@ -83,6 +83,8 @@ export type BundledRuntimeInfo = {
     bundledNodePath: string | null;
     bundledNpmCliPath: string | null;
     bundledNpxCliPath: string | null;
+    /** Directory containing the real ffmpeg/ffprobe binaries and their dylibs */
+    ffmpegDir: string | null;
 };
 
 export function getResourcesPath(): string | null {
@@ -112,6 +114,12 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
     const bundledCandidates = [nodeBinDir, toolsBinDir, ripgrepBinDir].filter((candidate): candidate is string => Boolean(candidate));
     const bundledBinDirs = bundledCandidates.filter((candidate) => existsSync(candidate));
 
+    // Detect the real ffmpeg binary from @remotion/compositor-* (platform-specific).
+    // The npm .bin/ffmpeg wrapper (from ffmpeg-static) is a JS script that fails with
+    // ENOEXEC when spawn'd with shell:false. The remotion compositor package contains
+    // the actual Mach-O/ELF binary alongside its required dylibs/shared objects.
+    const ffmpegDir = resourcesPath ? detectFfmpegDir(join(resourcesPath, "standalone", "node_modules")) : null;
+
     return {
         resourcesPath,
         isProductionBuild: !!resourcesPath && process.env.ELECTRON_IS_DEV !== "1" && process.env.NODE_ENV !== "development",
@@ -122,7 +130,36 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
         bundledNodePath: bundledNodePath && existsSync(bundledNodePath) ? bundledNodePath : null,
         bundledNpmCliPath: bundledNpmCliPath && existsSync(bundledNpmCliPath) ? bundledNpmCliPath : null,
         bundledNpxCliPath: bundledNpxCliPath && existsSync(bundledNpxCliPath) ? bundledNpxCliPath : null,
+        ffmpegDir,
     };
+}
+
+/**
+ * Detect the @remotion/compositor-* directory containing the real ffmpeg binary.
+ * Returns the directory path if found (contains ffmpeg binary + dylibs), null otherwise.
+ */
+function detectFfmpegDir(nodeModulesPath: string): string | null {
+    // Platform-specific compositor package names
+    const platformMap: Record<string, Record<string, string>> = {
+        darwin: { arm64: "compositor-darwin-arm64", x64: "compositor-darwin-x64" },
+        linux: { arm64: "compositor-linux-arm64-gnu", x64: "compositor-linux-x64-gnu" },
+    };
+    const archMap = platformMap[process.platform];
+    if (!archMap) return null;
+
+    const compositorName = archMap[process.arch];
+    if (!compositorName) return null;
+
+    const compositorDir = join(nodeModulesPath, "@remotion", compositorName);
+    const ffmpegBinary = join(compositorDir, process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
+    if (existsSync(ffmpegBinary)) return compositorDir;
+
+    // Fallback: check ffmpeg-static (some builds may have the real binary there)
+    const ffmpegStaticDir = join(nodeModulesPath, "ffmpeg-static");
+    const ffmpegStaticBinary = join(ffmpegStaticDir, "ffmpeg");
+    if (existsSync(ffmpegStaticBinary)) return ffmpegStaticDir;
+
+    return null;
 }
 
 export function prependBundledPaths(pathValue: string, runtime: BundledRuntimeInfo): string {
@@ -269,7 +306,25 @@ export function resolveBundledNodeCommand(
     env: NodeJS.ProcessEnv,
     runtime: BundledRuntimeInfo,
 ): { command: string; args: string[]; env: NodeJS.ProcessEnv; resolution: string | null } {
-    if (!runtime.resourcesPath || isAbsolute(command)) {
+    if (!runtime.resourcesPath) {
+        return { command, args, env, resolution: null };
+    }
+
+    // Handle absolute paths pointing to the broken .bin/ffmpeg JS wrapper.
+    // The npm wrapper is a JS script that fails with ENOEXEC under spawn(shell:false).
+    // Redirect to the real binary if we detect this pattern.
+    if (isAbsolute(command)) {
+        const base = normalizeExecutable(command);
+        if ((base === "ffmpeg" || base === "ffprobe") && runtime.ffmpegDir) {
+            const isBrokenWrapper = command.includes("node_modules/.bin/");
+            if (isBrokenWrapper) {
+                const realBinary = join(runtime.ffmpegDir, base);
+                if (existsSync(realBinary)) {
+                    const envWithLibPath = setLibraryPath(env, runtime.ffmpegDir);
+                    return { command: realBinary, args, env: envWithLibPath, resolution: `redirected broken .bin/${base} wrapper to real binary` };
+                }
+            }
+        }
         return { command, args, env, resolution: null };
     }
 
@@ -296,7 +351,31 @@ export function resolveBundledNodeCommand(
         };
     }
 
+    // Resolve ffmpeg/ffprobe to the real binary from @remotion/compositor-*.
+    // The npm .bin/ffmpeg wrapper is a JS script that fails with ENOEXEC under
+    // spawn(shell:false). The compositor package has the actual native binary.
+    if ((normalized === "ffmpeg" || normalized === "ffprobe") && runtime.ffmpegDir) {
+        const realBinary = join(runtime.ffmpegDir, normalized);
+        if (existsSync(realBinary)) {
+            const envWithLibPath = setLibraryPath(env, runtime.ffmpegDir);
+            return { command: realBinary, args, env: envWithLibPath, resolution: `resolved '${command}' to bundled ${normalized} at ${runtime.ffmpegDir}` };
+        }
+    }
+
     return { command, args, env, resolution: null };
+}
+
+/**
+ * Set the dynamic library search path so ffmpeg can find its co-located dylibs/shared objects.
+ * macOS uses DYLD_LIBRARY_PATH, Linux uses LD_LIBRARY_PATH.
+ */
+function setLibraryPath(env: NodeJS.ProcessEnv, libDir: string): NodeJS.ProcessEnv {
+    const envKey = process.platform === "darwin" ? "DYLD_LIBRARY_PATH" : "LD_LIBRARY_PATH";
+    const existing = env[envKey];
+    return {
+        ...env,
+        [envKey]: existing ? `${libDir}:${existing}` : libDir,
+    };
 }
 
 export function buildNotFoundDiagnostic(

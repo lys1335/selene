@@ -11,6 +11,21 @@ const rootDir = process.cwd();
 const standaloneDir = path.join(rootDir, '.next', 'standalone');
 const standaloneNextDir = path.join(standaloneDir, '.next');
 
+function syncNodeModulePackage(packageName) {
+    const src = path.join(rootDir, 'node_modules', packageName);
+    const dest = path.join(standaloneDir, 'node_modules', packageName);
+
+    if (!fs.existsSync(src)) {
+        console.log(`Skipping ${packageName} package (not found)`);
+        return;
+    }
+
+    console.log(`Syncing ${packageName} package...`);
+    ensureDir(path.dirname(dest));
+    removePath(dest);
+    copyRecursive(src, dest);
+}
+
 function ensureDir(dir) {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -249,15 +264,7 @@ if (fs.existsSync(remotionSrc)) {
     console.log('Skipping @remotion folder (not found)');
 }
 
-// 5b. Remove @remotion dev-only packages that shouldn't ship in production
-const remotionDevPackages = ['studio', 'studio-server'];
-for (const pkg of remotionDevPackages) {
-    const pkgPath = path.join(remotionDest, pkg);
-    if (fs.existsSync(pkgPath)) {
-        console.log(`  Removing @remotion/${pkg} (dev-only)...`);
-        removePath(pkgPath);
-    }
-}
+// 5b. @remotion/studio and studio-server are intentionally kept — bundler requires studio/renderEntry at runtime
 
 // 6. Copy pdf-parse and its dependencies for PDF parsing support
 // pdf-parse requires: pdfjs-dist (PDF.js library) and @napi-rs/canvas (native canvas bindings)
@@ -343,6 +350,44 @@ for (const dep of embeddingDependencies) {
     }
 }
 
+// 9b. Copy missing Remotion and rspack packages to standalone
+// Next.js standalone trace misses many @remotion/* packages (loaded via dynamic require chains)
+// and @rspack/* native bindings (loaded via optionalDependencies). Copy everything that's in
+// root node_modules but missing from standalone.
+console.log('Copying missing Remotion/rspack/Mediabunny dependencies...');
+const scopedPackagesToSync = ['@remotion', '@rspack', '@mediabunny'];
+for (const scope of scopedPackagesToSync) {
+    const rootScopeDir = path.join(rootDir, 'node_modules', scope);
+    const standaloneScopeDir = path.join(standaloneDir, 'node_modules', scope);
+    if (!fs.existsSync(rootScopeDir)) continue;
+    const rootPackages = fs.readdirSync(rootScopeDir);
+    const standalonePackages = fs.existsSync(standaloneScopeDir)
+        ? fs.readdirSync(standaloneScopeDir)
+        : [];
+    const missing = rootPackages.filter(p => !standalonePackages.includes(p));
+    for (const pkg of missing) {
+        // Skip platform-specific rspack bindings that aren't for this platform
+        if (pkg.startsWith('binding-') && scope === '@rspack') {
+            const expected = `binding-${process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'win32' : 'linux'}-${process.arch}`;
+            if (!pkg.startsWith(expected)) {
+                continue;
+            }
+        }
+        const srcDir = path.join(rootScopeDir, pkg);
+        const destDir = path.join(standaloneScopeDir, pkg);
+        console.log(`  Copying ${scope}/${pkg}...`);
+        ensureDir(standaloneScopeDir);
+        copyRecursive(srcDir, destDir);
+    }
+}
+
+// Next standalone can leave runtime-critical packages partially traced.
+// Remotion's runtime webpack config aliases directly into remotion/dist/esm,
+// and @remotion/studio resolves mediabunny via its ESM export path.
+for (const pkg of ['remotion', 'mediabunny']) {
+    syncNodeModulePackage(pkg);
+}
+
 // 10. Copy rebuilt native modules from root node_modules to standalone
 // This is critical because Next.js standalone doesn't include build files (binding.gyp, src/, deps/)
 // needed by electron-rebuild. We rebuild in root node_modules first, then copy the binaries here.
@@ -377,9 +422,9 @@ for (const mod of nativeModuleBinaries) {
 // These get pulled in by Next.js standalone tracing or transitive deps but aren't needed at runtime.
 // electron: duplicates the Electron framework already in Contents/Frameworks/ (~270 MB)
 // typescript: build-time compiler, not used at runtime (~19 MB)
-// webpack: dragged in by @remotion/bundler transitive deps, not used directly (~7 MB)
+// NOTE: webpack is intentionally kept — @remotion/bundler requires it at runtime for bundle()
 console.log('Removing dev-only packages from standalone...');
-const devOnlyPackages = ['electron', 'typescript', 'webpack'];
+const devOnlyPackages = ['electron', 'typescript'];
 for (const pkg of devOnlyPackages) {
     const pkgPath = path.join(standaloneDir, 'node_modules', pkg);
     if (fs.existsSync(pkgPath)) {
