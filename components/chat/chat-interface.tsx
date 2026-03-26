@@ -1149,10 +1149,12 @@ export default function ChatInterface({
                 // is dead. Reset the stale flag so checkActiveRunRef can detect
                 // the still-running agent and resume background tracking.
                 isForegroundStreamingRef.current = false;
+                console.log("[Background Processing] SSE reconnected — checking active run state");
                 // Always force-reload messages on reconnection. checkActiveRunRef
                 // skips reload when isSameTrackedRun is true, but we always need
                 // to hydrate events that were lost during the disconnect window.
                 await checkActiveRunRef.current();
+                console.log("[Background Processing] After checkActiveRunRef — processingRunId:", bg.processingRunId, "isProcessingInBackground:", bg.isProcessingInBackground);
                 if (sessionId) {
                     void reloadSessionMessages(sessionId, { force: true });
                 }
@@ -1307,13 +1309,14 @@ export default function ChatInterface({
             const detail = (event as CustomEvent<TaskEvent>).detail;
             if (!detail) return;
             if (detail.eventType === "task:completed" && detail.task.sessionId === sessionId) {
+                console.log("[Background Processing] handleTaskCompleted: clearing terminal UI for", detail.task.runId);
                 if (reloadDebounceRef.current) clearTimeout(reloadDebounceRef.current);
                 reloadDebounceRef.current = setTimeout(() => {
                     void reloadSessionMessages(sessionId, { force: true });
                     reloadDebounceRef.current = null;
                 }, 150);
                 void clearTerminalRunUi(detail.task.runId, {
-                    clearTaskState: false,
+                    clearTaskState: true,
                 });
             }
             if (detail.eventType === "task:completed" && detail.task.characterId === character.id) {
