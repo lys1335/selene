@@ -18,7 +18,40 @@ import type { Browser, BrowserContext, Page } from "playwright-core";
 import { join } from "path";
 import { homedir, platform } from "os";
 import { startScreencast, stopScreencast } from "./screencast";
-import { cleanupInputSession } from "./input-dispatcher";
+import { cleanupInputSession, cleanupAllInputSessions } from "./input-dispatcher";
+
+// ─── Timeout helpers ──────────────────────────────────────────────────────────
+
+/** Timeout for graceful browser/context close operations */
+const CLOSE_TIMEOUT_MS = 10_000;
+
+/**
+ * Race a promise against a timeout. Returns the promise result or
+ * rejects with a timeout error. The original promise is NOT cancelled —
+ * this is used to avoid blocking forever on degraded browsers.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+
+    if (typeof timer === "object" && "unref" in timer) {
+      timer.unref();
+    }
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    );
+  });
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -129,8 +162,42 @@ async function ensureBrowser(): Promise<void> {
     await shutdownBrowser();
   }
 
-  // Already connected
-  if (state.browser?.isConnected() || state.persistentContext) return;
+  // Already connected — but verify the browser is actually functional.
+  // isConnected() can return true even when the browser is in a degraded
+  // state (renderer crash, GPU crash). Test with a lightweight operation.
+  if (state.browser?.isConnected() || state.persistentContext) {
+    try {
+      if (state.browser) {
+        // Standalone: test that the browser can allocate a new context.
+        // IMPORTANT: capture the probe promise separately so we can close the
+        // context even if the timeout fires first (prevents BrowserContext leak).
+        const probePromise = state.browser.newContext();
+        try {
+          const probe = await withTimeout(probePromise, 5000, "browser health check");
+          await probe.close();
+        } catch (err) {
+          // Close the probe if it eventually resolved (timeout raced ahead)
+          probePromise.then((ctx) => ctx.close()).catch(() => {});
+          throw err;
+        }
+      } else if (state.persistentContext) {
+        // User-chrome: test that the persistent context can create a page.
+        const probePromise = state.persistentContext.newPage();
+        try {
+          const probe = await withTimeout(probePromise, 5000, "browser health check");
+          await probe.close();
+        } catch (err) {
+          probePromise.then((p) => p.close()).catch(() => {});
+          throw err;
+        }
+      }
+      return;
+    } catch (err) {
+      console.warn("[ChromiumManager] Browser health check failed — forcing restart:", err);
+      await shutdownBrowser();
+      // Fall through to re-launch
+    }
+  }
 
   // Another caller is already launching — wait for it
   if (state.launching) {
@@ -214,10 +281,16 @@ async function launchStandalone(
 
   browser.on("disconnected", () => {
     const s = getState();
+    // Stop all screencasts synchronously (best-effort) — CDP sessions are dead
+    // but we must clear the screencast state so isScreencastActive() returns false
+    // and new sessions can start fresh screencasts.
+    import("./screencast").then(({ stopAllScreencasts }) => stopAllScreencasts()).catch(() => {});
+    cleanupAllInputSessions();
     s.browser = null;
     s.persistentContext = null;
     s.browserMode = null;
     s.sessions.clear();
+    stopReaper();
     console.warn("[ChromiumManager] Browser disconnected — all sessions invalidated");
   });
 
@@ -267,10 +340,13 @@ async function launchUserChrome(
     // returns null. Track the context directly as the top-level resource.
     context.on("close", () => {
       const s = getState();
+      import("./screencast").then(({ stopAllScreencasts }) => stopAllScreencasts()).catch(() => {});
+      cleanupAllInputSessions();
       s.browser = null;
       s.persistentContext = null;
       s.browserMode = null;
       s.sessions.clear();
+      stopReaper();
       console.warn("[ChromiumManager] Persistent context closed — all sessions invalidated");
     });
 
@@ -312,8 +388,34 @@ export async function getOrCreateSession(sessionId: string): Promise<BrowserSess
   const existing = state.sessions.get(sessionId);
 
   if (existing) {
-    existing.lastAccessedAt = Date.now();
-    return existing;
+    // Verify the page is still alive — pages can crash silently during heavy
+    // JS execution (e.g., audio buffers, shadow DOM manipulation) and leave
+    // stale session objects in the map.
+    if (existing.page.isClosed()) {
+      console.warn(`[ChromiumManager] Session ${sessionId} has a closed page — cleaning up and recreating`);
+      await stopScreencast(sessionId);
+      cleanupInputSession(sessionId);
+      state.sessions.delete(sessionId);
+
+      // In user-chrome mode the persistent context is shared across sessions, so
+      // only tear down isolated standalone contexts here.
+      const isSharedPersistentContext =
+        state.persistentContext != null && existing.context === state.persistentContext;
+      if (!isSharedPersistentContext) {
+        try {
+          await withTimeout(
+            existing.context.close(),
+            CLOSE_TIMEOUT_MS,
+            `closing stale context for session ${sessionId}`
+          );
+        } catch {
+          // Ignore — context may already be dead
+        }
+      }
+    } else {
+      existing.lastAccessedAt = Date.now();
+      return existing;
+    }
   }
 
   await ensureBrowser();
@@ -321,24 +423,48 @@ export async function getOrCreateSession(sessionId: string): Promise<BrowserSess
   let context: BrowserContext;
   let page: Page;
 
-  if (state.browserMode === "user-chrome" && state.persistentContext) {
-    // User-chrome mode: reuse the persistent context, create a new page/tab
-    context = state.persistentContext;
-    page = await context.newPage();
-  } else {
-    // Standalone mode: create an isolated context per session
-    if (!state.browser) {
-      throw new Error("[ChromiumManager] Browser not available after ensureBrowser() — this should not happen");
+  try {
+    if (state.browserMode === "user-chrome" && state.persistentContext) {
+      // User-chrome mode: reuse the persistent context, create a new page/tab
+      context = state.persistentContext;
+      page = await context.newPage();
+    } else {
+      // Standalone mode: create an isolated context per session
+      if (!state.browser) {
+        throw new Error("[ChromiumManager] Browser not available after ensureBrowser() — this should not happen");
+      }
+      const browser = state.browser;
+      context = await browser.newContext({
+        viewport: { width: 1280, height: 720 },
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Selene/1.0",
+        javaScriptEnabled: true,
+        ignoreHTTPSErrors: true,
+      });
+      page = await context.newPage();
     }
-    const browser = state.browser;
-    context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Selene/1.0",
-      javaScriptEnabled: true,
-      ignoreHTTPSErrors: true,
-    });
-    page = await context.newPage();
+  } catch (err) {
+    // Context/page creation failed — the browser is likely in a degraded state.
+    // Force a full restart and retry once.
+    console.warn(`[ChromiumManager] Failed to create session context — restarting browser:`, err);
+    await shutdownBrowser();
+    await ensureBrowser();
+
+    if (state.browserMode === "user-chrome" && state.persistentContext) {
+      context = state.persistentContext;
+      page = await context.newPage();
+    } else if (state.browser) {
+      context = await state.browser.newContext({
+        viewport: { width: 1280, height: 720 },
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Selene/1.0",
+        javaScriptEnabled: true,
+        ignoreHTTPSErrors: true,
+      });
+      page = await context.newPage();
+    } else {
+      throw new Error("[ChromiumManager] Browser restart failed — cannot create session");
+    }
   }
 
   const now = Date.now();
@@ -393,14 +519,15 @@ export async function closeSession(sessionId: string): Promise<void> {
 
   try {
     if (state.browserMode === "user-chrome" && state.persistentContext) {
-      // In user-chrome mode, only close the page — the shared context stays alive
-      await session.page.close();
+      // In user-chrome mode, only close the page — the shared context stays alive.
+      await withTimeout(session.page.close(), CLOSE_TIMEOUT_MS, `closing page for session ${sessionId}`);
     } else {
-      // In standalone mode, close the entire isolated context
-      await session.context.close();
+      // In standalone mode, close the entire isolated context.
+      await withTimeout(session.context.close(), CLOSE_TIMEOUT_MS, `closing context for session ${sessionId}`);
     }
   } catch (err) {
-    // Context/page may already be closed if browser disconnected
+    // Context/page may already be closed or a degraded browser may stop responding.
+    // We still drop the session so a fresh one can be created immediately.
     console.warn(`[ChromiumManager] Error closing session ${sessionId}:`, err);
   }
 
@@ -427,9 +554,9 @@ export async function shutdownAll(): Promise<void> {
   if (state.browserMode === "user-chrome") {
     const closePromises = Array.from(state.sessions.values()).map(async (session) => {
       try {
-        await session.page.close();
+        await withTimeout(session.page.close(), CLOSE_TIMEOUT_MS, `closing page for session ${session.sessionId}`);
       } catch {
-        // Ignore — page may already be closed
+        // Ignore — page may already be closed or the browser may be degraded
       }
     });
     await Promise.allSettled(closePromises);
@@ -437,9 +564,9 @@ export async function shutdownAll(): Promise<void> {
     // Standalone mode: each session has its own isolated context
     const closePromises = Array.from(state.sessions.values()).map(async (session) => {
       try {
-        await session.context.close();
+        await withTimeout(session.context.close(), CLOSE_TIMEOUT_MS, `closing context for session ${session.sessionId}`);
       } catch {
-        // Ignore — browser may already be gone
+        // Ignore — browser may already be gone or the close may have stalled
       }
     });
     await Promise.allSettled(closePromises);
@@ -468,18 +595,22 @@ async function shutdownBrowser(): Promise<void> {
   // In user-chrome mode, close the persistent context first (closes browser too)
   if (state.persistentContext) {
     try {
-      await state.persistentContext.close();
+      await withTimeout(
+        state.persistentContext.close(),
+        CLOSE_TIMEOUT_MS,
+        "closing persistent browser context"
+      );
     } catch {
-      // Ignore
+      // Ignore — the browser may already be gone or the close may have stalled
     }
     state.persistentContext = null;
   }
 
   if (state.browser) {
     try {
-      await state.browser.close();
+      await withTimeout(state.browser.close(), CLOSE_TIMEOUT_MS, "closing browser");
     } catch {
-      // Ignore — may already be closed by persistent context teardown
+      // Ignore — may already be closed by persistent context teardown or the close may have stalled
     }
     state.browser = null;
   }

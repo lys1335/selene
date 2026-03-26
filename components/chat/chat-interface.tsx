@@ -909,8 +909,14 @@ export default function ChatInterface({
             return { sessionId: targetSessionId, messages: uiMessages };
         });
 
-        // Update thread in-place via AI SDK setMessages (no remount needed)
-        if (chatSetMessagesRef.current) {
+        // ── Streaming guard ──────────────────────────────────────────────────
+        // During foreground streaming, the AI SDK builds message parts
+        // incrementally from stream chunks. Pushing a DB snapshot via
+        // setMessages mid-stream causes parts-array misalignment — text parts
+        // leak into tool-call groups because React keeps stale index mappings.
+        // Skip the thread update here; handleForegroundRunFinished will force
+        // a full reconciliation once the stream ends.
+        if (!isForegroundStreamingRef.current && chatSetMessagesRef.current) {
             chatSetMessagesRef.current(uiMessages);
         }
 
@@ -919,7 +925,7 @@ export default function ChatInterface({
             messageCount: conversationalMessageCount,
         });
         sm.refreshSessionTimestamp(targetSessionId);
-    }, [bg.isRunActiveRef, sm.fetchSessionMessages, sm.notifySessionUpdate, sm.refreshSessionTimestamp]);
+    }, [bg.isRunActiveRef, isForegroundStreamingRef, sm.fetchSessionMessages, sm.notifySessionUpdate, sm.refreshSessionTimestamp]);
 
     const handleOverlaySessionUpdated = useCallback(async (
         payload: { sessionId: string; characterId: string }
@@ -1416,6 +1422,14 @@ export default function ChatInterface({
                 isChannelSession,
                 isProcessingInBackground: bg.isProcessingInBackground,
             })) return;
+
+            // Foreground streaming is authoritative for the visible thread.
+            // Ignore progress-driven DB reloads until the stream completes,
+            // then reconcile once via handleForegroundRunFinished.
+            if (isForegroundStreamingRef.current) {
+                return;
+            }
+
             const now = Date.now();
             if (now - lastProgressTimeRef.current < PROGRESS_THROTTLE_MS) return;
             lastProgressTimeRef.current = now;
@@ -1429,7 +1443,7 @@ export default function ChatInterface({
         };
         window.addEventListener("background-task-progress", handleTaskProgress);
         return () => window.removeEventListener("background-task-progress", handleTaskProgress);
-    }, [isChannelSession, bg.isProcessingInBackground, sm.refreshSessionTimestamp, reloadSessionMessages, sessionId]);
+    }, [isChannelSession, bg.isProcessingInBackground, isForegroundStreamingRef, sm.refreshSessionTimestamp, reloadSessionMessages, sessionId]);
 
     // Global keyboard shortcut: Cmd+N / Ctrl+N → new session
     useEffect(() => {
