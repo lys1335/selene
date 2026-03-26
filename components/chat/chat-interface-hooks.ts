@@ -296,6 +296,9 @@ export function useBackgroundProcessing({
                             pollingIntervalRef.current = null;
                         }
                         activePollingRunIdRef.current = null;
+                        // Unblock deferral gates so reconnection can hydrate
+                        // messages from DB without being blocked by stale state.
+                        isRunActiveRef.current = false;
                     }
                     return;
                 }

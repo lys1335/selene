@@ -916,7 +916,9 @@ export default function ChatInterface({
         // leak into tool-call groups because React keeps stale index mappings.
         // Skip the thread update here; handleForegroundRunFinished will force
         // a full reconciliation once the stream ends.
-        if (!isForegroundStreamingRef.current && chatSetMessagesRef.current) {
+        // Exception: force=true (reconnection recovery) bypasses this guard
+        // because the original stream is dead and won't reconcile anything.
+        if ((!isForegroundStreamingRef.current || options?.force) && chatSetMessagesRef.current) {
             chatSetMessagesRef.current(uiMessages);
         }
 
@@ -1100,6 +1102,9 @@ export default function ChatInterface({
         if (typeof window === "undefined") return;
         const handleVisibility = () => {
             if (document.visibilityState !== "visible" || !sessionId) return;
+            // Tab re-focus after potential network loss — clear stale streaming
+            // flag so active-run detection isn't gated by a dead stream.
+            isForegroundStreamingRef.current = false;
             if (bg.processingRunId) {
                 // Already tracking a run — restart polling + refresh messages
                 bg.startPollingForCompletion(bg.processingRunId);
@@ -1128,6 +1133,10 @@ export default function ChatInterface({
             if (reconnectCheckDebounceRef.current) clearTimeout(reconnectCheckDebounceRef.current);
             reconnectCheckDebounceRef.current = setTimeout(() => {
                 reconnectCheckDebounceRef.current = null;
+                // The SSE reconnect itself is evidence that any foreground stream
+                // is dead. Reset the stale flag so checkActiveRunRef can detect
+                // the still-running agent and resume background tracking.
+                isForegroundStreamingRef.current = false;
                 void checkActiveRunRef.current();
             }, 300);
         };
