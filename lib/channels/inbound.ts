@@ -127,8 +127,15 @@ interactiveBridgeEvents.on("pending", async ({ sessionId, toolUseId, questions }
     });
 
     const firstPrompt = Array.isArray(prompt) ? prompt[0] : prompt;
-    const questionText = getInteractivePromptQuestionText(prompt);
+    let questionText = getInteractivePromptQuestionText(prompt);
     const instructionText = getInteractivePromptInstructionText(prompt);
+
+    // For plan approval prompts, include the plan body in the question text
+    // so native connectors (Telegram inline buttons) show the full plan,
+    // not just "Review the plan and choose how to continue."
+    if (!Array.isArray(prompt) && "plan" in prompt && typeof prompt.plan === "string" && prompt.plan.trim()) {
+      questionText = `${questionText}\n\n${prompt.plan.trim()}`;
+    }
     const multiSelect = Array.isArray(prompt) ? (prompt[0]?.multiSelect ?? false) : false;
 
     const options = firstPrompt.options.map((opt, i) => ({
