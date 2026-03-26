@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCanonicalAssistantContentFromSteps,
   mergeCanonicalAssistantContent,
+  consolidateAdjacentTextParts,
   reconcileDbToolCallResultPairs,
   isReconstructedMissingResult,
   countCanonicalTruncationMarkers,
@@ -75,12 +76,14 @@ describe("mergeCanonicalAssistantContent", () => {
     expect((textParts[0] as { text: string }).text).toBe("hello world");
   });
 
-  it("genuinely new text → append", () => {
+  it("genuinely new text → append and consolidate", () => {
     const streamed = [textPart("alpha")];
     const step = [textPart("beta")];
     const merged = mergeCanonicalAssistantContent(streamed, step);
     const textParts = merged.filter((p) => p.type === "text");
-    expect(textParts).toHaveLength(2);
+    // Adjacent text parts are consolidated with paragraph break
+    expect(textParts).toHaveLength(1);
+    expect((textParts[0] as { text: string }).text).toBe("alpha\n\nbeta");
   });
 
   // ── blob-drop heuristic (multi-part subsumption) ─────────────────────
@@ -158,18 +161,18 @@ describe("mergeCanonicalAssistantContent", () => {
     expect(textParts).toHaveLength(1);
   });
 
-  it("fake tool JSON as entire streaming text: step text appended as new content", () => {
+  it("fake tool JSON as entire streaming text: step text appended and consolidated", () => {
     // Streaming text is ONLY fake tool JSON (no real text). Step has real text.
-    // They don't overlap at all → step text appended.
+    // They don't overlap at all → step text appended → adjacent texts consolidated.
     const fakeToolJson = '{"type":"tool-call","toolCallId":"tc_123","toolName":"Read","args":{}}';
     const streamed = [textPart(fakeToolJson)];
     const step = [textPart("Let me check.")];
 
     const merged = mergeCanonicalAssistantContent(streamed, step);
     const textParts = merged.filter((p) => p.type === "text");
-    // 2 parts: original fake-JSON text (still in base) + new step text
-    expect(textParts).toHaveLength(2);
-    expect((textParts[1] as { text: string }).text).toBe("Let me check.");
+    // Adjacent text parts consolidated into 1
+    expect(textParts).toHaveLength(1);
+    expect((textParts[0] as { text: string }).text).toContain("Let me check.");
   });
 
   // ── tool-call/result merging ──────────────────────────────────────────
@@ -371,6 +374,107 @@ describe("buildCanonicalAssistantContentFromSteps", () => {
     ]);
     const results = parts.filter((p) => p.type === "tool-result");
     expect(results).toHaveLength(1);
+  });
+
+  it("deduplicates identical text across steps", () => {
+    const parts = buildCanonicalAssistantContentFromSteps([
+      { text: "All done. The task is complete." },
+      {
+        toolCalls: [{ toolCallId: "tc1", toolName: "executeCommand", input: { command: "git status" } }],
+        toolResults: [{ toolCallId: "tc1", output: { stdout: "clean" } }],
+        text: "All done. The task is complete.",
+      },
+    ]);
+    const textParts = parts.filter((p) => p.type === "text");
+    expect(textParts).toHaveLength(1);
+    expect((textParts[0] as { text: string }).text).toBe("All done. The task is complete.");
+  });
+
+  it("keeps genuinely different text across steps", () => {
+    const parts = buildCanonicalAssistantContentFromSteps([
+      { text: "Let me check the results." },
+      {
+        toolCalls: [{ toolCallId: "tc1", toolName: "executeCommand", input: { command: "npm test" } }],
+        toolResults: [{ toolCallId: "tc1", output: { stdout: "ok" } }],
+        text: "All tests pass. Done.",
+      },
+    ]);
+    const textParts = parts.filter((p) => p.type === "text");
+    expect(textParts).toHaveLength(2);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// consolidateAdjacentTextParts
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("consolidateAdjacentTextParts", () => {
+  it("merges adjacent text parts with paragraph break", () => {
+    const parts: DBContentPart[] = [
+      textPart("Typecheck passes — 0 errors."),
+      textPart("All done. The test file is in place."),
+    ];
+    const consolidated = consolidateAdjacentTextParts(parts);
+    expect(consolidated).toHaveLength(1);
+    expect((consolidated[0] as { text: string }).text).toBe(
+      "Typecheck passes — 0 errors.\n\nAll done. The test file is in place."
+    );
+  });
+
+  it("does not merge text parts separated by tool parts", () => {
+    const parts: DBContentPart[] = [
+      textPart("Before tool."),
+      toolCall("tc1", "Read"),
+      toolResult("tc1", "Read"),
+      textPart("After tool."),
+    ];
+    const consolidated = consolidateAdjacentTextParts(parts);
+    const textParts = consolidated.filter((p) => p.type === "text");
+    expect(textParts).toHaveLength(2);
+  });
+
+  it("merges 3+ adjacent text parts", () => {
+    const parts: DBContentPart[] = [
+      textPart("Part 1."),
+      textPart("Part 2."),
+      textPart("Part 3."),
+    ];
+    const consolidated = consolidateAdjacentTextParts(parts);
+    expect(consolidated).toHaveLength(1);
+    expect((consolidated[0] as { text: string }).text).toBe(
+      "Part 1.\n\nPart 2.\n\nPart 3."
+    );
+  });
+
+  it("handles empty/whitespace text parts gracefully", () => {
+    const parts: DBContentPart[] = [
+      textPart("Hello."),
+      textPart(""),
+      textPart("World."),
+    ];
+    const consolidated = consolidateAdjacentTextParts(parts);
+    expect(consolidated).toHaveLength(1);
+  });
+
+  it("returns single-element arrays unchanged", () => {
+    const parts: DBContentPart[] = [textPart("Only one.")];
+    const consolidated = consolidateAdjacentTextParts(parts);
+    expect(consolidated).toHaveLength(1);
+    expect((consolidated[0] as { text: string }).text).toBe("Only one.");
+  });
+
+  it("empty streamed + duplicate step text → deduplicated and consolidated", () => {
+    // This is the regression scenario: base.length === 0, step content has
+    // adjacent duplicate text parts from multi-step execution
+    const stepContent = buildCanonicalAssistantContentFromSteps([
+      { text: "All done. Task complete." },
+      { text: "All done. Task complete." },
+    ]);
+    const merged = mergeCanonicalAssistantContent(undefined, stepContent);
+    const textParts = merged.filter((p) => p.type === "text");
+    // Should be deduplicated to 1 by buildCanonicalAssistantContentFromSteps
+    expect(textParts).toHaveLength(1);
+    expect((textParts[0] as { text: string }).text).toBe("All done. Task complete.");
   });
 });
 

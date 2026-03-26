@@ -106,17 +106,29 @@ export function shouldStopTurn(input: {
   initiatorSessionId: string;
   stepCount: number;
   maxSteps: number;
+  provider?: string;
 }): boolean {
   if (input.stepCount >= input.maxSteps) {
     return true;
   }
 
-  // Never force-stop a turn due to async work status. Delegations and
-  // background tasks run asynchronously — the model needs follow-up steps
-  // to observe results. The AI SDK loop ends naturally when the model stops
-  // making tool calls (outputs text-only response).
+  // Claude Code Agent SDK handles tool execution internally — its SSE
+  // response includes tool_use blocks (Read, Edit, Bash, etc.) from those
+  // internal executions. The AI SDK sees them, can't match them to Selene
+  // tools, and would continue to a second step — triggering another Claude
+  // Code SDK query that produces a duplicate response.
   //
-  // To prevent premature turn ending, prepareStep sets toolChoice="required"
-  // while async work is in-flight, forcing the model to keep calling tools.
+  // Stop after the initial step UNLESS there's active async work
+  // (delegations / background tasks) that the model needs follow-up steps
+  // to observe. prepareStep already forces toolChoice="required" during
+  // async work, so those follow-up steps will be tool calls (observe),
+  // not standalone text that would duplicate the response.
+  if (input.provider === "claudecode" && input.stepCount > 0) {
+    return !hasActiveAsyncWork(input.characterId, input.initiatorSessionId);
+  }
+
+  // For other providers, never force-stop. The AI SDK loop ends naturally
+  // when the model stops making tool calls (outputs text-only response).
+  // prepareStep sets toolChoice="required" while async work is in-flight.
   return false;
 }

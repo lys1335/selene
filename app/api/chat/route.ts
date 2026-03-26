@@ -1021,15 +1021,16 @@ export async function POST(req: Request) {
             toolChoice: AI_CONFIG.toolChoice,
           } : {}),
           abortSignal: streamAbortSignal,
-          // Delegation-aware step control: only enforces maxSteps. Delegations
-          // always run in background mode and the model collects results via
-          // observe() — shouldStopTurn never force-stops mid-delegation so the
-          // model has steps available to observe and process sub-agent results.
+          // Provider-aware step control. Claude Code SDK handles tool execution
+          // internally, so we stop after the initial step unless async work
+          // (delegations/background tasks) needs observation. Other providers
+          // run Selene tools natively and can loop freely up to maxSteps.
           stopWhen: ({ steps }) => shouldStopTurn({
             characterId,
             initiatorSessionId: sessionId,
             stepCount: steps.length,
             maxSteps: AI_CONFIG.maxSteps,
+            provider,
           }),
           temperature: await getSessionProviderTemperatureForSession(
             sessionMetadata,
