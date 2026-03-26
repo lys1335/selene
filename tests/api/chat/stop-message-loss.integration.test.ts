@@ -337,7 +337,7 @@ describe("Stop Message Loss Prevention", () => {
    * Validates that a stopped assistant message containing partial tool calls
    * is preserved through the next turn's sync.
    */
-  it("filters unresolved tool calls from streaming persistence until a result exists", async () => {
+  it("persists unresolved tool calls once their input is finalized", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const state = makeStreamingState([
       { type: "text", text: "Working" },
@@ -352,16 +352,18 @@ describe("Stop Message Loss Prevention", () => {
 
     const filtered = filterStreamingPartsForPersistence(state);
 
-    expect(filtered).toEqual([{ type: "text", text: "Working" }]);
-    expect(warnSpy).toHaveBeenCalledWith(
-      "[CHAT API] Dropped unresolved projected tool call",
-      expect.objectContaining({
+    expect(filtered).toEqual([
+      { type: "text", text: "Working" },
+      {
+        type: "tool-call",
         toolCallId: "tc-unsealed",
         toolName: "localGrep",
-        reason: "unresolved-no-result",
-        projection: "streaming-persistence",
-      })
-    );
+        state: "input-available",
+        args: { pattern: "todo" },
+        active: true,
+      },
+    ]);
+    expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 

@@ -54,7 +54,7 @@ describe("sanitizeMessagesForInit", () => {
     expect((activePart as any).active).toBe(true);
   });
 
-  it("removes dangling input-streaming and input-available tool parts", () => {
+  it("removes unresolved tool parts that are not marked pending", () => {
     const messages = [
       {
         id: "assistant-1",
@@ -93,6 +93,32 @@ describe("sanitizeMessagesForInit", () => {
       .map((part: any) => part.toolCallId);
 
     expect(toolCallIds).toEqual(["tool-complete"]);
+  });
+
+  it("keeps unresolved input-available tool parts when marked pending", () => {
+    const messages = [
+      {
+        id: "assistant-pending",
+        role: "assistant",
+        parts: [
+          { type: "text", text: "delegating" },
+          {
+            type: "tool-delegateToSubagent",
+            toolCallId: "tool-pending",
+            state: "input-available",
+            input: { action: "start", agentName: "Reviewer" },
+            active: true,
+          },
+        ],
+      },
+    ] as any;
+
+    const sanitized = sanitizeMessagesForInit(messages);
+    const assistant = sanitized[0];
+    const pendingPart = assistant.parts.find((part: any) => part.toolCallId === "tool-pending");
+
+    expect(pendingPart).toBeDefined();
+    expect((pendingPart as any).active).toBe(true);
   });
 
   it("keeps interrupted tool parts with output payloads", () => {

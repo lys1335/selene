@@ -139,6 +139,38 @@ describe("converter internal tool history guard", () => {
     ]);
   });
 
+  it("preserves unresolved pending tool calls through DB to UI conversion", () => {
+    const now = new Date().toISOString();
+
+    const uiMessages = convertDBMessagesToUIMessages([
+      {
+        id: "a-pending",
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call-pending",
+            toolName: "delegateToSubagent",
+            args: { action: "start", agentName: "Reviewer" },
+            state: "input-available",
+            active: true,
+          },
+        ],
+        createdAt: now,
+        orderingIndex: 1,
+      },
+    ] as any);
+
+    expect(uiMessages).toHaveLength(1);
+    const toolPart = uiMessages[0]?.parts.find(
+      (part: any) => part.toolCallId === "call-pending"
+    ) as any;
+    expect(toolPart).toBeDefined();
+    expect(toolPart.state).toBe("input-available");
+    expect(toolPart.active).toBe(true);
+    expect(toolPart.output).toBeUndefined();
+  });
+
   it("preserves persisted attachment metadata on rehydrated UI messages", () => {
     const now = new Date().toISOString();
 

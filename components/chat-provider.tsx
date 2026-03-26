@@ -44,6 +44,7 @@ import {
   getDocumentTypeLabel,
   isImageAttachment,
 } from "@/lib/documents/file-types";
+import { INTERACTIVE_TOOL_NAME_SET } from "@/lib/interactive-tools/constants";
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -229,6 +230,25 @@ function useDynamicChatTransport<T extends AssistantChatTransport<UIMessage>>(tr
   );
 }
 
+function isInteractiveToolPart(part: { type?: string }): boolean {
+  const partToolName = typeof part.type === "string" ? part.type.replace("tool-", "") : "";
+  return INTERACTIVE_TOOL_NAME_SET.has(partToolName);
+}
+
+function isPendingToolPart(part: {
+  state?: string;
+  output?: unknown;
+  result?: unknown;
+  active?: boolean;
+}): boolean {
+  return (
+    part.state === "input-available" &&
+    part.output === undefined &&
+    part.result === undefined &&
+    part.active === true
+  );
+}
+
 export function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
   return messages.map((msg) => {
     if (!msg.parts || !Array.isArray(msg.parts)) return msg;
@@ -253,6 +273,7 @@ export function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
       if (part.type?.startsWith("tool-") && part.toolCallId) {
         const toolCallId = part.toolCallId;
         const key = `${msg.id}:${toolCallId}`;
+        const keepPendingPart = isPendingToolPart(part) || isInteractiveToolPart(part);
 
         if (seenToolCalls.has(toolCallId)) {
           if (!loggedSanitizerToolCallIds.has(key)) {
@@ -281,24 +302,8 @@ export function sanitizeMessagesForInit(messages: UIMessage[]): UIMessage[] {
           part.output === undefined &&
           part.result === undefined &&
           !toolCallsWithOutput.has(toolCallId) &&
-          !(part as { active?: boolean }).active
+          !keepPendingPart
         ) {
-          // Interactive tools (ExitPlanMode, AskUserQuestion, AskFollowupQuestion) persist
-          // to the DB without a result while waiting for user input. Don't strip them —
-          // they need to render in the UI so the user can respond (especially in background
-          // mode where the client reloads from DB). Mirrors INTERACTIVE_TOOL_NAMES in
-          // app/api/chat/streaming-progress.ts.
-          const partToolName = typeof part.type === "string" ? part.type.replace("tool-", "") : "";
-          if (
-            partToolName === "ExitPlanMode" ||
-            partToolName === "AskUserQuestion" ||
-            partToolName === "AskFollowupQuestion" ||
-            partToolName === "askUserQuestion" ||
-            partToolName === "askFollowupQuestion"
-          ) {
-            return true;
-          }
-
           if (!loggedSanitizerToolCallIds.has(key)) {
             loggedSanitizerToolCallIds.add(key);
             console.warn("[ChatProvider] Removing dangling input-available tool part:", toolCallId);

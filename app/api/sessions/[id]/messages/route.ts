@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/local-auth";
 import { getSessionWithMessages, updateMessage, getOrCreateLocalUser } from "@/lib/db/queries";
 import { loadSettings } from "@/lib/settings/settings-manager";
+import { listAgentRunsBySession } from "@/lib/observability/queries";
+import { isStale } from "@/lib/utils/timestamp";
 
 type RouteParams = { params: Promise<{ id: string }> };
 

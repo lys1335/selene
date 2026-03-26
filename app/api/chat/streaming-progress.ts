@@ -65,14 +65,47 @@ function emitDroppedToolCallTelemetry(
  */
 const INTERACTIVE_TOOL_NAMES = INTERACTIVE_TOOL_NAME_SET;
 
+function buildPendingToolCallProjection(part: DBToolCallPart): DBToolCallPart | null {
+  const isFinalizedInputState = part.state === undefined || part.state === "input-available";
+  if (!isFinalizedInputState) {
+    return null;
+  }
+
+  if (part.args !== undefined) {
+    return {
+      ...part,
+      state: part.state ?? "input-available",
+      active: true,
+    };
+  }
+
+  if (typeof part.argsText !== "string" || part.argsText.length === 0) {
+    return null;
+  }
+
+  try {
+    return {
+      ...part,
+      args: JSON.parse(part.argsText),
+      state: "input-available",
+      active: true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function filterStreamingPartsForPersistence(
   streamingState: StreamingMessageState
 ): DBContentPart[] {
   const persistedToolResultIds = collectPersistedToolResultIds(streamingState.parts);
 
-  return streamingState.parts.filter((part) => {
+  const filteredParts: DBContentPart[] = [];
+
+  for (const part of streamingState.parts) {
     if (part.type !== "tool-call") {
-      return true;
+      filteredParts.push(part);
+      continue;
     }
 
     const hasCompleteArgs = part.args !== undefined;
@@ -89,14 +122,13 @@ export function filterStreamingPartsForPersistence(
       const hasArgContent =
         hasCompleteArgs ||
         (typeof part.argsText === "string" && part.argsText.length > 0);
-      if (hasArgContent) return true;
-      // Nothing to render yet (streaming just started) — suppress until content arrives.
-      return false;
+      if (hasArgContent) filteredParts.push(part);
+      continue;
     }
 
     if (isStillStreaming && !hasCompleteArgs) {
       emitDroppedToolCallTelemetry(streamingState, part, "input-streaming", persistedToolResultIds);
-      return false;
+      continue;
     }
 
     if (!hasCompleteArgs && part.argsText) {
@@ -104,22 +136,30 @@ export function filterStreamingPartsForPersistence(
         JSON.parse(part.argsText);
       } catch {
         emitDroppedToolCallTelemetry(streamingState, part, "malformed-args", persistedToolResultIds);
-        return false;
+        continue;
       }
     }
 
     if (!persistedToolResultIds.has(part.toolCallId)) {
+      const pendingProjection = buildPendingToolCallProjection(part);
+      if (pendingProjection) {
+        filteredParts.push(pendingProjection);
+        continue;
+      }
+
       emitDroppedToolCallTelemetry(
         streamingState,
         part,
         "unresolved-no-result",
         persistedToolResultIds,
       );
-      return false;
+      continue;
     }
 
-    return true;
-  });
+    filteredParts.push(part);
+  }
+
+  return filteredParts;
 }
 
 export function buildProgressContentSnapshot(
