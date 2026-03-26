@@ -793,8 +793,13 @@ export function useTaskNotifications() {
           })
         );
       }
-      const isActualBackgroundCompleted = task.type === "scheduled" || isDelegationChat;
-      if (isActualBackgroundCompleted) {
+      // Dispatch for all chat/scheduled/delegation completions. For foreground
+      // chat runs that completed while the client was disconnected (network
+      // interruption), this is the ONLY signal that triggers message reload
+      // and terminal UI cleanup in the chat interface. For runs that completed
+      // normally (stream delivered everything), the extra reload is a no-op.
+      const shouldDispatchCompletion = task.type === "chat" || task.type === "scheduled" || isDelegationChat;
+      if (shouldDispatchCompletion) {
         dispatchLifecycleEvent("background-task-completed", event);
       }
 

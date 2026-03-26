@@ -258,7 +258,14 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
       const canonicalStatus = getStatus(partLike);
       // Always read liveStatus — even for completed tools — so elapsedMs and steps survive past completion.
       const liveStatus = partLike.toolCallId ? liveStatuses[partLike.toolCallId] : undefined;
-      const phase = liveStatus?.phase ?? getFallbackToolPhase(part.result, canonicalStatus === "running");
+      // When the tool has a result (DB-persisted), trust canonical status over
+      // stale liveStatus. This prevents a "running" live phase from overriding
+      // a tool that actually completed (e.g. after network reconnection when
+      // the completion progress event was missed).
+      const isCanonicalTerminal = canonicalStatus === "completed" || canonicalStatus === "error";
+      const phase = isCanonicalTerminal
+        ? getFallbackToolPhase(part.result, false)
+        : (liveStatus?.phase ?? getFallbackToolPhase(part.result, canonicalStatus === "running"));
       const detail = liveStatus?.detail;
       const inputPreview = liveStatus?.argsPreview ?? summarizeToolInputByName(canonicalToolName, partLike.input ?? partLike.args ?? partLike.argsText);
       const outputPreview = liveStatus?.outputPreview ?? summarizeToolOutputByName(canonicalToolName, part.result);
@@ -273,14 +280,16 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
       return {
         key: partLike.toolCallId ?? `${part.toolName}-${index}`,
         label,
-        badgeStatus: liveStatus ? phaseToBadgeStatus(liveStatus.phase) : canonicalStatus,
+        badgeStatus: isCanonicalTerminal ? canonicalStatus : (liveStatus ? phaseToBadgeStatus(liveStatus.phase) : canonicalStatus),
         phase,
         count,
         detail,
         inputPreview,
         outputPreview,
         elapsedMs: isAgent ? liveStatus?.elapsedMs : undefined,
-        startedAt: isAgent ? liveStatus?.startedAt : undefined,
+        // Clear startedAt when tool completed (stops the live timer).
+        // The final elapsedMs is preserved above for display.
+        startedAt: isAgent && !isCanonicalTerminal ? liveStatus?.startedAt : undefined,
         steps: isAgent ? liveStatus?.steps : undefined,
       };
     });

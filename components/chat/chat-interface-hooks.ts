@@ -339,6 +339,10 @@ export function useBackgroundProcessing({
                         pollingIntervalRef.current = null;
                     }
                     activePollingRunIdRef.current = null;
+                    // Mirror the error-branch cleanup: unblock deferral gates
+                    // so reconnect-triggered message reloads aren't gated by
+                    // stale "run active" state.
+                    isRunActiveRef.current = false;
                 }
             }
         };

@@ -1064,9 +1064,14 @@ export default function ChatInterface({
             }
 
             if (bg.processingRunId) {
+                // Run completed while disconnected — clear state and reload
+                // final messages so the completed output reaches UI.
                 await clearTerminalRunUi(bg.processingRunId, {
                     clearTaskState: true,
+                    refreshMessages: true,
                 });
+                // Also force-reload to bypass any stale signature checks.
+                void reloadSessionMessages(targetSessionId, { force: true });
                 return;
             }
 
@@ -1102,9 +1107,16 @@ export default function ChatInterface({
         if (typeof window === "undefined") return;
         const handleVisibility = () => {
             if (document.visibilityState !== "visible" || !sessionId) return;
-            // Tab re-focus after potential network loss — clear stale streaming
-            // flag so active-run detection isn't gated by a dead stream.
-            isForegroundStreamingRef.current = false;
+            // Only clear the foreground streaming flag if we're NOT actively
+            // streaming. During a healthy foreground stream the flag must stay
+            // true, otherwise checkActiveRunRef treats the live run as "detached"
+            // and DB hydration clobbers the in-flight stream.
+            if (isForegroundStreamingRef.current && bg.processingRunId) {
+                // Foreground stream is (presumably) still alive — don't reset.
+                // The sse-tasks-reconciled handler covers actual disconnects.
+            } else {
+                isForegroundStreamingRef.current = false;
+            }
             if (bg.processingRunId) {
                 // Already tracking a run — restart polling + refresh messages
                 bg.startPollingForCompletion(bg.processingRunId);
@@ -1131,13 +1143,19 @@ export default function ChatInterface({
         const handleReconciled = () => {
             // Debounce to coalesce rapid reconnects (e.g. SSE flapping)
             if (reconnectCheckDebounceRef.current) clearTimeout(reconnectCheckDebounceRef.current);
-            reconnectCheckDebounceRef.current = setTimeout(() => {
+            reconnectCheckDebounceRef.current = setTimeout(async () => {
                 reconnectCheckDebounceRef.current = null;
                 // The SSE reconnect itself is evidence that any foreground stream
                 // is dead. Reset the stale flag so checkActiveRunRef can detect
                 // the still-running agent and resume background tracking.
                 isForegroundStreamingRef.current = false;
-                void checkActiveRunRef.current();
+                // Always force-reload messages on reconnection. checkActiveRunRef
+                // skips reload when isSameTrackedRun is true, but we always need
+                // to hydrate events that were lost during the disconnect window.
+                await checkActiveRunRef.current();
+                if (sessionId) {
+                    void reloadSessionMessages(sessionId, { force: true });
+                }
             }, 300);
         };
         window.addEventListener("sse-tasks-reconciled", handleReconciled);
@@ -1288,7 +1306,7 @@ export default function ChatInterface({
         const handleTaskCompleted = (event: Event) => {
             const detail = (event as CustomEvent<TaskEvent>).detail;
             if (!detail) return;
-            if (detail.eventType === "task:completed" && isBackgroundTask(detail.task) && detail.task.sessionId === sessionId) {
+            if (detail.eventType === "task:completed" && detail.task.sessionId === sessionId) {
                 if (reloadDebounceRef.current) clearTimeout(reloadDebounceRef.current);
                 reloadDebounceRef.current = setTimeout(() => {
                     void reloadSessionMessages(sessionId, { force: true });

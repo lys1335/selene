@@ -1406,7 +1406,15 @@ export async function POST(req: Request) {
           try {
             controller.enqueue(chunk);
           } catch {
-            // Controller already cancelled (client disconnected) — stop enqueuing
+            if (clientDisconnected) {
+              // Client gone — silently discard but DON'T set closed. The pump
+              // must keep reading from the AI SDK pipeline so the internal
+              // TransformStream chain stays alive, onChunk keeps firing
+              // (→ syncStreamingMessage persists to DB), and onFinish fires
+              // when the provider completes (→ run finalizes properly).
+              return;
+            }
+            // Non-disconnect error — stop the pump.
             closed = true;
           }
         };
@@ -1528,8 +1536,11 @@ export async function POST(req: Request) {
         void pump();
       },
       async cancel(_reason) {
-        // Mark client as gone so the pump stops emitting and finalizeAndEmitError
-        // skips writing to the closed transport.
+        // Mark client as gone so emitChunk silently discards instead of setting
+        // closed=true. The pump KEEPS consuming the AI SDK pipeline in the
+        // background — this is critical because onChunk (syncStreamingMessage)
+        // and onFinish (run finalization) live inside TransformStream.flush()
+        // and only fire when the pipeline is fully consumed.
         markClientDisconnected();
         // Do NOT cancel activeUiReader — cancellation propagates upstream through
         // the AI SDK stream and can abort the LLM call, defeating the signal
