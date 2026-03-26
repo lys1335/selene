@@ -110,6 +110,7 @@ export function buildWorkflowPromptContext(input: WorkflowPromptContextInput): s
       "- Choose target subagent from directory by explicit purpose match before starting delegation.",
       "- Integrate and synthesize subagent results back to the user with clear decisions and next actions.",
       "- Multiple parallel delegations to the same subagent are supported — each gets its own session and delegationId.",
+      "- IMPORTANT: When launching multiple delegations, emit ALL start calls in a single response. Never emit one start call per turn — that is sequential, not parallel.",
       "",
       "## Background Mode",
       "- mode='background' returns immediately with a delegationId. Use observe(waitSeconds=180) to check progress.",
