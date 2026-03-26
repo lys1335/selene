@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getCharacterFull: vi.fn(),
   createSession: vi.fn(),
   getObserveMessageSummary: vi.fn(),
+  getObserveStepsSince: vi.fn(),
   listAgentRunsBySession: vi.fn(),
   markRunAsCancelled: vi.fn(),
   abortChatRun: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock("@/lib/characters/queries", () => ({
 vi.mock("@/lib/db/sqlite-queries", () => ({
   createSession: mocks.createSession,
   getObserveMessageSummary: mocks.getObserveMessageSummary,
+  getObserveStepsSince: mocks.getObserveStepsSince,
 }));
 
 vi.mock("@/lib/observability/queries", () => ({
@@ -167,6 +169,10 @@ describe("delegate-to-subagent-tool session isolation", () => {
       assistantMessageCount: 0,
       messageCount: 0,
       toolMessageCount: 0,
+    });
+    mocks.getObserveStepsSince.mockResolvedValue({
+      steps: [],
+      maxOrderingIndex: 0,
     });
 
     fetchMock.mockImplementation(

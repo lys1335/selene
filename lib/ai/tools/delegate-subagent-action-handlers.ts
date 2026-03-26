@@ -11,7 +11,7 @@ import {
   getWorkflowByAgentId,
   getWorkflowMembers,
 } from "@/lib/agents/workflows";
-import { createSession, getObserveMessageSummary } from "@/lib/db/sqlite-queries";
+import { createSession, getObserveMessageSummary, getObserveStepsSince } from "@/lib/db/sqlite-queries";
 import {
   activeDelegations,
   nextDelegationId,
@@ -35,7 +35,11 @@ import {
   resolveSubagentCandidate,
 } from "./delegate-to-subagent-handlers";
 import { getCharacterFull } from "@/lib/characters/queries";
-import { appendToLivePromptQueueBySession } from "@/lib/background-tasks/live-prompt-queue-registry";
+import {
+  appendToLivePromptQueueBySession,
+  removeFromQueueByDelegationId,
+} from "@/lib/background-tasks/live-prompt-queue-registry";
+import { removeDelegationCompletionById } from "./delegation-completion-store";
 import {
   hasStopIntent,
   sanitizeLivePromptContent,
@@ -321,6 +325,7 @@ async function handleStart(
     streamPromise: Promise.resolve(),
     settled: false,
     executionId: 0,
+    lastObservedOrderingIndex: 0,
   };
 
   startBackgroundExecution(delegation, userMessage);
@@ -393,10 +398,21 @@ export async function handleObserve(
   }
 
   // Query bounded DB summary data instead of loading the full session history.
-  const observeSummary = await getObserveMessageSummary(
-    delegation.sessionId,
-    MAX_OBSERVE_PREVIEW_RESPONSES + 1,
-  );
+  const [observeSummary, stepsSince] = await Promise.all([
+    getObserveMessageSummary(
+      delegation.sessionId,
+      MAX_OBSERVE_PREVIEW_RESPONSES + 1,
+    ),
+    getObserveStepsSince(
+      delegation.sessionId,
+      delegation.lastObservedOrderingIndex,
+    ),
+  ]);
+
+  // Advance the watermark so the next observe() only returns new steps.
+  if (stepsSince.maxOrderingIndex > delegation.lastObservedOrderingIndex) {
+    delegation.lastObservedOrderingIndex = stepsSince.maxOrderingIndex;
+  }
 
   // Return the final response in full via `lastResponse` and keep `allResponses`
   // as a bounded preview list of prior assistant turns to avoid context blowups.
@@ -421,6 +437,18 @@ export async function handleObserve(
   const isRunning = !delegation.settled;
   const waitedMs = Date.now() - observeStart;
 
+  // ── Prevent duplicate delivery ───────────────────────────────────────────
+  // When observe returns a completed result, the caller already has the full
+  // delegation output. Remove any queued completion notifications from both
+  // the live prompt queue (would be injected as user message in prepareStep)
+  // and the delegation completion store (would appear in system prompt).
+  // Without this, the model sees the result AND a "use observe to read results"
+  // notification, causing it to re-observe or generate a duplicate response.
+  if (delegation.settled) {
+    removeFromQueueByDelegationId(initiatorSessionId, delegationId);
+    removeDelegationCompletionById(initiatorSessionId, delegationId);
+  }
+
   return {
     success: true,
     delegationId,
@@ -439,6 +467,12 @@ export async function handleObserve(
     responsePreviewCount: allResponses.length,
     responsePreviewOmittedCount,
     responsePreviewTruncatedCount,
+    ...(stepsSince.steps.length > 0
+      ? {
+          steps: stepsSince.steps.map(({ toolName, summary }) => ({ toolName, summary })),
+          newStepCount: stepsSince.steps.length,
+        }
+      : {}),
     ...(pendingInteractivePrompts.length > 0 ? { pendingInteractivePrompts } : {}),
     ...(pendingInteractivePrompts.length > 0
       ? {

@@ -7,12 +7,17 @@ const mocks = vi.hoisted(() => ({
   createSession: vi.fn(),
   getMessages: vi.fn(),
   getObserveMessageSummary: vi.fn(),
+  getObserveStepsSince: vi.fn(),
   listAgentRunsBySession: vi.fn(),
   markRunAsCancelled: vi.fn(),
   abortChatRun: vi.fn(),
   removeChatAbortController: vi.fn(),
   taskRegistryGet: vi.fn(),
   taskRegistryUpdateStatus: vi.fn(),
+  appendToLivePromptQueueBySession: vi.fn(),
+  removeFromQueueByDelegationId: vi.fn(),
+  removeDelegationCompletionById: vi.fn(),
+  addDelegationCompletion: vi.fn(),
 }));
 
 vi.mock("@/lib/agents/workflows", () => ({
@@ -28,6 +33,7 @@ vi.mock("@/lib/db/sqlite-queries", () => ({
   createSession: mocks.createSession,
   getMessages: mocks.getMessages,
   getObserveMessageSummary: mocks.getObserveMessageSummary,
+  getObserveStepsSince: mocks.getObserveStepsSince,
 }));
 
 vi.mock("@/lib/observability/queries", () => ({
@@ -38,6 +44,16 @@ vi.mock("@/lib/observability/queries", () => ({
 vi.mock("@/lib/background-tasks/chat-abort-registry", () => ({
   abortChatRun: mocks.abortChatRun,
   removeChatAbortController: mocks.removeChatAbortController,
+}));
+
+vi.mock("@/lib/background-tasks/live-prompt-queue-registry", () => ({
+  appendToLivePromptQueueBySession: mocks.appendToLivePromptQueueBySession,
+  removeFromQueueByDelegationId: mocks.removeFromQueueByDelegationId,
+}));
+
+vi.mock("@/lib/ai/tools/delegation-completion-store", () => ({
+  addDelegationCompletion: mocks.addDelegationCompletion,
+  removeDelegationCompletionById: mocks.removeDelegationCompletionById,
 }));
 
 vi.mock("@/lib/background-tasks/registry", () => ({
@@ -142,12 +158,19 @@ describe("delegate-to-subagent-tool", () => {
       messageCount: 1,
       toolMessageCount: 0,
     });
+    mocks.getObserveStepsSince.mockResolvedValue({
+      steps: [],
+      maxOrderingIndex: 0,
+    });
     mocks.listAgentRunsBySession.mockResolvedValue([]);
     mocks.markRunAsCancelled.mockResolvedValue(undefined);
     mocks.abortChatRun.mockReturnValue(true);
     mocks.taskRegistryGet.mockReturnValue(undefined);
     bridgeMocks.getPendingInteractivePrompts.mockReturnValue([]);
     bridgeMocks.resolveInteractiveWait.mockReturnValue(false);
+    mocks.appendToLivePromptQueueBySession.mockReturnValue(false);
+    mocks.removeFromQueueByDelegationId.mockReturnValue(0);
+    mocks.removeDelegationCompletionById.mockReturnValue(false);
 
     fetchMock.mockResolvedValue({
       ok: true,
@@ -631,6 +654,106 @@ describe("delegate-to-subagent-tool", () => {
 
     expect(result.success).toBe(false);
     expect(String(result.error || "")).toContain("cannot exceed 600");
+  });
+
+  it("observe cleans up completion notifications when returning a settled result (prevents duplicate responses)", async () => {
+    // Regression test: when observe() returns a completed delegation, it must
+    // remove any queued live prompt notifications AND delegation completion store
+    // entries for this delegation. Without this, the model receives the result
+    // AND a "[Delegation Complete] Use observe..." notification in the next step,
+    // causing it to re-observe or generate a duplicate/looped response.
+    const finalText = "Analysis complete. Want me to dig deeper into any specific part?";
+    mocks.getObserveMessageSummary.mockResolvedValue({
+      recentAssistantMessages: [
+        { role: "assistant", content: [{ type: "text", text: finalText }] },
+      ],
+      assistantMessageCount: 1,
+      messageCount: 2,
+      toolMessageCount: 0,
+    });
+
+    fetchMock.mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: async () => ({ done: true, value: undefined }),
+        }),
+      },
+      text: async () => "",
+    });
+
+    const tool = makeTool();
+    const start = await (tool as any).execute({
+      action: "start",
+      agentName: "Research Analyst",
+      task: "Summarize the auth module",
+      mode: "background",
+    });
+
+    // Wait for delegation to settle
+    await delay(60);
+
+    const observed = await (tool as any).execute({
+      action: "observe",
+      delegationId: start.delegationId,
+    });
+
+    // The observe should return the result exactly once
+    expect(observed.success).toBe(true);
+    expect(observed.completed).toBe(true);
+    expect(observed.lastResponse).toBe(finalText);
+
+    // Cleanup should have been called to prevent double-delivery
+    expect(mocks.removeFromQueueByDelegationId).toHaveBeenCalledWith(
+      "sess-main",
+      start.delegationId,
+    );
+    expect(mocks.removeDelegationCompletionById).toHaveBeenCalledWith(
+      "sess-main",
+      start.delegationId,
+    );
+  });
+
+  it("observe does NOT clean up notifications when delegation is still running", async () => {
+    let readCount = 0;
+    fetchMock.mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => ({
+          read: async () => {
+            if (readCount === 0) {
+              readCount += 1;
+              await delay(500);
+              return { done: false, value: new Uint8Array([1]) };
+            }
+            return { done: true, value: undefined };
+          },
+        }),
+      },
+      text: async () => "",
+    });
+
+    const tool = makeTool();
+    const start = await (tool as any).execute({
+      action: "start",
+      agentName: "Research Analyst",
+      task: "Long running analysis",
+      mode: "background",
+    });
+
+    // Observe immediately — delegation still running
+    const observed = await (tool as any).execute({
+      action: "observe",
+      delegationId: start.delegationId,
+    });
+
+    expect(observed.success).toBe(true);
+    expect(observed.running).toBe(true);
+    expect(observed.completed).toBe(false);
+
+    // Should NOT clean up notifications for still-running delegations
+    expect(mocks.removeFromQueueByDelegationId).not.toHaveBeenCalled();
+    expect(mocks.removeDelegationCompletionById).not.toHaveBeenCalled();
   });
 
   it("observe returns full lastResponse and bounded/truncated prior response previews", async () => {

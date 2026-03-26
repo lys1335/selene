@@ -72,6 +72,10 @@ export interface DelegateResult {
   responsePreviewCount?: number;
   responsePreviewOmittedCount?: number;
   responsePreviewTruncatedCount?: number;
+  /** Incremental steps since last observe — compact tool call descriptions. */
+  steps?: Array<{ toolName: string; summary: string }>;
+  /** Total new steps since last observe. */
+  newStepCount?: number;
   elapsed?: number;
   waitedMs?: number;
   waitTimedOut?: boolean;
@@ -117,6 +121,8 @@ export interface ActiveDelegation {
   settled: boolean;
   executionId: number;
   error?: string;
+  /** Watermark for incremental observe — tracks the last orderingIndex seen by the caller. */
+  lastObservedOrderingIndex: number;
 }
 
 export type SubagentCandidate = {

@@ -120,6 +120,100 @@ export async function getObserveMessageSummary(sessionId: string, previewAssista
   };
 }
 
+/**
+ * Get compact step descriptions for tool activity since a watermark.
+ * Returns tool name + brief arg summary for each tool message after `afterOrderingIndex`.
+ * Used by observe() to provide incremental progress visibility.
+ */
+export async function getObserveStepsSince(
+  sessionId: string,
+  afterOrderingIndex: number,
+  limit = 50,
+): Promise<{ steps: Array<{ toolName: string; summary: string; orderingIndex: number }>; maxOrderingIndex: number }> {
+  const rows = await db.query.messages.findMany({
+    where: and(
+      eq(messages.sessionId, sessionId),
+      or(eq(messages.role, "tool"), eq(messages.role, "assistant")),
+      sql`${messages.orderingIndex} > ${afterOrderingIndex}`,
+    ),
+    orderBy: [asc(messages.orderingIndex), asc(messages.createdAt)],
+    limit,
+    columns: {
+      role: true,
+      toolName: true,
+      content: true,
+      orderingIndex: true,
+    },
+  });
+
+  const steps: Array<{ toolName: string; summary: string; orderingIndex: number }> = [];
+  let maxOrderingIndex = afterOrderingIndex;
+
+  for (const row of rows) {
+    const idx = row.orderingIndex ?? 0;
+    if (idx > maxOrderingIndex) maxOrderingIndex = idx;
+
+    // Extract tool invocations from assistant messages (AI SDK format)
+    if (row.role === "assistant" && Array.isArray(row.content)) {
+      for (const part of row.content as Array<Record<string, unknown>>) {
+        if (part.type === "tool-call" && typeof part.toolName === "string") {
+          steps.push({
+            toolName: part.toolName as string,
+            summary: extractToolCallSummary(part.toolName as string, part.args),
+            orderingIndex: idx,
+          });
+        }
+      }
+    }
+    // tool-role messages have toolName at message level
+    else if (row.role === "tool" && row.toolName) {
+      // Skip tool result messages — we already captured the call from the assistant message
+      // Only include if we didn't already have a step for this tool (handles edge cases)
+    }
+  }
+
+  return { steps, maxOrderingIndex };
+}
+
+/**
+ * Build a one-line summary of a tool call from its name and args.
+ * Keeps it very compact — e.g. "readFile → lib/db/queries.ts"
+ */
+function extractToolCallSummary(toolName: string, args: unknown): string {
+  if (!args || typeof args !== "object") return toolName;
+  const a = args as Record<string, unknown>;
+
+  // Common tool patterns — extract the most informative arg
+  const fileArg = a.file_path ?? a.filePath ?? a.path ?? a.file;
+  if (typeof fileArg === "string") return `${shortenPath(fileArg)}`;
+
+  const patternArg = a.pattern ?? a.query ?? a.search ?? a.regex;
+  if (typeof patternArg === "string") return `"${truncate(patternArg, 60)}"`;
+
+  const commandArg = a.command ?? a.cmd;
+  if (typeof commandArg === "string") return `$ ${truncate(commandArg, 60)}`;
+
+  const urlArg = a.url;
+  if (typeof urlArg === "string") return truncate(urlArg, 60);
+
+  // Fallback: first string arg value
+  for (const val of Object.values(a)) {
+    if (typeof val === "string" && val.length > 0) return truncate(val, 60);
+  }
+
+  return "";
+}
+
+function shortenPath(p: string): string {
+  // Keep last 3 segments: "lib/db/queries.ts" from "/Users/foo/project/lib/db/queries.ts"
+  const parts = p.split("/").filter(Boolean);
+  return parts.length > 3 ? parts.slice(-3).join("/") : p;
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
+
 export async function updateMessage(
   messageId: string,
   data: Partial<Pick<NewMessage, "content" | "metadata" | "model" | "tokenCount">>
