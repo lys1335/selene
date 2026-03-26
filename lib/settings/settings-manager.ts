@@ -133,6 +133,14 @@ export interface AppSettings {
     stylyAiApiKey?: string;
     imageGenerationProvider?: "openrouter" | "local-comfyui"; // Image generation provider selection
 
+    // Runway Video Generation
+    runwayApiSecret?: string;         // Runway API secret (RUNWAYML_API_SECRET)
+
+    // Vertex AI Video Generation (Google Veo)
+    vertexAIProjectId?: string;       // Google Cloud project ID
+    vertexAILocation?: string;        // Vertex AI region (default: us-central1)
+    vertexAICredentialsPath?: string; // Path to service account JSON (GOOGLE_APPLICATION_CREDENTIALS)
+
     // ComfyUI Local Backend Settings (Z-Image)
     comfyuiEnabled?: boolean;        // Enable local ComfyUI for image generation
     comfyuiInstalled?: boolean;      // Whether Docker image is built
@@ -736,6 +744,22 @@ function updateEnvFromSettings(settings: AppSettings): void {
     }
     if (settings.comfyuiCustomBaseUrl) {
         process.env.COMFYUI_CUSTOM_BASE_URL = settings.comfyuiCustomBaseUrl;
+    }
+
+    // Runway video generation
+    if (settings.runwayApiSecret) {
+        process.env.RUNWAYML_API_SECRET = settings.runwayApiSecret;
+    }
+
+    // Vertex AI video generation
+    if (settings.vertexAIProjectId) {
+        process.env.VERTEX_AI_PROJECT_ID = settings.vertexAIProjectId;
+    }
+    if (settings.vertexAILocation) {
+        process.env.VERTEX_AI_LOCATION = settings.vertexAILocation;
+    }
+    if (settings.vertexAICredentialsPath) {
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = settings.vertexAICredentialsPath;
     }
 
     // TTS/STT settings

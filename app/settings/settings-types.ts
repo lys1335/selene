@@ -79,6 +79,11 @@ export interface AppSettings {
     accountId?: string;
     expiresAt?: number;
   };
+  // Video generation provider keys
+  runwayApiSecret?: string;
+  vertexAIProjectId?: string;
+  vertexAILocation?: string;
+  vertexAICredentialsPath?: string;
   screenCaptureEnabled?: boolean;
   screenCaptureShortcut?: string;
   quickCaptureEnabled?: boolean;
@@ -229,6 +234,11 @@ export interface FormState {
   voiceActionFormalTone: "auto" | "business" | "casual";
   voiceActionTranslationStyle: "natural" | "literal";
   voiceActionSummarizeLength: "short" | "medium" | "long";
+  // Video generation provider keys
+  runwayApiSecret: string;
+  vertexAIProjectId: string;
+  vertexAILocation: string;
+  vertexAICredentialsPath: string;
   // Mini Overlay settings
   miniOverlayDefaultMode: "direct" | "compose";
   miniOverlayAutoCloseAfterSpeak: boolean;
@@ -359,6 +369,10 @@ export const DEFAULT_FORM_STATE: FormState = {
   voiceActionFormalTone: "auto",
   voiceActionTranslationStyle: "natural",
   voiceActionSummarizeLength: "medium",
+  runwayApiSecret: "",
+  vertexAIProjectId: "",
+  vertexAILocation: "us-central1",
+  vertexAICredentialsPath: "",
   miniOverlayDefaultMode: "direct",
   miniOverlayAutoCloseAfterSpeak: false,
   miniOverlayKeepAppFocusedOnCompose: true,
@@ -490,6 +504,10 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     voiceActionFormalTone: data.voiceActionFormalTone ?? "auto",
     voiceActionTranslationStyle: data.voiceActionTranslationStyle ?? "natural",
     voiceActionSummarizeLength: data.voiceActionSummarizeLength ?? "medium",
+    runwayApiSecret: data.runwayApiSecret ?? "",
+    vertexAIProjectId: data.vertexAIProjectId ?? "",
+    vertexAILocation: data.vertexAILocation ?? "us-central1",
+    vertexAICredentialsPath: data.vertexAICredentialsPath ?? "",
     miniOverlayDefaultMode: data.miniOverlayDefaultMode === "compose" ? "compose" : "direct",
     miniOverlayAutoCloseAfterSpeak: data.miniOverlayAutoCloseAfterSpeak ?? false,
     miniOverlayKeepAppFocusedOnCompose: data.miniOverlayKeepAppFocusedOnCompose ?? true,

@@ -9,6 +9,7 @@ import { getToolIcon } from "@/components/ui/tool-icon-map";
 import { getCanonicalToolName } from "./tool-name-utils";
 import { useToolExpansion } from "./tool-expansion-context";
 import { stripXmlStatusTags } from "./claude-code-tools/parse-text-result";
+import { DiffStyledPre } from "./diff-styled-pre";
 // Define the tool call component type manually since it's no longer exported
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -762,6 +763,20 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
     const displayText = textContent.length > 2000
       ? textContent.substring(0, 2000) + `\n\n... [${textContent.length - 2000} more characters]`
       : textContent;
+
+    // Detect diff content: if >30% of lines are +/- prefixed, render with diff styling
+    const textLines = displayText.split("\n");
+    const diffLineCount = textLines.filter(l => l.startsWith("+ ") || l.startsWith("- ")).length;
+    const isDiffContent = diffLineCount > 0 && textLines.length > 1 && diffLineCount / textLines.length > 0.3;
+
+    if (isDiffContent) {
+      return (
+        <div className={cn("mt-2", TOOL_RESULT_TEXT_CLASS)}>
+          <DiffStyledPre lines={textLines} className="max-h-64 overflow-y-auto" />
+        </div>
+      );
+    }
+
     return (
       <div className={cn("mt-2", TOOL_RESULT_TEXT_CLASS)}>
         <pre className={cn("max-h-64", TOOL_RESULT_PRE_CLASS)}>

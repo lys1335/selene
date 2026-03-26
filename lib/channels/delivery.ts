@@ -14,6 +14,7 @@ import type { ChannelAttachment } from "./types";
 import { loadSettings } from "@/lib/settings/settings-manager";
 import { isTTSAvailable, synthesizeSpeech, shouldSummarizeForTTS, summarizeForTTS, getAudioForChannel } from "@/lib/tts/manager";
 import { parseTTSDirectives } from "@/lib/tts/directives";
+import { INTERACTIVE_TOOL_NAME_SET } from "@/lib/interactive-tools/constants";
 
 export async function deliverChannelReply(params: {
   sessionId: string;
@@ -96,6 +97,10 @@ export async function deliverChannelReply(params: {
   await touchChannelConversation(conversation.id);
 }
 
+// Interactive tool calls are delivered directly by the channel bridge.
+// Text before the interactive question is suppressed to avoid duplicate noise.
+const INTERACTIVE_DELIVERY_SUPPRESSIONS = INTERACTIVE_TOOL_NAME_SET;
+
 async function buildOutgoingPayload(content: DBContentPart[]): Promise<{
   text: string;
   attachments: ChannelAttachment[];
@@ -104,8 +109,31 @@ async function buildOutgoingPayload(content: DBContentPart[]): Promise<{
   const attachments: ChannelAttachment[] = [];
   const imageUrls: string[] = [];
 
-  for (const part of content) {
-    if (part.type === "text" && part.text) {
+  // Find the last interactive tool-result to determine the text start index.
+  // Text before the interactive question is suppressed; text after it (the AI's
+  // follow-up once the user answered) is delivered.
+  const hasInteractiveToolCall = content.some(
+    (p) => p.type === "tool-call" && INTERACTIVE_DELIVERY_SUPPRESSIONS.has((p as { toolName?: string }).toolName ?? ""),
+  );
+  let textStartIndex = 0;
+  if (hasInteractiveToolCall) {
+    // Find the last tool-result for an interactive tool. Text after it is the
+    // AI's continuation once the question was answered — deliver that.
+    let lastInteractiveResultIndex = -1;
+    for (let i = content.length - 1; i >= 0; i--) {
+      const p = content[i];
+      if (p.type === "tool-result" && INTERACTIVE_DELIVERY_SUPPRESSIONS.has((p as { toolName?: string }).toolName ?? "")) {
+        lastInteractiveResultIndex = i;
+        break;
+      }
+    }
+    // If no result exists (question is still pending), suppress all text.
+    textStartIndex = lastInteractiveResultIndex >= 0 ? lastInteractiveResultIndex + 1 : content.length;
+  }
+
+  for (let i = 0; i < content.length; i++) {
+    const part = content[i];
+    if (part.type === "text" && part.text && i >= textStartIndex) {
       textChunks.push(part.text);
     }
     if (part.type === "image" && part.image) {

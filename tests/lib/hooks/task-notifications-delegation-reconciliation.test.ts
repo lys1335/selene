@@ -101,7 +101,16 @@ describe("delegation task reconciliation", () => {
       },
     });
     expect(useSessionSyncStore.getState().activeRuns.has(task.sessionId!)).toBe(false);
-    expect(useSessionSyncStore.getState().getSessionActivity(task.sessionId!)).toBeUndefined();
+    expect(useSessionSyncStore.getState().getSessionActivity(task.sessionId!)).toMatchObject({
+      runId: task.runId,
+      isRunning: false,
+    });
+    expect(
+      useSessionSyncStore
+        .getState()
+        .getSessionActivity(task.sessionId!)
+        ?.indicators.some((indicator) => indicator.key === "cancelled")
+    ).toBe(true);
     expect(reconciledEvents).toHaveLength(1);
     expect(reconciledEvents[0].task.runId).toBe(task.runId);
     expect(reconciledEvents[0].task.metadata).toMatchObject({

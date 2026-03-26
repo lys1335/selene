@@ -11,7 +11,7 @@ import {
   getWorkflowByAgentId,
   getWorkflowMembers,
 } from "@/lib/agents/workflows";
-import { createSession } from "@/lib/db/sqlite-queries";
+import { createSession, getObserveMessageSummary, getObserveStepsSince } from "@/lib/db/sqlite-queries";
 import {
   activeDelegations,
   nextDelegationId,
@@ -27,7 +27,6 @@ import {
   buildDelegationsSummary,
   startBackgroundExecution,
   extractTextFromContent,
-  extractFinalResponse,
   sleep,
   validateObserveWaitSeconds,
   truncateObservePreview,
@@ -36,8 +35,11 @@ import {
   resolveSubagentCandidate,
 } from "./delegate-to-subagent-handlers";
 import { getCharacterFull } from "@/lib/characters/queries";
-import { getMessages } from "@/lib/db/sqlite-queries";
-import { appendToLivePromptQueueBySession } from "@/lib/background-tasks/live-prompt-queue-registry";
+import {
+  appendToLivePromptQueueBySession,
+  removeFromQueueByDelegationId,
+} from "@/lib/background-tasks/live-prompt-queue-registry";
+import { removeDelegationCompletionById } from "./delegation-completion-store";
 import {
   hasStopIntent,
   sanitizeLivePromptContent,
@@ -57,24 +59,49 @@ import {
 import { taskRegistry } from "@/lib/background-tasks/registry";
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Walk the active delegation chain to find the root session ID.
+ * In a multi-hop delegation (A → B → C), B's initiatorSessionId is A's session,
+ * and A might itself be a delegation from a channel session. This function
+ * traces back to the original session that has no parent delegation.
+ *
+ * WARNING: This function relies on intermediate delegations still being present
+ * in the `activeDelegations` in-memory map. If a delegation has been GC'd
+ * (e.g. via stop/cleanup), the chain walk will terminate early — returning the
+ * first session whose parent delegation is missing, not necessarily the true
+ * root. Currently safe because this is only called at delegation start time
+ * (before any cleanup). Future callers should be aware of this limitation.
+ */
+function resolveRootSessionId(initiatorSessionId: string): string {
+  let currentSessionId = initiatorSessionId;
+  const visited = new Set<string>();
+
+  while (true) {
+    if (visited.has(currentSessionId)) break; // cycle guard
+    visited.add(currentSessionId);
+
+    // Find any delegation whose subagent session matches currentSessionId
+    let parentFound = false;
+    for (const d of activeDelegations.values()) {
+      if (d.sessionId === currentSessionId) {
+        currentSessionId = d.initiatorSessionId;
+        parentFound = true;
+        break;
+      }
+    }
+    if (!parentFound) break;
+  }
+
+  return currentSessionId;
+}
+
+// ---------------------------------------------------------------------------
 // Action handlers
 // ---------------------------------------------------------------------------
 
-/** Default blocking timeout in seconds (5 minutes). */
-const DEFAULT_BLOCKING_TIMEOUT_SECONDS = 600;
-
-/**
- * Resolve the effective execution mode from input parameters.
- * Priority: explicit mode > legacy runInBackground > default (blocking).
- */
-function resolveExecutionMode(input: DelegateToSubagentInput): "blocking" | "background" {
-  if (input.mode === "background") return "background";
-  if (input.mode === "blocking") return "blocking";
-  // Legacy compat: runInBackground=true -> background
-  if (input.runInBackground === true) return "background";
-  // Default: blocking
-  return "blocking";
-}
 
 function getDelegationPendingInteractivePrompts(
   sessionId: string,
@@ -132,6 +159,7 @@ export async function handleStartAction(
   userId: string,
   characterId: string,
   initiatorSessionId: string,
+  provider?: string,
 ): Promise<DelegateResult> {
   // Compatibility mode: resume + start maps to continue with task as follow-up.
   if (input.resume) {
@@ -154,68 +182,27 @@ export async function handleStartAction(
     );
   }
 
-  const mode = resolveExecutionMode(input);
   const startResult = await handleStart(input, userId, characterId, initiatorSessionId);
 
   if (!startResult.success || !startResult.delegationId) {
     return startResult;
   }
 
-  // ── Background mode: return immediately ──────────────────────────────────
-  if (mode === "background") {
-    return {
-      ...startResult,
-      mode: "background",
-      message:
-        `Delegation started in background (${startResult.delegationId}). ` +
-        "Use observe/continue/stop with this delegationId to manage it.",
-    };
-  }
-
-  // ── Blocking mode (default): await completion, return compact result ─────
-  const delegation = activeDelegations.get(startResult.delegationId);
-  if (!delegation) {
-    return startResult;
-  }
-
-  const maxWaitMs = (input.waitSeconds ?? DEFAULT_BLOCKING_TIMEOUT_SECONDS) * 1000;
-  const pendingInteractivePrompts = await waitForDelegationPausePoint(delegation, maxWaitMs);
-
-  // Read the final response compactly — just the last assistant text
-  const result = await extractFinalResponse(delegation.sessionId);
-  const completed = delegation.settled;
-
-  // Build compact result — no allResponses, no preview counts, no observe noise
-  const compactResult: DelegateResult = {
-    success: true,
-    delegationId: startResult.delegationId,
-    sessionId: delegation.sessionId,
-    delegateAgent: delegation.delegateName,
-    mode: "blocking",
-    completed,
-    result,
-    elapsed: Date.now() - delegation.startedAt,
-    availableAgents: startResult.availableAgents,
-    ...(pendingInteractivePrompts.length > 0 ? { pendingInteractivePrompts } : {}),
+  // ── Always return immediately (background/non-blocking) ──────────────────
+  // Delegations run concurrently. The AI SDK's shouldStopTurn keeps the
+  // initiator's agentic loop alive while any delegations are running, so the
+  // model can call observe() to collect results once sub-agents settle.
+  //
+  // Previous "blocking" mode awaited completion inside the tool execute()
+  // function, which serialized parallel delegations when the model emitted
+  // start calls across multiple steps instead of batching them in one response.
+  return {
+    ...startResult,
+    mode: "background",
+    message:
+      `Delegation started in background (${startResult.delegationId}). ` +
+      "Use observe/continue/stop with this delegationId to manage it.",
   };
-
-  if (delegation.error) {
-    compactResult.error = `Delegation failed: ${delegation.error}`;
-  }
-
-  if (pendingInteractivePrompts.length > 0) {
-    compactResult.message =
-      "Sub-agent is waiting for an interactive answer. " +
-      "Use delegateToSubagent action='answer' with the delegationId, toolUseId, and answers to continue.";
-  } else if (!completed) {
-    compactResult.message =
-      "Sub-agent did not finish within the wait timeout. " +
-      "Use observe(delegationId) to check later, or stop(delegationId) to cancel.";
-  } else {
-    activeDelegations.delete(startResult.delegationId);
-  }
-
-  return compactResult;
 }
 
 async function handleStart(
@@ -297,6 +284,9 @@ async function handleStart(
   // NOTE: characterId MUST be in metadata — createSession's extractSessionMetadataColumns
   // promotes metadata.characterId to the DB column. Passing it only as a top-level field
   // gets overridden to null by the metadata extraction spread.
+  // Resolve root session ID early so we can embed it in session metadata
+  const rootSessionId = resolveRootSessionId(initiatorSessionId);
+
   const session = await createSession({
     title: `Delegation: ${task.slice(0, 50)}`,
     userId,
@@ -306,6 +296,7 @@ async function handleStart(
       workflowId: membership.workflow.id,
       characterId: resolution.candidate.agentId,
       characterName: resolution.candidate.agentName,
+      rootSessionId,
     },
   });
 
@@ -323,6 +314,7 @@ async function handleStart(
     id: delegationId,
     sessionId: session.id,
     initiatorSessionId,
+    rootSessionId,
     delegateId: resolution.candidate.agentId,
     delegateName: resolution.candidate.agentName,
     delegatorId: characterId,
@@ -333,6 +325,7 @@ async function handleStart(
     streamPromise: Promise.resolve(),
     settled: false,
     executionId: 0,
+    lastObservedOrderingIndex: 0,
   };
 
   startBackgroundExecution(delegation, userMessage);
@@ -404,35 +397,56 @@ export async function handleObserve(
     };
   }
 
-  // Query real data from DB
-  const messages = await getMessages(delegation.sessionId);
-  const assistantMessages = messages.filter((m) => m.role === "assistant");
-  const toolMessages = messages.filter((m) => m.role === "tool");
+  // Query bounded DB summary data instead of loading the full session history.
+  const [observeSummary, stepsSince] = await Promise.all([
+    getObserveMessageSummary(
+      delegation.sessionId,
+      MAX_OBSERVE_PREVIEW_RESPONSES + 1,
+    ),
+    getObserveStepsSince(
+      delegation.sessionId,
+      delegation.lastObservedOrderingIndex,
+    ),
+  ]);
 
-  // Extract all assistant responses.
+  // Advance the watermark so the next observe() only returns new steps.
+  if (stepsSince.maxOrderingIndex > delegation.lastObservedOrderingIndex) {
+    delegation.lastObservedOrderingIndex = stepsSince.maxOrderingIndex;
+  }
+
   // Return the final response in full via `lastResponse` and keep `allResponses`
   // as a bounded preview list of prior assistant turns to avoid context blowups.
-  const assistantResponses = assistantMessages
-    .map((m) => extractTextFromContent(m.content))
-    .filter((t): t is string => !!t);
+  const assistantResponses = observeSummary.recentAssistantMessages
+    .map((message) => extractTextFromContent(message.content))
+    .filter((text): text is string => !!text);
   const lastResponse = assistantResponses[assistantResponses.length - 1];
   const priorResponses = assistantResponses.slice(0, -1);
-  const recentResponsePreviews = priorResponses.slice(-MAX_OBSERVE_PREVIEW_RESPONSES);
   let responsePreviewTruncatedCount = 0;
-  const allResponses = recentResponsePreviews.map((response) => {
+  const allResponses = priorResponses.map((response) => {
     const preview = truncateObservePreview(response);
     if (preview.truncated) {
       responsePreviewTruncatedCount += 1;
     }
     return preview.text;
   });
-  const responsePreviewOmittedCount = Math.max(0, priorResponses.length - recentResponsePreviews.length);
+  const responsePreviewOmittedCount = Math.max(
+    0,
+    (observeSummary.assistantMessageCount - 1) - allResponses.length,
+  );
 
   const isRunning = !delegation.settled;
   const waitedMs = Date.now() - observeStart;
 
-  if (delegation.settled && pendingInteractivePrompts.length === 0) {
-    activeDelegations.delete(delegationId);
+  // ── Prevent duplicate delivery ───────────────────────────────────────────
+  // When observe returns a completed result, the caller already has the full
+  // delegation output. Remove any queued completion notifications from both
+  // the live prompt queue (would be injected as user message in prepareStep)
+  // and the delegation completion store (would appear in system prompt).
+  // Without this, the model sees the result AND a "use observe to read results"
+  // notification, causing it to re-observe or generate a duplicate response.
+  if (delegation.settled) {
+    removeFromQueueByDelegationId(initiatorSessionId, delegationId);
+    removeDelegationCompletionById(initiatorSessionId, delegationId);
   }
 
   return {
@@ -445,14 +459,20 @@ export async function handleObserve(
     elapsed: Date.now() - delegation.startedAt,
     waitedMs,
     waitTimedOut: waitValidation.waitMs > 0 && isRunning,
-    messageCount: messages.length,
-    toolCallCount: toolMessages.length,
+    messageCount: observeSummary.messageCount,
+    toolCallCount: observeSummary.toolMessageCount,
     lastResponse,
     allResponses,
-    responseCount: assistantResponses.length,
+    responseCount: observeSummary.assistantMessageCount,
     responsePreviewCount: allResponses.length,
     responsePreviewOmittedCount,
     responsePreviewTruncatedCount,
+    ...(stepsSince.steps.length > 0
+      ? {
+          steps: stepsSince.steps.map(({ toolName, summary }) => ({ toolName, summary })),
+          newStepCount: stepsSince.steps.length,
+        }
+      : {}),
     ...(pendingInteractivePrompts.length > 0 ? { pendingInteractivePrompts } : {}),
     ...(pendingInteractivePrompts.length > 0
       ? {
@@ -681,36 +701,7 @@ export async function handleList(
   const candidates = await buildSubagentCandidates(members, characterId);
   const availableAgents = toAvailableAgents(candidates);
 
-  const results: DelegateResult["delegations"] = [];
-
-  // Clean up stale entries and collect only delegations scoped to this session.
-  const staleIds: string[] = [];
-
-  for (const [id, del] of activeDelegations.entries()) {
-    if (del.delegatorId !== characterId) continue;
-    if (del.initiatorSessionId !== initiatorSessionId) continue;
-
-    if (del.settled) {
-      if (Date.now() - del.startedAt > 10 * 60 * 1000) {
-        staleIds.push(id);
-      }
-      continue;
-    }
-
-    results.push({
-      delegationId: id,
-      sessionId: del.sessionId,
-      delegateAgentId: del.delegateId,
-      delegateAgent: del.delegateName,
-      task: del.task.length > 100 ? del.task.slice(0, 100) + "..." : del.task,
-      running: true,
-      elapsed: Date.now() - del.startedAt,
-    });
-  }
-
-  for (const id of staleIds) {
-    activeDelegations.delete(id);
-  }
+  const results = buildDelegationsSummary(characterId, initiatorSessionId) ?? [];
 
   return {
     success: true,
@@ -718,7 +709,7 @@ export async function handleList(
     delegations: results,
     message:
       results.length === 0
-        ? `No active delegations. ${availableAgents.length} available sub-agent(s) listed.`
-        : `${results.length} active delegation(s) found. ${availableAgents.length} available sub-agent(s) listed.`,
+        ? `No delegations found. ${availableAgents.length} available sub-agent(s) listed.`
+        : `${results.length} delegation(s) found. ${availableAgents.length} available sub-agent(s) listed.`,
   };
 }

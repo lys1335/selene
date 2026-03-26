@@ -4,6 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, PencilIcon, PlusIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
+import { DiffStyledPre } from "../diff-styled-pre";
 import { parseTextResult } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
@@ -131,23 +132,7 @@ export const ClaudeEditToolUI: ToolCallContentPartComponent = ({ args, result })
 
           {diffLines.length > 0 && (
             <div className="space-y-2">
-              <div className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto">
-                <pre className="text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
-                  {visibleDiffLines.map((line, i) => (
-                    <span
-                      key={i}
-                      className={cn(
-                        "block rounded-sm px-1",
-                        line.startsWith("+ ") && "text-emerald-700 bg-emerald-100/60 border-l-2 border-emerald-500 dark:text-emerald-200 dark:bg-emerald-500/[0.15] dark:border-emerald-400",
-                        line.startsWith("- ") && "text-red-700 bg-red-100/60 border-l-2 border-red-500 dark:text-red-200 dark:bg-red-500/[0.15] dark:border-red-400",
-                        !line.startsWith("+ ") && !line.startsWith("- ") && "text-terminal-muted dark:text-terminal-muted/80"
-                      )}
-                    >
-                      {line}
-                    </span>
-                  ))}
-                </pre>
-              </div>
+              <DiffStyledPre lines={visibleDiffLines} />
 
               {isDiffTruncated && (
                 <button

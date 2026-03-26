@@ -143,6 +143,14 @@ export interface FinalReportEvent extends BaseResearchEvent {
 export interface ErrorEvent extends BaseResearchEvent {
   type: 'error';
   error: string;
+  failedPhase?: Exclude<ResearchPhase, 'idle' | 'complete' | 'error'>;
+  phaseMessage?: string;
+  code?: string;
+  debug?: {
+    rawResponsePreview?: string;
+    extractedJsonPreview?: string;
+    parseMessage?: string;
+  };
 }
 
 export interface CompleteEvent extends BaseResearchEvent {

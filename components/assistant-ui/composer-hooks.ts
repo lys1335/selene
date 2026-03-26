@@ -594,6 +594,18 @@ export function usePromptEnhancement({
     setEnhancementInfo(null);
   }, []);
 
+  useEffect(() => {
+    if (!enhancedContext) {
+      return;
+    }
+
+    if (inputValue.trim() === enhancedContext.trim()) {
+      return;
+    }
+
+    clearEnhancement();
+  }, [clearEnhancement, enhancedContext, inputValue]);
+
   const handleEnhance = useCallback(async () => {
     const trimmedInput = inputValue.trim();
     if (!trimmedInput || trimmedInput.length < 3) {
@@ -633,7 +645,7 @@ export function usePromptEnhancement({
           useLLM: true,
           conversationContext: recentMessages,
         },
-        { timeout: 60_000, retries: 0 }
+        { timeout: 150_000, retries: 0 }
       );
 
       if (fetchError || !data) {

@@ -25,6 +25,8 @@ type DependencyStatus = {
   localGrepEnabled: boolean;
   devWorkspaceEnabled: boolean;
   screenCaptureEnabled: boolean;
+  runwayApiSecret: boolean;
+  vertexAIProjectId: boolean;
 };
 
 const DEFAULT_DEPENDENCY_STATUS: DependencyStatus = {
@@ -39,6 +41,8 @@ const DEFAULT_DEPENDENCY_STATUS: DependencyStatus = {
   localGrepEnabled: true,
   devWorkspaceEnabled: false,
   screenCaptureEnabled: true,
+  runwayApiSecret: false,
+  vertexAIProjectId: false,
 };
 
 export function useToolEditor(
@@ -158,6 +162,8 @@ export function useToolEditor(
           localGrepEnabled: settingsData.localGrepEnabled !== false,
           devWorkspaceEnabled: settingsData.devWorkspaceEnabled === true,
           screenCaptureEnabled: settingsData.screenCaptureEnabled !== false,
+          runwayApiSecret: typeof settingsData.runwayApiSecret === "string" && settingsData.runwayApiSecret.trim().length > 0,
+          vertexAIProjectId: typeof settingsData.vertexAIProjectId === "string" && settingsData.vertexAIProjectId.trim().length > 0,
         });
       } catch (error) {
         if (cancelled) return;

@@ -30,7 +30,7 @@ export interface DBToolCallPart extends ContextProvenance {
   args?: unknown;
   argsText?: string;
   state?: ToolInvocationState;
-  /** Progress-only hint for live projections; canonical persisted history should not rely on it. */
+  /** Pending hint for unresolved persisted calls and live progress projections. */
   active?: boolean;
 }
 
@@ -170,6 +170,7 @@ type SimplePart =
       output?: unknown;
       errorText?: string;
       preliminary?: boolean;
+      active?: boolean;
     };
 
 type ToolResultInfo = {
@@ -370,6 +371,7 @@ function buildUIPartsFromDBContent(
           output: hasFinalOutput ? toolResult?.result ?? null : undefined,
           errorText: toolResult?.errorText,
           preliminary: toolResult?.preliminary,
+          active: part.active === true && !hasFinalOutput,
         });
         renderedToolCallIds.add(part.toolCallId);
       } else {

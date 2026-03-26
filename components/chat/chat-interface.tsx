@@ -515,7 +515,7 @@ export default function ChatInterface({
             refreshMessages: options?.refreshMessages,
             clearTaskState: options?.clearTaskState,
         });
-    }, [bg, clearScheduledBanner]);
+    }, [bg.clearTrackedRunState, clearScheduledBanner]);
 
     // ── Session CRUD & list management ──
     const sm = useSessionManager({
@@ -909,8 +909,16 @@ export default function ChatInterface({
             return { sessionId: targetSessionId, messages: uiMessages };
         });
 
-        // Update thread in-place via AI SDK setMessages (no remount needed)
-        if (chatSetMessagesRef.current) {
+        // ── Streaming guard ──────────────────────────────────────────────────
+        // During foreground streaming, the AI SDK builds message parts
+        // incrementally from stream chunks. Pushing a DB snapshot via
+        // setMessages mid-stream causes parts-array misalignment — text parts
+        // leak into tool-call groups because React keeps stale index mappings.
+        // Skip the thread update here; handleForegroundRunFinished will force
+        // a full reconciliation once the stream ends.
+        // Exception: force=true (reconnection recovery) bypasses this guard
+        // because the original stream is dead and won't reconcile anything.
+        if ((!isForegroundStreamingRef.current || options?.force) && chatSetMessagesRef.current) {
             chatSetMessagesRef.current(uiMessages);
         }
 
@@ -919,7 +927,7 @@ export default function ChatInterface({
             messageCount: conversationalMessageCount,
         });
         sm.refreshSessionTimestamp(targetSessionId);
-    }, [bg.isRunActiveRef, sm.fetchSessionMessages, sm.notifySessionUpdate, sm.refreshSessionTimestamp]);
+    }, [bg.isRunActiveRef, isForegroundStreamingRef, sm.fetchSessionMessages, sm.notifySessionUpdate, sm.refreshSessionTimestamp]);
 
     const handleOverlaySessionUpdated = useCallback(async (
         payload: { sessionId: string; characterId: string }
@@ -1094,6 +1102,9 @@ export default function ChatInterface({
         if (typeof window === "undefined") return;
         const handleVisibility = () => {
             if (document.visibilityState !== "visible" || !sessionId) return;
+            // Tab re-focus after potential network loss — clear stale streaming
+            // flag so active-run detection isn't gated by a dead stream.
+            isForegroundStreamingRef.current = false;
             if (bg.processingRunId) {
                 // Already tracking a run — restart polling + refresh messages
                 bg.startPollingForCompletion(bg.processingRunId);
@@ -1122,6 +1133,10 @@ export default function ChatInterface({
             if (reconnectCheckDebounceRef.current) clearTimeout(reconnectCheckDebounceRef.current);
             reconnectCheckDebounceRef.current = setTimeout(() => {
                 reconnectCheckDebounceRef.current = null;
+                // The SSE reconnect itself is evidence that any foreground stream
+                // is dead. Reset the stale flag so checkActiveRunRef can detect
+                // the still-running agent and resume background tracking.
+                isForegroundStreamingRef.current = false;
                 void checkActiveRunRef.current();
             }, 300);
         };
@@ -1176,7 +1191,9 @@ export default function ChatInterface({
                 storeCheckDebounceRef.current = null;
             }
         };
-    }, [activeTasks, bg, reloadSessionMessages, sessionId]);
+    // bg.processingRunId is the only reactive bg value used in the guard.
+    // Setters & startPollingForCompletion are identity-stable.
+    }, [activeTasks, bg.processingRunId, reloadSessionMessages, sessionId]);
 
     useEffect(() => {
         if (activeScheduledTaskForSession?.type === "scheduled") {
@@ -1233,7 +1250,10 @@ export default function ChatInterface({
         bg.setProcessingRunId(activeDelegationTaskForSession.runId);
         bg.setIsZombieRun(false);
         bg.startPollingForCompletion(activeDelegationTaskForSession.runId);
-    }, [activeDelegationTaskForSession, bg]);
+    // Use specific deps — bg.processingRunId for the guard check,
+    // activeDelegationTaskForSession for the trigger.  Setters, refs,
+    // and startPollingForCompletion are identity-stable.
+    }, [activeDelegationTaskForSession, bg.processingRunId]);
 
     const handleCancelRun = useCallback(async () => {
         if (!activeRun || !sessionId) return;
@@ -1411,6 +1431,14 @@ export default function ChatInterface({
                 isChannelSession,
                 isProcessingInBackground: bg.isProcessingInBackground,
             })) return;
+
+            // Foreground streaming is authoritative for the visible thread.
+            // Ignore progress-driven DB reloads until the stream completes,
+            // then reconcile once via handleForegroundRunFinished.
+            if (isForegroundStreamingRef.current) {
+                return;
+            }
+
             const now = Date.now();
             if (now - lastProgressTimeRef.current < PROGRESS_THROTTLE_MS) return;
             lastProgressTimeRef.current = now;
@@ -1424,7 +1452,7 @@ export default function ChatInterface({
         };
         window.addEventListener("background-task-progress", handleTaskProgress);
         return () => window.removeEventListener("background-task-progress", handleTaskProgress);
-    }, [isChannelSession, bg.isProcessingInBackground, sm.refreshSessionTimestamp, reloadSessionMessages, sessionId]);
+    }, [isChannelSession, bg.isProcessingInBackground, isForegroundStreamingRef, sm.refreshSessionTimestamp, reloadSessionMessages, sessionId]);
 
     // Global keyboard shortcut: Cmd+N / Ctrl+N → new session
     useEffect(() => {

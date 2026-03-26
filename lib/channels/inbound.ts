@@ -26,10 +26,13 @@ import { getChannelManager } from "./manager";
 import { taskRegistry } from "@/lib/background-tasks/registry";
 import { abortChatRun } from "@/lib/background-tasks/chat-abort-registry";
 import type { ChannelTask } from "@/lib/background-tasks/types";
+import { appendToLivePromptQueueBySession } from "@/lib/background-tasks/live-prompt-queue-registry";
+import { hasStopIntent, sanitizeLivePromptContent } from "@/lib/background-tasks/live-prompt-helpers";
 import { nowISO } from "@/lib/utils/timestamp";
 import { getInternalApiBaseUrl } from "@/lib/utils/environment";
 import { transcribeAudio, isTranscriptionAvailable, isAudioMimeType } from "@/lib/audio/transcription";
 import { interactiveBridgeEvents, resolveInteractiveWait, storeUserAnswer } from "@/lib/interactive-tool-bridge";
+import { getUndrainedEvents } from "@/lib/background-tasks/undrained-signal";
 import {
   parseInteractivePromptInput,
   getInteractivePromptQuestionText,
@@ -49,7 +52,17 @@ const conversationQueues = new Map<string, Promise<void>>();
 
 // ---------------------------------------------------------------------------
 // Interactive question bridge — listen for pending AskUserQuestion tool calls
+// Guard against HMR duplicate registration: these listeners are idempotent per
+// session but the EventEmitters live on globalThis across hot reloads, so we
+// must only register once per process lifetime.
 // ---------------------------------------------------------------------------
+
+const globalForChannelBridge = globalThis as typeof globalThis & {
+  __channelBridgeListenersRegistered?: boolean;
+};
+
+if (!globalForChannelBridge.__channelBridgeListenersRegistered) {
+  globalForChannelBridge.__channelBridgeListenersRegistered = true;
 
 interactiveBridgeEvents.on("pending", async ({ sessionId, toolUseId, questions }: {
   sessionId: string;
@@ -57,7 +70,23 @@ interactiveBridgeEvents.on("pending", async ({ sessionId, toolUseId, questions }
   questions: unknown;
 }) => {
   try {
-    const conversation = await findChannelConversationBySessionId(sessionId);
+    // Try direct session lookup first
+    let conversation = await findChannelConversationBySessionId(sessionId);
+
+    // Fallback: if this is a delegation session, try the rootSessionId from
+    // the session metadata. Delegation sessions have their own session IDs
+    // with no channel_conversations mapping — the root session (original
+    // Telegram/WhatsApp session) has the mapping.
+    if (!conversation) {
+      const session = await getSession(sessionId);
+      const metadata = session?.metadata as Record<string, unknown> | null;
+      const rootSessionId = metadata?.rootSessionId as string | undefined;
+      if (rootSessionId && rootSessionId !== sessionId) {
+        console.log(`[Channels] Interactive question: session ${sessionId.slice(0, 8)}… has no channel mapping, trying rootSessionId ${rootSessionId.slice(0, 8)}…`);
+        conversation = await findChannelConversationBySessionId(rootSessionId);
+      }
+    }
+
     if (!conversation) return; // Not a channel session
 
     const connection = await getChannelConnection(conversation.connectionId);
@@ -69,7 +98,9 @@ interactiveBridgeEvents.on("pending", async ({ sessionId, toolUseId, questions }
     const manager = getChannelManager();
     const connector = manager.getConnector(conversation.connectionId);
 
-    // Wire up the interactive answer handler for button callbacks
+    // Re-register the connector callback on each pending question event.
+    // Connectors store just one handler slot, so reassignment is cheap and avoids
+    // stale global connection IDs blocking new connector instances after reconnects.
     if (connector?.setInteractiveAnswerHandler) {
       connector.setInteractiveAnswerHandler((data) => {
         const pending = findPendingQuestionByToolUseId(data.toolUseId);
@@ -96,8 +127,15 @@ interactiveBridgeEvents.on("pending", async ({ sessionId, toolUseId, questions }
     });
 
     const firstPrompt = Array.isArray(prompt) ? prompt[0] : prompt;
-    const questionText = getInteractivePromptQuestionText(prompt);
+    let questionText = getInteractivePromptQuestionText(prompt);
     const instructionText = getInteractivePromptInstructionText(prompt);
+
+    // For plan approval prompts, include the plan body in the question text
+    // so native connectors (Telegram inline buttons) show the full plan,
+    // not just "Review the plan and choose how to continue."
+    if (!Array.isArray(prompt) && "plan" in prompt && typeof prompt.plan === "string" && prompt.plan.trim()) {
+      questionText = `${questionText}\n\n${prompt.plan.trim()}`;
+    }
     const multiSelect = Array.isArray(prompt) ? (prompt[0]?.multiSelect ?? false) : false;
 
     const options = firstPrompt.options.map((opt, i) => ({
@@ -149,6 +187,45 @@ interactiveBridgeEvents.on("resolved", ({ sessionId, toolUseId }: {
 }) => {
   clearPendingQuestionBySession(sessionId, toolUseId);
 });
+
+// ---------------------------------------------------------------------------
+// Undrained message recovery — when a stream finishes with unprocessed injected
+// messages, the web UI frontend would poll and replay them. For channel sessions
+// there's no frontend, so we listen for the signal and re-invoke the chat API.
+// ---------------------------------------------------------------------------
+
+getUndrainedEvents().on("undrained", async (sessionId: string) => {
+  try {
+    const conversation = await findChannelConversationBySessionId(sessionId);
+    if (!conversation) return; // Not a channel session — let the web frontend handle it
+
+    const connection = await getChannelConnection(conversation.connectionId);
+    if (!connection) return;
+
+    const character = await getCharacter(conversation.characterId);
+    if (!character) return;
+
+    console.log(`[Channels] Re-triggering chat for undrained messages in session ${sessionId.slice(0, 8)}...`);
+
+    const dbMessages = await getMessages(sessionId);
+    const uiMessages = convertDBMessagesToUIMessages(dbMessages);
+
+    await invokeChatApi({
+      userId: connection.userId,
+      sessionId,
+      characterId: character.id,
+      messages: uiMessages.map((msg) => ({
+        id: msg.id,
+        role: msg.role,
+        parts: msg.parts,
+      })),
+    });
+  } catch (error) {
+    console.error("[Channels] Failed to re-trigger chat for undrained messages:", error);
+  }
+});
+
+} // end HMR guard — __channelBridgeListenersRegistered
 
 // ---------------------------------------------------------------------------
 
@@ -381,6 +458,69 @@ async function processInboundMessage(message: ChannelInboundMessage): Promise<vo
         });
         return;
       }
+
+      // ── Live prompt injection: if an AI stream is active for this session,
+      // inject the message into the running stream instead of starting a new
+      // chat API call. This mirrors the web UI behavior where injected messages
+      // get `livePromptInjected: true` metadata and don't trigger separate
+      // AI responses — preventing the duplicate-message-then-double-response
+      // issue on Telegram.
+      const textContent = contentParts
+        .filter((p) => p.type === "text" && p.text)
+        .map((p) => p.text!)
+        .join("\n");
+      const sanitizedContent = sanitizeLivePromptContent(textContent);
+
+      if (sanitizedContent) {
+        const injected = appendToLivePromptQueueBySession(sessionId, {
+          id: `chan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          content: sanitizedContent,
+          stopIntent: hasStopIntent(sanitizedContent),
+        });
+
+        if (injected) {
+          // Persist the message in DB with livePromptInjected flag so it
+          // doesn't count as a visible conversation turn and won't trigger
+          // another AI response when messages reload.
+          const orderingIndex = await nextOrderingIndex(sessionId);
+          const createdMessage = await createMessage({
+            sessionId,
+            role: "user",
+            content: contentParts,
+            orderingIndex,
+            metadata: {
+              livePromptInjected: true,
+              channel: {
+                connectionId: message.connectionId,
+                channelType: message.channelType,
+                peerId: message.peerId,
+                threadId: message.threadId,
+                externalMessageId: message.messageId,
+                fromSelf: message.fromSelf ?? false,
+              },
+            },
+          });
+
+          if (createdMessage?.id) {
+            await createChannelMessage({
+              connectionId: message.connectionId,
+              channelType: message.channelType,
+              externalMessageId: message.messageId,
+              sessionId,
+              messageId: createdMessage.id,
+              direction: "inbound",
+            });
+          }
+
+          console.log("[Channels] Message injected into active stream via live prompt queue");
+          taskRegistry.updateStatus(runId, "succeeded", {
+            durationMs: Date.now() - new Date(startedAt).getTime(),
+          });
+          return;
+        }
+      }
+
+      // ── Normal path: no active stream, fire a new chat API call ──────────
 
       // Allocate ordering index for bullet-proof message ordering
       const userMessageIndex = await nextOrderingIndex(sessionId);

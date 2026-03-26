@@ -78,15 +78,39 @@ function emitPhaseChange(
  */
 function parseJsonResponse<T>(text: string): T {
   let cleaned = text.trim();
-  if (cleaned.startsWith("```json")) {
-    cleaned = cleaned.slice(7);
-  } else if (cleaned.startsWith("```")) {
-    cleaned = cleaned.slice(3);
+
+  // Extract JSON from markdown code block if present
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    cleaned = codeBlockMatch[1].trim();
   }
-  if (cleaned.endsWith("```")) {
-    cleaned = cleaned.slice(0, -3);
+
+  // If no code block, try to extract the outermost JSON object
+  if (!codeBlockMatch) {
+    const firstBrace = cleaned.indexOf("{");
+    const lastBrace = cleaned.lastIndexOf("}");
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+    }
   }
-  return JSON.parse(cleaned.trim());
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (error) {
+    // Log context for debugging
+    const parseError = error as SyntaxError;
+    const posMatch = parseError.message.match(/position (\d+)/);
+    if (posMatch) {
+      const pos = parseInt(posMatch[1], 10);
+      const start = Math.max(0, pos - 60);
+      const end = Math.min(cleaned.length, pos + 60);
+      console.error(
+        `[VIDEO-ASSEMBLY] JSON parse error at position ${pos}:\n` +
+        `  ...${cleaned.slice(start, pos)}[HERE>>]${cleaned.slice(pos, end)}...`
+      );
+    }
+    throw error;
+  }
 }
 
 function isAntigravityQuotaError(error: unknown): boolean {
@@ -474,38 +498,59 @@ async function renderVideoPhase(
 
   emitPhaseChange(emit, "rendering", `Rendering ${totalFrames} frames with Remotion...`);
 
-  try {
-    // Render video using Remotion
-    const result = await remotionRenderVideo(
-      plan,
-      config,
-      state.sessionId,
-      (progress) => {
-        state.renderProgress = progress.percent;
-        state.renderedFrames = progress.renderedFrames;
+  const MAX_RENDER_ATTEMPTS = 2;
+  let lastRenderError: unknown;
 
-        emit({
-          type: "render_progress",
-          progress: progress.percent,
-          renderedFrames: progress.renderedFrames,
-          totalFrames: progress.totalFrames,
-          estimatedTimeRemaining: progress.estimatedTimeRemaining,
-          timestamp: new Date(),
-        });
-      },
-      abortSignal
-    );
+  for (let attempt = 1; attempt <= MAX_RENDER_ATTEMPTS; attempt++) {
+    try {
+      const result = await remotionRenderVideo(
+        plan,
+        config,
+        state.sessionId,
+        (progress) => {
+          state.renderProgress = progress.percent;
+          state.renderedFrames = progress.renderedFrames;
 
-    console.log(`[VIDEO-ASSEMBLY] Render complete: ${result.url}`);
+          emit({
+            type: "render_progress",
+            progress: progress.percent,
+            renderedFrames: progress.renderedFrames,
+            totalFrames: progress.totalFrames,
+            estimatedTimeRemaining: progress.estimatedTimeRemaining,
+            timestamp: new Date(),
+          });
+        },
+        abortSignal
+      );
 
-    return {
-      url: result.url,
-      localPath: result.outputLocalPath,
-    };
-  } catch (error) {
-    console.error("[VIDEO-ASSEMBLY] Render failed:", error);
-    throw error;
+      console.log(`[VIDEO-ASSEMBLY] Render complete: ${result.url}`);
+
+      return {
+        url: result.url,
+        localPath: result.outputLocalPath,
+      };
+    } catch (error) {
+      lastRenderError = error;
+
+      // Don't retry user cancellations
+      if (error instanceof Error && error.name === "AbortError") {
+        throw error;
+      }
+
+      if (attempt < MAX_RENDER_ATTEMPTS) {
+        console.warn(
+          `[VIDEO-ASSEMBLY] Render attempt ${attempt}/${MAX_RENDER_ATTEMPTS} failed, retrying in 3s...`,
+          error instanceof Error ? error.message : error
+        );
+        emitPhaseChange(emit, "rendering", `Render failed, retrying (attempt ${attempt + 1})...`);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        throwIfAborted(abortSignal);
+      }
+    }
   }
+
+  console.error("[VIDEO-ASSEMBLY] All render attempts failed:", lastRenderError);
+  throw lastRenderError;
 }
 
 /**

@@ -42,6 +42,13 @@ interface PersistedDeepResearchState {
   findings: ResearchFinding[];
   finalReport: FinalReport | null;
   error: string | null;
+  failedPhase?: Exclude<ResearchPhase, 'idle' | 'complete' | 'error'>;
+  errorCode?: string;
+  errorDebug?: {
+    rawResponsePreview?: string;
+    extractedJsonPreview?: string;
+    parseMessage?: string;
+  } | null;
   updatedAt: string;
 }
 
@@ -250,7 +257,14 @@ export async function POST(req: Request) {
               await persistState({ phase: "complete", finalReport: event.report, error: null });
               break;
             case "error":
-              await persistState({ phase: "error", error: event.error });
+              await persistState({
+                phase: "error",
+                phaseMessage: event.phaseMessage ?? persistedState.phaseMessage,
+                error: event.error,
+                failedPhase: event.failedPhase,
+                errorCode: event.code,
+                errorDebug: event.debug ?? null,
+              });
               break;
             case "complete":
               await persistState({ phase: "complete", error: null });
@@ -330,6 +344,10 @@ export async function POST(req: Request) {
                 sendEvent({
                   type: 'error',
                   error: errorMessage,
+                  phaseMessage: persistedState.phaseMessage || 'Deep Research failed.',
+                  failedPhase: persistedState.phase === 'error' ? persistedState.failedPhase : undefined,
+                  code: persistedState.errorCode,
+                  debug: persistedState.errorDebug ?? undefined,
                   timestamp: new Date(),
                 });
                 // Complete agent run as failed

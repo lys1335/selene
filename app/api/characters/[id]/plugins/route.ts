@@ -2,12 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/local-auth";
 import { getOrCreateLocalUser } from "@/lib/db/queries";
 import { loadSettings } from "@/lib/settings/settings-manager";
-import { getCharacter } from "@/lib/characters/queries";
+import { getCharacter, updateCharacter } from "@/lib/characters/queries";
 import {
   getAvailablePluginsForAgent,
   setPluginEnabledForAgent,
 } from "@/lib/plugins/registry";
 import { z } from "zod";
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function sameStringArray(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function serializeAssignments(
+  assignments: Awaited<ReturnType<typeof getAvailablePluginsForAgent>>
+) {
+  return assignments.map((entry) => ({
+    ...entry.plugin,
+    enabledForAgent: entry.enabledForAgent,
+  }));
+}
 
 export const runtime = "nodejs";
 
@@ -35,12 +53,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
 
     const assignments = await getAvailablePluginsForAgent(dbUser.id, id, id);
 
-    return NextResponse.json({
-      plugins: assignments.map((entry) => ({
-        ...entry.plugin,
-        enabledForAgent: entry.enabledForAgent,
-      })),
-    });
+    return NextResponse.json(
+      { plugins: serializeAssignments(assignments) },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error) {
     if (
       error instanceof Error &&
@@ -91,7 +107,31 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
     await setPluginEnabledForAgent(id, parsed.data.pluginId, parsed.data.enabled);
 
-    return NextResponse.json({ success: true });
+    const assignments = await getAvailablePluginsForAgent(dbUser.id, id, id);
+    const enabledPluginIds = assignments
+      .filter((entry) => entry.enabledForAgent)
+      .map((entry) => entry.plugin.id);
+
+    const existingMetadata = (character.metadata as Record<string, unknown> | null) ?? {};
+    const previousEnabledPluginIds = toStringArray(existingMetadata.enabledPlugins);
+
+    if (!sameStringArray(previousEnabledPluginIds, enabledPluginIds)) {
+      await updateCharacter(id, {
+        metadata: {
+          ...existingMetadata,
+          enabledPlugins: enabledPluginIds,
+        },
+      });
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        enabledPluginIds,
+        plugins: serializeAssignments(assignments),
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (error) {
     if (
       error instanceof Error &&

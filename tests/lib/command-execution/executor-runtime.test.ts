@@ -182,6 +182,23 @@ describe("buildSafeEnvironment", () => {
         expect(env.SAFE_KEY).toBe("ok");
     });
 
+    it("strips TURBOPACK and NEXT_PRIVATE_* vars regardless of source", () => {
+        vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
+            TURBOPACK: "1",
+            NEXT_PRIVATE_BUILD_WORKER: "1",
+            NEXT_PRIVATE_LOCAL_WEBPACK: "1",
+            PATH: "/usr/bin",
+            SAFE_KEY: "ok",
+        });
+
+        const env = buildSafeEnvironment(baseRuntime);
+
+        expect(env.TURBOPACK).toBeUndefined();
+        expect(env.NEXT_PRIVATE_BUILD_WORKER).toBeUndefined();
+        expect(env.NEXT_PRIVATE_LOCAL_WEBPACK).toBeUndefined();
+        expect(env.SAFE_KEY).toBe("ok");
+    });
+
     it("strips NEXT_RUNTIME and NEXT_DEPLOYMENT_ID from always-blocked list", () => {
         vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
             NEXT_RUNTIME: "nodejs",

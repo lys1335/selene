@@ -14,6 +14,8 @@ import type { Page, CDPSession } from "playwright-core";
 
 const GLOBAL_KEY = "__selene_input_cdp_sessions__" as const;
 const PENDING_KEY = "__selene_input_cdp_pending__" as const;
+const SESSION_GEN_KEY = "__selene_input_cdp_session_generations__" as const;
+const GLOBAL_GEN_KEY = "__selene_input_cdp_global_generation__" as const;
 
 function getCdpCache(): Map<string, CDPSession> {
   const g = globalThis as unknown as Record<string, Map<string, CDPSession>>;
@@ -29,6 +31,36 @@ function getPendingCreations(): Map<string, Promise<CDPSession>> {
     g[PENDING_KEY] = new Map();
   }
   return g[PENDING_KEY];
+}
+
+function getSessionGenerations(): Map<string, number> {
+  const g = globalThis as unknown as Record<string, Map<string, number>>;
+  if (!g[SESSION_GEN_KEY]) {
+    g[SESSION_GEN_KEY] = new Map();
+  }
+  return g[SESSION_GEN_KEY];
+}
+
+function getGlobalGeneration(): number {
+  const g = globalThis as unknown as Record<string, number>;
+  if (typeof g[GLOBAL_GEN_KEY] !== "number") {
+    g[GLOBAL_GEN_KEY] = 0;
+  }
+  return g[GLOBAL_GEN_KEY];
+}
+
+function bumpGlobalGeneration(): void {
+  const g = globalThis as unknown as Record<string, number>;
+  g[GLOBAL_GEN_KEY] = getGlobalGeneration() + 1;
+}
+
+function getSessionGeneration(sessionId: string): number {
+  return getSessionGenerations().get(sessionId) ?? 0;
+}
+
+function bumpSessionGeneration(sessionId: string): void {
+  const generations = getSessionGenerations();
+  generations.set(sessionId, getSessionGeneration(sessionId) + 1);
 }
 
 /**
@@ -55,9 +87,23 @@ async function getCdpSession(sessionId: string, page: Page): Promise<CDPSession>
   const inflight = pending.get(sessionId);
   if (inflight) return inflight;
 
+  const sessionGeneration = getSessionGeneration(sessionId);
+  const globalGeneration = getGlobalGeneration();
+
   const promise = (async () => {
     try {
       const cdp = await page.context().newCDPSession(page);
+
+      // Teardown may have happened while this CDP session was being created.
+      // If the generation changed, detach the stale CDP instead of resurrecting it.
+      if (
+        sessionGeneration !== getSessionGeneration(sessionId) ||
+        globalGeneration !== getGlobalGeneration()
+      ) {
+        cdp.detach().catch(() => {});
+        throw new Error(`CDP session became stale during creation for ${sessionId}`);
+      }
+
       cache.set(sessionId, cdp);
       return cdp;
     } finally {
@@ -74,11 +120,33 @@ async function getCdpSession(sessionId: string, page: Page): Promise<CDPSession>
  */
 export function cleanupInputSession(sessionId: string): void {
   const cache = getCdpCache();
+  const pending = getPendingCreations();
+  bumpSessionGeneration(sessionId);
+
   const cdp = cache.get(sessionId);
   if (cdp) {
     cdp.detach().catch(() => {});
     cache.delete(sessionId);
   }
+
+  pending.delete(sessionId);
+}
+
+/**
+ * Clean up all cached CDP sessions. Used when the underlying browser/context
+ * dies and every cached session becomes invalid at once.
+ */
+export function cleanupAllInputSessions(): void {
+  const cache = getCdpCache();
+  bumpGlobalGeneration();
+
+  for (const cdp of cache.values()) {
+    cdp.detach().catch(() => {});
+  }
+
+  cache.clear();
+  getPendingCreations().clear();
+  getSessionGenerations().clear();
 }
 
 // ─── Mouse Events ──────────────────────────────────────────────────────────────

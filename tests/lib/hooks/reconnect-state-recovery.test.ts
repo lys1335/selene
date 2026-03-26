@@ -122,9 +122,18 @@ describe("reconnect state recovery", () => {
       expect(useUnifiedTasksStore.getState().tasks).toHaveLength(0);
       expect(useUnifiedTasksStore.getState().tasksMap.has("run-stale")).toBe(false);
 
-      // Active run should be cleared
+      // Active run should be cleared and completion state preserved for the sidebar
       expect(useSessionSyncStore.getState().activeRuns.has("session-1")).toBe(false);
-      expect(useSessionSyncStore.getState().getSessionActivity("session-1")).toBeUndefined();
+      expect(useSessionSyncStore.getState().getSessionActivity("session-1")).toMatchObject({
+        runId: "run-stale",
+        isRunning: false,
+      });
+      expect(
+        useSessionSyncStore
+          .getState()
+          .getSessionActivity("session-1")
+          ?.indicators.some((indicator) => indicator.key === "cancelled")
+      ).toBe(true);
 
       // Plain chat tasks don't dispatch lifecycle reconciled events
       // (only scheduled/delegation tasks do via isBackgroundLifecycleTask)
@@ -233,11 +242,17 @@ describe("reconnect state recovery", () => {
       expect(useSessionSyncStore.getState().activeRuns.get("session-B")).toBe("run-B");
       expect(useSessionSyncStore.getState().getSessionActivity("session-B")?.isRunning).toBe(true);
 
-      // Sessions A and C cleared
+      // Sessions A and C no longer have active runs
       expect(useSessionSyncStore.getState().activeRuns.has("session-A")).toBe(false);
       expect(useSessionSyncStore.getState().activeRuns.has("session-C")).toBe(false);
-      expect(useSessionSyncStore.getState().getSessionActivity("session-A")).toBeUndefined();
-      expect(useSessionSyncStore.getState().getSessionActivity("session-C")).toBeUndefined();
+      expect(useSessionSyncStore.getState().getSessionActivity("session-A")).toMatchObject({
+        runId: "run-A",
+        isRunning: false,
+      });
+      expect(useSessionSyncStore.getState().getSessionActivity("session-C")).toMatchObject({
+        runId: "run-C",
+        isRunning: false,
+      });
     });
   });
 

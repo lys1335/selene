@@ -1,6 +1,6 @@
 "use client";
 
-import { type FC, useCallback, useState } from "react";
+import { type FC, useCallback, useEffect, useState } from "react";
 import { CircleNotch, ChatCircleDots, CheckCircle, Check } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { parseNestedJsonString } from "@/lib/utils/parse-nested-json";
@@ -124,7 +124,20 @@ export const AskFollowupQuestionToolUI: ToolCallContentPartComponent = ({
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Only treat as answered when the USER has submitted (not when the SDK auto-populates result)
+  // Sync external answers (e.g., answered via Telegram) to submitted state.
+  // When Telegram resolves the wait, `result` is populated via the stream
+  // before the user interacts with the web UI — mark as answered in that case.
+  useEffect(() => {
+    if (
+      !submitted &&
+      result != null &&
+      typeof result === "object" &&
+      "answers" in (result as Record<string, unknown>)
+    ) {
+      setSubmitted(true);
+    }
+  }, [result, submitted]);
+
   const isAnswered = submitted;
 
   const handleSelect = useCallback(

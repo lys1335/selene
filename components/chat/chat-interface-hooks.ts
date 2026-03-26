@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -14,8 +14,25 @@ import { useUnifiedTasksStore } from "@/lib/stores/unified-tasks-store";
 import type { TaskEvent } from "@/lib/background-tasks/types";
 import { useSessionSync } from "@/lib/hooks/use-session-sync";
 import { useSessionSyncNotifier } from "@/lib/hooks/use-session-sync";
-import { useSessionSyncStore, sessionInfoArrayToSyncData } from "@/lib/stores/session-sync-store";
+import {
+    useSessionSyncStore,
+    sessionInfoArrayToSyncData,
+    type SessionActivityIndicator,
+    type SessionActivityState,
+} from "@/lib/stores/session-sync-store";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
+
+function isCompletionActivityState(activity: SessionActivityState | undefined, runId?: string | null): boolean {
+    if (!activity || activity.isRunning) {
+        return false;
+    }
+
+    if (runId && activity.runId && activity.runId !== runId) {
+        return false;
+    }
+
+    return activity.indicators.some((indicator: SessionActivityIndicator) => indicator.key === "completed");
+}
 import type { UIMessage } from "ai";
 import type { DBMessage, SessionState, ChannelFilter, DateRangeFilter } from "@/components/chat/chat-interface-types";
 import {
@@ -176,6 +193,9 @@ export function useBackgroundProcessing({
     useEffect(() => { refreshMessagesRef.current = refreshMessages; }, [refreshMessages]);
 
     const consecutiveErrorsRef = useRef<number>(0);
+    // Holds the most recent pollOnce closure so the visibility-change handler
+    // can trigger an immediate poll without restarting the interval.
+    const pollOnceRef = useRef<(() => Promise<void>) | null>(null);
 
     const clearTrackedRunState = useCallback(async (options: ClearTrackedRunStateOptions = {}) => {
         const runId = options.runId ?? processingRunId;
@@ -201,7 +221,10 @@ export function useBackgroundProcessing({
             }
 
             const activity = sessionSyncState.getSessionActivity(sessionId);
-            if (!activity || activity.runId === runId) {
+            if (
+                (!activity || activity.runId === runId) &&
+                !isCompletionActivityState(activity, runId)
+            ) {
                 sessionSyncState.setSessionActivity(sessionId, null);
             }
         }
@@ -273,6 +296,9 @@ export function useBackgroundProcessing({
                             pollingIntervalRef.current = null;
                         }
                         activePollingRunIdRef.current = null;
+                        // Unblock deferral gates so reconnection can hydrate
+                        // messages from DB without being blocked by stale state.
+                        isRunActiveRef.current = false;
                     }
                     return;
                 }
@@ -317,12 +343,40 @@ export function useBackgroundProcessing({
             }
         };
 
+        // Expose pollOnce so the visibility-change handler can trigger an
+        // immediate poll without restarting the interval.
+        pollOnceRef.current = pollOnce;
+
         // Poll immediately — don't wait for the first interval tick.
         // If the run already completed, this clears the state right away
         // instead of showing "processing" for up to 2 seconds.
         void pollOnce();
         pollingIntervalRef.current = setInterval(pollOnce, pollIntervalMs);
     }, []);
+
+    // When the user returns to this tab while a background run is active, reset
+    // the consecutive-error counter (network may be back) and either restart the
+    // polling interval (if it was killed by too many errors) or trigger an
+    // immediate poll (if the interval is still alive) so the UI updates right away
+    // instead of waiting up to 2 s for the next tick.
+    useEffect(() => {
+        if (!isProcessingInBackground || !processingRunId) return;
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState !== "visible") return;
+            consecutiveErrorsRef.current = 0;
+            if (!pollingIntervalRef.current) {
+                // Polling was killed (e.g. by a network outage) — restart it.
+                startPollingForCompletion(processingRunId);
+            } else if (pollOnceRef.current) {
+                // Interval is alive — just do an immediate poll to avoid lag.
+                void pollOnceRef.current();
+            }
+        };
+
+        document.addEventListener("visibilitychange", handleVisibilityChange);
+        return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    }, [isProcessingInBackground, processingRunId, startPollingForCompletion]);
 
     // Clear polling interval on unmount to prevent stale updates after navigation
     useEffect(() => {
@@ -372,7 +426,10 @@ export function useBackgroundProcessing({
         }
     }, [clearTrackedRunState, processingRunId, t]);
 
-    return {
+    // Memoize the return object so consumers that use `bg` as a useEffect
+    // dependency don't re-fire on every render.  Refs and state-setters are
+    // identity-stable and excluded from the dep array on purpose.
+    return useMemo(() => ({
         pollingIntervalRef,
         activePollingRunIdRef,
         isProcessingInBackground,
@@ -391,7 +448,19 @@ export function useBackgroundProcessing({
         handleCancelBackgroundRun,
         /** Exposed so reloadSessionMessages can skip injected-message pushes mid-run. */
         isRunActiveRef,
-    };
+    }), [
+        isProcessingInBackground,
+        processingRunId,
+        isZombieRun,
+        isChatFading,
+        isCancellingBackgroundRun,
+        refreshMessages,
+        clearTrackedRunState,
+        resetBackgroundState,
+        handleCancelBackgroundRun,
+        // startPollingForCompletion has [] deps — stable
+        // refs & state setters are identity-stable
+    ]);
 }
 
 // ---------------------------------------------------------------------------

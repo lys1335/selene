@@ -69,14 +69,14 @@ export const ReasoningPart: FC<ReasoningPartProps> = ({ text, status }) => {
       : "Thought";
 
   return (
-    <div className="my-1.5 rounded-lg border border-terminal-border/40 bg-terminal-dark/[0.03] dark:bg-terminal-cream/[0.03]">
+    <div className="my-1.5 rounded-lg border border-border/50 bg-muted/30">
       {/* Accordion trigger */}
       <button
         type="button"
         onClick={toggle}
         className={cn(
           "flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-xs",
-          "text-terminal-muted transition-colors hover:text-terminal-dark dark:hover:text-terminal-cream",
+          "text-foreground/80 transition-colors hover:text-foreground",
           "select-none cursor-pointer rounded-lg",
         )}
       >
@@ -92,7 +92,7 @@ export const ReasoningPart: FC<ReasoningPartProps> = ({ text, status }) => {
         <span className="flex items-center gap-2">
           {headerLabel}
           {isStreaming && (
-            <span className="reasoning-pulse-dot inline-block size-1.5 rounded-full bg-terminal-muted" />
+            <span className="reasoning-pulse-dot inline-block size-1.5 rounded-full bg-muted-foreground" />
           )}
         </span>
       </button>
@@ -110,9 +110,9 @@ export const ReasoningPart: FC<ReasoningPartProps> = ({ text, status }) => {
           >
             <div
               className={cn(
-                "border-t border-terminal-border/30 px-3 py-2.5",
+                "border-t border-border/40 px-3 py-2.5",
                 "font-mono text-xs leading-relaxed",
-                "text-terminal-muted whitespace-pre-wrap break-words",
+                "text-foreground/75 whitespace-pre-wrap break-words",
                 "max-h-[20rem] overflow-y-auto",
               )}
             >

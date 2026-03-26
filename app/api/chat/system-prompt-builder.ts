@@ -17,6 +17,7 @@ import { getSkillsSummaryForPrompt } from "@/lib/skills/queries";
 import type { CacheableSystemBlock } from "@/lib/ai/cache/types";
 import { buildContextWindowPromptBlock } from "./message-splitter";
 import type { ContextWindowStatus } from "@/lib/context-window/manager";
+import { peekDelegationCompletions } from "@/lib/ai/tools/delegation-completion-store";
 
 // Re-use hasStylyApiKey check
 const hasStylyApiKey = () => !!process.env.STYLY_AI_API_KEY;
@@ -38,6 +39,7 @@ function appendBlock(
 export interface SystemPromptBuildArgs {
   characterId: string | null;
   userId: string;
+  sessionId: string;
   toolLoadingMode: "deferred" | "always";
   useCaching: boolean;
   sessionMetadata: Record<string, unknown>;
@@ -64,6 +66,7 @@ export async function buildSystemPromptForRequest(
   const {
     characterId,
     userId,
+    sessionId,
     toolLoadingMode,
     useCaching,
     sessionMetadata,
@@ -202,6 +205,20 @@ export async function buildSystemPromptForRequest(
   // Append workflow context if provided
   if (workflowPromptContext) {
     systemPromptValue = appendBlock(systemPromptValue, `\n\n[Workflow Context]\n${workflowPromptContext}`);
+  }
+
+  const completedDelegations = peekDelegationCompletions(sessionId);
+  if (completedDelegations.length > 0) {
+    const completionLines = completedDelegations.map((completion) => {
+      const ageSeconds = Math.max(0, Math.floor((Date.now() - completion.completedAt) / 1000));
+      const suffix = completion.error ? ` with error: ${completion.error}` : "";
+      return `- ${completion.delegationId}: "${completion.delegateName}" completed ${ageSeconds}s ago${suffix}. Use delegateToSubagent action="observe" delegationId="${completion.delegationId}" to read the results.`;
+    });
+
+    systemPromptValue = appendBlock(
+      systemPromptValue,
+      `\n\n[Delegation Completions]\n${completionLines.join("\n")}`
+    );
   }
 
   // Append runtime skills hint

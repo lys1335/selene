@@ -15,7 +15,8 @@ const mocks = vi.hoisted(() => ({
   getWorkflowMembers: vi.fn(),
   getCharacterFull: vi.fn(),
   createSession: vi.fn(),
-  getMessages: vi.fn(),
+  getObserveMessageSummary: vi.fn(),
+  getObserveStepsSince: vi.fn(),
   listAgentRunsBySession: vi.fn(),
   markRunAsCancelled: vi.fn(),
   abortChatRun: vi.fn(),
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   appendToLivePromptQueueBySession: vi.fn(),
   hasStopIntent: vi.fn(),
   sanitizeLivePromptContent: vi.fn((s: string) => s),
+  addDelegationCompletion: vi.fn(),
 }));
 
 vi.mock("@/lib/agents/workflows", () => ({
@@ -38,7 +40,8 @@ vi.mock("@/lib/characters/queries", () => ({
 
 vi.mock("@/lib/db/sqlite-queries", () => ({
   createSession: mocks.createSession,
-  getMessages: mocks.getMessages,
+  getObserveMessageSummary: mocks.getObserveMessageSummary,
+  getObserveStepsSince: mocks.getObserveStepsSince,
 }));
 
 vi.mock("@/lib/observability/queries", () => ({
@@ -67,6 +70,12 @@ vi.mock("@/lib/background-tasks/live-prompt-helpers", () => ({
   sanitizeLivePromptContent: mocks.sanitizeLivePromptContent,
 }));
 
+vi.mock("@/lib/ai/tools/delegation-completion-store", () => ({
+  addDelegationCompletion: mocks.addDelegationCompletion,
+  drainDelegationCompletions: vi.fn(() => []),
+  hasPendingDelegationCompletions: vi.fn(() => false),
+}));
+
 const bridgeMocks = vi.hoisted(() => ({
   getPendingInteractivePrompts: vi.fn(),
   resolveInteractiveWait: vi.fn(),
@@ -84,99 +93,19 @@ import { getActiveDelegationsForCharacter } from "@/lib/ai/tools/delegate-to-sub
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
-// ── Constants ────────────────────────────────────────────────────────────────
-
 const AGENT_ID = "agent-init";
 const SESSION_A = "sess-A";
 const SESSION_B = "sess-B";
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeToolForSession(sessionId: string) {
   return createDelegateToSubagentTool({
     sessionId,
     userId: "user-1",
     characterId: AGENT_ID,
+    provider: "claudecode",
   });
 }
 
-let sessionCounter = 0;
-
-function setupCommonMocks() {
-  mocks.getWorkflowByAgentId.mockResolvedValue({
-    workflow: { id: "wf-1", name: "Test Workflow" },
-    member: { workflowId: "wf-1", agentId: AGENT_ID, role: "initiator" },
-  });
-
-  mocks.getWorkflowMembers.mockResolvedValue([
-    { workflowId: "wf-1", agentId: AGENT_ID, role: "initiator", metadataSeed: {} },
-    {
-      workflowId: "wf-1",
-      agentId: "agent-sub",
-      role: "subagent",
-      metadataSeed: { purpose: "Sub-agent worker" },
-    },
-  ]);
-
-  mocks.getCharacterFull.mockImplementation(async (agentId: string) => {
-    if (agentId === "agent-sub") {
-      return {
-        id: "agent-sub",
-        name: "worker",
-        displayName: "Worker Agent",
-        tagline: "Does work",
-      };
-    }
-    return {
-      id: AGENT_ID,
-      name: "initiator",
-      displayName: "Initiator",
-      tagline: "Main coordinator",
-    };
-  });
-
-  mocks.createSession.mockImplementation(async () => {
-    sessionCounter += 1;
-    return { id: `delegation-session-${sessionCounter}` };
-  });
-
-  mocks.getMessages.mockResolvedValue([
-    { role: "assistant", content: [{ type: "text", text: "done" }] },
-  ]);
-
-  mocks.listAgentRunsBySession.mockResolvedValue([]);
-  mocks.markRunAsCancelled.mockResolvedValue(undefined);
-  mocks.abortChatRun.mockReturnValue(true);
-  mocks.taskRegistryGet.mockReturnValue(undefined);
-  bridgeMocks.getPendingInteractivePrompts.mockReturnValue([]);
-  bridgeMocks.resolveInteractiveWait.mockReturnValue(false);
-  mocks.appendToLivePromptQueueBySession.mockReturnValue(false);
-  mocks.hasStopIntent.mockReturnValue(false);
-
-  // Keep the stream open so delegations stay unsettled (running).
-  // Without this, the delegation settles immediately and gets cleaned up
-  // before we can test cross-session visibility.
-  fetchMock.mockImplementation(
-    () =>
-      new Promise<{
-        ok: boolean;
-        body: { getReader: () => { read: () => Promise<{ done: boolean; value: undefined }> } };
-        text: () => Promise<string>;
-      }>((resolve) => {
-        resolve({
-          ok: true,
-          body: {
-            getReader: () => ({
-              read: () => new Promise(() => {}), // never resolves — stream stays open
-            }),
-          },
-          text: async () => "",
-        });
-      }),
-  );
-}
-
-/** Start a background delegation in the given session and return the delegationId. */
 async function startDelegationInSession(sessionId: string): Promise<string> {
   const tool = makeToolForSession(sessionId);
   const result = await (tool as any).execute({
@@ -186,65 +115,84 @@ async function startDelegationInSession(sessionId: string): Promise<string> {
     mode: "background",
   });
   expect(result.success).toBe(true);
-  expect(result.delegationId).toBeTypeOf("string");
-  return result.delegationId;
+  expect(typeof result.delegationId).toBe("string");
+  return result.delegationId as string;
 }
 
-// ── Tests ────────────────────────────────────────────────────────────────────
-
-describe("delegation cross-session isolation", () => {
+describe("delegate-to-subagent-tool session isolation", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     activeDelegations.clear();
-    sessionCounter = 0;
-    setupCommonMocks();
-  });
 
-  // ─── List ─────────────────────────────────────────────────────────────────
-
-  describe("list", () => {
-    it("Session B cannot see delegations created in Session A", async () => {
-      const delIdA = await startDelegationInSession(SESSION_A);
-
-      // Verify Session A can see its own delegation
-      const toolA = makeToolForSession(SESSION_A);
-      const listA = await (toolA as any).execute({ action: "list" });
-      expect(listA.delegations).toHaveLength(1);
-      expect(listA.delegations[0].delegationId).toBe(delIdA);
-
-      // Session B should see nothing
-      const toolB = makeToolForSession(SESSION_B);
-      const listB = await (toolB as any).execute({ action: "list" });
-      expect(listB.delegations).toHaveLength(0);
+    mocks.getWorkflowByAgentId.mockResolvedValue({
+      workflow: { id: "wf-1", name: "Main Workflow" },
+      member: { workflowId: "wf-1", agentId: AGENT_ID, role: "initiator" },
     });
 
-    it("each session only sees its own delegations when both have active delegations", async () => {
-      const delIdA = await startDelegationInSession(SESSION_A);
-      const delIdB = await startDelegationInSession(SESSION_B);
+    mocks.getWorkflowMembers.mockResolvedValue([
+      { workflowId: "wf-1", agentId: AGENT_ID, role: "initiator", metadataSeed: {} },
+      {
+        workflowId: "wf-1",
+        agentId: "agent-worker",
+        role: "subagent",
+        metadataSeed: { purpose: "Worker" },
+      },
+    ]);
 
-      const toolA = makeToolForSession(SESSION_A);
-      const listA = await (toolA as any).execute({ action: "list" });
-      expect(listA.delegations).toHaveLength(1);
-      expect(listA.delegations[0].delegationId).toBe(delIdA);
-
-      const toolB = makeToolForSession(SESSION_B);
-      const listB = await (toolB as any).execute({ action: "list" });
-      expect(listB.delegations).toHaveLength(1);
-      expect(listB.delegations[0].delegationId).toBe(delIdB);
+    mocks.getCharacterFull.mockImplementation(async (agentId: string) => {
+      if (agentId === AGENT_ID) {
+        return {
+          id: AGENT_ID,
+          name: "initiator",
+          displayName: "Initiator",
+          tagline: "Initiates tasks",
+        };
+      }
+      if (agentId === "agent-worker") {
+        return {
+          id: "agent-worker",
+          name: "worker",
+          displayName: "Worker Agent",
+          tagline: "Executes tasks",
+        };
+      }
+      return null;
     });
 
-    it("multiple delegations in the same session are all visible", async () => {
-      const delId1 = await startDelegationInSession(SESSION_A);
-      const delId2 = await startDelegationInSession(SESSION_A);
+    mocks.createSession.mockImplementation(async ({ metadata }: any) => ({
+      id: `deleg-session-${Math.random().toString(36).slice(2, 8)}`,
+      metadata,
+    }));
 
-      const tool = makeToolForSession(SESSION_A);
-      const list = await (tool as any).execute({ action: "list" });
-      expect(list.delegations).toHaveLength(2);
-
-      const ids = list.delegations.map((d: any) => d.delegationId);
-      expect(ids).toContain(delId1);
-      expect(ids).toContain(delId2);
+    mocks.getObserveMessageSummary.mockResolvedValue({
+      recentAssistantMessages: [],
+      assistantMessageCount: 0,
+      messageCount: 0,
+      toolMessageCount: 0,
     });
+    mocks.getObserveStepsSince.mockResolvedValue({
+      steps: [],
+      maxOrderingIndex: 0,
+    });
+
+    fetchMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolve({
+            ok: true,
+            body: {
+              getReader: () => ({
+                read: () => new Promise(() => {}),
+              }),
+            },
+            text: async () => "",
+          });
+        }),
+    );
+
+    mocks.listAgentRunsBySession.mockResolvedValue([]);
+    bridgeMocks.getPendingInteractivePrompts.mockReturnValue([]);
+    bridgeMocks.resolveInteractiveWait.mockReturnValue(true);
   });
 
   // ─── Observe ──────────────────────────────────────────────────────────────

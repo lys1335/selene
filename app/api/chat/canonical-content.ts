@@ -30,6 +30,7 @@ export function buildCanonicalAssistantContentFromSteps(
   const toolCallMetadata = new Map<string, { toolName: string; input?: unknown }>();
   const seenToolCalls = new Set<string>();
   const seenToolResults = new Set<string>();
+  const seenTexts = new Set<string>();
 
   if (steps && steps.length > 0) {
     for (const step of steps) {
@@ -86,7 +87,9 @@ export function buildCanonicalAssistantContentFromSteps(
 
       if (step.text?.trim()) {
         const cleanedStepText = stripFakeToolCallJson(step.text);
-        if (cleanedStepText.trim()) {
+        const trimmed = cleanedStepText.trim();
+        if (trimmed && !seenTexts.has(trimmed)) {
+          seenTexts.add(trimmed);
           content.push({ type: "text", text: cleanedStepText });
         }
       }
@@ -166,6 +169,38 @@ export function reconcileDbToolCallResultPairs(parts: DBContentPart[]): DBConten
   return normalized;
 }
 
+/**
+ * Merge adjacent text parts into a single part separated by `\n\n`.
+ *
+ * When multi-step runs produce text across consecutive steps (with tool parts
+ * in between during streaming but not in the canonical step-built content),
+ * the final content can end up with adjacent text parts.  Rendering adjacent
+ * text parts without a visual separator creates the "concatenated without
+ * space" symptom (e.g. "0 errors.All done.").  Consolidating them here
+ * guarantees proper paragraph separation regardless of how the parts arrive.
+ */
+export function consolidateAdjacentTextParts(parts: DBContentPart[]): DBContentPart[] {
+  if (parts.length <= 1) return parts;
+
+  const result: DBContentPart[] = [];
+  for (const part of parts) {
+    const prev = result[result.length - 1];
+    if (part.type === "text" && prev?.type === "text") {
+      // Merge into previous text part with paragraph break
+      const prevText = prev.text.trimEnd();
+      const curText = part.text.trimStart();
+      if (prevText && curText) {
+        prev.text = `${prevText}\n\n${curText}`;
+      } else {
+        prev.text = prevText || curText;
+      }
+    } else {
+      result.push(part);
+    }
+  }
+  return result;
+}
+
 export function mergeCanonicalAssistantContent(
   streamedParts: DBContentPart[] | undefined,
   stepParts: DBContentPart[]
@@ -175,10 +210,10 @@ export function mergeCanonicalAssistantContent(
     : [];
 
   if (base.length === 0) {
-    return reconcileDbToolCallResultPairs(stepParts);
+    return consolidateAdjacentTextParts(reconcileDbToolCallResultPairs(stepParts));
   }
   if (stepParts.length === 0) {
-    return reconcileDbToolCallResultPairs(base);
+    return consolidateAdjacentTextParts(reconcileDbToolCallResultPairs(base));
   }
 
   const callIndexById = new Map<string, number>();
@@ -299,7 +334,7 @@ export function mergeCanonicalAssistantContent(
     base.push(incoming);
   }
 
-  return reconcileDbToolCallResultPairs(base);
+  return consolidateAdjacentTextParts(reconcileDbToolCallResultPairs(base));
 }
 
 export function countCanonicalTruncationMarkers(parts: DBContentPart[]): number {

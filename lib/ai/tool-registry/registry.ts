@@ -161,8 +161,8 @@ class ToolRegistry {
 
     const envValue = process.env[enableEnvVar];
 
-    // For API key env vars, check presence (non-empty)
-    if (enableEnvVar.includes('API_KEY')) {
+    // For API key / secret / credential env vars, check presence (non-empty)
+    if (enableEnvVar.includes('API_KEY') || enableEnvVar.includes('SECRET') || enableEnvVar.includes('PROJECT_ID')) {
       if (enableEnvVar === "FIRECRAWL_API_KEY") {
         const provider = process.env.WEB_SCRAPER_PROVIDER || "firecrawl";
         if (provider === "local") {
@@ -307,6 +307,7 @@ class ToolRegistry {
           characterAvatarUrl: context.characterAvatarUrl,
           characterAppearanceDescription: context.characterAppearanceDescription,
           onExecuteCommandProgress: context.onExecuteCommandProgress,
+          provider: context.provider,
         });
       } catch (error) {
         console.error(`[ToolRegistry] Failed to create tool "${name}":`, error);

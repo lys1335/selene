@@ -398,6 +398,28 @@ function deriveProgressIndicators(event: TaskProgressEvent): {
   };
 }
 
+function isPersistentBackgroundChatTask(task: UnifiedTask): boolean {
+  if (isBackgroundLifecycleTask(task)) {
+    return true;
+  }
+
+  if (task.type !== "chat") {
+    return false;
+  }
+
+  const metadata =
+    task.metadata && typeof task.metadata === "object"
+      ? (task.metadata as Record<string, unknown>)
+      : {};
+
+  return (
+    metadata.deepResearch === true ||
+    metadata.suppressFromUI === true ||
+    metadata.taskSource === "channel" ||
+    typeof metadata.scheduledRunId === "string"
+  );
+}
+
 function deriveCompletionIndicators(task: UnifiedTask): SessionActivityIndicator[] {
   const indicators: SessionActivityIndicator[] = [];
 
@@ -502,17 +524,35 @@ export function reconcileTaskSnapshotWithStores(
   const serverRunIds = new Set(serverTasks.map((task) => task.runId));
   const sessionSyncState = useSessionSyncStore.getState();
 
+  const applyCompletionState = (
+    task: UnifiedTask,
+    completionTask: UnifiedTask,
+    event: Extract<TaskEvent, { eventType: "task:completed" }>,
+  ) => {
+    callbacks.completeTask(completionTask);
+    if (task.sessionId) {
+      sessionSyncState.setActiveRun(task.sessionId, null);
+      const previous = sessionSyncState.getSessionActivity(task.sessionId);
+      sessionSyncState.setSessionActivity(
+        task.sessionId,
+        buildActivityState(task.sessionId, completionTask.runId, deriveCompletionIndicators(completionTask), {
+          isRunning: false,
+          previous,
+        })
+      );
+    }
+    if (isBackgroundLifecycleTask(task)) {
+      callbacks.dispatchTaskReconciledEvent?.(event);
+    }
+  };
+
+  const reconciledRunIds = new Set<string>();
+
   for (const task of currentTasks) {
     if (!serverRunIds.has(task.runId)) {
       const reconciledCompletion = buildReconciledCompletionEvent(task);
-      callbacks.completeTask(reconciledCompletion.task);
-      if (task.sessionId) {
-        sessionSyncState.setActiveRun(task.sessionId, null);
-        sessionSyncState.setSessionActivity(task.sessionId, null);
-      }
-      if (isBackgroundLifecycleTask(task)) {
-        callbacks.dispatchTaskReconciledEvent?.(reconciledCompletion);
-      }
+      applyCompletionState(task, reconciledCompletion.task, reconciledCompletion);
+      reconciledRunIds.add(task.runId);
     }
   }
 
@@ -540,11 +580,22 @@ export function reconcileTaskSnapshotWithStores(
     }
   }
 
-  const currentActiveRuns = sessionSyncState.activeRuns;
-  for (const [sessionId] of currentActiveRuns) {
+  const currentActiveRuns = new Map(sessionSyncState.activeRuns);
+  for (const [sessionId, runId] of currentActiveRuns) {
+    if (reconciledRunIds.has(runId)) {
+      continue;
+    }
+
     if (!serverTasks.some((t) => t.sessionId === sessionId)) {
-      sessionSyncState.setActiveRun(sessionId, null);
-      sessionSyncState.setSessionActivity(sessionId, null);
+      const task = currentTasks.find((current) => current.runId === runId && current.sessionId === sessionId);
+      if (task && !isPersistentBackgroundChatTask(task)) {
+        const reconciledCompletion = buildReconciledCompletionEvent(task);
+        applyCompletionState(task, reconciledCompletion.task, reconciledCompletion);
+        reconciledRunIds.add(runId);
+      } else if (!task) {
+        sessionSyncState.setActiveRun(sessionId, null);
+        sessionSyncState.setSessionActivity(sessionId, null);
+      }
     }
   }
 }
@@ -566,6 +617,7 @@ export function useTaskNotifications() {
   // Layer 5: Visibility-aware budget — drop progress events when window is hidden
   const isWindowVisibleRef = useRef(true);
   const reconcileOnFocusRef = useRef<(() => Promise<void>) | null>(null);
+  const stalenessCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const addTask = useUnifiedTasksStore((state) => state.addTask);
   const updateTask = useUnifiedTasksStore((state) => state.updateTask);
   const completeTask = useUnifiedTasksStore((state) => state.completeTask);
@@ -590,6 +642,25 @@ export function useTaskNotifications() {
   const shouldShowChatToast = useCallback((task: UnifiedTask) => {
     if (typeof window === "undefined") return true;
     if (task.type !== "chat") return true;
+
+    const metadata =
+      task.metadata && typeof task.metadata === "object"
+        ? (task.metadata as Record<string, unknown>)
+        : {};
+
+    // Background chat work needs completion toasts even when the user is focused
+    // on the originating session. Foreground chat runs still suppress duplicate
+    // notifications for the active session.
+    if (
+      metadata.isDelegation === true ||
+      metadata.deepResearch === true ||
+      metadata.suppressFromUI === true ||
+      metadata.taskSource === "channel" ||
+      typeof metadata.scheduledRunId === "string"
+    ) {
+      return true;
+    }
+
     const { pathname, search } = window.location;
     if (!pathname.startsWith("/chat/")) return true;
     if (!task.sessionId) return true;
@@ -880,6 +951,10 @@ export function useTaskNotifications() {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
       }
+      if (stalenessCheckRef.current) {
+        clearInterval(stalenessCheckRef.current);
+        stalenessCheckRef.current = null;
+      }
       connectedUserIdRef.current = null;
     };
 
@@ -889,19 +964,21 @@ export function useTaskNotifications() {
       }
       const attempt = reconnectAttemptsRef.current + 1;
       reconnectAttemptsRef.current = attempt;
-      const delay = Math.min(30000, 1000 * Math.pow(2, Math.min(attempt, 4)));
+      // Cap at 10s (was 30s), add ±20% jitter to prevent reconnect storms
+      const baseDelay = Math.min(10000, 1000 * Math.pow(2, Math.min(attempt, 3)));
+      const jitter = baseDelay * (0.8 + Math.random() * 0.4); // ±20%
       reconnectTimeoutRef.current = setTimeout(() => {
         reconnectTimeoutRef.current = null;
         if (user?.id) {
           cleanupConnection();
           connect();
         }
-      }, delay);
+      }, jitter);
     };
 
     const reconcileTasks = async (showToast: boolean) => {
       try {
-        const { data, error } = await resilientFetch<{ tasks: UnifiedTask[] }>("/api/tasks/active");
+        const { data, error } = await resilientFetch<{ tasks: UnifiedTask[]; recentlyCompleted?: UnifiedTask[] }>("/api/tasks/active");
         if (!data) {
           if (error) console.warn("[TaskNotifications] Failed to fetch active tasks:", error);
           return;
@@ -921,6 +998,37 @@ export function useTaskNotifications() {
           },
           dispatchTaskReconciledEvent,
         });
+
+        // Phase 2: Process recently-completed tasks that the frontend may have
+        // missed during SSE disconnect. Only replay completions that are NOT
+        // already in the client-side "seen" set (store.recentlyCompleted) to
+        // prevent duplicate toasts and events on reconnect or initial mount.
+        if (data.recentlyCompleted?.length) {
+          const storeState = useUnifiedTasksStore.getState();
+          const activeRunIds = new Set(storeState.tasks.map((t) => t.runId));
+          const seenCompletionIds = new Set(storeState.recentlyCompleted.map((t) => t.runId));
+          for (const completedTask of data.recentlyCompleted) {
+            // Only fire if:
+            // 1. Not still active in client store (still processing)
+            // 2. Not already seen/completed on client side (dedup)
+            // 3. Not in the server's active tasks (still running)
+            if (
+              !activeRunIds.has(completedTask.runId) &&
+              !seenCompletionIds.has(completedTask.runId) &&
+              !tasks.some((t) => t.runId === completedTask.runId)
+            ) {
+              console.log(`[TaskNotifications] Reconciling recently-completed task: ${completedTask.runId}`);
+              const event: TaskEvent = {
+                eventType: "task:completed",
+                task: completedTask,
+                timestamp: completedTask.completedAt ?? new Date().toISOString(),
+              };
+              handleTaskCompletedRef.current(event);
+              // Mark as seen immediately to prevent TOCTOU race with concurrent SSE events
+              seenCompletionIds.add(completedTask.runId);
+            }
+          }
+        }
 
         if (showToast && tasks.length > 0) {
           toast.success(t("taskReconnected"), {
@@ -1032,6 +1140,26 @@ export function useTaskNotifications() {
 
         scheduleReconnect();
       };
+
+      // Proactive staleness detection: if no message received for 35s
+      // (~2.3x the 15s server heartbeat), the connection is likely dead but the
+      // browser hasn't fired onerror yet. Force reconnect.
+      // Using 35s instead of 25s to tolerate GC pauses and CPU stalls.
+      if (stalenessCheckRef.current) {
+        clearInterval(stalenessCheckRef.current);
+      }
+      stalenessCheckRef.current = setInterval(() => {
+        const last = lastEventReceivedAtRef.current;
+        if (last === null) return;
+        const silenceMs = Date.now() - last;
+        if (silenceMs > 35_000 && eventSourceRef.current?.readyState === EventSource.OPEN) {
+          console.warn(`[TaskNotifications] SSE stale (${Math.round(silenceMs / 1000)}s silence), forcing reconnect`);
+          eventSourceRef.current.close();
+          wasDisconnectedRef.current = true;
+          eventSourceRef.current = null;
+          scheduleReconnect();
+        }
+      }, 10_000);
     };
 
     void reconcileTasks(false).then(() => {
@@ -1051,6 +1179,10 @@ export function useTaskNotifications() {
       }
       progressBatchRef.current.clear();
       reconnectAttemptsRef.current = 0;
+      if (stalenessCheckRef.current) {
+        clearInterval(stalenessCheckRef.current);
+        stalenessCheckRef.current = null;
+      }
     };
   }, [isLoading, user?.id]);
 
@@ -1063,15 +1195,20 @@ export function useTaskNotifications() {
       isWindowVisibleRef.current = visible;
       if (visible && wasHidden) {
         // Reconcile task state after returning from background
-        resilientFetch<{ tasks: UnifiedTask[] }>("/api/tasks/active").then(({ data }) => {
+        resilientFetch<{ tasks: UnifiedTask[]; recentlyCompleted?: UnifiedTask[] }>("/api/tasks/active").then(({ data }) => {
           if (!data) return;
           const store = useUnifiedTasksStore.getState();
           const syncStore = useSessionSyncStore.getState();
           const serverRunIds = new Set(data.tasks.map((t) => t.runId));
-          // Remove tasks that completed while hidden
+          const recentlyCompletedMap = new Map(
+            (data.recentlyCompleted ?? []).map((t) => [t.runId, t])
+          );
+          // Remove tasks that completed while hidden — use real completion
+          // data from recentlyCompleted when available
           for (const task of store.tasks) {
             if (!serverRunIds.has(task.runId)) {
-              store.completeTask(task);
+              const realCompletion = recentlyCompletedMap.get(task.runId);
+              store.completeTask(realCompletion ?? task);
               if (task.sessionId) {
                 syncStore.setActiveRun(task.sessionId, null);
                 syncStore.setSessionActivity(task.sessionId, null);

@@ -2,7 +2,6 @@ import { stat } from "node:fs/promises";
 import {
   createUIMessageStreamResponse,
   streamText,
-  stepCountIs,
   wrapLanguageModel,
   type ModelMessage,
   type Tool,
@@ -40,6 +39,7 @@ import {
   buildUserInjectionContent,
   buildStopSystemMessage,
 } from "@/lib/background-tasks/live-prompt-helpers";
+import { clearDelegationCompletions } from "@/lib/ai/tools/delegation-completion-store";
 
 import { createHeartbeatStream } from "@/lib/utils/heartbeat-stream";
 import {
@@ -102,6 +102,7 @@ import {
   parseInvalidToolSchemaError,
 } from "./tool-schema-recovery";
 import { tagIntermediateDelegationParts } from "./delegation-scope-tagging";
+import { shouldStopTurn, hasRunningDelegationsForSession, hasActiveAsyncWork } from "./delegation-waiting";
 import { createThinkTagFilter, shouldFilterThinkTags } from "@/lib/ai/streaming/think-tag-filter";
 import { thinkTagMiddleware, hasThinkTags } from "@/lib/ai/utils/think-tag-stream";
 import { detectEmotion } from "@/lib/emotion";
@@ -655,6 +656,7 @@ export async function POST(req: Request) {
     } = await buildSystemPromptForRequest({
       characterId,
       userId: dbUser.id,
+      sessionId,
       toolLoadingMode,
       useCaching,
       sessionMetadata,
@@ -903,6 +905,7 @@ export async function POST(req: Request) {
           if (activeSessionId) {
             handleUndrainedQueueMessages(agentRun.id, activeSessionId);
             removeLivePromptQueue(agentRun.id, activeSessionId);
+            clearDelegationCompletions(activeSessionId);
           }
           await completeAgentRun(agentRun.id, runStatus, shouldCancel
             ? { reason: "stream_interrupted" }
@@ -1018,10 +1021,17 @@ export async function POST(req: Request) {
             toolChoice: AI_CONFIG.toolChoice,
           } : {}),
           abortSignal: streamAbortSignal,
-          // For claudecode: stop after step 0 to prevent the passthrough tool
-          // execute results from triggering a new SDK query (infinite loop).
-          // The SDK agent's entire multi-turn work happens inside step 0's fetch.
-          stopWhen: stepCountIs(provider === "claudecode" ? 1 : AI_CONFIG.maxSteps),
+          // Provider-aware step control. Claude Code SDK handles tool execution
+          // internally, so we stop after the initial step unless async work
+          // (delegations/background tasks) needs observation. Other providers
+          // run Selene tools natively and can loop freely up to maxSteps.
+          stopWhen: ({ steps }) => shouldStopTurn({
+            characterId,
+            initiatorSessionId: sessionId,
+            stepCount: steps.length,
+            maxSteps: AI_CONFIG.maxSteps,
+            provider,
+          }),
           temperature: await getSessionProviderTemperatureForSession(
             sessionMetadata,
             providerSupportsFeature("tools", provider) && initialActiveToolNames.length > 0 ? AI_CONFIG.toolTemperature : AI_CONFIG.temperature,
@@ -1128,6 +1138,21 @@ export async function POST(req: Request) {
               return {
                 activeTools: currentActiveTools as string[],
                 messages: [...stepMessages, injectedUserMessage],
+              };
+            }
+
+            // Force the model to keep calling tools while async work is in-flight.
+            // Without this, the model outputs text ("Both are running...") and the
+            // AI SDK loop ends — nobody observes the results.
+            if (stepNumber > 0 && hasActiveAsyncWork(characterId, sessionId)) {
+              const hasDelegations = hasRunningDelegationsForSession(characterId, sessionId);
+              const systemMsg = hasDelegations
+                ? "You have active delegations still running. You MUST call observe() or delegateToSubagent with action='observe' to wait for and collect their results. Do NOT respond to the user until all delegations have completed and you have processed their results."
+                : "You have background processes still running. You MUST call executeCommand with the processId to check their status, or wait for them to complete. Do NOT respond to the user until you have checked on all running processes.";
+              return {
+                activeTools: currentActiveTools as string[],
+                toolChoice: "required" as const,
+                system: systemMsg,
               };
             }
 
@@ -1555,6 +1580,7 @@ export async function POST(req: Request) {
         removeChatAbortController(agentRun.id);
         if (activeSessionId) {
           removeLivePromptQueue(agentRun.id, activeSessionId);
+          clearDelegationCompletions(activeSessionId);
         }
         await completeAgentRun(agentRun.id, runStatus, shouldCancel
           ? { reason: "stream_interrupted" }

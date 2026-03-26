@@ -851,8 +851,16 @@ function createStreamingClaudeCodeResponse(options: {
 
   const stream = new ReadableStream({
     async start(controller) {
+      let emitClosed = false;
       const emit = (event: string, data: unknown) => {
-        controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        if (emitClosed) return;
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          // Controller closed (client disconnected). Continue consuming the SDK
+          // generator so onFinish fires and DB persistence completes normally.
+          emitClosed = true;
+        }
       };
 
       const abortController = new AbortController();
@@ -1607,6 +1615,11 @@ function createStreamingClaudeCodeResponse(options: {
           // Already closed
         }
       }
+    },
+    cancel() {
+      // Client stopped reading (disconnect / abort). The try/catch in emit()
+      // already no-ops on a closed controller, so the SDK generator keeps
+      // running to completion and DB persistence finishes normally.
     },
   });
 

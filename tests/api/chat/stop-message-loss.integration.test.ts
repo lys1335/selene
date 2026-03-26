@@ -34,6 +34,7 @@ import {
 } from "@/lib/db/queries";
 import { nextOrderingIndex } from "@/lib/session/message-ordering";
 import { convertDBMessagesToUIMessages } from "@/lib/messages/converter";
+import { buildRetryMessage } from "@/lib/chat/client-retry";
 import { sanitizeMessagesForInit } from "@/components/chat-provider";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -336,7 +337,7 @@ describe("Stop Message Loss Prevention", () => {
    * Validates that a stopped assistant message containing partial tool calls
    * is preserved through the next turn's sync.
    */
-  it("filters unresolved tool calls from streaming persistence until a result exists", async () => {
+  it("persists unresolved tool calls once their input is finalized", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const state = makeStreamingState([
       { type: "text", text: "Working" },
@@ -351,16 +352,18 @@ describe("Stop Message Loss Prevention", () => {
 
     const filtered = filterStreamingPartsForPersistence(state);
 
-    expect(filtered).toEqual([{ type: "text", text: "Working" }]);
-    expect(warnSpy).toHaveBeenCalledWith(
-      "[CHAT API] Dropped unresolved projected tool call",
-      expect.objectContaining({
+    expect(filtered).toEqual([
+      { type: "text", text: "Working" },
+      {
+        type: "tool-call",
         toolCallId: "tc-unsealed",
         toolName: "localGrep",
-        reason: "unresolved-no-result",
-        projection: "streaming-persistence",
-      })
-    );
+        state: "input-available",
+        args: { pattern: "todo" },
+        active: true,
+      },
+    ]);
+    expect(warnSpy).not.toHaveBeenCalled();
     warnSpy.mockRestore();
   });
 
@@ -548,9 +551,23 @@ describe("Stop Message Loss Prevention", () => {
       metadata: { interruptionType: "chat", interrupted: true },
     });
 
+    const retryMessage = buildRetryMessage([
+      {
+        id: userMsg1!.id,
+        role: "user",
+        parts: [{ type: "text", text: "Explain quantum computing" }],
+      } as any,
+    ]);
+    expect(retryMessage).toEqual({
+      id: userMsg1!.id,
+      role: "user",
+      parts: [{ type: "text", text: "Explain quantum computing" }],
+      messageId: userMsg1!.id,
+    });
+
     // ── Second attempt (retry same turn): also stopped ────────────────────
-    // In practice, assistant-ui sends the same user message again — but the
-    // frontend still knows about firstStoppedId from the previous stream.
+    // In practice, the client resends the same user message rather than
+    // regenerating an assistant row that may not exist yet.
 
     const secondStoppedId = crypto.randomUUID();
     await createMessage({

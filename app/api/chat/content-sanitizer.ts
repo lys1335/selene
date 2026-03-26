@@ -9,6 +9,8 @@ export const MAX_TEXT_CONTENT_LENGTH = 75_000;
 // Limit how many missing tool results we attempt to re-fetch per request
 export const MAX_TOOL_REFETCH = 6;
 
+export const BASE64_IMAGE_PLACEHOLDER = "[Base64 image data removed - use image URL instead]";
+
 export const WEB_SEARCH_NO_RESULT_GUARD = {
   maxConsecutiveZeroResultCalls: 3,
   maxZeroResultRepeatsPerQuery: 2,
@@ -99,25 +101,23 @@ export function normalizeReadFileInputArgs(
   };
 }
 
-/**
- * Check if a string looks like base64 image data that shouldn't be in text context
- * This is a safeguard against accidentally including base64 in conversation
- */
-export function looksLikeBase64ImageData(text: string): boolean {
-  // Base64 image data is typically very long and contains specific patterns
-  if (text.length < 1000) return false;
 
-  // Check for data URL pattern
-  if (text.includes("data:image/") && text.includes(";base64,")) return true;
+const INLINE_DATA_URL_IMAGE_RE =
+  /data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=\r\n]+(?=$|[\s)"'\]>])/g;
 
-  // Check for long base64-like strings (mostly alphanumeric with + and /)
-  // A typical base64 image would have very high ratio of base64 chars
-  const base64Chars = text.match(/[A-Za-z0-9+/=]/g);
-  if (base64Chars && base64Chars.length / text.length > 0.95 && text.length > 5000) {
-    return true;
-  }
+function stripInlineBase64ImageData(text: string): {
+  text: string;
+  removedCount: number;
+} {
+  let removedCount = 0;
+  const sanitized = text.replace(INLINE_DATA_URL_IMAGE_RE, (match) => {
+    removedCount += 1;
+    // Preserve trailing delimiter/spacing that terminated the regex match.
+    const trailingWhitespace = match.match(/\s+$/)?.[0] ?? "";
+    return `${BASE64_IMAGE_PLACEHOLDER}${trailingWhitespace}`;
+  });
 
-  return false;
+  return { text: sanitized, removedCount };
 }
 
 /**
@@ -183,9 +183,12 @@ export function sanitizeTextContent(text: string, context: string, sessionId?: s
   // Strip fake tool call JSON that may have been output as text
   text = stripFakeToolCallJson(text);
 
-  if (looksLikeBase64ImageData(text)) {
-    console.warn(`[CHAT API] Detected base64 image data in ${context}, stripping to prevent token overflow`);
-    return `[Base64 image data removed - use image URL instead]`;
+  const inlineImageStripResult = stripInlineBase64ImageData(text);
+  if (inlineImageStripResult.removedCount > 0) {
+    console.warn(
+      `[CHAT API] Removed ${inlineImageStripResult.removedCount} inline base64 image payload(s) from ${context}`,
+    );
+    text = inlineImageStripResult.text;
   }
 
   // Smart truncation: store full content and provide retrieval instructions

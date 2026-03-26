@@ -212,8 +212,15 @@ async function runLiveTests(): Promise<void> {
   const titleA = await sessions[0].page.title();
   assert(typeof titleA === "string", "Session A is still functional after B closed");
 
-  // Test 5: Shutdown all
-  section("5. Full Shutdown");
+  // Test 5: Recreate a closed session ID
+  section("5. Session Recreate After Close");
+  const recreatedB = await getOrCreateSession("live-B");
+  assert(getActiveSessionCount() === 3, "Closed session ID can be recreated");
+  await recreatedB.page.goto("https://example.com", { waitUntil: "domcontentloaded" });
+  assert(recreatedB.page.url().includes("example.com"), "Recreated session can navigate successfully");
+
+  // Test 6: Shutdown all
+  section("6. Full Shutdown");
   await shutdownAll();
   assert(getActiveSessionCount() === 0, "All sessions closed");
 

@@ -15,6 +15,8 @@ export interface DelegateToSubagentToolOptions {
   sessionId: string;
   userId: string;
   characterId: string;
+  /** LLM provider name — determines whether background delegations can use async completion notifications. */
+  provider?: string;
 }
 
 export type DelegateAction = "start" | "observe" | "continue" | "answer" | "stop" | "list";
@@ -70,6 +72,10 @@ export interface DelegateResult {
   responsePreviewCount?: number;
   responsePreviewOmittedCount?: number;
   responsePreviewTruncatedCount?: number;
+  /** Incremental steps since last observe — compact tool call descriptions. */
+  steps?: Array<{ toolName: string; summary: string }>;
+  /** Total new steps since last observe. */
+  newStepCount?: number;
   elapsed?: number;
   waitedMs?: number;
   waitTimedOut?: boolean;
@@ -81,6 +87,7 @@ export interface DelegateResult {
     delegateAgent: string;
     task: string;
     running: boolean;
+    completed?: boolean;
     elapsed: number;
   }>;
 }
@@ -95,17 +102,27 @@ export interface ActiveDelegation {
   sessionId: string;
   /** The initiator's chat session ID — used to scope delegations per session. */
   initiatorSessionId: string;
+  /**
+   * The root session ID — the original channel/web session that started the
+   * delegation chain. Used by the channel bridge to route interactive questions
+   * back to the correct channel conversation when the subagent's own session
+   * has no channel_conversations mapping.
+   */
+  rootSessionId: string;
   delegateId: string;
   delegateName: string;
   delegatorId: string;
   workflowId: string;
   task: string;
   startedAt: number;
+  settledAt?: number;
   abortController: AbortController;
   streamPromise: Promise<void>;
   settled: boolean;
   executionId: number;
   error?: string;
+  /** Watermark for incremental observe — tracks the last orderingIndex seen by the caller. */
+  lastObservedOrderingIndex: number;
 }
 
 export type SubagentCandidate = {

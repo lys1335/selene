@@ -1,10 +1,10 @@
 /**
  * Deep Research React Hook
- * 
+ *
  * Provides a React hook for managing deep research state and streaming.
  */
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, type Dispatch, type SetStateAction } from 'react';
 import { resilientFetch } from '@/lib/utils/resilient-fetch';
 import type {
   DeepResearchEvent,
@@ -16,6 +16,12 @@ import type {
 
 type DeepResearchProgress = { completed: number; total: number; currentQuery: string } | null;
 
+type DeepResearchErrorDebug = {
+  rawResponsePreview?: string;
+  extractedJsonPreview?: string;
+  parseMessage?: string;
+} | null;
+
 interface PersistedDeepResearchState {
   runId: string;
   query: string;
@@ -25,7 +31,17 @@ interface PersistedDeepResearchState {
   findings: ResearchFinding[];
   finalReport: FinalReport | null;
   error: string | null;
+  failedPhase?: Exclude<ResearchPhase, 'idle' | 'complete' | 'error'>;
+  errorCode?: string;
+  errorDebug?: DeepResearchErrorDebug;
   updatedAt: string;
+}
+
+interface DeepResearchErrorState {
+  message: string | null;
+  failedPhase: Exclude<ResearchPhase, 'idle' | 'complete' | 'error'> | null;
+  code: string | null;
+  debug: DeepResearchErrorDebug;
 }
 
 interface ActiveRunLookupResponse {
@@ -58,8 +74,120 @@ interface LocalDeepResearchSnapshot {
   findings: ResearchFinding[];
   finalReport: FinalReport | null;
   error: string | null;
+  errorState: DeepResearchErrorState;
   activeRunId: string | null;
   updatedAt: string;
+}
+
+function createInitialErrorState(): DeepResearchErrorState {
+  return {
+    message: null,
+    failedPhase: null,
+    code: null,
+    debug: null,
+  };
+}
+
+function hydrateErrorState(state?: Partial<DeepResearchErrorState> | null): DeepResearchErrorState {
+  return {
+    message: state?.message ?? null,
+    failedPhase: state?.failedPhase ?? null,
+    code: state?.code ?? null,
+    debug: state?.debug ?? null,
+  };
+}
+
+function formatDeepResearchErrorMessage(state: DeepResearchErrorState, fallback: string | null): string | null {
+  const message = state.message ?? fallback;
+  if (!message) {
+    return null;
+  }
+
+  if (!state.failedPhase) {
+    return message;
+  }
+
+  return `${state.failedPhase}: ${message}`;
+}
+
+function buildErrorStateFromPersisted(state: PersistedDeepResearchState): DeepResearchErrorState {
+  return hydrateErrorState({
+    message: state.error,
+    failedPhase: state.failedPhase ?? null,
+    code: state.errorCode ?? null,
+    debug: state.errorDebug ?? null,
+  });
+}
+
+function buildErrorStateFromEvent(event: Extract<DeepResearchEvent, { type: 'error' }>): DeepResearchErrorState {
+  return hydrateErrorState({
+    message: event.error,
+    failedPhase: event.failedPhase ?? null,
+    code: event.code ?? null,
+    debug: event.debug ?? null,
+  });
+}
+
+function buildErrorStateFromThrownError(errorMessage: string): DeepResearchErrorState {
+  return hydrateErrorState({ message: errorMessage });
+}
+
+function clearDeepResearchErrorState(
+  setErrorState: Dispatch<SetStateAction<DeepResearchErrorState>>,
+  setError: Dispatch<SetStateAction<string | null>>,
+): void {
+  setErrorState(createInitialErrorState());
+  setError(null);
+}
+
+function applyDeepResearchErrorState(
+  nextState: DeepResearchErrorState,
+  setErrorState: Dispatch<SetStateAction<DeepResearchErrorState>>,
+  setError: Dispatch<SetStateAction<string | null>>,
+): void {
+  const hydrated = hydrateErrorState(nextState);
+  setErrorState(hydrated);
+  setError(formatDeepResearchErrorMessage(hydrated, hydrated.message));
+}
+
+function isPhaseActive(phase: ResearchPhase): boolean {
+  return phase !== 'idle' && phase !== 'complete' && phase !== 'error';
+}
+
+function isPhaseTerminal(phase: ResearchPhase): boolean {
+  return phase === 'complete' || phase === 'error' || phase === 'idle';
+}
+
+function getUserFacingPhaseMessage(state: DeepResearchErrorState, fallback: string): string {
+  if (!state.failedPhase) {
+    return fallback;
+  }
+
+  return `${state.failedPhase} failed`;
+}
+
+function getUserFacingErrorMessage(state: DeepResearchErrorState): string | null {
+  if (!state.message) {
+    return null;
+  }
+
+  switch (state.code) {
+    case 'DEEP_RESEARCH_PLAN_INVALID_JSON':
+      return 'The research planner returned malformed JSON. Check the deep research logs for the raw planner payload.';
+    case 'DEEP_RESEARCH_PLAN_INVALID_SHAPE':
+      return 'The research planner returned an incomplete plan payload.';
+    case 'DEEP_RESEARCH_QUERY_INVALID_SHAPE':
+      return 'The research query generator returned an invalid payload.';
+    case 'DEEP_RESEARCH_REFINEMENT_INVALID_SHAPE':
+      return 'The research refinement step returned an invalid payload.';
+    default:
+      return state.message;
+  }
+}
+
+function getDebugSummary(state: DeepResearchErrorState): string | null {
+  const parts = [state.code, state.debug?.parseMessage].filter(Boolean);
+  return parts.length > 0 ? parts.join(' | ') : null;
 }
 
 function getStorageKey(sessionId?: string): string | null {
@@ -111,7 +239,6 @@ export interface UseDeepResearchOptions {
 }
 
 export interface UseDeepResearchReturn {
-  // State
   isActive: boolean;
   isLoading: boolean;
   phase: ResearchPhase;
@@ -120,12 +247,9 @@ export interface UseDeepResearchReturn {
   findings: ResearchFinding[];
   finalReport: FinalReport | null;
   error: string | null;
-
-  // Background/polling state
+  errorState: DeepResearchErrorState;
   activeRunId: string | null;
   isBackgroundPolling: boolean;
-
-  // Actions
   startResearch: (query: string) => Promise<void>;
   cancelResearch: () => void;
   reset: () => void;
@@ -135,7 +259,7 @@ export interface UseDeepResearchReturn {
 
 export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepResearchReturn {
   const { sessionId, config, onComplete, onError } = options;
-  
+
   const [isActive, setIsActive] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [phase, setPhase] = useState<ResearchPhase>('idle');
@@ -144,6 +268,7 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
   const [findings, setFindings] = useState<ResearchFinding[]>([]);
   const [finalReport, setFinalReport] = useState<FinalReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorState, setErrorState] = useState<DeepResearchErrorState>(createInitialErrorState());
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [isBackgroundPolling, setIsBackgroundPolling] = useState(false);
 
@@ -152,11 +277,16 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
   const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollingRunIdRef = useRef<string | null>(null);
   const activeRunIdRef = useRef<string | null>(null);
+  const phaseRef = useRef<ResearchPhase>('idle');
   const hasHydratedRef = useRef(false);
 
   useEffect(() => {
     activeRunIdRef.current = activeRunId;
   }, [activeRunId]);
+
+  useEffect(() => {
+    phaseRef.current = phase;
+  }, [phase]);
 
   const stopPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
@@ -168,14 +298,20 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
   }, []);
 
   const applyPersistedState = useCallback((state: PersistedDeepResearchState) => {
+    const nextErrorState = buildErrorStateFromPersisted(state);
     setPhase(state.phase);
-    setPhaseMessage(state.phaseMessage || "");
+    phaseRef.current = state.phase;
+    setPhaseMessage(
+      state.phase === 'error'
+        ? getUserFacingPhaseMessage(nextErrorState, state.phaseMessage || 'Deep Research failed.')
+        : (state.phaseMessage || '')
+    );
     setProgress(state.progress ?? null);
     setFindings(Array.isArray(state.findings) ? state.findings : []);
     setFinalReport(state.finalReport ?? null);
-    setError(state.error ?? null);
-    setIsActive(state.phase !== "idle" && state.phase !== "complete" && state.phase !== "error");
-    setIsLoading(state.phase !== "idle" && state.phase !== "complete" && state.phase !== "error");
+    applyDeepResearchErrorState(nextErrorState, setErrorState, setError);
+    setIsActive(isPhaseActive(state.phase));
+    setIsLoading(isPhaseActive(state.phase));
   }, []);
 
   useEffect(() => {
@@ -190,21 +326,23 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
       findings,
       finalReport,
       error,
+      errorState,
       activeRunId,
       updatedAt: new Date().toISOString(),
     });
-  }, [activeRunId, error, finalReport, findings, phase, phaseMessage, progress, storageKey]);
+  }, [activeRunId, error, errorState, finalReport, findings, phase, phaseMessage, progress, storageKey]);
 
   const reset = useCallback(() => {
     stopPolling();
     setIsActive(false);
     setIsLoading(false);
     setPhase('idle');
+    phaseRef.current = 'idle';
     setPhaseMessage('');
     setProgress(null);
     setFindings([]);
     setFinalReport(null);
-    setError(null);
+    clearDeepResearchErrorState(setErrorState, setError);
     setActiveRunId(null);
     writeLocalSnapshot(storageKey, null);
   }, [stopPolling, storageKey]);
@@ -230,11 +368,11 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
     setIsActive(false);
     setIsLoading(false);
     setPhase('idle');
+    phaseRef.current = 'idle';
     setPhaseMessage('Research cancelled');
-    setError(null);
+    clearDeepResearchErrorState(setErrorState, setError);
   }, [stopPolling]);
 
-  // Use refs for callbacks to avoid stale closures
   const onCompleteRef = useRef(onComplete);
   const onErrorRef = useRef(onError);
   onCompleteRef.current = onComplete;
@@ -283,7 +421,7 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
       applyPersistedState(data.deepResearchState);
     }
 
-    const isRunning = data.status === "running";
+    const isRunning = data.status === 'running';
     setIsActive(isRunning);
     setIsLoading(isRunning);
 
@@ -296,7 +434,8 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
       }
 
       if (data.deepResearchState?.error) {
-        onErrorRef.current?.(data.deepResearchState.error);
+        const nextErrorState = buildErrorStateFromPersisted(data.deepResearchState);
+        onErrorRef.current?.(getUserFacingErrorMessage(nextErrorState) ?? data.deepResearchState.error);
       }
 
       if (!data.deepResearchState?.finalReport && !data.deepResearchState?.error) {
@@ -338,46 +477,58 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
 
     switch (event.type) {
       case 'phase_change':
+        clearDeepResearchErrorState(setErrorState, setError);
         setPhase(event.phase);
+        phaseRef.current = event.phase;
         setPhaseMessage(event.message);
         break;
       case 'search_progress':
         setProgress({ completed: event.completed, total: event.total, currentQuery: event.currentQuery });
         break;
       case 'search_result':
-        setFindings(prev => [...prev, event.finding]);
+        setFindings((prev) => [...prev, event.finding]);
         break;
       case 'final_report':
-        console.log('[DEEP-RESEARCH-HOOK] Setting final report:', event.report?.title);
+        clearDeepResearchErrorState(setErrorState, setError);
         setFinalReport(event.report);
         setPhase('complete');
+        phaseRef.current = 'complete';
+        setPhaseMessage('Research complete');
         setIsActive(false);
         setIsLoading(false);
         onCompleteRef.current?.(event.report);
         break;
-      case 'error':
-        setError(event.error);
+      case 'error': {
+        const nextErrorState = buildErrorStateFromEvent(event);
+        applyDeepResearchErrorState(nextErrorState, setErrorState, setError);
         setPhase('error');
+        phaseRef.current = 'error';
+        setPhaseMessage(getUserFacingPhaseMessage(nextErrorState, event.phaseMessage ?? 'Deep Research failed.'));
         setIsActive(false);
         setIsLoading(false);
-        onErrorRef.current?.(event.error);
+        const debugSummary = getDebugSummary(nextErrorState);
+        if (debugSummary) {
+          console.error('[DEEP-RESEARCH-HOOK] Structured error:', debugSummary);
+        }
+        onErrorRef.current?.(getUserFacingErrorMessage(nextErrorState) ?? event.error);
         break;
-      case 'complete':
-        // Phase should already be set by final_report, but ensure it's complete
-        setPhase(prev => prev === 'error' ? prev : 'complete');
+      }
+      case 'complete': {
+        const nextPhase: ResearchPhase = phaseRef.current === 'error' ? 'error' : 'complete';
+        phaseRef.current = nextPhase;
+        setPhase(nextPhase);
         setIsActive(false);
         setIsLoading(false);
         break;
+      }
     }
   }, []);
 
   const startResearch = useCallback(async (query: string) => {
-    // Reset state
     reset();
     setIsActive(true);
     setIsLoading(true);
 
-    // Create abort controller
     abortControllerRef.current = new AbortController();
 
     try {
@@ -408,7 +559,6 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
       while (true) {
         const { done, value } = await reader.read();
         if (done) {
-          // Process any remaining buffer content
           if (buffer.trim()) {
             console.log('[DEEP-RESEARCH-HOOK] Processing remaining buffer:', buffer);
           }
@@ -421,28 +571,28 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
         buffer = lines.pop() || '';
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') {
-              console.log('[DEEP-RESEARCH-HOOK] Received [DONE] signal');
-              continue;
-            }
+          if (!line.startsWith('data: ')) {
+            continue;
+          }
 
-            try {
-              const event: DeepResearchEvent = JSON.parse(data);
-              handleEvent(event);
-            } catch (parseError) {
-              console.warn('[DEEP-RESEARCH-HOOK] Failed to parse event:', data, parseError);
-            }
+          const data = line.slice(6);
+          if (data === '[DONE]') {
+            console.log('[DEEP-RESEARCH-HOOK] Received [DONE] signal');
+            continue;
+          }
+
+          try {
+            const event: DeepResearchEvent = JSON.parse(data);
+            handleEvent(event);
+          } catch (parseError) {
+            console.warn('[DEEP-RESEARCH-HOOK] Failed to parse event:', data, parseError);
           }
         }
       }
 
       console.log('[DEEP-RESEARCH-HOOK] Stream ended');
 
-      // If the stream closes before we receive terminal events, continue via status polling.
-      const shouldStartPolling = !hasStreamActivity
-        || (phase !== 'complete' && phase !== 'error' && phase !== 'idle');
+      const shouldStartPolling = !hasStreamActivity || !isPhaseTerminal(phaseRef.current);
 
       if (shouldStartPolling) {
         const fallbackRunId = activeRunIdRef.current;
@@ -464,19 +614,22 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
       }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        return; // Cancelled, don't set error
+        return;
       }
+
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      const nextErrorState = buildErrorStateFromThrownError(errorMessage);
       console.error('[DEEP-RESEARCH-HOOK] Error:', errorMessage);
-      setError(errorMessage);
+      applyDeepResearchErrorState(nextErrorState, setErrorState, setError);
       setPhase('error');
+      setPhaseMessage(getUserFacingPhaseMessage(nextErrorState, 'Deep Research failed.'));
       setIsActive(false);
       setIsLoading(false);
-      onErrorRef.current?.(errorMessage);
+      onErrorRef.current?.(getUserFacingErrorMessage(nextErrorState) ?? errorMessage);
     } finally {
       abortControllerRef.current = null;
     }
-  }, [applyPersistedState, config, handleEvent, reset, resolveDeepResearchRun, startPolling]);
+  }, [applyPersistedState, config, handleEvent, reset, resolveDeepResearchRun, sessionId, startPolling]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -492,7 +645,7 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
       setProgress(localSnapshot.progress ?? null);
       setFindings(Array.isArray(localSnapshot.findings) ? localSnapshot.findings : []);
       setFinalReport(localSnapshot.finalReport ?? null);
-      setError(localSnapshot.error ?? null);
+      applyDeepResearchErrorState(localSnapshot.errorState, setErrorState, setError);
       if (localSnapshot.activeRunId) {
         setActiveRunId(localSnapshot.activeRunId);
       }
@@ -544,6 +697,7 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
     findings,
     finalReport,
     error,
+    errorState,
     activeRunId,
     isBackgroundPolling,
     startResearch,
@@ -553,4 +707,3 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
     stopPolling,
   };
 }
-

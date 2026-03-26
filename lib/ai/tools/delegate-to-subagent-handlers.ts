@@ -32,16 +32,42 @@ import {
   type SubagentCandidate,
   type AvailableSubagent,
 } from "./delegate-to-subagent-types";
+import { appendToLivePromptQueueBySession } from "@/lib/background-tasks/live-prompt-queue-registry";
+import { addDelegationCompletion } from "./delegation-completion-store";
 
 // ---------------------------------------------------------------------------
 // Read-only accessor for external consumers (API routes, system prompt)
 // ---------------------------------------------------------------------------
 
 /**
- * Return active (unsettled) delegations for a character.
+ * Return delegations for a character, including settled ones until TTL cleanup.
  * When `initiatorSessionId` is provided, only delegations created in that
  * session are returned — this prevents cross-session leakage.
  */
+const DELEGATION_STALE_TTL_MS = 60 * 60 * 1000;
+
+function isDelegationExpired(delegation: ActiveDelegation, now = Date.now()): boolean {
+  const referenceTime = delegation.settledAt ?? delegation.startedAt;
+  return now - referenceTime > DELEGATION_STALE_TTL_MS;
+}
+
+function toDelegationSummary(
+  delegationId: string,
+  delegation: ActiveDelegation,
+  now = Date.now(),
+): NonNullable<DelegateResult["delegations"]>[number] {
+  return {
+    delegationId,
+    sessionId: delegation.sessionId,
+    delegateAgentId: delegation.delegateId,
+    delegateAgent: delegation.delegateName,
+    task: delegation.task.length > 100 ? delegation.task.slice(0, 100) + "..." : delegation.task,
+    running: !delegation.settled,
+    completed: delegation.settled,
+    elapsed: now - delegation.startedAt,
+  };
+}
+
 export function getActiveDelegationsForCharacter(
   characterId: string,
   initiatorSessionId?: string,
@@ -52,6 +78,7 @@ export function getActiveDelegationsForCharacter(
   delegateAgent: string;
   task: string;
   running: boolean;
+  completed?: boolean;
   elapsed: number;
 }> {
   const results: Array<{
@@ -61,28 +88,21 @@ export function getActiveDelegationsForCharacter(
     delegateAgent: string;
     task: string;
     running: boolean;
+    completed?: boolean;
     elapsed: number;
   }> = [];
 
   const staleIds: string[] = [];
+  const now = Date.now();
   for (const [id, del] of activeDelegations.entries()) {
     if (del.delegatorId !== characterId) continue;
     if (initiatorSessionId && del.initiatorSessionId !== initiatorSessionId) continue;
-    if (del.settled) {
-      if (Date.now() - del.startedAt > 10 * 60 * 1000) {
-        staleIds.push(id);
-      }
+    if (isDelegationExpired(del, now)) {
+      staleIds.push(id);
       continue;
     }
-    results.push({
-      delegationId: id,
-      sessionId: del.sessionId,
-      delegateAgentId: del.delegateId,
-      delegateAgent: del.delegateName,
-      task: del.task.length > 100 ? del.task.slice(0, 100) + "..." : del.task,
-      running: true,
-      elapsed: Date.now() - del.startedAt,
-    });
+
+    results.push(toDelegationSummary(id, del, now));
   }
   for (const id of staleIds) {
     activeDelegations.delete(id);
@@ -354,8 +374,14 @@ export function resolveSubagentCandidate(
  */
 export async function extractFinalResponse(sessionId: string): Promise<string | undefined> {
   const messages = await getMessages(sessionId);
-  const assistantMessages = messages.filter((m) => m.role === "assistant");
+  if (!Array.isArray(messages)) return undefined;
+
+  const assistantMessages = messages.filter(
+    (message) =>
+      !!message && typeof message === "object" && "role" in message && (message as { role?: string }).role === "assistant",
+  );
   if (assistantMessages.length === 0) return undefined;
+
   const last = assistantMessages[assistantMessages.length - 1];
   return extractTextFromContent(last.content);
 }
@@ -365,6 +391,37 @@ export async function extractFinalResponse(sessionId: string): Promise<string | 
 // ---------------------------------------------------------------------------
 
 /** Start or restart background execution for a delegation, tracking settlement. */
+function notifyInitiatorSessionOfCompletion(delegation: ActiveDelegation): void {
+  const completionMessage =
+    `[Delegation Complete] ${delegation.id} ("${delegation.delegateName}") has finished. ` +
+    `Use delegateToSubagent action="observe" delegationId="${delegation.id}" to read the results.`;
+
+  const queued = appendToLivePromptQueueBySession(delegation.initiatorSessionId, {
+    id: `deleg-complete-${delegation.id}`,
+    content: completionMessage,
+    stopIntent: false,
+    metadata: {
+      kind: "delegation_completion",
+      delegationId: delegation.id,
+      delegateName: delegation.delegateName,
+    },
+  });
+
+  if (queued) {
+    return;
+  }
+
+  addDelegationCompletion({
+    delegationId: delegation.id,
+    delegateName: delegation.delegateName,
+    sessionId: delegation.sessionId,
+    initiatorSessionId: delegation.initiatorSessionId,
+    characterId: delegation.delegatorId,
+    completedAt: delegation.settledAt ?? Date.now(),
+    error: delegation.error,
+  });
+}
+
 export function startBackgroundExecution(
   delegation: ActiveDelegation,
   userMessage: string,
@@ -375,6 +432,7 @@ export function startBackgroundExecution(
   delegation.abortController = abortController;
   delegation.executionId = executionId;
   delegation.settled = false;
+  delegation.settledAt = undefined;
   delegation.error = undefined;
 
   const streamPromise = executeDelegation(
@@ -387,21 +445,26 @@ export function startBackgroundExecution(
     .then(() => {
       if (delegation.executionId !== executionId) return;
       delegation.settled = true;
+      delegation.settledAt = Date.now();
+      notifyInitiatorSessionOfCompletion(delegation);
     })
     .catch((err) => {
       if (delegation.executionId !== executionId) return;
       delegation.settled = true;
+      delegation.settledAt = Date.now();
 
       const isAbortError =
         (err instanceof DOMException && err.name === "AbortError") ||
         (err instanceof Error && err.name === "AbortError");
 
       if (isAbortError) {
+        notifyInitiatorSessionOfCompletion(delegation);
         return;
       }
 
       delegation.error = err instanceof Error ? err.message : String(err);
       console.error(`[Delegation] ${delegation.id} failed:`, delegation.error);
+      notifyInitiatorSessionOfCompletion(delegation);
     });
 
   delegation.streamPromise = streamPromise;

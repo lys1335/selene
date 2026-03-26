@@ -49,13 +49,13 @@ extraResources:
       - "!**/.env*"
       - "!**/drizzle"
       - "!**/.cache"
-      - "!**/@remotion/studio"
+      # NOTE: @remotion/studio is intentionally kept — @remotion/bundler requires studio/renderEntry at runtime
       - "!**/typescript"
-      - "!**/webpack"
       - "!**/@huggingface/transformers/node_modules/onnxruntime-node"
       - "!**/@huggingface/transformers/node_modules/onnxruntime-web"
       - "!**/*.map"
       - "!**/*.ts"
+      - "lib/ai/video-assembly/remotion/**/*.ts"
       - "!**/test"
       - "!**/tests"
       # Exclude bundled source code (Next.js standalone copies project root)
@@ -82,9 +82,7 @@ extraResources:
       # Dev/build-only packages (also removed in electron-prepare.js as primary defense)
       - "!electron/**"
       - "!typescript/**"
-      - "!webpack/**"
-      - "!@remotion/studio/**"
-      - "!@remotion/studio-server/**"
+      # NOTE: @remotion/studio and studio-server are intentionally kept — bundler requires them at runtime
   # Turbopack external module wrappers (lives inside .next/node_modules, excluded by the !**/node_modules filter above)
   - from: ".next/standalone/.next/node_modules"
     to: "standalone/.next/node_modules"
@@ -140,19 +138,17 @@ extraResources:
 asar: true
 compression: "normal"
 
-# afterSign: "scripts/notarize.js"  # TEMPORARILY DISABLED
-
 # Disable npm rebuild - we handle this in electron:rebuild-standalone
 npmRebuild: false
 
 # macOS specific configuration
+# afterSign: "scripts/notarize.js"
+
 mac:
   category: "public.app-category.entertainment"
-  identity: null  # TEMPORARILY DISABLED - skip code signing
+  identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
-  # entitlements: "build-resources/entitlements.mac.plist"       # TEMPORARILY DISABLED
-  # entitlementsInherit: "build-resources/entitlements.mac.inherit.plist"  # TEMPORARILY DISABLED
   # Build only for current architecture by default (use CLI flags to override)
   target:
     - target: "dir"

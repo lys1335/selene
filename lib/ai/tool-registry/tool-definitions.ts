@@ -482,11 +482,12 @@ Examples:
       loading: { deferLoading: true },
       requiresSession: true,
     } satisfies ToolMetadata,
-    ({ sessionId, userId, characterId }) =>
+    ({ sessionId, userId, characterId, provider }) =>
       createDelegateToSubagentTool({
         sessionId: sessionId || "UNSCOPED",
         userId: userId || "UNSCOPED",
         characterId: characterId || "UNSCOPED",
+        provider,
       })
   );
 

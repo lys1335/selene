@@ -651,7 +651,9 @@
         "flux2Klein9bEnabled": "Requires FLUX.2 Klein 9B enabled",
         "localGrepEnabled": "Requires Local Grep enabled",
         "devWorkspaceEnabled": "Requires Developer Workspace enabled",
-        "screenCaptureEnabled": "Requires Screen Capture enabled"
+        "screenCaptureEnabled": "Requires Screen Capture enabled",
+        "runwayApiSecret": "Requires Runway API key",
+        "vertexAIProjectId": "Requires Vertex AI Project ID"
       }
     },
     "tools": {
@@ -710,6 +712,14 @@
       "generateVideoWan22": {
         "name": "Video Generation",
         "description": "Animate images into videos"
+      },
+      "generateVideoRunway": {
+        "name": "Video Generation (Runway)",
+        "description": "Generate cinematic videos with Runway Gen-4/Gen-4.5"
+      },
+      "generateVideoVertexAI": {
+        "name": "Video Generation (Google Veo)",
+        "description": "Generate videos with Google Veo via Vertex AI"
       },
       "generatePixelVideoWan22": {
         "name": "Pixel Animation (WAN 2.2)",
@@ -1052,6 +1062,8 @@
       "generateImageFlux2": "Flux2 Image Generation",
       "generateImageWan22": "WAN 2.2 Image Generation",
       "generateVideoWan22": "WAN 2.2 Video Generation",
+      "generateVideoRunway": "Runway Video Generation",
+      "generateVideoVertexAI": "Vertex AI Veo Video",
       "generatePixelVideoWan22": "WAN 2.2 Pixel Animation",
       "assembleVideo": "Video Assembly",
       "showProductImages": "Product Gallery",
@@ -1756,6 +1768,10 @@
         "editRoomImageDesc": "Edit images, create variations, combine elements from two images",
         "generateVideoWan22": "Video Generation",
         "generateVideoWan22Desc": "Animate images into short videos",
+        "generateVideoRunway": "Video Generation (Runway)",
+        "generateVideoRunwayDesc": "Generate cinematic videos with Runway Gen-4/Gen-4.5",
+        "generateVideoVertexAI": "Video Generation (Google Veo)",
+        "generateVideoVertexAIDesc": "Generate videos with Google Veo via Vertex AI",
         "generatePixelVideoWan22": "Pixel Animation (WAN 2.2)",
         "generatePixelVideoWan22Desc": "Generate pixel art character sprite animations",
         "assembleVideo": "Video Assembly",
@@ -1850,7 +1866,9 @@
         "flux2Klein9bEnabled": "Requires FLUX.2 Klein 9B enabled",
         "localGrepEnabled": "Requires Local Grep enabled",
         "devWorkspaceEnabled": "Requires Developer Workspace enabled",
-        "screenCaptureEnabled": "Requires Screen Capture enabled"
+        "screenCaptureEnabled": "Requires Screen Capture enabled",
+        "runwayApiSecret": "Requires Runway API key",
+        "vertexAIProjectId": "Requires Vertex AI Project ID"
       },
       "back": "Back",
       "continue": "Continue →"
@@ -2059,6 +2077,8 @@
       "ollama": "Ollama (local)",
       "vllm": "vLLM (local)",
       "keysTitle": "Provider keys",
+      "videoTitle": "Video generation",
+      "videoDescription": "Configure API keys for video generation providers (Runway, Google Vertex AI Veo).",
       "auth": {
         "pasteInstructions": "A browser tab has been opened. After authorizing, copy the code shown on the page and paste it below.",
         "codePlaceholder": "Paste the authorization code here...",
@@ -2147,6 +2167,26 @@
           "label": "Selene media key",
           "placeholder": "Enter your Selene AI key",
           "helper": "Needed for image and video generation."
+        },
+        "runway": {
+          "label": "Runway API Secret",
+          "placeholder": "rw_...",
+          "helper": "Needed for Runway video generation (Gen-4, Gen-4.5)."
+        },
+        "vertexProjectId": {
+          "label": "Vertex AI Project ID",
+          "placeholder": "my-gcp-project-id",
+          "helper": "Your Google Cloud project ID for Vertex AI Veo video generation."
+        },
+        "vertexLocation": {
+          "label": "Vertex AI Location",
+          "placeholder": "us-central1",
+          "helper": "Region for Vertex AI. Defaults to us-central1."
+        },
+        "googleCredentials": {
+          "label": "Google Service Account Credentials",
+          "placeholder": "/path/to/service-account.json",
+          "helper": "Path to your Google Cloud service account JSON file for Vertex AI authentication."
         },
         "ollama": {
           "label": "Ollama URL",
@@ -3210,7 +3250,7 @@
       "forceStop": "Force Stop"
     },
     "processingInBackground": "Agent is processing in background",
-    "processingInBackgroundHint": "Responses are streamed in 5 seconds intervals",
+    "processingInBackgroundHint": "Updates automatically when ready",
     "processingComplete": "Response ready",
     "contextWindow": {
       "status": {

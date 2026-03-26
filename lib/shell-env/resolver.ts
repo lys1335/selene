@@ -14,6 +14,7 @@ const BLOCKED_ENV_KEYS = new Set([
     "ELECTRON_NO_ATTACH_CONSOLE",
     "ELECTRON_ENABLE_LOGGING",
     "SELENE_PRODUCTION_BUILD",
+    "TURBOPACK",
     "NEXT_RUNTIME",
     "NEXT_DEPLOYMENT_ID",
     "PORT",
@@ -24,7 +25,7 @@ const BLOCKED_ENV_KEYS = new Set([
  * these belongs to the running Next.js host process and must not be inherited
  * by user-facing child commands.
  */
-const BLOCKED_ENV_PREFIXES = ["__NEXT_"];
+const BLOCKED_ENV_PREFIXES = ["__NEXT_", "NEXT_PRIVATE_"];
 
 let cachedShellEnv: Record<string, string> | null = null;
 let shellEnvResolutionAttempted = false;

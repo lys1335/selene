@@ -10,6 +10,8 @@ interface ToolCallBadgeProps {
   label: string;
   status: ToolCallBadgeStatus;
   count?: number | null;
+  /** Formatted elapsed time string (e.g. "42s", "1m23s") — shown for Agent tools. */
+  elapsed?: string;
 }
 
 const statusStyles: Record<ToolCallBadgeStatus, string> = {
@@ -30,7 +32,7 @@ const statusIcons: Record<ToolCallBadgeStatus, FC<{ className?: string }>> = {
   error: XCircleIcon,
 };
 
-export const ToolCallBadge: FC<ToolCallBadgeProps> = ({ label, status, count }) => {
+export const ToolCallBadge: FC<ToolCallBadgeProps> = ({ label, status, count, elapsed }) => {
   const Icon = statusIcons[status];
   return (
     <span
@@ -43,7 +45,12 @@ export const ToolCallBadge: FC<ToolCallBadgeProps> = ({ label, status, count }) 
       <span className="whitespace-nowrap">{label}</span>
       {typeof count === "number" && (
         <span className="rounded-full bg-terminal-dark/10 px-1.5 py-0.5 text-[10px] leading-none text-terminal-muted tabular-nums">
-          {count}
+          +{count}
+        </span>
+      )}
+      {elapsed && (
+        <span className="text-[10px] leading-none text-terminal-muted/70 tabular-nums">
+          {elapsed}
         </span>
       )}
     </span>

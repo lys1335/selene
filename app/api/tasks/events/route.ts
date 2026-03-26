@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const DEBUG_SSE_EVENTS = process.env.DEBUG_SSE_EVENTS === "true";
-const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_INTERVAL_MS = 15_000;
 const MAX_SSE_MESSAGE_BYTES = 10_000_000; // 10MB
 
 const redact = (value?: string) => {

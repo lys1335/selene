@@ -31,6 +31,12 @@ export {
   createVideoAssemblyTool,
 } from "@/lib/ai/tools/video-tools";
 
+// Runway video tools
+export { createRunwayVideoTool } from "@/lib/ai/tools/runway-video-tool";
+
+// Vertex AI Veo video tools
+export { createVertexAIVideoTool } from "@/lib/ai/tools/vertex-ai-video-tool";
+
 // OpenRouter image tools (Flux2 Flex, GPT-5 Image Mini, GPT-5 Image,
 // Gemini 2.5 Flash, Gemini 3 Pro – generate / edit / reference variants)
 export {

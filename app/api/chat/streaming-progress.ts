@@ -18,6 +18,7 @@ import {
   buildProgressSignature,
   extractTextFromParts,
 } from "./streaming-state";
+import { INTERACTIVE_TOOL_NAME_SET } from "@/lib/interactive-tools/constants";
 
 function collectPersistedToolResultIds(parts: DBContentPart[]): Set<string> {
   const persistedToolResultIds = new Set<string>();
@@ -62,27 +63,72 @@ function emitDroppedToolCallTelemetry(
  * otherwise they vanish from the chat when the client reloads from DB
  * (background mode). See: https://github.com/seline/seline/issues/XXX
  */
-const INTERACTIVE_TOOL_NAMES = new Set([
-  "ExitPlanMode",
-  "AskUserQuestion",
-  "AskFollowupQuestion",
-]);
+const INTERACTIVE_TOOL_NAMES = INTERACTIVE_TOOL_NAME_SET;
+
+function buildPendingToolCallProjection(part: DBToolCallPart): DBToolCallPart | null {
+  const isFinalizedInputState = part.state === undefined || part.state === "input-available";
+  if (!isFinalizedInputState) {
+    return null;
+  }
+
+  if (part.args !== undefined) {
+    return {
+      ...part,
+      state: part.state ?? "input-available",
+      active: true,
+    };
+  }
+
+  if (typeof part.argsText !== "string" || part.argsText.length === 0) {
+    return null;
+  }
+
+  try {
+    return {
+      ...part,
+      args: JSON.parse(part.argsText),
+      state: "input-available",
+      active: true,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function filterStreamingPartsForPersistence(
   streamingState: StreamingMessageState
 ): DBContentPart[] {
   const persistedToolResultIds = collectPersistedToolResultIds(streamingState.parts);
 
-  return streamingState.parts.filter((part) => {
+  const filteredParts: DBContentPart[] = [];
+
+  for (const part of streamingState.parts) {
     if (part.type !== "tool-call") {
-      return true;
+      filteredParts.push(part);
+      continue;
     }
 
     const hasCompleteArgs = part.args !== undefined;
     const isStillStreaming = part.state === "input-streaming";
+
+    // Interactive tools (AskUserQuestion, ExitPlanMode, AskFollowupQuestion) block
+    // the SDK while waiting for user input. The SDK fires PreToolUse *before*
+    // emitting content_block_stop, so args may not be complete yet when
+    // filterStreamingPartsForPersistence is first called. We must persist them
+    // early — as long as there's any argument content — so the UI shows the
+    // pending question while the user is deciding. The non-result check below
+    // is intentionally skipped for these tools.
+    if (INTERACTIVE_TOOL_NAMES.has(part.toolName)) {
+      const hasArgContent =
+        hasCompleteArgs ||
+        (typeof part.argsText === "string" && part.argsText.length > 0);
+      if (hasArgContent) filteredParts.push(part);
+      continue;
+    }
+
     if (isStillStreaming && !hasCompleteArgs) {
       emitDroppedToolCallTelemetry(streamingState, part, "input-streaming", persistedToolResultIds);
-      return false;
+      continue;
     }
 
     if (!hasCompleteArgs && part.argsText) {
@@ -90,16 +136,15 @@ export function filterStreamingPartsForPersistence(
         JSON.parse(part.argsText);
       } catch {
         emitDroppedToolCallTelemetry(streamingState, part, "malformed-args", persistedToolResultIds);
-        return false;
+        continue;
       }
     }
 
     if (!persistedToolResultIds.has(part.toolCallId)) {
-      // Interactive tools block the SDK waiting for user input. They must
-      // persist so the UI can render them when the client reloads from DB
-      // (e.g. background mode page return or polling refresh).
-      if (INTERACTIVE_TOOL_NAMES.has(part.toolName) && hasCompleteArgs) {
-        return true;
+      const pendingProjection = buildPendingToolCallProjection(part);
+      if (pendingProjection) {
+        filteredParts.push(pendingProjection);
+        continue;
       }
 
       emitDroppedToolCallTelemetry(
@@ -108,11 +153,13 @@ export function filterStreamingPartsForPersistence(
         "unresolved-no-result",
         persistedToolResultIds,
       );
-      return false;
+      continue;
     }
 
-    return true;
-  });
+    filteredParts.push(part);
+  }
+
+  return filteredParts;
 }
 
 export function buildProgressContentSnapshot(

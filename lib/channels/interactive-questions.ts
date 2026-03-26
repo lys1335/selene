@@ -153,6 +153,18 @@ export function parseToolInputToQuestions(toolInput: unknown): ParsedQuestion[] 
   }
 
   if (!input || typeof input !== "object") return [];
+
+  // Handle bare array of questions (e.g. Codex passing args.questions directly)
+  if (Array.isArray(input)) {
+    return (input as Array<Record<string, unknown>>)
+      .filter((q) => q.question && Array.isArray(q.options) && (q.options as unknown[]).length > 0)
+      .map((q) => ({
+        question: q.question as string,
+        options: q.options as QuestionOption[],
+        multiSelect: (q.multiSelect as boolean) ?? false,
+      }));
+  }
+
   const raw = input as RawToolInput;
 
   // Multi-question format: { questions: [...] }

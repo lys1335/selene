@@ -5,6 +5,7 @@ import { FileIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon, ChevronDownI
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "./tool-expansion-context";
+import { DiffStyledPre } from "./diff-styled-pre";
 
 interface DiagnosticResult {
   tool: string;
@@ -154,22 +155,10 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
                   </div>
                 )}
                 {diff && (
-                  <div className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 mt-1 ml-5">
-                    <pre className="text-[11px] text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all">
-                      {(isDiffTruncated && !isDiffExpanded ? diffLines.slice(0, maxDiffLines) : diffLines).map((line, j) => (
-                        <span
-                          key={j}
-                          className={cn(
-                            "block rounded-sm px-1",
-                            line.startsWith("+ ") && "text-emerald-700 bg-emerald-100/60 border-l-2 border-emerald-500 dark:text-emerald-200 dark:bg-emerald-500/[0.15] dark:border-emerald-400",
-                            line.startsWith("- ") && "text-red-700 bg-red-100/60 border-l-2 border-red-500 dark:text-red-200 dark:bg-red-500/[0.15] dark:border-red-400",
-                            !line.startsWith("+ ") && !line.startsWith("- ") && "text-terminal-muted dark:text-terminal-muted/80"
-                          )}
-                        >
-                          {line}
-                        </span>
-                      ))}
-                    </pre>
+                  <div className="mt-1 ml-5">
+                    <DiffStyledPre
+                      lines={isDiffTruncated && !isDiffExpanded ? diffLines.slice(0, maxDiffLines) : diffLines}
+                    />
                     {isDiffTruncated && (
                       <button
                         type="button"

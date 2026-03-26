@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  BASE64_IMAGE_PLACEHOLDER,
   MAX_TEXT_CONTENT_LENGTH,
   sanitizeTextContent,
   normalizeReadFileInputArgs,
@@ -61,6 +62,65 @@ describe("content-sanitizer text length limits", () => {
 
     expect(storeFullContent).not.toHaveBeenCalled();
     expect(output).toContain("Content truncated at 75,000 chars");
+  });
+
+  it("strips inline data-url image payloads without replacing the whole text", () => {
+    const base64 = "A".repeat(1200);
+    const input = `Plan:\n![diagram](data:image/png;base64,${base64})\nKeep the numbered steps below.`;
+
+    const output = sanitizeTextContent(input, "unit-test");
+
+    expect(output).toContain("Plan:");
+    expect(output).toContain(BASE64_IMAGE_PLACEHOLDER);
+    expect(output).toContain("Keep the numbered steps below.");
+    expect(output).not.toBe(BASE64_IMAGE_PLACEHOLDER);
+  });
+
+  it("strips inline base64 data URL but does not collapse entire text", () => {
+    const input = `data:image/png;base64,${"A".repeat(6000)}`;
+    const output = sanitizeTextContent(input, "unit-test");
+    // The inline regex strips the data URL, leaving just the placeholder
+    expect(output).toContain(BASE64_IMAGE_PLACEHOLDER);
+  });
+});
+
+describe("no false-positive base64 detection on text", () => {
+  it("preserves long code blocks", () => {
+    const code = `function processMessage(content: string): string {\n  const sanitized = content.replace(/[<>]/g, "");\n  if (sanitized.length > MAX_LENGTH) {\n    console.warn("Content too long:", sanitized.length);\n    return sanitized.slice(0, MAX_LENGTH);\n  }\n  return sanitized;\n}\n`;
+    const input = code.repeat(Math.ceil(6000 / code.length));
+    expect(input.length).toBeGreaterThan(5000);
+    const output = sanitizeTextContent(input, "unit-test");
+    expect(output).not.toBe(BASE64_IMAGE_PLACEHOLDER);
+    expect(output).toContain("processMessage");
+  });
+
+  it("preserves long markdown documents", () => {
+    const md = `## Plan\n\nExtract and fix the function:\n\n\`\`\`typescript\nexport function check(text: string): boolean {\n  return text.includes("data:image/");\n}\n\`\`\`\n\n- Update consumers\n- Remove duplicates\n`;
+    const input = md.repeat(Math.ceil(6000 / md.length));
+    expect(input.length).toBeGreaterThan(5000);
+    const output = sanitizeTextContent(input, "unit-test");
+    expect(output).not.toBe(BASE64_IMAGE_PLACEHOLDER);
+    expect(output).toContain("## Plan");
+  });
+
+  it("preserves long JSON payloads", () => {
+    const json = JSON.stringify({
+      messages: Array.from({ length: 100 }, (_, i) => ({
+        id: `msg_${i}`,
+        role: i % 2 === 0 ? "user" : "assistant",
+        content: `Message ${i} with technical content about APIs and functions.`,
+      })),
+    });
+    const output = sanitizeTextContent(json, "unit-test");
+    expect(output).not.toBe(BASE64_IMAGE_PLACEHOLDER);
+    expect(output).toContain("msg_0");
+  });
+
+  it("preserves raw alphanumeric strings (not base64)", () => {
+    const input = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".repeat(100);
+    expect(input.length).toBeGreaterThan(5000);
+    const output = sanitizeTextContent(input, "unit-test");
+    expect(output).toBe(input);
   });
 });
 

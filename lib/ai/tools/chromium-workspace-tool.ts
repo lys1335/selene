@@ -240,7 +240,7 @@ export async function executeAction(
       result = await handleExtract(sessionId, input, timeout);
       break;
     case "evaluate":
-      result = await handleEvaluate(sessionId, input);
+      result = await handleEvaluate(sessionId, input, timeout);
       break;
     case "close":
       result = await handleClose(sessionId);
@@ -395,16 +395,30 @@ async function handleExtract(
 
 async function handleEvaluate(
   sessionId: string,
-  input: ChromiumWorkspaceInput
+  input: ChromiumWorkspaceInput,
+  timeout: number = 60_000
 ): Promise<ActionResult> {
   if (!input.expression) throw new Error("'expression' is required for the 'evaluate' action");
 
   const session = await getSessionOrThrow(sessionId);
 
-  const result = await session.page.evaluate((expr: string) => {
-    // eslint-disable-next-line no-eval
-    return eval(expr);
-  }, input.expression);
+  // Apply a timeout to prevent indefinite blocking from long-running
+  // expressions (e.g., those with setTimeout delays for audio playback).
+  // Default is 60s (higher than other actions) since evaluate() is
+  // commonly used for async operations.
+  const evaluateTimeout = Math.max(timeout, 60_000);
+  const result = await Promise.race([
+    session.page.evaluate((expr: string) => {
+      // eslint-disable-next-line no-eval
+      return eval(expr);
+    }, input.expression),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`evaluate() timed out after ${evaluateTimeout}ms`)),
+        evaluateTimeout
+      )
+    ),
+  ]);
 
   const serialized = typeof result === "string"
     ? result

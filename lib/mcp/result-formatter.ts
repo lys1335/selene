@@ -7,20 +7,8 @@
 
 import { getFullPath, saveBase64Image, saveBase64Video } from "@/lib/storage/local-storage";
 import { getRunContext } from "@/lib/observability/run-context";
-
 const BASE64_PLACEHOLDER = "[Base64 data removed to prevent context bloat]";
-const MAX_BASE64_GUESS_LENGTH = 5000;
 const MAX_SANITIZE_DEPTH = 6;
-
-function looksLikeBase64ImageData(text: string): boolean {
-    if (text.length < 1000) return false;
-    if (text.includes("data:image/") && text.includes(";base64,")) return true;
-    const base64Chars = text.match(/[A-Za-z0-9+/=]/g);
-    if (base64Chars && base64Chars.length / text.length > 0.95 && text.length > MAX_BASE64_GUESS_LENGTH) {
-        return true;
-    }
-    return false;
-}
 
 function parseDataUrl(value: string): { mimeType: string; data: string } | null {
     const match = value.match(/^data:([^;]+);base64,(.+)$/);
@@ -53,9 +41,6 @@ async function sanitizeString(value: string, sessionId?: string): Promise<string
     if (value.startsWith("data:")) {
         const persisted = await persistDataUrl(value, sessionId);
         return persisted?.url ?? BASE64_PLACEHOLDER;
-    }
-    if (looksLikeBase64ImageData(value)) {
-        return BASE64_PLACEHOLDER;
     }
     return value;
 }

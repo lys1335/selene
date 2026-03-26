@@ -98,6 +98,11 @@ function resolveTrayIconImage(isMac: boolean): TrayIconResult | null {
 export interface InitTrayOptions {
   onShowMainWindow: () => void;
   onQuit: () => void;
+  onVoiceSession: () => void;
+  onVoiceScreenshot: () => void;
+  onScreenshot: () => void;
+  onNewChat: () => void;
+  onOpenSettings: () => void;
 }
 
 /**
@@ -150,6 +155,43 @@ export function initTray(opts: InitTrayOptions): Tray | null {
         click: () => {
           debugLog("[Tray] 'Open Selene' clicked");
           opts.onShowMainWindow();
+        },
+      },
+      { type: "separator" },
+      {
+        label: "Voice Session",
+        click: () => {
+          debugLog("[Tray] 'Voice Session' clicked");
+          opts.onVoiceSession();
+        },
+      },
+      {
+        label: "Voice + Screenshot",
+        click: () => {
+          debugLog("[Tray] 'Voice + Screenshot' clicked");
+          opts.onVoiceScreenshot();
+        },
+      },
+      {
+        label: "Take Screenshot",
+        click: () => {
+          debugLog("[Tray] 'Take Screenshot' clicked");
+          opts.onScreenshot();
+        },
+      },
+      { type: "separator" },
+      {
+        label: "New Chat",
+        click: () => {
+          debugLog("[Tray] 'New Chat' clicked");
+          opts.onNewChat();
+        },
+      },
+      {
+        label: "Settings",
+        click: () => {
+          debugLog("[Tray] 'Settings' clicked");
+          opts.onOpenSettings();
         },
       },
       { type: "separator" },

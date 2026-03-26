@@ -325,13 +325,26 @@ export const useSessionSyncStore = create<SessionSyncState>((set, get) => ({
       } else {
         newActiveRuns.delete(sessionId);
       }
-      return { activeRuns: newActiveRuns };
+
+      const existingSession = state.sessionsById.get(sessionId);
+      const nextSessionsById = new Map(state.sessionsById);
+      if (existingSession && existingSession.hasActiveRun !== Boolean(runId)) {
+        nextSessionsById.set(sessionId, {
+          ...existingSession,
+          hasActiveRun: Boolean(runId),
+        });
+      }
+
+      return {
+        activeRuns: newActiveRuns,
+        sessionsById: nextSessionsById,
+      };
     });
 
     if (runId) {
       get().emit({ type: "run_started", sessionId, runId });
     } else {
-      get().emit({ type: "run_completed", sessionId, runId: "" });
+      get().emit({ type: "run_completed", sessionId, runId: current ?? "" });
     }
   },
 

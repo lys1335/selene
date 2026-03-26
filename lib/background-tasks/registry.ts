@@ -25,6 +25,9 @@ const globalForRegistry = globalThis as typeof globalThis & {
 
 class TaskRegistry extends EventEmitter {
   private tasks: Map<string, UnifiedTask> = new Map();
+  private recentlyCompleted: Map<string, { task: UnifiedTask; completedAt: number }> = new Map();
+  private static COMPLETED_TTL_MS = 10 * 60 * 1000; // 10 minutes
+  private static MAX_COMPLETED_BUFFER = 200; // size cap to prevent unbounded growth
   private cleanupInterval: NodeJS.Timeout | null = null;
   private cleanupStats = {
     totalCleaned: 0,
@@ -51,6 +54,8 @@ class TaskRegistry extends EventEmitter {
   }
 
   register(task: UnifiedTask): void {
+    // Clear any stale completed entry for reused runIds
+    this.recentlyCompleted.delete(task.runId);
     this.tasks.set(task.runId, task);
 
     const event: TaskEvent = {
@@ -83,6 +88,16 @@ class TaskRegistry extends EventEmitter {
 
     if (shouldComplete) {
       this.tasks.delete(runId);
+      this.recentlyCompleted.set(runId, { task: updated, completedAt: Date.now() });
+      // Enforce size cap by evicting oldest entries
+      if (this.recentlyCompleted.size > TaskRegistry.MAX_COMPLETED_BUFFER) {
+        const excess = this.recentlyCompleted.size - TaskRegistry.MAX_COMPLETED_BUFFER;
+        const iter = this.recentlyCompleted.keys();
+        for (let i = 0; i < excess; i++) {
+          const key = iter.next().value;
+          if (key) this.recentlyCompleted.delete(key);
+        }
+      }
       const event: TaskEvent = {
         eventType: "task:completed",
         task: updated,
@@ -220,6 +235,31 @@ class TaskRegistry extends EventEmitter {
     return this.list(options).total;
   }
 
+  /**
+   * Returns tasks that completed within the TTL window.
+   * Used by reconciliation to detect completions missed during SSE disconnects.
+   */
+  listRecentlyCompleted(options: ListActiveTasksOptions = {}): UnifiedTask[] {
+    const now = Date.now();
+    const results: UnifiedTask[] = [];
+
+    for (const [, entry] of this.recentlyCompleted) {
+      if (now - entry.completedAt > TaskRegistry.COMPLETED_TTL_MS) continue;
+      const t = entry.task;
+      if (options.userId && t.userId !== options.userId) continue;
+      if (options.characterId && t.characterId !== options.characterId) continue;
+      if (options.type && t.type !== options.type) continue;
+      if (options.sessionId && t.sessionId !== options.sessionId) continue;
+      results.push(t);
+    }
+
+    results.sort(
+      (a, b) => new Date(b.completedAt ?? b.startedAt).getTime() - new Date(a.completedAt ?? a.startedAt).getTime()
+    );
+
+    return options.limit ? results.slice(0, options.limit) : results;
+  }
+
   subscribeForUser(
     userId: string,
     handlers: {
@@ -274,12 +314,27 @@ class TaskRegistry extends EventEmitter {
       this.cleanupStats.cleanupsByReason.stale += 1;
     }
 
-    if (staleRunIds.length > 0) {
+    // Prune expired recently-completed entries
+    const now = Date.now();
+    let expiredCount = 0;
+    for (const [runId, entry] of this.recentlyCompleted) {
+      if (now - entry.completedAt > TaskRegistry.COMPLETED_TTL_MS) {
+        this.recentlyCompleted.delete(runId);
+        expiredCount++;
+      }
+    }
+
+    if (staleRunIds.length > 0 || expiredCount > 0) {
       this.cleanupStats.lastCleanupAt = nowISO();
-      console.log(
-        `[TaskRegistry] Cleaned up ${staleRunIds.length} stale tasks ` +
-        `(total: ${this.cleanupStats.totalCleaned})`
-      );
+      if (staleRunIds.length > 0) {
+        console.log(
+          `[TaskRegistry] Cleaned up ${staleRunIds.length} stale tasks ` +
+          `(total: ${this.cleanupStats.totalCleaned})`
+        );
+      }
+      if (expiredCount > 0) {
+        console.log(`[TaskRegistry] Pruned ${expiredCount} expired recently-completed entries`);
+      }
     }
   }
 
@@ -294,6 +349,7 @@ class TaskRegistry extends EventEmitter {
     }
     this.removeAllListeners();
     this.tasks.clear();
+    this.recentlyCompleted.clear();
   }
 }
 

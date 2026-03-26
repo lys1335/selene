@@ -147,6 +147,7 @@ export async function buildToolsForRequest(
     characterAppearanceDescription: characterAppearanceDescription || undefined,
     includeDeferredTools: false,
     agentEnabledTools,
+    provider: ctx.provider,
   });
   const initialActiveTools = new Set(Object.keys(nonDeferredTools));
 
@@ -159,6 +160,7 @@ export async function buildToolsForRequest(
     characterAppearanceDescription: characterAppearanceDescription || undefined,
     agentEnabledTools,
     includeDeferredTools: true,
+    provider: ctx.provider,
   });
 
   // Mutable set to track tools discovered via searchTools during this request.
@@ -556,6 +558,12 @@ export async function buildToolsForRequest(
   let webSearchDisableReason: string | null = null;
   let webSearchDisableLogged = false;
 
+  // executeCommand oversized-output loop guard
+  let consecutiveOversizedExecCommands = 0;
+  let execCommandDisabledByLoopGuard = false;
+  let execCommandDisableReason: string | null = null;
+  const EXEC_COMMAND_OVERSIZED_LIMIT = 2;
+
   for (const [toolId, originalTool] of Object.entries(allToolsWithMCP)) {
     if (!originalTool.execute) {
       wrappedTools[toolId] = originalTool;
@@ -579,6 +587,22 @@ export async function buildToolsForRequest(
           console.warn(
             `[CHAT API] readFile args normalized: dropped selectors (${droppedReadFileSelectors.join(", ")}) to enforce a single selection mode`
           );
+        }
+
+        // executeCommand oversized-output loop guard (pre-execution check)
+        if (toolId === "executeCommand" && execCommandDisabledByLoopGuard) {
+          console.warn(
+            `[CHAT API] executeCommand disabled for remaining response (${execCommandDisableReason ?? "unknown reason"})`
+          );
+          return {
+            status: "error",
+            error:
+              `executeCommand has been temporarily disabled for this response ` +
+              `(${execCommandDisableReason}). ` +
+              `The previous commands produced output too large for the context window. ` +
+              `To recover: run specific test files (e.g., npm test -- path/to/file.test.ts), ` +
+              `use head/tail to limit output, or use a compact reporter (--reporter=dot).`,
+          };
         }
 
         if (toolId === "webSearch") {
@@ -685,6 +709,23 @@ export async function buildToolsForRequest(
             }
           } else {
             consecutiveZeroResultWebSearches = 0;
+          }
+
+          // executeCommand oversized-output loop guard (post-execution tracking)
+          if (toolId === "executeCommand") {
+            if (guardedResult.blocked) {
+              consecutiveOversizedExecCommands += 1;
+              if (consecutiveOversizedExecCommands >= EXEC_COMMAND_OVERSIZED_LIMIT) {
+                execCommandDisableReason =
+                  `${consecutiveOversizedExecCommands} consecutive oversized results`;
+                execCommandDisabledByLoopGuard = true;
+                console.warn(
+                  `[CHAT API] executeCommand loop guard triggered (${execCommandDisableReason})`
+                );
+              }
+            } else {
+              consecutiveOversizedExecCommands = 0;
+            }
           }
 
           // PostToolUse: fire-and-forget
