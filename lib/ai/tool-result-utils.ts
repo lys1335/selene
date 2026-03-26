@@ -263,11 +263,15 @@ export function buildToolSummary(toolName: string, input?: unknown, output?: unk
       const completed = result.completed === true;
       const statusTag = completed ? "completed" : status || "in-progress";
 
-      // Extract actual sub-agent response content
+      // Extract actual sub-agent response content.
+      // Prefer `lastResponse` (the terminal assistant message) over `allResponses`
+      // (which only contains truncated previews of prior turns, not the final one).
+      const lastResponseField = getString(result.lastResponse);
       const allResponses = Array.isArray(result.allResponses) ? result.allResponses : [];
       let responseExcerpt = "";
-      if (allResponses.length > 0) {
-        const lastResponse = allResponses[allResponses.length - 1];
+      const excerptSource = lastResponseField ?? (allResponses.length > 0 ? allResponses[allResponses.length - 1] : undefined);
+      if (excerptSource) {
+        const lastResponse = excerptSource;
         let text: string | undefined;
         if (typeof lastResponse === "string") {
           text = lastResponse;

@@ -102,10 +102,15 @@ async function executeAskUserQuestion(
     return TIMEOUT_RESULT;
   }
 
+  // Pass the full args object (not args.questions) so the bridge emits
+  // { questions: [...] } — the same shape the Claude Code SDK path sends.
+  // parseToolInputToQuestions expects a wrapper object with a `questions` key;
+  // passing the bare array caused it to return [] and silently drop the
+  // Telegram interactive question.
   const waitResult = await registerInteractiveWait(
     options.sessionId,
     toolCallId,
-    args.questions,
+    args,
     { abortSignal: toolCallOptions?.abortSignal },
   );
 

@@ -138,6 +138,28 @@ export function waitForQueueMessage(runId: string, signal?: AbortSignal): Promis
   });
 }
 
+/**
+ * Remove all queued entries whose metadata matches the given delegationId.
+ * Used when an observe() call already consumed the delegation result —
+ * the completion notification becomes redundant and would cause the model
+ * to re-process the same result (duplicate/looped responses).
+ */
+export function removeFromQueueByDelegationId(sessionId: string, delegationId: string): number {
+  const runId = getSessionIndex().get(sessionId);
+  if (!runId) return 0;
+  const queue = getQueueMap().get(runId);
+  if (!queue || queue.length === 0) return 0;
+  const before = queue.length;
+  const filtered = queue.filter(
+    (entry) => !(entry.metadata?.delegationId === delegationId)
+  );
+  if (filtered.length < before) {
+    queue.length = 0;
+    queue.push(...filtered);
+  }
+  return before - filtered.length;
+}
+
 /** Call in onFinish, onAbort, and error cleanup paths to release memory. */
 export function removeLivePromptQueue(runId: string, sessionId: string): void {
   getQueueMap().delete(runId);

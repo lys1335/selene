@@ -71,10 +71,13 @@ describe("askUserQuestion tool", () => {
       buildToolCallOptions({ toolCallId: "tool-call-1" }),
     ) as { answers: Record<string, string>; timedOut?: boolean };
 
+    // The tool now passes the full args object (not just args.questions)
+    // so parseToolInputToQuestions receives { questions: [...] } — same shape
+    // as the Claude Code SDK path.
     expect(interactiveBridgeMocks.registerInteractiveWait).toHaveBeenCalledWith(
       "sess-1",
       "tool-call-1",
-      sampleArgs.questions,
+      sampleArgs,
       { abortSignal: expect.any(AbortSignal) },
     );
     expect(result).toEqual({
@@ -106,7 +109,7 @@ describe("askUserQuestion tool", () => {
     expect(interactiveBridgeMocks.registerInteractiveWait).toHaveBeenLastCalledWith(
       "sess-1",
       "tool-call-signal",
-      sampleArgs.questions,
+      sampleArgs,
       { abortSignal: controller.signal },
     );
   });

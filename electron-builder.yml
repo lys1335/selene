@@ -142,6 +142,8 @@ compression: "normal"
 npmRebuild: false
 
 # macOS specific configuration
+# afterSign: "scripts/notarize.js"
+
 mac:
   category: "public.app-category.entertainment"
   identity: null

@@ -64,3 +64,25 @@ export function drainDelegationCompletions(initiatorSessionId: string): Delegati
 export function hasPendingDelegationCompletions(initiatorSessionId: string): boolean {
   return peekDelegationCompletions(initiatorSessionId).length > 0;
 }
+
+/**
+ * Remove a single delegation completion by ID from the store.
+ * Called when observe() returns a completed result — the notification
+ * is already consumed and must not be re-delivered via system prompt.
+ */
+export function removeDelegationCompletionById(
+  initiatorSessionId: string,
+  delegationId: string,
+): boolean {
+  const store = getStore();
+  const existing = store.get(initiatorSessionId);
+  if (!existing || existing.length === 0) return false;
+  const filtered = existing.filter((c) => c.delegationId !== delegationId);
+  if (filtered.length === existing.length) return false;
+  if (filtered.length === 0) {
+    store.delete(initiatorSessionId);
+  } else {
+    store.set(initiatorSessionId, filtered);
+  }
+  return true;
+}
