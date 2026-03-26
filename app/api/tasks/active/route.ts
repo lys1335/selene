@@ -22,9 +22,12 @@ export async function GET(request: NextRequest) {
 
   const { tasks } = taskRegistry.list({ userId });
   const visibleTasks = tasks.filter((task) => !isTaskSuppressedFromUI(task));
+  const recentlyCompleted = taskRegistry.listRecentlyCompleted({ userId })
+    .filter((task) => !isTaskSuppressedFromUI(task));
 
   return Response.json({
     tasks: visibleTasks,
+    recentlyCompleted,
     timestamp: new Date().toISOString(),
   });
 }

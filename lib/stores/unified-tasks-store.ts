@@ -69,12 +69,16 @@ export const useUnifiedTasksStore = create<UnifiedTasksState>((set, get) => ({
 
   completeTask: (task) => {
     set((state) => {
+      // Idempotent: if already in recentlyCompleted, only remove from active
+      const alreadySeen = state.recentlyCompleted.some((t) => t.runId === task.runId);
       const newMap = new Map(state.tasksMap);
       newMap.delete(task.runId);
       return {
         tasksMap: newMap,
         tasks: Array.from(newMap.values()),
-        recentlyCompleted: [task, ...state.recentlyCompleted].slice(0, 10),
+        recentlyCompleted: alreadySeen
+          ? state.recentlyCompleted
+          : [task, ...state.recentlyCompleted].slice(0, 10),
       };
     });
   },
