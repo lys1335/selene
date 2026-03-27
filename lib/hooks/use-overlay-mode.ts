@@ -9,6 +9,7 @@ interface OverlaySettings {
   voicePostProcessing?: boolean;
   miniOverlayAutoCloseAfterSpeak?: boolean;
   miniOverlayShowScreenPreview?: boolean;
+  ttsReadCodeBlocks?: boolean;
 }
 
 function readStoredMode(): OverlayMode {
@@ -41,6 +42,7 @@ export function useOverlayMode() {
           voicePostProcessing: data.voicePostProcessing,
           miniOverlayAutoCloseAfterSpeak: data.miniOverlayAutoCloseAfterSpeak,
           miniOverlayShowScreenPreview: data.miniOverlayShowScreenPreview,
+          ttsReadCodeBlocks: data.ttsReadCodeBlocks,
         };
         setSettings(fetched);
         setSettingsLoaded(true);
@@ -74,6 +76,8 @@ export function useOverlayMode() {
     autoCloseAfterSpeak: settings.miniOverlayAutoCloseAfterSpeak ?? false,
     /** Show screenshot thumbnail preview. */
     showScreenPreview: settings.miniOverlayShowScreenPreview ?? true,
+    /** Whether code blocks should be read aloud in overlay TTS. */
+    ttsReadCodeBlocks: settings.ttsReadCodeBlocks ?? false,
     /** Whether settings have been loaded from the server. */
     settingsLoaded,
   };

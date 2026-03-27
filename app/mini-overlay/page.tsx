@@ -17,7 +17,7 @@ function MiniOverlayContent() {
   const screenshotUrl = searchParams.get("screenshotUrl") ?? undefined;
 
   const { agents, selectedAgent, selectAgent, loading: agentLoading } = useOverlayAgentPicker();
-  const { mode, setMode, voicePostProcessing, autoCloseAfterSpeak, showScreenPreview } = useOverlayMode();
+  const { mode, setMode, voicePostProcessing, autoCloseAfterSpeak, showScreenPreview, ttsReadCodeBlocks } = useOverlayMode();
 
   // Resolve the effective characterId and sessionId from the picker or URL params
   const characterId = selectedAgent?.id ?? characterIdParam;
@@ -56,6 +56,7 @@ function MiniOverlayContent() {
     autoStart: hasResolvedTarget,
     mode,
     voicePostProcessing,
+    ttsReadCodeBlocks,
     onComposeReady: handleComposeReady,
   });
 
