@@ -35,7 +35,6 @@ const TOOL_CATEGORIES: Record<string, string> = {
   editImage: "image-editing",
   generateVideoWan22: "video-generation",
   generatePixelVideoWan22: "video-generation",
-  assembleVideo: "video-generation",
   describeImage: "analysis",
   showProductImages: "utility",
   executeCommand: "utility",

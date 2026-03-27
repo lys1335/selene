@@ -141,6 +141,7 @@ export async function PUT(request: NextRequest) {
       edgeTtsVoice: body.edgeTtsVoice !== undefined ? body.edgeTtsVoice : currentSettings.edgeTtsVoice,
       ttsSummarizeThreshold: body.ttsSummarizeThreshold !== undefined ? body.ttsSummarizeThreshold : currentSettings.ttsSummarizeThreshold,
       ttsReadCodeBlocks: body.ttsReadCodeBlocks !== undefined ? body.ttsReadCodeBlocks : currentSettings.ttsReadCodeBlocks,
+      ttsSpeakCodeSymbols: body.ttsSpeakCodeSymbols !== undefined ? body.ttsSpeakCodeSymbols : currentSettings.ttsSpeakCodeSymbols,
       // Voice & Audio - STT
       sttEnabled: body.sttEnabled !== undefined ? body.sttEnabled : currentSettings.sttEnabled,
       sttProvider: body.sttProvider !== undefined ? body.sttProvider : currentSettings.sttProvider,

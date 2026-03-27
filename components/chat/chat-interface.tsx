@@ -200,9 +200,10 @@ const StreamingAutoSpeakBridge: FC<{
     ttsAutoMode: string;
     ttsEnabled: boolean;
     ttsReadCodeBlocks: boolean;
+    ttsSpeakCodeSymbols: boolean;
     muted: boolean;
     mutedRef: React.RefObject<boolean>;
-}> = ({ ttsAutoMode, ttsEnabled, ttsReadCodeBlocks, muted, mutedRef }) => {
+}> = ({ ttsAutoMode, ttsEnabled, ttsReadCodeBlocks, ttsSpeakCodeSymbols, muted, mutedRef }) => {
     const voiceCtx = useOptionalVoice();
     const playAudio = voiceCtx?.playAudio;
     const cancelAudio = voiceCtx?.cancelAudio;
@@ -256,7 +257,7 @@ const StreamingAutoSpeakBridge: FC<{
                 queuedAudioRef.current = true;
                 queue.enqueue(sentence);
             }
-        }, { readCodeBlocks: ttsReadCodeBlocks });
+        }, { readCodeBlocks: ttsReadCodeBlocks, speakCodeSymbols: ttsSpeakCodeSymbols });
 
         const lifecycle = new StableStreamingLifecycle({
             onStart: () => {
@@ -310,7 +311,7 @@ const StreamingAutoSpeakBridge: FC<{
             splitterRef.current = null;
             bridgePlaybackRef.current = false;
         };
-    }, [cancelAudio, playAudio, mutedRef, ttsReadCodeBlocks]);
+    }, [cancelAudio, playAudio, mutedRef, ttsReadCodeBlocks, ttsSpeakCodeSymbols]);
 
     useEffect(() => {
         const shouldSpeak = ttsAutoMode === "always" && ttsEnabled && !muted;
@@ -406,6 +407,7 @@ export default function ChatInterface({
     const [ttsAutoMode, setTtsAutoMode] = useState<string>("off");
     const [ttsEnabled, setTtsEnabled] = useState(false);
     const [ttsReadCodeBlocks, setTtsReadCodeBlocks] = useState(false);
+    const [ttsSpeakCodeSymbols, setTtsSpeakCodeSymbols] = useState(false);
     const [showThemeChooser, setShowThemeChooser] = useState(false);
     const [availableAgents, setAvailableAgents] = useState<Array<{ id: string; name: string; avatarUrl?: string | null }>>([]);
     const [browserArchivedSessions, setBrowserArchivedSessions] = useState<SessionInfo[]>([]);
@@ -443,6 +445,7 @@ export default function ChatInterface({
                 if (data?.ttsAutoMode) setTtsAutoMode(data.ttsAutoMode);
                 if (data?.ttsEnabled != null) setTtsEnabled(data.ttsEnabled);
                 if (data?.ttsReadCodeBlocks != null) setTtsReadCodeBlocks(data.ttsReadCodeBlocks);
+                if (data?.ttsSpeakCodeSymbols != null) setTtsSpeakCodeSymbols(data.ttsSpeakCodeSymbols);
                 // Show theme chooser for newly onboarded users who haven't seen it
                 if (data?.onboardingComplete && !data?.hasSeenThemeChooser) {
                     setShowThemeChooser(true);
@@ -1064,9 +1067,14 @@ export default function ChatInterface({
             }
 
             if (bg.processingRunId) {
+                // Run completed while disconnected — clear state and reload
+                // final messages so the completed output reaches UI.
                 await clearTerminalRunUi(bg.processingRunId, {
                     clearTaskState: true,
+                    refreshMessages: true,
                 });
+                // Also force-reload to bypass any stale signature checks.
+                void reloadSessionMessages(targetSessionId, { force: true });
                 return;
             }
 
@@ -1102,9 +1110,16 @@ export default function ChatInterface({
         if (typeof window === "undefined") return;
         const handleVisibility = () => {
             if (document.visibilityState !== "visible" || !sessionId) return;
-            // Tab re-focus after potential network loss — clear stale streaming
-            // flag so active-run detection isn't gated by a dead stream.
-            isForegroundStreamingRef.current = false;
+            // Only clear the foreground streaming flag if we're NOT actively
+            // streaming. During a healthy foreground stream the flag must stay
+            // true, otherwise checkActiveRunRef treats the live run as "detached"
+            // and DB hydration clobbers the in-flight stream.
+            if (isForegroundStreamingRef.current && bg.processingRunId) {
+                // Foreground stream is (presumably) still alive — don't reset.
+                // The sse-tasks-reconciled handler covers actual disconnects.
+            } else {
+                isForegroundStreamingRef.current = false;
+            }
             if (bg.processingRunId) {
                 // Already tracking a run — restart polling + refresh messages
                 bg.startPollingForCompletion(bg.processingRunId);
@@ -1131,13 +1146,21 @@ export default function ChatInterface({
         const handleReconciled = () => {
             // Debounce to coalesce rapid reconnects (e.g. SSE flapping)
             if (reconnectCheckDebounceRef.current) clearTimeout(reconnectCheckDebounceRef.current);
-            reconnectCheckDebounceRef.current = setTimeout(() => {
+            reconnectCheckDebounceRef.current = setTimeout(async () => {
                 reconnectCheckDebounceRef.current = null;
                 // The SSE reconnect itself is evidence that any foreground stream
                 // is dead. Reset the stale flag so checkActiveRunRef can detect
                 // the still-running agent and resume background tracking.
                 isForegroundStreamingRef.current = false;
-                void checkActiveRunRef.current();
+                console.log("[Background Processing] SSE reconnected — checking active run state");
+                // Always force-reload messages on reconnection. checkActiveRunRef
+                // skips reload when isSameTrackedRun is true, but we always need
+                // to hydrate events that were lost during the disconnect window.
+                await checkActiveRunRef.current();
+                console.log("[Background Processing] After checkActiveRunRef — processingRunId:", bg.processingRunId, "isProcessingInBackground:", bg.isProcessingInBackground);
+                if (sessionId) {
+                    void reloadSessionMessages(sessionId, { force: true });
+                }
             }, 300);
         };
         window.addEventListener("sse-tasks-reconciled", handleReconciled);
@@ -1288,14 +1311,15 @@ export default function ChatInterface({
         const handleTaskCompleted = (event: Event) => {
             const detail = (event as CustomEvent<TaskEvent>).detail;
             if (!detail) return;
-            if (detail.eventType === "task:completed" && isBackgroundTask(detail.task) && detail.task.sessionId === sessionId) {
+            if (detail.eventType === "task:completed" && detail.task.sessionId === sessionId) {
+                console.log("[Background Processing] handleTaskCompleted: clearing terminal UI for", detail.task.runId);
                 if (reloadDebounceRef.current) clearTimeout(reloadDebounceRef.current);
                 reloadDebounceRef.current = setTimeout(() => {
                     void reloadSessionMessages(sessionId, { force: true });
                     reloadDebounceRef.current = null;
                 }, 150);
                 void clearTerminalRunUi(detail.task.runId, {
-                    clearTaskState: false,
+                    clearTaskState: true,
                 });
             }
             if (detail.eventType === "task:completed" && detail.task.characterId === character.id) {
@@ -1688,7 +1712,7 @@ export default function ChatInterface({
                                     {avatarConfig.enabled && (
                                         <>
                                             <AvatarAudioBridge avatarRef={avatarRef} mutedRef={avatarMutedRef} />
-                                            <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} muted={avatarMuted} mutedRef={avatarMutedRef} />
+                                            <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} ttsSpeakCodeSymbols={ttsSpeakCodeSymbols} muted={avatarMuted} mutedRef={avatarMutedRef} />
                                             <AvatarPipWidget
                                                 avatarRef={avatarRef}
                                                 config={avatarConfig}
@@ -1851,7 +1875,7 @@ export default function ChatInterface({
                             {avatarConfig.enabled && (
                                 <>
                                     <AvatarAudioBridge avatarRef={avatarRef} mutedRef={avatarMutedRef} />
-                                    <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} muted={avatarMuted} mutedRef={avatarMutedRef} />
+                                    <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} ttsSpeakCodeSymbols={ttsSpeakCodeSymbols} muted={avatarMuted} mutedRef={avatarMutedRef} />
                                     <AvatarPipWidget
                                         avatarRef={avatarRef}
                                         config={avatarConfig}

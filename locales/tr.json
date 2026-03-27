@@ -187,7 +187,6 @@
         "promptEnhancement": "İstem Geliştirme",
         "deepResearch": "Derin Araştırma",
         "dynamicContext": "Dinamik Bağlam",
-        "remotionVideo": "Remotion Video",
         "subagents": "Alt Ajanlar",
         "gitWorktrees": "Git Worktrees",
         "toolSearch": "Araç Keşfi"
@@ -717,10 +716,6 @@
         "name": "Piksel Animasyon (WAN 2.2)",
         "description": "Piksel art animasyonlar üretin"
       },
-      "assembleVideo": {
-        "name": "Video Montajı",
-        "description": "Görsel ve videoları düzenleyip birleştirin"
-      },
       "describeImage": {
         "name": "Görseli Açıkla",
         "description": "Görselleri analiz edin ve açıklayın"
@@ -1067,7 +1062,6 @@
       "generateVideoRunway": "Runway Video Oluşturma",
       "generateVideoVertexAI": "Vertex AI Veo Video",
       "generatePixelVideoWan22": "WAN 2.2 Piksel Animasyonu",
-      "assembleVideo": "Video Montajı",
       "showProductImages": "Ürün Galerisi",
       "localGrep": "Yerel Grep",
       "executeCommand": "Komut Çalıştır",
@@ -1775,8 +1769,6 @@
         "generateVideoVertexAIDesc": "Vertex AI üzerinden Google Veo ile video oluştur",
         "generatePixelVideoWan22": "Piksel Animasyonu (WAN 2.2)",
         "generatePixelVideoWan22Desc": "Piksel sanatı karakter sprite animasyonları oluştur",
-        "assembleVideo": "Video Montajı",
-        "assembleVideoDesc": "Oturum görsellerini/videolarını düzenlenmiş videolara birleştir",
         "describeImage": "Görsel Tanımla",
         "describeImageDesc": "AI görüşü kullanarak görselleri analiz et ve tanımla",
         "screenCapture": "Ekran Görüntüsü",

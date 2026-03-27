@@ -682,7 +682,7 @@ export const AssistantActionBar: FC<{ ttsEnabled?: boolean; messageText?: string
   const voiceCtx = useOptionalVoice();
   const [isSpeaking, setIsSpeaking] = useState(false);
   const audioUrlRef = useRef<string | null>(null);
-  const sanitizedMessageText = stripMarkdown((messageText || "").trim());
+  const speakableMessageText = (messageText || "").trim();
   const handleCopyClick = useCallback(() => {
     toast.success(t("toast.copied"));
   }, [t]);
@@ -703,7 +703,7 @@ export const AssistantActionBar: FC<{ ttsEnabled?: boolean; messageText?: string
   );
 
   const handleSpeakClick = useCallback(async () => {
-    if (!ttsEnabled || !sanitizedMessageText) {
+    if (!ttsEnabled || !speakableMessageText) {
       return;
     }
 
@@ -718,7 +718,7 @@ export const AssistantActionBar: FC<{ ttsEnabled?: boolean; messageText?: string
       const response = await fetch("/api/voice/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: sanitizedMessageText }),
+        body: JSON.stringify({ text: speakableMessageText }),
       });
 
       if (!response.ok) {
@@ -750,7 +750,7 @@ export const AssistantActionBar: FC<{ ttsEnabled?: boolean; messageText?: string
       setIsSpeaking(false);
       voiceCtx?.setSynthesizing(false);
     }
-  }, [isPlayingCurrentMessage, sanitizedMessageText, ttsEnabled, voiceCtx]);
+  }, [isPlayingCurrentMessage, speakableMessageText, ttsEnabled, voiceCtx]);
 
   return (
     <ActionBarPrimitive.Root
@@ -758,7 +758,7 @@ export const AssistantActionBar: FC<{ ttsEnabled?: boolean; messageText?: string
       autohide="not-last"
       className="flex gap-1"
     >
-      {ttsEnabled && sanitizedMessageText.length > 0 && (
+      {ttsEnabled && speakableMessageText.length > 0 && (
         <TooltipIconButton
           tooltip={isPlayingCurrentMessage ? t("tooltips.stopAudio") : t("tooltips.readAloud")}
           side="bottom"

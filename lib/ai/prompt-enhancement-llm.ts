@@ -30,6 +30,12 @@ export interface EnhancementRequestContext {
   memories: string;
   /** Detected input type for format-aware enhancement */
   inputType?: 'bug_report' | 'feature_request' | 'question' | 'implementation_task';
+  /** Agent identity context */
+  agentName?: string;
+  agentPurpose?: string;
+  agentTagline?: string;
+  /** Current session topic (session title) */
+  sessionTitle?: string;
 }
 
 // =============================================================================
@@ -141,6 +147,23 @@ export function buildEnhancementRequest(context: EnhancementRequestContext): str
     ? `\n**Detected Input Type:** ${context.inputType.replace('_', ' ')}\n`
     : '';
 
+  // Agent identity context (helps LLM tailor enhancement to agent's domain)
+  if (context.agentName || context.agentPurpose) {
+    parts.push(`## Agent Context\n`);
+    if (context.agentName) {
+      parts.push(`**Agent:** ${context.agentName}${context.agentTagline ? ` — ${context.agentTagline}` : ''}`);
+    }
+    if (context.agentPurpose) {
+      parts.push(`**Purpose:** ${context.agentPurpose}`);
+    }
+    parts.push('');
+  }
+
+  // Session topic for conversational continuity
+  if (context.sessionTitle) {
+    parts.push(`**Current Topic:** ${context.sessionTitle}\n`);
+  }
+
   // Original query - emphasize preservation
   parts.push(`## User's Original Request (PRESERVE THIS FORMAT)\n\n"${context.originalQuery}"${inputTypeHint}`);
   parts.push(`⚠️ Your output must maintain the same structural format as the input above. Do NOT convert to a different format.\n`);
@@ -151,7 +174,7 @@ export function buildEnhancementRequest(context: EnhancementRequestContext): str
     for (const msg of context.recentMessages) {
       const role = msg.role === "user" ? "User" : "Assistant";
       const content = typeof msg.content === "string"
-        ? msg.content.slice(0, 500)
+        ? msg.content.slice(0, 25000)
         : "[complex content]";
       parts.push(`**${role}:** ${content}\n`);
     }

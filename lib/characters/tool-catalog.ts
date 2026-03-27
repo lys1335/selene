@@ -41,7 +41,6 @@ export const CHARACTER_TOOL_CATALOG: CharacterToolCatalogItem[] = [
   { id: "promptLibrary", category: "knowledge" },
   { id: "webSearch", category: "search" },
   { id: "firecrawlCrawl", category: "search", dependencies: ["webScraper"] },
-  { id: "assembleVideo", category: "video-generation" },
   { id: "describeImage", category: "analysis" },
   { id: "showProductImages", category: "utility" },
   { id: "executeCommand", category: "utility", dependencies: ["syncedFolders"] },

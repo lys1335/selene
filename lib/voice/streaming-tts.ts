@@ -4,6 +4,7 @@
  */
 
 import { stripMarkdown } from "@/lib/utils/strip-markdown";
+import { formatCodeForSpeech } from "@/lib/voice/format-tts-text";
 export { stripMarkdown };
 
 // ---------------------------------------------------------------------------
@@ -90,10 +91,12 @@ export class SentenceSplitter {
   private codeBlockContent = "";
   private onSentence: (sentence: string) => void;
   private readCodeBlocks: boolean;
+  private speakCodeSymbols: boolean;
 
-  constructor(onSentence: (sentence: string) => void, options?: { readCodeBlocks?: boolean }) {
+  constructor(onSentence: (sentence: string) => void, options?: { readCodeBlocks?: boolean; speakCodeSymbols?: boolean }) {
     this.onSentence = onSentence;
     this.readCodeBlocks = options?.readCodeBlocks ?? false;
+    this.speakCodeSymbols = options?.speakCodeSymbols ?? false;
   }
 
   /** Feed a text delta (streaming token). */
@@ -110,8 +113,8 @@ export class SentenceSplitter {
         // Emit any pending prose before the code block
         const prose = stripMarkdown(this.pendingProse.trim());
         if (prose.length > 0) this.onSentence(prose);
-        // Emit accumulated code block content
-        const code = (this.codeBlockContent + this.buffer).trim();
+        // Emit accumulated code block content with symbol-aware speech formatting.
+        const code = formatCodeForSpeech((this.codeBlockContent + this.buffer).trim(), this.speakCodeSymbols);
         if (code.length > 0) this.onSentence("Code: " + code);
       } else {
         // Emit prose that preceded the unclosed code block
@@ -166,7 +169,7 @@ export class SentenceSplitter {
           // Emit pending prose, then code block content
           const prose = stripMarkdown(this.pendingProse.trim());
           if (prose.length > 0) this.onSentence(prose);
-          const code = (this.codeBlockContent + this.buffer.slice(0, closeIdx)).trim();
+          const code = formatCodeForSpeech((this.codeBlockContent + this.buffer.slice(0, closeIdx)).trim(), this.speakCodeSymbols);
           if (code.length > 0) this.onSentence("Code: " + code);
           this.codeBlockContent = "";
           this.pendingProse = "";

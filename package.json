@@ -70,7 +70,6 @@
     "electron:prepare": "node scripts/electron-prepare.js",
     "electron:verify-package": "node scripts/verify-package.js",
     "electron:recover-mac-dmg": "node scripts/recover-mac-dmg.js",
-    "electron:copy-remotion": "rm -rf .next/standalone/node_modules/@remotion && cp -r node_modules/@remotion .next/standalone/node_modules/",
     "electron:rebuild-native": "electron-rebuild -f -o better-sqlite3,onnxruntime-node -v 39.2.4",
     "electron:rebuild-standalone": "electron-rebuild -f -m .next/standalone -o better-sqlite3,onnxruntime-node -v 39.2.4",
     "electron:pack": "npm run electron:build && electron-builder --dir && npm run electron:verify-package",
@@ -82,7 +81,7 @@
     "electron:dist:win32": "npm run typecheck && rimraf dist-electron && npm run electron:build && electron-builder --win --ia32 && npm run electron:verify-package",
     "embedding:test": "node scripts/embedding-test.mjs",
     "embedding:pipeline-test": "tsx scripts/embedding-pipeline-test.ts",
-    "postinstall": "electron-builder install-app-deps && node scripts/patch-remotion-dylibs.js"
+    "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",
@@ -119,9 +118,6 @@
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.1.6",
-    "@remotion/bundler": "^4.0.382",
-    "@remotion/cli": "^4.0.382",
-    "@remotion/renderer": "^4.0.382",
     "@slack/bolt": "^4.1.1",
     "@tiptap/extension-image": "^3.20.0",
     "@tiptap/extension-placeholder": "^3.20.0",
@@ -177,7 +173,6 @@
     "react-dom": "^19.2.3",
     "react-shiki": "^0.9.0",
     "remark-gfm": "^4.0.1",
-    "remotion": "^4.0.382",
     "selfsigned": "^5.5.0",
     "simple-git": "^3.32.3",
     "sonner": "^2.0.7",

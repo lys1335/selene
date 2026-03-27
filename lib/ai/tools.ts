@@ -24,11 +24,10 @@ export {
   type Flux2GenerateToolOptions,
 } from "@/lib/ai/tools/image-tools";
 
-// Video tools (wan22 video, wan22 pixel video, video assembly)
+// Video tools (wan22 video, wan22 pixel video)
 export {
   createWan22VideoTool,
   createWan22PixelVideoTool,
-  createVideoAssemblyTool,
 } from "@/lib/ai/tools/video-tools";
 
 // Runway video tools

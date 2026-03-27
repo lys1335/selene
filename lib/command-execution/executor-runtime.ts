@@ -114,10 +114,7 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
     const bundledCandidates = [nodeBinDir, toolsBinDir, ripgrepBinDir].filter((candidate): candidate is string => Boolean(candidate));
     const bundledBinDirs = bundledCandidates.filter((candidate) => existsSync(candidate));
 
-    // Detect the real ffmpeg binary from @remotion/compositor-* (platform-specific).
-    // The npm .bin/ffmpeg wrapper (from ffmpeg-static) is a JS script that fails with
-    // ENOEXEC when spawn'd with shell:false. The remotion compositor package contains
-    // the actual Mach-O/ELF binary alongside its required dylibs/shared objects.
+    // Detect the ffmpeg binary from ffmpeg-static package.
     const ffmpegDir = resourcesPath ? detectFfmpegDir(join(resourcesPath, "standalone", "node_modules")) : null;
 
     return {
@@ -135,29 +132,19 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
 }
 
 /**
- * Detect the @remotion/compositor-* directory containing the real ffmpeg binary.
- * Returns the directory path if found (contains ffmpeg binary + dylibs), null otherwise.
+ * Detect the directory containing the ffmpeg binary from ffmpeg-static.
+ * Returns the directory path if found, null otherwise.
  */
 function detectFfmpegDir(nodeModulesPath: string): string | null {
-    // Platform-specific compositor package names
-    const platformMap: Record<string, Record<string, string>> = {
-        darwin: { arm64: "compositor-darwin-arm64", x64: "compositor-darwin-x64" },
-        linux: { arm64: "compositor-linux-arm64-gnu", x64: "compositor-linux-x64-gnu" },
-    };
-    const archMap = platformMap[process.platform];
-    if (!archMap) return null;
-
-    const compositorName = archMap[process.arch];
-    if (!compositorName) return null;
-
-    const compositorDir = join(nodeModulesPath, "@remotion", compositorName);
-    const ffmpegBinary = join(compositorDir, process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg");
-    if (existsSync(ffmpegBinary)) return compositorDir;
-
-    // Fallback: check ffmpeg-static (some builds may have the real binary there)
     const ffmpegStaticDir = join(nodeModulesPath, "ffmpeg-static");
-    const ffmpegStaticBinary = join(ffmpegStaticDir, "ffmpeg");
+    const ffmpegBinaryName = process.platform === "win32" ? "ffmpeg.exe" : "ffmpeg";
+    const ffmpegStaticBinary = join(ffmpegStaticDir, ffmpegBinaryName);
     if (existsSync(ffmpegStaticBinary)) return ffmpegStaticDir;
+
+    // Also check .bin directory where electron-prepare copies the binary
+    const binDir = join(nodeModulesPath, ".bin");
+    const binFfmpeg = join(binDir, ffmpegBinaryName);
+    if (existsSync(binFfmpeg)) return binDir;
 
     return null;
 }
@@ -351,9 +338,7 @@ export function resolveBundledNodeCommand(
         };
     }
 
-    // Resolve ffmpeg/ffprobe to the real binary from @remotion/compositor-*.
-    // The npm .bin/ffmpeg wrapper is a JS script that fails with ENOEXEC under
-    // spawn(shell:false). The compositor package has the actual native binary.
+    // Resolve ffmpeg/ffprobe to the bundled binary from ffmpeg-static.
     if ((normalized === "ffmpeg" || normalized === "ffprobe") && runtime.ffmpegDir) {
         const realBinary = join(runtime.ffmpegDir, normalized);
         if (existsSync(realBinary)) {

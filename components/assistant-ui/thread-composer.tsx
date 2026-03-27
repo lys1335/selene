@@ -737,8 +737,13 @@ export const Composer: FC<{
           part.type === "image" && typeof part.image === "string",
       );
       const rawComposerAttachments = threadRuntime.composer.getState().attachments ?? [];
+      // Accept both "complete" and "requires-action" (upload finished, pending send finalization).
+      // The rich editor path uses threadRuntime.append() directly instead of composer.send(),
+      // so attachments never go through attachmentAdapter.send() which transitions to "complete".
+      // Only block on "running" (actively uploading) attachments.
       const composerAttachments = rawComposerAttachments.filter(
-        (attachment): attachment is CompleteAttachment => attachment.status.type === "complete",
+        (attachment): attachment is CompleteAttachment =>
+          attachment.status.type === "complete" || attachment.status.type === "requires-action",
       );
       if (contentParts.length === 0 && attachmentCount === 0 && inlineImageParts.length === 0) return;
 

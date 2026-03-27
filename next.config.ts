@@ -88,23 +88,11 @@ const nextConfig: NextConfig = {
     // Needed for multipart uploads that pass through proxy (default is 10mb).
     proxyClientMaxBodySize: DOCUMENT_UPLOAD_BODY_SIZE_LIMIT,
   },
-  // Exclude Remotion and esbuild packages from Turbopack bundling
-  // These packages contain native binaries and platform-specific code
-  // that should not be processed by the bundler
+  // Exclude native/platform-specific packages from Turbopack bundling
   serverExternalPackages: [
     // Claude Agent SDK resolves cli.js via import.meta.url at runtime —
     // bundling it breaks that path resolution, causing auth to fail in production.
     "@anthropic-ai/claude-agent-sdk",
-    "@remotion/bundler",
-    "@remotion/renderer",
-    "@remotion/cli",
-    "@remotion/compositor-linux-arm64-gnu",
-    "@remotion/compositor-linux-arm64-musl",
-    "@remotion/compositor-linux-x64-gnu",
-    "@remotion/compositor-linux-x64-musl",
-    "@remotion/compositor-darwin-arm64",
-    "@remotion/compositor-darwin-x64",
-    "@remotion/compositor-win32-x64-msvc",
     "esbuild",
     "@esbuild/darwin-arm64",
     "@esbuild/darwin-x64",
@@ -128,8 +116,6 @@ const nextConfig: NextConfig = {
     "@esbuild/sunos-x64",
     "@esbuild/win32-arm64",
     "@esbuild/win32-ia32",
-    "webpack",
-    "terser-webpack-plugin",
     // LanceDB - embedded vector database with native bindings
     "@lancedb/lancedb",
     "@lancedb/lancedb-darwin-arm64",
@@ -177,7 +163,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // Configure webpack to handle ONNX files and exclude Remotion from bundling
+  // Configure webpack to handle native/platform-specific packages
   webpack: (config, { isServer }) => {
     // For client-side, prevent Node.js-only modules from being bundled
     if (!isServer) {
@@ -208,21 +194,15 @@ const nextConfig: NextConfig = {
       };
     }
 
-    // Exclude Remotion bundler/renderer from webpack bundling
-    // These packages are dynamically imported at runtime and contain
-    // Node.js-only dependencies (esbuild, webpack) that conflict with Next.js
+    // Exclude native/platform-specific packages from webpack bundling
     // Use a function-based pattern matcher to exclude entire package namespaces
     if (isServer) {
       const existingExternals = Array.isArray(config.externals) ? config.externals : [];
 
       // Patterns to externalize - matches entire package namespaces
-      // These patterns catch both direct imports and nested dependencies
       const externalPatterns = [
-        /^@remotion(\/|$)/,  // All @remotion/* packages (including @remotion itself)
         /^@esbuild(\/|$)/,   // All platform-specific esbuild packages
         /^esbuild(\/|$)/,    // Main esbuild package and subpaths
-        /^webpack(\/|$)/,    // Webpack itself and subpaths
-        /^terser-webpack-plugin(\/|$)/, // Webpack plugin dependency
         /^@lancedb(\/|$)/,   // LanceDB embedded vector database with native bindings
         /^@modelcontextprotocol(\/|$)/, // MCP SDK - uses Node.js child_process
         /^cross-spawn(\/|$)/, // Spawning child processes - Node.js only
@@ -230,7 +210,7 @@ const nextConfig: NextConfig = {
 
       // Function-based external that matches patterns
       // Uses webpack 5 async function signature for better compatibility
-      const remotionExternalsFn = async ({
+      const nativeExternalsFn = async ({
         request,
         context,
         getResolve,
@@ -246,21 +226,14 @@ const nextConfig: NextConfig = {
         // Check if the request matches any of our patterns at the start (for module specifiers)
         for (const pattern of externalPatterns) {
           if (pattern.test(request)) {
-            // Return as commonjs external to prevent bundling
             return `commonjs ${request}`;
           }
         }
 
         // For resolved file system paths that contain these packages anywhere in the path
-        // This catches paths like:
-        // - 'node_modules/@remotion/bundler/node_modules/@esbuild/darwin-arm64/README.md'
-        // - './styly-agent/node_modules/@esbuild/darwin-arm64/bin/esbuild'
         const pathPatterns = [
-          /node_modules\/@remotion\//,
           /node_modules\/@esbuild\//,
           /node_modules\/esbuild\//,
-          /node_modules\/webpack\//,
-          /node_modules\/terser-webpack-plugin\//,
           /node_modules\/@lancedb\//,
           /node_modules\/@modelcontextprotocol\//,
           /node_modules\/cross-spawn\//,
@@ -276,7 +249,7 @@ const nextConfig: NextConfig = {
         return undefined;
       };
 
-      config.externals = [...existingExternals, remotionExternalsFn];
+      config.externals = [...existingExternals, nativeExternalsFn];
     }
 
     const existingIgnored = config.watchOptions?.ignored;

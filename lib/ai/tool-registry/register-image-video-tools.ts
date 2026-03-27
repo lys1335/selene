@@ -18,7 +18,6 @@ import {
   createOpenRouterGpt5ImageMiniGenerate,
   createOpenRouterGpt5ImageMiniReference,
   createOpenRouterGpt5ImageReference,
-  createVideoAssemblyTool,
   createWan22ImagenTool,
   createWan22PixelVideoTool,
   createWan22VideoTool,
@@ -690,36 +689,6 @@ Advanced reference-guided generation and style transfer. Adjust reference_streng
     enableEnvVar: "OPENROUTER_API_KEY",
   } satisfies ToolMetadata,
   ({ sessionId }) => createOpenRouterGemini3ProImageReference(sessionId!)
-);
-
-// Video Assembly Tool (NOT a legacy tool - uses FFmpeg, not STYLY IO API)
-registry.register(
-  "assembleVideo",
-  {
-    displayName: "Assemble Video",
-    category: "video-generation",
-    keywords: [
-      "assemble",
-      "video",
-      "compile",
-      "montage",
-      "slideshow",
-      "combine",
-      "edit",
-      "production",
-      "transitions",
-      "remotion",
-    ],
-    shortDescription:
-      "Assemble session images and videos into a cohesive video with transitions and effects",
-    fullInstructions: `## Video Assembly
-
-Assemble session images/videos into a cohesive video using Remotion. AI-driven scene planning, transitions (fade/crossfade/slide/wipe/zoom), Ken Burns, text overlays.
-Automatically uses all media from the current session. Rendering may take time for longer videos.`,
-    loading: { deferLoading: true }, // Deferred - discover via searchTools
-    requiresSession: true,
-  } satisfies ToolMetadata,
-  ({ sessionId }) => createVideoAssemblyTool(sessionId!)
 );
 
 // ============================================================================

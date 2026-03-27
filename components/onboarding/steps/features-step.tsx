@@ -109,7 +109,6 @@ const FEATURE_CATEGORIES: FeatureCategory[] = [
         features: [
             { nameKey: "comfyui", icon: "comfyui.svg", status: "ready" },
             { nameKey: "openrouterImage", icon: "openrouter.svg", status: "configurable" },
-            { nameKey: "remotionVideo", icon: "remotion.svg", status: "ready" },
         ],
     },
     {

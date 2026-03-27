@@ -36,7 +36,7 @@ describe("SentenceSplitter", () => {
     const sentences: string[] = [];
     const splitter = new SentenceSplitter((sentence) => {
       sentences.push(sentence);
-    }, { readCodeBlocks: true });
+    }, { readCodeBlocks: true, speakCodeSymbols: true });
 
     splitter.feed("Here is the code. ```ts\nconst a = 1;\n```");
     splitter.feed(" After the code.");
@@ -44,7 +44,7 @@ describe("SentenceSplitter", () => {
 
     expect(sentences).toEqual([
       "Here is the code.",
-      "Code: const a = 1;",
+      "Code: const a equals 1 semicolon",
       "After the code.",
     ]);
   });
@@ -53,14 +53,14 @@ describe("SentenceSplitter", () => {
     const sentences: string[] = [];
     const splitter = new SentenceSplitter((sentence) => {
       sentences.push(sentence);
-    }, { readCodeBlocks: true });
+    }, { readCodeBlocks: true, speakCodeSymbols: true });
 
     splitter.feed("Before code. ```python\nprint('hello')");
     splitter.flush();
 
     expect(sentences).toEqual([
       "Before code.",
-      "Code: print('hello')",
+      "Code: print open parenthesis single quote hello single quote close parenthesis",
     ]);
   });
 

@@ -24,6 +24,8 @@ import {
   getSessionByMetadataKey,
   getSession,
 } from "@/lib/db/queries";
+import { getMessages } from "@/lib/db/queries-messages";
+import { getCharacter } from "@/lib/characters/queries";
 
 interface EnhancePromptRequestBody {
   input?: string;
@@ -112,17 +114,77 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       // Use LLM-driven enhancement by default
       if (useLLM) {
+        // Fetch authoritative chat history from DB (server-side, not client-dependent)
+        let dbMessages: Array<{ role: string; content: string }> | undefined;
+        if (resolvedFromProvidedSession && sessionRecord?.id) {
+          try {
+            const allMessages = await getMessages(sessionRecord.id);
+            // Filter: only user/assistant messages with actual text, no tool results, no injected prompts
+            const visibleMessages = allMessages.filter((m) => {
+              if (m.role !== "user" && m.role !== "assistant") return false;
+              // Exclude livePromptInjected messages
+              const meta = typeof m.metadata === "string"
+                ? (() => { try { return JSON.parse(m.metadata); } catch { return null; } })()
+                : m.metadata;
+              if (meta?.livePromptInjected === true) return false;
+              return true;
+            });
+            // Take last 3 visible messages, extract text content, truncate each to 25K chars
+            dbMessages = visibleMessages.slice(-3).map((m) => {
+              let text: string;
+              if (typeof m.content === "string") {
+                text = m.content;
+              } else if (Array.isArray(m.content)) {
+                text = (m.content as Array<Record<string, unknown>>)
+                  .filter((part) => part.type === "text" && typeof part.text === "string")
+                  .map((part) => part.text as string)
+                  .join("\n");
+              } else {
+                text = "";
+              }
+              return { role: m.role, content: text.slice(0, 25000) };
+            }).filter((m) => m.content.length > 0);
+          } catch (err) {
+            console.warn("[enhance-prompt] Failed to fetch DB messages, falling back to client context:", err);
+          }
+        }
+
+        // Fetch agent identity for enhancement context
+        let agentName: string | undefined;
+        let agentPurpose: string | undefined;
+        let agentTagline: string | undefined;
+        if (validCharacterId) {
+          try {
+            const character = await getCharacter(validCharacterId);
+            if (character) {
+              agentName = character.name || undefined;
+              agentTagline = character.tagline || undefined;
+              const charMeta = typeof character.metadata === "string"
+                ? (() => { try { return JSON.parse(character.metadata); } catch { return null; } })()
+                : character.metadata;
+              agentPurpose = charMeta?.purpose || undefined;
+            }
+          } catch (err) {
+            console.warn("[enhance-prompt] Failed to fetch character:", err);
+          }
+        }
+
         const result = await withRunContext(
           { runId: agentRun.id, sessionId, pipelineName: "enhance-prompt" },
           async () => {
             const llmOptions: LLMEnhancementOptions = {
               timeoutMs: 135000, // 135s — search + LLM synthesis pipeline needs headroom
               conversationContext,
+              dbMessages,
               userId,
               sessionId,
               sessionMetadata: sessionRecord.metadata as Record<string, unknown> | null,
               includeFileTree: true,
               includeMemories: true,
+              agentName,
+              agentPurpose,
+              agentTagline,
+              sessionTitle: sessionRecord.title || undefined,
             };
             return enhancePromptWithLLM(input, validCharacterId, llmOptions);
           }

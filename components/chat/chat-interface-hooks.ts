@@ -199,6 +199,7 @@ export function useBackgroundProcessing({
 
     const clearTrackedRunState = useCallback(async (options: ClearTrackedRunStateOptions = {}) => {
         const runId = options.runId ?? processingRunId;
+        console.log("[Background Processing] clearTrackedRunState called:", { runId, refreshMessages: options.refreshMessages, clearTaskState: options.clearTaskState });
 
         if (pollingIntervalRef.current) {
             clearInterval(pollingIntervalRef.current);
@@ -339,6 +340,10 @@ export function useBackgroundProcessing({
                         pollingIntervalRef.current = null;
                     }
                     activePollingRunIdRef.current = null;
+                    // Mirror the error-branch cleanup: unblock deferral gates
+                    // so reconnect-triggered message reloads aren't gated by
+                    // stale "run active" state.
+                    isRunActiveRef.current = false;
                 }
             }
         };
@@ -396,6 +401,39 @@ export function useBackgroundProcessing({
             isRunActiveRef.current = false;
         }
     }, [isProcessingInBackground]);
+
+    // Safety net: detect stale "processing in background" state.
+    // After reconnection, checkActiveRunRef may set isProcessingInBackground(true)
+    // and start polling. If polling quickly detects terminal status, the React
+    // state batch from checkActiveRunRef (true) and clearTrackedRunState (false)
+    // can race. This effect catches the inconsistency: if the banner is showing
+    // but polling has stopped and isRunActiveRef is false, force clear after 3s.
+    const processingRunIdRef = useRef(processingRunId);
+    processingRunIdRef.current = processingRunId;
+    useEffect(() => {
+        if (!isProcessingInBackground || !processingRunId) return;
+        const timer = setTimeout(async () => {
+            // Use refs to read fresh state (not stale closure values)
+            if (!pollingIntervalRef.current && !isRunActiveRef.current) {
+                // Polling stopped and run is not active — verify with server
+                const runId = processingRunIdRef.current;
+                if (!runId) return;
+                const { data } = await resilientFetch<{ status: string }>(
+                    `/api/agent-runs/${runId}/status`,
+                    { retries: 0 }
+                );
+                if (!data) return;
+                if (data.status === "running") {
+                    // Run is still active but polling died — restart it
+                    startPollingForCompletion(runId);
+                    return;
+                }
+                console.warn("[Background Processing] Safety net: clearing stale background state for", runId);
+                void clearTrackedRunState({ runId, refreshMessages: true, clearTaskState: true });
+            }
+        }, 3000);
+        return () => clearTimeout(timer);
+    }, [isProcessingInBackground, processingRunId, clearTrackedRunState, startPollingForCompletion]);
 
     const handleCancelBackgroundRun = useCallback(async () => {
         const runId = processingRunId;

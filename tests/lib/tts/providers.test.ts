@@ -37,9 +37,9 @@ describe("OpenAITTSProvider", () => {
       expect(provider.isAvailable()).toBe(false);
     });
 
-    it("returns true with OpenRouter API key", () => {
+    it("returns false with only OpenRouter API key", () => {
       settingsMock.state.settings.openrouterApiKey = "sk-test";
-      expect(provider.isAvailable()).toBe(true);
+      expect(provider.isAvailable()).toBe(false);
     });
 
     it("returns true with OPENAI_API_KEY env", () => {
@@ -52,7 +52,15 @@ describe("OpenAITTSProvider", () => {
     it("throws when no API key is configured", async () => {
       await expect(
         provider.synthesize({ text: "Hello" })
-      ).rejects.toThrow("No OpenAI or OpenRouter API key");
+      ).rejects.toThrow("No OpenAI API key configured for OpenAI TTS");
+    });
+
+    it("throws when only an OpenRouter API key is configured", async () => {
+      settingsMock.state.settings.openrouterApiKey = "sk-or-key";
+
+      await expect(
+        provider.synthesize({ text: "Hello" })
+      ).rejects.toThrow("No OpenAI API key configured for OpenAI TTS");
     });
 
     it("calls OpenAI TTS API with correct parameters", async () => {
@@ -161,19 +169,6 @@ describe("OpenAITTSProvider", () => {
       ).rejects.toThrow("OpenAI TTS API error 500");
     });
 
-    it("uses OpenRouter base URL when no OPENAI_API_KEY env", async () => {
-      settingsMock.state.settings.openrouterApiKey = "sk-or-key";
-
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(50),
-      });
-
-      await provider.synthesize({ text: "Hello" });
-
-      const callUrl = (global.fetch as any).mock.calls[0][0];
-      expect(callUrl).toBe("https://openrouter.ai/api/v1/audio/speech");
-    });
   });
 });
 

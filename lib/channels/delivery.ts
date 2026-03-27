@@ -15,6 +15,7 @@ import { loadSettings } from "@/lib/settings/settings-manager";
 import { isTTSAvailable, synthesizeSpeech, shouldSummarizeForTTS, summarizeForTTS, getAudioForChannel } from "@/lib/tts/manager";
 import { parseTTSDirectives } from "@/lib/tts/directives";
 import { INTERACTIVE_TOOL_NAME_SET } from "@/lib/interactive-tools/constants";
+import { formatTextForTTS } from "@/lib/voice/format-tts-text";
 
 export async function deliverChannelReply(params: {
   sessionId: string;
@@ -295,7 +296,11 @@ async function maybeGenerateTTSAttachment(
     }
 
     // Strip markdown formatting for cleaner speech
-    ttsText = stripMarkdownForTTS(ttsText, settings.ttsReadCodeBlocks ?? false);
+    ttsText = formatTextForTTS(
+      ttsText,
+      settings.ttsReadCodeBlocks ?? false,
+      settings.ttsSpeakCodeSymbols ?? false,
+    );
 
     const result = await synthesizeSpeech({
       text: ttsText,
@@ -381,34 +386,3 @@ function escapeHtmlEntities(str: string): string {
     .replace(/>/g, "&gt;");
 }
 
-/**
- * Strip markdown syntax for cleaner TTS output.
- * When readCodeBlocks is true, fenced code blocks are kept as "Code: …"
- * instead of being removed entirely.
- */
-function stripMarkdownForTTS(text: string, readCodeBlocks = false): string {
-  let result = text;
-
-  if (readCodeBlocks) {
-    // Replace fenced code blocks with "Code: <content>" for speech
-    result = result.replace(/```[^\n]*\n([\s\S]*?)```/g, (_match, code: string) => {
-      const trimmed = code.trim();
-      return trimmed.length > 0 ? `\nCode: ${trimmed}\n` : "";
-    });
-    // Replace inline code with just the content (keep it readable)
-    result = result.replace(/`([^`]+)`/g, "$1");
-  } else {
-    // Remove all code (inline and fenced)
-    result = result.replace(/`{1,3}[^`]*`{1,3}/g, "");
-  }
-
-  return result
-    .replace(/#{1,6}\s+/g, "") // headers
-    .replace(/\*\*([^*]+)\*\*/g, "$1") // bold
-    .replace(/\*([^*]+)\*/g, "$1") // italic
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
-    .replace(/^[-*]\s+/gm, "") // list markers
-    .replace(/^\d+\.\s+/gm, "") // numbered lists
-    .replace(/\n{3,}/g, "\n\n") // excess newlines
-    .trim();
-}

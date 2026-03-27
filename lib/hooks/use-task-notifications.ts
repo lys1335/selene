@@ -610,6 +610,8 @@ export function useTaskNotifications() {
   const connectedUserIdRef = useRef<string | null>(null);
   const hasConnectedOnceRef = useRef(false);
   const wasDisconnectedRef = useRef(false);
+  const pendingReconnectRef = useRef(false);
+  const disconnectedAtRef = useRef<number | null>(null);
   const lastEventReceivedAtRef = useRef<number | null>(null);
   // Layer 2: Progress event batching — dedup per-runId, flush on timer
   const progressBatchRef = useRef<Map<string, TaskEvent>>(new Map());
@@ -793,8 +795,13 @@ export function useTaskNotifications() {
           })
         );
       }
-      const isActualBackgroundCompleted = task.type === "scheduled" || isDelegationChat;
-      if (isActualBackgroundCompleted) {
+      // Dispatch for all chat/scheduled/delegation completions. For foreground
+      // chat runs that completed while the client was disconnected (network
+      // interruption), this is the ONLY signal that triggers message reload
+      // and terminal UI cleanup in the chat interface. For runs that completed
+      // normally (stream delivered everything), the extra reload is a no-op.
+      const shouldDispatchCompletion = task.type === "chat" || task.type === "scheduled" || isDelegationChat;
+      if (shouldDispatchCompletion) {
         dispatchLifecycleEvent("background-task-completed", event);
       }
 
@@ -1060,15 +1067,32 @@ export function useTaskNotifications() {
         reconnectAttemptsRef.current = 0;
         lastEventReceivedAtRef.current = Date.now();
         console.log("[TaskNotifications] SSE connection opened");
-        const showToast = hasConnectedOnceRef.current && wasDisconnectedRef.current;
+        // Don't toast or reconcile here — wait for first actual message
+        // to confirm the connection is fully functional (not just TCP open).
+        if (hasConnectedOnceRef.current && wasDisconnectedRef.current) {
+          pendingReconnectRef.current = true;
+          disconnectedAtRef.current = disconnectedAtRef.current ?? Date.now();
+        }
         hasConnectedOnceRef.current = true;
-        wasDisconnectedRef.current = false;
-        void reconcileTasks(showToast);
       };
 
       eventSource.onmessage = (event) => {
         try {
           lastEventReceivedAtRef.current = Date.now();
+
+          // Confirm reconnection on first actual message (not just TCP open).
+          // This ensures the full SSE pipeline is working before we toast/reconcile.
+          if (pendingReconnectRef.current) {
+            pendingReconnectRef.current = false;
+            const disconnectDuration = Date.now() - (disconnectedAtRef.current ?? Date.now());
+            disconnectedAtRef.current = null;
+            wasDisconnectedRef.current = false;
+            // Only show toast for outages >3s — skip brief hiccups
+            const showToast = disconnectDuration > 3000;
+            console.log(`[TaskNotifications] Reconnection confirmed after ${Math.round(disconnectDuration / 1000)}s (toast: ${showToast})`);
+            void reconcileTasks(showToast);
+          }
+
           const message: SSEMessage = JSON.parse(event.data);
           if (DEBUG_CHAT) console.log("[TaskNotifications] Received message:", message.type);
 
@@ -1133,6 +1157,7 @@ export function useTaskNotifications() {
 
         eventSource.close();
         wasDisconnectedRef.current = true;
+        disconnectedAtRef.current = disconnectedAtRef.current ?? Date.now();
 
         if (eventSourceRef.current === eventSource) {
           eventSourceRef.current = null;
@@ -1156,6 +1181,7 @@ export function useTaskNotifications() {
           console.warn(`[TaskNotifications] SSE stale (${Math.round(silenceMs / 1000)}s silence), forcing reconnect`);
           eventSourceRef.current.close();
           wasDisconnectedRef.current = true;
+          disconnectedAtRef.current = disconnectedAtRef.current ?? Date.now();
           eventSourceRef.current = null;
           scheduleReconnect();
         }
