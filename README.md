@@ -151,7 +151,6 @@ npm run electron:dist:mac
 ### Runtime Secrets
 Set in `.env`:
 - `INTERNAL_API_SECRET`: internal API auth
-- `REMOTION_MEDIA_TOKEN`: media URL token
 
 ### Troubleshooting
 - **Native module errors**: `npm run electron:rebuild-native`
