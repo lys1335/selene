@@ -112,10 +112,11 @@ Use any combination, or go fully local with no API keys.
 
 | Provider | Models |
 |----------|--------|
-| **Anthropic** | Claude with prompt caching |
-| **OpenAI** | GPT-5, Codex, 60+ variants |
+| **Anthropic** | Claude with prompt caching and Agent SDK |
+| **OpenAI** | GPT-4.5, Codex |
 | **OpenRouter** | Claude, Gemini, Grok, DeepSeek, and more |
 | **Ollama** | Any local model |
+| **vLLM** | Self-hosted inference |
 | **Kimi / Moonshot** | 256K context, vision |
 | **Minimax** | 3 variants |
 | **Antigravity** | Free tier via Google OAuth |
