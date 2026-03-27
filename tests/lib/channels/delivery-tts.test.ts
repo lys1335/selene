@@ -242,7 +242,7 @@ describe("Channel Delivery with TTS", () => {
 
     const ttsText = ttsMocks.synthesizeSpeech.mock.calls[0][0].text;
     expect(ttsText).toContain("Code:");
-    expect(ttsText).toContain("const x = 1;");
+    expect(ttsText).toContain("const x equals 1 semicolon");
     expect(ttsText).toContain("Done.");
   });
 

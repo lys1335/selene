@@ -775,6 +775,14 @@ export function SettingsPanel({
                   checked={formState.ttsReadCodeBlocks}
                   onChange={(checked) => updateField("ttsReadCodeBlocks", checked)}
                 />
+
+                <SettingsToggleRow
+                  id="ttsSpeakCodeSymbols"
+                  label={t("voice.tts.speakCodeSymbolsLabel")}
+                  description={t("voice.tts.speakCodeSymbolsDesc")}
+                  checked={formState.ttsSpeakCodeSymbols}
+                  onChange={(checked) => updateField("ttsSpeakCodeSymbols", checked)}
+                />
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-terminal-border/60 bg-terminal-bg/5 px-3 py-2.5 font-mono text-xs text-terminal-muted dark:border-terminal-border/80 dark:bg-terminal-cream/5">

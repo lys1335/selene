@@ -200,9 +200,10 @@ const StreamingAutoSpeakBridge: FC<{
     ttsAutoMode: string;
     ttsEnabled: boolean;
     ttsReadCodeBlocks: boolean;
+    ttsSpeakCodeSymbols: boolean;
     muted: boolean;
     mutedRef: React.RefObject<boolean>;
-}> = ({ ttsAutoMode, ttsEnabled, ttsReadCodeBlocks, muted, mutedRef }) => {
+}> = ({ ttsAutoMode, ttsEnabled, ttsReadCodeBlocks, ttsSpeakCodeSymbols, muted, mutedRef }) => {
     const voiceCtx = useOptionalVoice();
     const playAudio = voiceCtx?.playAudio;
     const cancelAudio = voiceCtx?.cancelAudio;
@@ -256,7 +257,7 @@ const StreamingAutoSpeakBridge: FC<{
                 queuedAudioRef.current = true;
                 queue.enqueue(sentence);
             }
-        }, { readCodeBlocks: ttsReadCodeBlocks });
+        }, { readCodeBlocks: ttsReadCodeBlocks, speakCodeSymbols: ttsSpeakCodeSymbols });
 
         const lifecycle = new StableStreamingLifecycle({
             onStart: () => {
@@ -310,7 +311,7 @@ const StreamingAutoSpeakBridge: FC<{
             splitterRef.current = null;
             bridgePlaybackRef.current = false;
         };
-    }, [cancelAudio, playAudio, mutedRef, ttsReadCodeBlocks]);
+    }, [cancelAudio, playAudio, mutedRef, ttsReadCodeBlocks, ttsSpeakCodeSymbols]);
 
     useEffect(() => {
         const shouldSpeak = ttsAutoMode === "always" && ttsEnabled && !muted;
@@ -406,6 +407,7 @@ export default function ChatInterface({
     const [ttsAutoMode, setTtsAutoMode] = useState<string>("off");
     const [ttsEnabled, setTtsEnabled] = useState(false);
     const [ttsReadCodeBlocks, setTtsReadCodeBlocks] = useState(false);
+    const [ttsSpeakCodeSymbols, setTtsSpeakCodeSymbols] = useState(false);
     const [showThemeChooser, setShowThemeChooser] = useState(false);
     const [availableAgents, setAvailableAgents] = useState<Array<{ id: string; name: string; avatarUrl?: string | null }>>([]);
     const [browserArchivedSessions, setBrowserArchivedSessions] = useState<SessionInfo[]>([]);

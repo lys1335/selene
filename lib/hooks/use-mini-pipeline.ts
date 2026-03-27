@@ -5,7 +5,7 @@ import {
   createSpeechMediaRecorder,
   transcribeRecordedSpeech,
 } from "@/lib/voice/browser-stt";
-import { stripMarkdown } from "@/lib/utils/strip-markdown";
+import { formatTextForTTS } from "@/lib/voice/format-tts-text";
 
 // Re-export for convenience
 export type { MiniOverlayPhase };
@@ -72,6 +72,7 @@ interface UseMiniPipelineOptions {
   autoStart?: boolean;
   mode?: "direct" | "compose";
   voicePostProcessing?: boolean;
+  ttsReadCodeBlocks?: boolean;
   onError?: (error: string) => void;
   onComposeReady?: (payload: { transcript: string; screenshotUrl?: string; screenshotUrls?: string[]; characterId?: string; sessionId?: string }) => void;
 }
@@ -98,6 +99,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     autoStart,
     mode = "direct",
     voicePostProcessing = true,
+    ttsReadCodeBlocks = false,
     onError,
     onComposeReady,
   } = options;
@@ -461,7 +463,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           return;
         }
 
-        const ttsText = stripMarkdown(accumulated);
+        const ttsText = formatTextForTTS(accumulated, true);
         if (!ttsText) {
           setPhase("done");
           return;
@@ -475,7 +477,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           const ttsRes = await fetch("/api/voice/speak", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: ttsText }),
+            body: JSON.stringify({ text: accumulated }),
             signal: ttsAbortRef.current.signal,
           });
           if (!ttsRes.ok) throw new Error(`TTS failed: ${ttsRes.status}`);
@@ -537,7 +539,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       setPhase("error");
       onError?.(msg);
     }
-  }, [screenshotUrl, voicePostProcessing, onError]);
+  }, [screenshotUrl, ttsReadCodeBlocks, voicePostProcessing, onError]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {

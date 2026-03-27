@@ -44,7 +44,7 @@ describe("SentenceSplitter", () => {
 
     expect(sentences).toEqual([
       "Here is the code.",
-      "Code: const a = 1;",
+      "Code: const a equals 1 semicolon",
       "After the code.",
     ]);
   });
@@ -60,7 +60,7 @@ describe("SentenceSplitter", () => {
 
     expect(sentences).toEqual([
       "Before code.",
-      "Code: print('hello')",
+      "Code: print open parenthesis single quote hello single quote close parenthesis",
     ]);
   });
 

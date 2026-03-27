@@ -2731,7 +2731,9 @@
         "limitLabel": "Long message limit (characters)",
         "limitHelper": "Messages above this limit are shortened before audio is generated.",
         "readCodeBlocksLabel": "Read code blocks aloud",
-        "readCodeBlocksDesc": "When enabled, code block content is included in speech output with a \"Code\" prefix instead of being skipped."
+        "readCodeBlocksDesc": "When enabled, code block content is included in speech output with a \"Code\" prefix instead of being skipped.",
+        "speakCodeSymbolsLabel": "Speak code symbols aloud",
+        "speakCodeSymbolsDesc": "When enabled, symbols inside spoken code are expanded into words like \"open bracket\", \"equals\", and \"semicolon\". Turn this off for less verbose code reading."
       },
       "stt": {
         "title": "Speech-to-Text (STT)",

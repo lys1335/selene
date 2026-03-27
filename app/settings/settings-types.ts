@@ -200,6 +200,7 @@ export interface FormState {
   edgeTtsVoice: string;
   ttsSummarizeThreshold: number;
   ttsReadCodeBlocks: boolean;
+  ttsSpeakCodeSymbols: boolean;
   sttEnabled: boolean;
   sttProvider: "openai" | "local" | "parakeet";
   sttLocalModel: string;
@@ -335,6 +336,7 @@ export const DEFAULT_FORM_STATE: FormState = {
   edgeTtsVoice: "en-US-AriaNeural",
   ttsSummarizeThreshold: 500,
   ttsReadCodeBlocks: false,
+  ttsSpeakCodeSymbols: false,
   sttEnabled: true,
   sttProvider: "local",
   sttLocalModel: DEFAULT_WHISPER_MODEL,
@@ -470,6 +472,7 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     edgeTtsVoice: data.edgeTtsVoice ?? "en-US-AriaNeural",
     ttsSummarizeThreshold: data.ttsSummarizeThreshold ?? 500,
     ttsReadCodeBlocks: data.ttsReadCodeBlocks ?? false,
+    ttsSpeakCodeSymbols: data.ttsSpeakCodeSymbols ?? false,
     sttEnabled: data.sttEnabled ?? true,
     sttProvider: data.sttProvider ?? "local",
     sttLocalModel: data.sttLocalModel ?? DEFAULT_WHISPER_MODEL,
