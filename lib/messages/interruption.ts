@@ -2,14 +2,12 @@ export type InterruptionContext =
   | "chat"
   | "deep-research"
   | "web-browse"
-  | "video-assembly"
   | "agent";
 
 const CONTEXT_LABELS: Record<InterruptionContext, string> = {
   chat: "Chat response",
   "deep-research": "Deep research",
   "web-browse": "Web browsing",
-  "video-assembly": "Video assembly",
   agent: "Agent operation",
 };
 

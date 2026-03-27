@@ -187,7 +187,6 @@
         "promptEnhancement": "Prompt Enhancement",
         "deepResearch": "Deep Research",
         "dynamicContext": "Dynamic Context",
-        "remotionVideo": "Remotion Video",
         "subagents": "Sub-agents",
         "gitWorktrees": "Git Worktrees",
         "toolSearch": "Tool Discovery"
@@ -725,10 +724,6 @@
         "name": "Pixel Animation (WAN 2.2)",
         "description": "Generate pixel art sprite animations"
       },
-      "assembleVideo": {
-        "name": "Video Assembly",
-        "description": "Assemble images/videos into edited videos"
-      },
       "describeImage": {
         "name": "Describe Image",
         "description": "Analyze and describe images"
@@ -1065,7 +1060,6 @@
       "generateVideoRunway": "Runway Video Generation",
       "generateVideoVertexAI": "Vertex AI Veo Video",
       "generatePixelVideoWan22": "WAN 2.2 Pixel Animation",
-      "assembleVideo": "Video Assembly",
       "showProductImages": "Product Gallery",
       "executeCommand": "Execute Command",
       "scheduleTask": "Schedule Task",
@@ -1774,8 +1768,6 @@
         "generateVideoVertexAIDesc": "Generate videos with Google Veo via Vertex AI",
         "generatePixelVideoWan22": "Pixel Animation (WAN 2.2)",
         "generatePixelVideoWan22Desc": "Generate pixel art character sprite animations",
-        "assembleVideo": "Video Assembly",
-        "assembleVideoDesc": "Assemble session images/videos into edited videos",
         "describeImage": "Describe Image",
         "describeImageDesc": "Analyze and describe images using AI vision",
         "screenCapture": "Screen Capture",

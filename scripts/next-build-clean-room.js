@@ -81,11 +81,6 @@ function runNextBuild() {
       console.warn("[build-clean-room] INTERNAL_API_SECRET missing; using ephemeral build-time value.");
     }
 
-    if (!buildEnv.REMOTION_MEDIA_TOKEN) {
-      buildEnv.REMOTION_MEDIA_TOKEN = `build-media-${crypto.randomBytes(16).toString("hex")}`;
-      console.warn("[build-clean-room] REMOTION_MEDIA_TOKEN missing; using ephemeral build-time value.");
-    }
-
     const child = spawn(
       process.execPath,
       [path.join(projectRoot, "node_modules", "next", "dist", "bin", "next"), "build"],
