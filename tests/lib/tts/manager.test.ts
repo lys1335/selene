@@ -83,7 +83,25 @@ describe("TTS Manager", () => {
       settingsMock.state.settings = {
         ttsEnabled: true,
         ttsProvider: "openai",
-        openrouterApiKey: "sk-test",
+        openaiApiKey: "sk-test",
+      };
+      expect(isTTSAvailable()).toBe(true);
+    });
+
+    it("falls back to edge when OpenAI is selected with only an OpenRouter key", () => {
+      settingsMock.state.settings = {
+        ttsEnabled: true,
+        ttsProvider: "openai",
+        openrouterApiKey: "sk-or-only",
+      };
+      expect(isTTSAvailable()).toBe(true);
+    });
+
+    it("falls back to edge when OpenAI is selected with only an OpenRouter key", () => {
+      settingsMock.state.settings = {
+        ttsEnabled: true,
+        ttsProvider: "openai",
+        openrouterApiKey: "sk-or-only",
       };
       expect(isTTSAvailable()).toBe(true);
     });
