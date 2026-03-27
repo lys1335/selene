@@ -1,3 +1,55 @@
+# Selene v0.3.3
+
+A stability and reliability release. The focus is on things that should have worked but didn't: agents losing output mid-stream, multi-agent tasks stalling, TTS reading code noise, and Claude Code producing duplicate responses. Also: macOS builds are now properly signed and notarized again.
+
+## Fixes
+
+### Network & Reliability
+- Fixed agent output disappearing from the UI after a network interruption — responses that finished mid-disconnect now restore correctly when you reconnect
+- Fixed background tasks not completing when the AI SDK pipeline drained early on disconnect
+- Fixed background run banners staying stuck after the run already finished
+- Fixed task state not syncing correctly after a reconnect — completed tasks now land in the right state
+- Fixed reconnect toast firing too early, before the connection was actually usable
+
+### Multi-Agent & Delegation
+- Fixed parallel delegations regressing to sequential execution — sub-agents now run concurrently again
+- Fixed AskUserQuestion not appearing in the UI for Codex and OpenAI-backed agents
+- Fixed plan step content not being delivered to Telegram when an agent is working in the background
+- Fixed delegation getting stuck waiting when it should have already completed
+- Fixed tool results from long-running delegated tools being lost if the result arrived before the tool call was persisted
+- Fixed delegation store accumulating stale entries and observe() calls having no upper bound
+
+### TTS
+- Fixed TTS reading raw code syntax and markdown artifacts when speaking responses that contain code
+- Fixed the "speak code blocks" setting not being respected in the mini overlay — it now honors your preference there too
+- Fixed TTS failing silently when a provider returned a descriptive error — errors now surface properly
+- Removed OpenRouter as a fallback for OpenAI TTS — it was causing silent failures when OpenAI was the intended provider
+
+### Claude Code Agent SDK
+- Fixed duplicate responses appearing when Claude Code agents replied — one message was being delivered twice
+- Fixed text messages being misidentified as base64 content and dropped
+
+### UI
+- Fixed blockquotes being hard to read — better contrast and visual weight
+- Fixed reasoning text nearly invisible in dark mode
+- Fixed attachment validation in the rich text editor rejecting files it should accept
+- Fixed chat content extraction edge cases causing incomplete messages
+
+### Browser Workspace
+- Fixed Chrome profile not being copied to a temp directory in user-chrome mode — avoids profile lock conflicts when the browser is already open
+
+## Changes
+
+- macOS builds are signed and notarized again — the temporary bypass is removed
+- Removed Remotion-based video assembly — it was packaging unused ffmpeg binaries and adding significant build weight with no active usage
+
+## Platform
+
+- macOS (Apple Silicon + Intel) / Windows
+- Package version: `0.3.3`
+
+---
+
 # Selene v0.3.2
 
 ![Waveform Close-up](public/overlay-waveform.png)
