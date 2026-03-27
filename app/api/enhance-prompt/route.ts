@@ -129,8 +129,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
               if (meta?.livePromptInjected === true) return false;
               return true;
             });
-            // Take last 3 visible messages, extract text content, truncate each to 25K chars
-            dbMessages = visibleMessages.slice(-3).map((m) => {
+            // Take last 3 user-assistant pairs (up to 6 messages) for full conversational context
+            // Walk backwards to collect up to 3 pairs
+            const pairs: typeof visibleMessages = [];
+            let pairsFound = 0;
+            for (let i = visibleMessages.length - 1; i >= 0 && pairsFound < 3; i--) {
+              pairs.unshift(visibleMessages[i]);
+              // A pair is complete when we hit a user message (user→assistant)
+              if (visibleMessages[i].role === "user") pairsFound++;
+            }
+            dbMessages = pairs.map((m) => {
               let text: string;
               if (typeof m.content === "string") {
                 text = m.content;

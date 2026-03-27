@@ -16,6 +16,8 @@
 
 Selene is a desktop app that runs AI agents on your machine. Connect them to your WhatsApp, Telegram, Slack, or Discord. Write code, generate images, build personal assistants. All from one place. Your data stays on your device.
 
+Every part of Selene (chat, embeddings, voice, images) lets you choose between local and cloud. Run everything offline or use APIs. Mix and match.
+
 <div align="center">
 <img src="public/icons/brands/selene.png" alt="Selene" height="40">
 <br/>
@@ -112,8 +114,8 @@ Use any combination, or go fully local with no API keys.
 
 | Provider | Models |
 |----------|--------|
-| **Anthropic** | Claude with prompt caching and Agent SDK |
-| **OpenAI** | GPT-4.5, Codex |
+| **Anthropic** | Claude with Agent SDK |
+| **OpenAI** | GPT-5.4, Codex |
 | **OpenRouter** | Claude, Gemini, Grok, DeepSeek, and more |
 | **Ollama** | Any local model |
 | **vLLM** | Self-hosted inference |
@@ -121,7 +123,6 @@ Use any combination, or go fully local with no API keys.
 | **Minimax** | 3 variants |
 | **Antigravity** | Free tier via Google OAuth |
 
-Every part of Selene (chat, embeddings, voice, images) lets you choose between local and cloud. Run everything offline or use APIs. Mix and match.
 
 ## Download
 
@@ -150,7 +151,6 @@ npm run electron:dist:mac
 ### Runtime Secrets
 Set in `.env`:
 - `INTERNAL_API_SECRET`: internal API auth
-- `REMOTION_MEDIA_TOKEN`: media URL token
 
 ### Troubleshooting
 - **Native module errors**: `npm run electron:rebuild-native`

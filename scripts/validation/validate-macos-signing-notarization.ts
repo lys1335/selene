@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Validate macOS builds have signing and notarization disabled.
+ * Validate macOS builds have signing and notarization enabled.
  *
  * Usage:
  *   npx tsx scripts/validation/validate-macos-signing-notarization.ts [--dry-run]
@@ -19,19 +19,19 @@ interface GuardCheck {
 
 const checks: GuardCheck[] = [
   {
-    id: "electron-builder-signing-disabled",
-    description: "electron-builder has macOS signing and notarization disabled",
+    id: "electron-builder-signing-enabled",
+    description: "electron-builder has macOS signing and notarization enabled",
     filePath: "electron-builder.yml",
     requiredSnippets: [
       "mac:",
-      "identity: null",
-      "hardenedRuntime: false",
-    ],
-    forbiddenSnippets: [
       'afterSign: "scripts/notarize.js"',
+      "hardenedRuntime: true",
       'entitlements: "build-resources/entitlements.mac.plist"',
       'entitlementsInherit: "build-resources/entitlements.mac.inherit.plist"',
-      "hardenedRuntime: true",
+    ],
+    forbiddenSnippets: [
+      "identity: null",
+      "hardenedRuntime: false",
     ],
   },
 ];
@@ -44,7 +44,7 @@ function readUtf8(filePath: string): string {
 function main(): void {
   const dryRun = process.argv.includes("--dry-run");
 
-  console.log("\n=== macOS Signing + Notarization Disabled Validation ===");
+  console.log("\n=== macOS Signing + Notarization Enabled Validation ===");
   console.log(`Mode: ${dryRun ? "dry-run" : "validate"}`);
   console.log("This script is read-only and performs no file writes.\n");
 
