@@ -445,6 +445,7 @@ export default function ChatInterface({
                 if (data?.ttsAutoMode) setTtsAutoMode(data.ttsAutoMode);
                 if (data?.ttsEnabled != null) setTtsEnabled(data.ttsEnabled);
                 if (data?.ttsReadCodeBlocks != null) setTtsReadCodeBlocks(data.ttsReadCodeBlocks);
+                if (data?.ttsSpeakCodeSymbols != null) setTtsSpeakCodeSymbols(data.ttsSpeakCodeSymbols);
                 // Show theme chooser for newly onboarded users who haven't seen it
                 if (data?.onboardingComplete && !data?.hasSeenThemeChooser) {
                     setShowThemeChooser(true);

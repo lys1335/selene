@@ -36,7 +36,7 @@ describe("SentenceSplitter", () => {
     const sentences: string[] = [];
     const splitter = new SentenceSplitter((sentence) => {
       sentences.push(sentence);
-    }, { readCodeBlocks: true });
+    }, { readCodeBlocks: true, speakCodeSymbols: true });
 
     splitter.feed("Here is the code. ```ts\nconst a = 1;\n```");
     splitter.feed(" After the code.");
@@ -53,7 +53,7 @@ describe("SentenceSplitter", () => {
     const sentences: string[] = [];
     const splitter = new SentenceSplitter((sentence) => {
       sentences.push(sentence);
-    }, { readCodeBlocks: true });
+    }, { readCodeBlocks: true, speakCodeSymbols: true });
 
     splitter.feed("Before code. ```python\nprint('hello')");
     splitter.flush();

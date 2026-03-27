@@ -40,7 +40,7 @@ describe("POST /api/voice/speak", () => {
   });
 
   it("keeps code blocks with a Code prefix when enabled", async () => {
-    settingsMocks.loadSettings.mockReturnValue({ ttsReadCodeBlocks: true });
+    settingsMocks.loadSettings.mockReturnValue({ ttsReadCodeBlocks: true, ttsSpeakCodeSymbols: true });
 
     const response = await POST(
       new Request("http://localhost/api/voice/speak", {
@@ -87,7 +87,7 @@ describe("POST /api/voice/speak", () => {
       }) as never,
     );
 
-    expect(response.status).toBe(500);
+    expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: "Unauthorized" });
   });
 });

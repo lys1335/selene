@@ -422,14 +422,18 @@ export function useBackgroundProcessing({
                     `/api/agent-runs/${runId}/status`,
                     { retries: 0 }
                 );
-                if (data && data.status !== "running") {
-                    console.warn("[Background Processing] Safety net: clearing stale background state for", runId);
-                    void clearTrackedRunState({ runId, refreshMessages: true, clearTaskState: true });
+                if (!data) return;
+                if (data.status === "running") {
+                    // Run is still active but polling died — restart it
+                    startPollingForCompletion(runId);
+                    return;
                 }
+                console.warn("[Background Processing] Safety net: clearing stale background state for", runId);
+                void clearTrackedRunState({ runId, refreshMessages: true, clearTaskState: true });
             }
         }, 3000);
         return () => clearTimeout(timer);
-    }, [isProcessingInBackground, processingRunId, clearTrackedRunState]);
+    }, [isProcessingInBackground, processingRunId, clearTrackedRunState, startPollingForCompletion]);
 
     const handleCancelBackgroundRun = useCallback(async () => {
         const runId = processingRunId;

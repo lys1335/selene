@@ -227,6 +227,7 @@ describe("Channel Delivery with TTS", () => {
 
   it("includes code blocks in TTS text when ttsReadCodeBlocks is enabled", async () => {
     settingsMock.state.settings.ttsReadCodeBlocks = true;
+    settingsMock.state.settings.ttsSpeakCodeSymbols = true;
     ttsMocks.isTTSAvailable.mockReturnValue(true);
     ttsMocks.synthesizeSpeech.mockResolvedValue({
       audio: Buffer.from("audio"),

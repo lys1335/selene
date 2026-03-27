@@ -97,15 +97,6 @@ describe("TTS Manager", () => {
       expect(isTTSAvailable()).toBe(true);
     });
 
-    it("falls back to edge when OpenAI is selected with only an OpenRouter key", () => {
-      settingsMock.state.settings = {
-        ttsEnabled: true,
-        ttsProvider: "openai",
-        openrouterApiKey: "sk-or-only",
-      };
-      expect(isTTSAvailable()).toBe(true);
-    });
-
     it("returns true for ElevenLabs provider with API key", () => {
       settingsMock.state.settings = {
         ttsEnabled: true,

@@ -135,23 +135,8 @@ function formatCodeBlockForSpeech(code: string, speakCodeSymbols = false): strin
   return spokenCode.length > 0 ? `\nCode: ${spokenCode}\n` : "";
 }
 
-export function formatTextForTTS(
-  text: string,
-  readCodeBlocks = false,
-  speakCodeSymbols = false,
-): string {
-  let result = text;
-
-  if (readCodeBlocks) {
-    result = result.replace(/```[^\n]*\n([\s\S]*?)```/g, (_match, code: string) => {
-      return formatCodeBlockForSpeech(code, speakCodeSymbols);
-    });
-    result = result.replace(/`([^`]+)`/g, (_match, code: string) => formatCodeForSpeech(code, speakCodeSymbols));
-  } else {
-    result = result.replace(/`{1,3}[^`]*`{1,3}/g, "");
-  }
-
-  return result
+function stripMarkdown(text: string): string {
+  return text
     .replace(/#{1,6}\s+/g, "")
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/\*([^*]+)\*/g, "$1")
@@ -160,4 +145,40 @@ export function formatTextForTTS(
     .replace(/^\d+\.\s+/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+export function formatTextForTTS(
+  text: string,
+  readCodeBlocks = false,
+  speakCodeSymbols = false,
+): string {
+  let result = text;
+
+  if (readCodeBlocks) {
+    // Replace code with sentinels, format code separately, then restore after
+    // markdown scrubbing so code content isn't mutated by heading/list regexes.
+    const codeSlots: string[] = [];
+    const sentinel = (i: number) => `\x00CODE${i}\x00`;
+
+    result = result.replace(/```[^\n]*\n([\s\S]*?)```/g, (_match, code: string) => {
+      const i = codeSlots.length;
+      codeSlots.push(formatCodeBlockForSpeech(code, speakCodeSymbols));
+      return sentinel(i);
+    });
+    result = result.replace(/`([^`]+)`/g, (_match, code: string) => {
+      const i = codeSlots.length;
+      codeSlots.push(formatCodeForSpeech(code, speakCodeSymbols));
+      return sentinel(i);
+    });
+
+    result = stripMarkdown(result);
+
+    for (let i = 0; i < codeSlots.length; i++) {
+      result = result.replace(sentinel(i), codeSlots[i]);
+    }
+    return result;
+  }
+
+  result = result.replace(/`{1,3}[^`]*`{1,3}/g, "");
+  return stripMarkdown(result);
 }

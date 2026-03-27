@@ -47,7 +47,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to synthesize speech";
+    const isAuthError = message === "Unauthorized" || message === "Forbidden";
     console.error("[Voice API] Speak failed:", error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: isAuthError ? 401 : 500 });
   }
 }

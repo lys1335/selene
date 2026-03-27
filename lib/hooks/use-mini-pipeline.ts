@@ -463,7 +463,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           return;
         }
 
-        const ttsText = formatTextForTTS(accumulated, true);
+        const ttsText = formatTextForTTS(accumulated, ttsReadCodeBlocks);
         if (!ttsText) {
           setPhase("done");
           return;
