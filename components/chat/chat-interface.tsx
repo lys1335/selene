@@ -1711,7 +1711,7 @@ export default function ChatInterface({
                                     {avatarConfig.enabled && (
                                         <>
                                             <AvatarAudioBridge avatarRef={avatarRef} mutedRef={avatarMutedRef} />
-                                            <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} muted={avatarMuted} mutedRef={avatarMutedRef} />
+                                            <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} ttsSpeakCodeSymbols={ttsSpeakCodeSymbols} muted={avatarMuted} mutedRef={avatarMutedRef} />
                                             <AvatarPipWidget
                                                 avatarRef={avatarRef}
                                                 config={avatarConfig}
@@ -1874,7 +1874,7 @@ export default function ChatInterface({
                             {avatarConfig.enabled && (
                                 <>
                                     <AvatarAudioBridge avatarRef={avatarRef} mutedRef={avatarMutedRef} />
-                                    <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} muted={avatarMuted} mutedRef={avatarMutedRef} />
+                                    <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} ttsSpeakCodeSymbols={ttsSpeakCodeSymbols} muted={avatarMuted} mutedRef={avatarMutedRef} />
                                     <AvatarPipWidget
                                         avatarRef={avatarRef}
                                         config={avatarConfig}

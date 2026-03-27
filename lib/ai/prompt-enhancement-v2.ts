@@ -39,8 +39,10 @@ import { extname, basename } from "path";
 export interface LLMEnhancementOptions {
   /** Maximum time to wait for LLM enhancement (default: 135000ms) */
   timeoutMs?: number;
-  /** Recent conversation messages for context */
+  /** Recent conversation messages for context (client-side fallback) */
   conversationContext?: Array<{ role: string; content: string }>;
+  /** Server-side chat messages fetched from DB (authoritative source) */
+  dbMessages?: Array<{ role: string; content: string }>;
   /** User ID for tool access */
   userId?: string;
   /** Session ID for strict enhancement session scoping */
@@ -51,6 +53,14 @@ export interface LLMEnhancementOptions {
   includeFileTree?: boolean;
   /** Whether to include memories in context (default: true) */
   includeMemories?: boolean;
+  /** Agent name */
+  agentName?: string;
+  /** Agent purpose/description */
+  agentPurpose?: string;
+  /** Agent tagline */
+  agentTagline?: string;
+  /** Session title (topic context) */
+  sessionTitle?: string;
 }
 
 export interface LLMEnhancementResult {
@@ -377,7 +387,10 @@ export async function enhancePromptWithLLM(
 
     const fileTreeMarkdown = formatFileTreeCompact(fileTree);
     const searchResultsFormatted = searchResults ? formatSearchResultsForLLM(searchResults.hits) : "";
-    const recentMessages = options.conversationContext?.slice(-3) || [];
+    // Prefer server-side DB messages (authoritative) over client-side thread snapshot
+    const recentMessages = (options.dbMessages && options.dbMessages.length > 0)
+      ? options.dbMessages.slice(-3)
+      : (options.conversationContext?.slice(-3) || []);
 
     const memoryInjection = decideMemoryInjection(
       memories.markdown,
@@ -422,6 +435,10 @@ export async function enhancePromptWithLLM(
       recentMessages,
       memories: memoryInjection.injectedMarkdown,
       inputType,
+      agentName: options.agentName,
+      agentPurpose: options.agentPurpose,
+      agentTagline: options.agentTagline,
+      sessionTitle: options.sessionTitle,
     });
 
     // Stage 2: LLM refinement with timeout
