@@ -45,6 +45,7 @@ function getProviderChain(): TTSProvider[] {
  */
 export async function synthesizeSpeech(options: TTSOptions): Promise<TTSResult> {
   const chain = getProviderChain();
+  const providerErrors: string[] = [];
   let lastError: Error | null = null;
 
   for (const provider of chain) {
@@ -58,8 +59,13 @@ export async function synthesizeSpeech(options: TTSOptions): Promise<TTSResult> 
       return result;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
+      providerErrors.push(`${provider.name}: ${lastError.message}`);
       console.warn(`[TTS] Provider ${provider.name} failed:`, lastError.message);
     }
+  }
+
+  if (providerErrors.length > 0) {
+    throw new Error(`TTS failed across providers (${providerErrors.join(" | ")})`);
   }
 
   throw lastError || new Error("No TTS provider available");
