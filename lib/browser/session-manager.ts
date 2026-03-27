@@ -16,7 +16,8 @@
 
 import type { Browser, BrowserContext, Page } from "playwright-core";
 import { join } from "path";
-import { homedir, platform } from "os";
+import { homedir, platform, tmpdir } from "os";
+import { cpSync, mkdirSync, rmSync, existsSync } from "fs";
 import { startScreencast, stopScreencast } from "./screencast";
 import { cleanupInputSession, cleanupAllInputSessions } from "./input-dispatcher";
 
@@ -68,6 +69,9 @@ export interface BrowserSession {
 /** Close idle sessions after 10 minutes */
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 
+/** Timeout for launching user-chrome mode (profile copy + browser start) */
+const USER_CHROME_LAUNCH_TIMEOUT_MS = 30_000;
+
 /** Reaper sweep interval */
 const REAPER_INTERVAL_MS = 60 * 1000;
 
@@ -76,6 +80,7 @@ const REAPER_INTERVAL_MS = 60 * 1000;
 interface ChromiumManagerState {
   browser: Browser | null;
   persistentContext: BrowserContext | null;  // For user-chrome mode
+  tempProfilePath: string | null;           // Temp copy of user's Chrome profile
   browserMode: "standalone" | "user-chrome" | null;
   sessions: Map<string, BrowserSession>;
   reaperInterval: ReturnType<typeof setInterval> | null;
@@ -90,6 +95,7 @@ function getState(): ChromiumManagerState {
     g[GLOBAL_KEY] = {
       browser: null,
       persistentContext: null,
+      tempProfilePath: null,
       browserMode: null,
       sessions: new Map(),
       reaperInterval: null,
@@ -301,9 +307,11 @@ async function launchStandalone(
 }
 
 /**
- * Launch in user-chrome mode — uses launchPersistentContext() with the
- * user's real Chrome profile directory. Inherits cookies, extensions,
- * fonts, WebGL fingerprint.
+ * Launch in user-chrome mode — copies the user's Chrome profile to a temp
+ * directory, then uses launchPersistentContext() on the copy. This gives us
+ * cookies, extensions, fonts, and fingerprint WITHOUT:
+ *  - Lock conflicts (Chrome can stay open)
+ *  - Profile corruption (writes go to the temp copy, not the real profile)
  *
  * Runs non-headless so the real rendering pipeline is used (better
  * anti-detection). The Electron screencast viewer still works via CDP.
@@ -311,8 +319,6 @@ async function launchStandalone(
  * Note: launchPersistentContext() returns a BrowserContext directly — there
  * is no separate Browser object. The persistent context IS the top-level
  * resource, so state.browser remains null in this mode.
- *
- * Throws a clear error if Chrome's profile lock is held (user has Chrome open).
  */
 async function launchUserChrome(
   chromium: typeof import("playwright-core").chromium,
@@ -321,11 +327,86 @@ async function launchUserChrome(
   const { profilePath } = getBrowserSettings();
   const resolvedPath = profilePath || getDefaultChromeProfilePath();
 
-  console.log(`[ChromiumManager] Launching with user Chrome profile: ${resolvedPath}`);
-  console.log("[ChromiumManager] User Chrome mode: a visible Chrome window will open. This is expected.");
+  if (!existsSync(resolvedPath)) {
+    throw new Error(
+      `Chrome profile directory not found at "${resolvedPath}". ` +
+      "Make sure Google Chrome is installed, or set the correct profile path in Settings → Preferences."
+    );
+  }
+
+  // Copy the profile to a temp directory to avoid lock conflicts and corruption
+  const tempDir = join(tmpdir(), `selene-chrome-profile-${Date.now()}`);
+  console.log(`[ChromiumManager] Copying Chrome profile to temp directory: ${tempDir}`);
+  console.log(`[ChromiumManager] Source profile: ${resolvedPath}`);
 
   try {
-    const context = await chromium.launchPersistentContext(resolvedPath, {
+    mkdirSync(tempDir, { recursive: true });
+
+    // Copy essential profile subdirectories. We skip large/unnecessary dirs
+    // (crash reports, cache, GPU cache, service workers) to keep the copy fast.
+    // The "Default" folder contains cookies, localStorage, extensions, login data.
+    const essentialEntries = [
+      "Default",           // Main profile: cookies, localStorage, extensions, login data
+      "Local State",       // Encryption keys for cookies/passwords
+      "First Run",         // Prevents first-run dialog
+    ];
+
+    const { readdirSync, statSync } = await import("fs");
+    const sourceEntries = readdirSync(resolvedPath);
+
+    for (const entry of essentialEntries) {
+      if (!sourceEntries.includes(entry)) continue;
+      const srcPath = join(resolvedPath, entry);
+      const destPath = join(tempDir, entry);
+      try {
+        const stat = statSync(srcPath);
+        if (stat.isDirectory()) {
+          cpSync(srcPath, destPath, {
+            recursive: true,
+            // Skip lock files, cache subdirs, and large binary blobs
+            filter: (src) => {
+              const name = src.split("/").pop() || "";
+              return !name.startsWith("SingletonLock") &&
+                     !name.startsWith("SingletonSocket") &&
+                     !name.startsWith("SingletonCookie") &&
+                     name !== "Cache" &&
+                     name !== "Code Cache" &&
+                     name !== "GPUCache" &&
+                     name !== "Service Worker" &&
+                     name !== "GrShaderCache" &&
+                     name !== "ShaderCache" &&
+                     name !== "DawnCache" &&
+                     name !== "DawnWebGPUCache" &&
+                     name !== "blob_storage" &&
+                     name !== "BudgetDatabase" &&
+                     name !== "commerce_subscription_db" &&
+                     name !== "coupon_db";
+            },
+          });
+        } else {
+          cpSync(srcPath, destPath);
+        }
+      } catch (copyErr) {
+        // Non-fatal: some files may be locked by Chrome, skip them
+        console.warn(`[ChromiumManager] Skipped "${entry}": ${copyErr instanceof Error ? copyErr.message : String(copyErr)}`);
+      }
+    }
+
+    state.tempProfilePath = tempDir;
+    console.log("[ChromiumManager] Profile copy complete");
+  } catch (err) {
+    // Clean up partial copy
+    try { rmSync(tempDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    throw new Error(
+      `Failed to copy Chrome profile: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  console.log("[ChromiumManager] Launching with copied Chrome profile (user-chrome mode)");
+  console.log("[ChromiumManager] A visible Chrome window will open. This is expected.");
+
+  try {
+    const launchPromise = chromium.launchPersistentContext(tempDir, {
       channel: "chrome",
       headless: false,
       args: [
@@ -335,6 +416,12 @@ async function launchUserChrome(
       // No custom UA — use Chrome's real one for anti-detection
       ignoreHTTPSErrors: true,
     });
+
+    const context = await withTimeout(
+      launchPromise,
+      USER_CHROME_LAUNCH_TIMEOUT_MS,
+      "launching user Chrome browser"
+    );
 
     // Persistent context has no separate Browser object — context.browser()
     // returns null. Track the context directly as the top-level resource.
@@ -347,6 +434,8 @@ async function launchUserChrome(
       s.browserMode = null;
       s.sessions.clear();
       stopReaper();
+      // Clean up temp profile
+      cleanupTempProfile(s);
       console.warn("[ChromiumManager] Persistent context closed — all sessions invalidated");
     });
 
@@ -355,22 +444,40 @@ async function launchUserChrome(
     state.browserMode = "user-chrome";
     startReaper();
 
-    console.log("[ChromiumManager] Launched using user Chrome profile (user-chrome mode)");
+    console.log("[ChromiumManager] Launched using copied Chrome profile (user-chrome mode)");
   } catch (err) {
+    // Clean up temp profile on launch failure
+    cleanupTempProfile(state);
+
     const msg = err instanceof Error ? err.message : String(err);
 
-    // Detect Chrome profile lock conflict
-    if (msg.includes("lock") || msg.includes("already running") || msg.includes("SingletonLock")) {
+    if (msg.includes("timed out")) {
       throw new Error(
-        "Cannot launch with your Chrome profile because Chrome is currently open. " +
-        "Close all Chrome windows and try again, or switch to Standalone mode in Settings → Preferences."
+        "Launching Chrome with your profile timed out after 30 seconds. " +
+        "Try switching to Standalone mode in Settings → Preferences."
       );
     }
 
     throw new Error(
-      `Failed to launch with user Chrome profile at "${resolvedPath}": ${msg}\n` +
+      `Failed to launch with Chrome profile: ${msg}\n` +
       "Make sure Google Chrome is installed and the profile path is correct."
     );
+  }
+}
+
+/**
+ * Clean up the temporary profile directory created for user-chrome mode.
+ */
+function cleanupTempProfile(state: ChromiumManagerState): void {
+  if (state.tempProfilePath) {
+    const path = state.tempProfilePath;
+    state.tempProfilePath = null;
+    try {
+      rmSync(path, { recursive: true, force: true });
+      console.log(`[ChromiumManager] Cleaned up temp profile: ${path}`);
+    } catch (err) {
+      console.warn(`[ChromiumManager] Failed to clean up temp profile at ${path}:`, err);
+    }
   }
 }
 
@@ -614,6 +721,9 @@ async function shutdownBrowser(): Promise<void> {
     }
     state.browser = null;
   }
+
+  // Clean up temp profile directory (user-chrome mode)
+  cleanupTempProfile(state);
 
   state.browserMode = null;
   console.log("[ChromiumManager] Browser shut down");
