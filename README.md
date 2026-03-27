@@ -16,6 +16,8 @@
 
 Selene is a desktop app that runs AI agents on your machine. Connect them to your WhatsApp, Telegram, Slack, or Discord. Write code, generate images, build personal assistants. All from one place. Your data stays on your device.
 
+Every part of Selene (chat, embeddings, voice, images) lets you choose between local and cloud. Run everything offline or use APIs. Mix and match.
+
 <div align="center">
 <img src="public/icons/brands/selene.png" alt="Selene" height="40">
 <br/>
@@ -121,7 +123,6 @@ Use any combination, or go fully local with no API keys.
 | **Minimax** | 3 variants |
 | **Antigravity** | Free tier via Google OAuth |
 
-Every part of Selene (chat, embeddings, voice, images) lets you choose between local and cloud. Run everything offline or use APIs. Mix and match.
 
 ## Download
 
