@@ -1,3 +1,5 @@
+import { stripMarkdown } from "@/lib/utils/strip-markdown";
+
 const MULTI_CHAR_CODE_TOKENS: Array<[token: string, speech: string]> = [
   ["!==", "not triple equals"],
   ["===", "triple equals"],
@@ -135,18 +137,6 @@ function formatCodeBlockForSpeech(code: string, speakCodeSymbols = false): strin
   return spokenCode.length > 0 ? `\nCode: ${spokenCode}\n` : "";
 }
 
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/#{1,6}\s+/g, "")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/\*([^*]+)\*/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/^[-*]\s+/gm, "")
-    .replace(/^\d+\.\s+/gm, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
 export function formatTextForTTS(
   text: string,
   readCodeBlocks = false,
@@ -179,6 +169,9 @@ export function formatTextForTTS(
     return result;
   }
 
-  result = result.replace(/`{1,3}[^`]*`{1,3}/g, "");
+  // Strip inline code entirely (content + backticks) — shared stripMarkdown
+  // only removes backticks but keeps content, and we don't want to speak code.
+  // Fenced code blocks are handled by the shared stripMarkdown.
+  result = result.replace(/`[^`\n]+`/g, "");
   return stripMarkdown(result);
 }
