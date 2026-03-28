@@ -57,7 +57,7 @@ Every UI action is also an agent action — step in anywhere or let it run end-t
 
 ## Why We Built It
 
-AI is expensive because models re-read everything, every turn. Selene runs a small retrieval model first — it finds what's relevant, the main agent picks it up and moves on. Tools load on demand. Context stays lean. You pay less per turn.
+AI is expensive because models re-read everything, every turn. Selene runs a small retrieval pipeline first — it finds what's relevant, the main agent picks it up and moves on. Tools load on demand. Context stays lean. You pay less per turn.
 
 ## Modes
 
