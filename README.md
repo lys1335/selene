@@ -14,7 +14,7 @@
 
 <br/>
 
-Selene is a desktop app that runs AI agents on your machine. Connect them to your WhatsApp, Telegram, Slack, or Discord. Write code, generate images, build personal assistants. All from one place. Your data stays on your device.
+Selene is a desktop app that runs AI agents on your machine. Connect them to your WhatsApp, Telegram, Slack, or Discord. Write code, generate images, build personal assistants. All from one place. Your data stays on your device. 
 
 Every part of Selene (chat, embeddings, voice, images) lets you choose between local and cloud. Run everything offline or use APIs. Mix and match.
 
@@ -53,7 +53,7 @@ Every part of Selene (chat, embeddings, voice, images) lets you choose between l
 
 ## Agent-First, Not Button-First
 
-Every UI action is also an agent action — step in anywhere or let it run end-to-end. 99% of this codebase was written by Selene agents.
+Every UI action is also an agent action — step in anywhere or let it run end-to-end. 99% of this codebase was written by Selene agents. You may think how Selene came to exist then? Boom. Your mind, exploded. 
 
 ## Why We Built It
 
