@@ -1,8 +1,59 @@
 import { tool, jsonSchema, generateText } from "ai";
 import { readFileSync, existsSync } from "fs";
-import { readLocalFile, fileExists } from "@/lib/storage/local-storage";
+import path from "path";
+import { fileURLToPath } from "url";
+import { getFullPathFromMediaRef } from "@/lib/storage/local-storage";
 import { getVisionModel } from "@/lib/ai/providers";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
+
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
+
+const WINDOWS_DRIVE_PATH_RE = /^[a-zA-Z]:[\\/]/;
+const WINDOWS_UNC_PATH_RE = /^\\\\[^\\]+\\[^\\]+/;
+const ATTACHMENT_HELPER_TEXT_RE = /^\[Attachment:/;
+const DESCRIBE_IMAGE_SOURCE_HINT = "Expected a data URL, http(s) URL, /api/media/ URL, local-media:// reference, storage-relative path, or absolute file path.";
+
+function inferImageMimeType(filePath: string): string {
+  return IMAGE_MIME_TYPES[path.extname(filePath).toLowerCase()] || "image/png";
+}
+
+function toImageDataUrl(buffer: Buffer, filePath: string): string {
+  return `data:${inferImageMimeType(filePath)};base64,${buffer.toString("base64")}`;
+}
+
+function readAbsoluteImageFile(absolutePath: string): string {
+  if (!existsSync(absolutePath)) {
+    throw new Error(`Local file not found: ${absolutePath}`);
+  }
+
+  return toImageDataUrl(readFileSync(absolutePath), absolutePath);
+}
+
+function resolveAbsoluteImagePath(imageSource: string): string | undefined {
+  if (imageSource.startsWith("file://")) {
+    try {
+      return fileURLToPath(imageSource);
+    } catch {
+      throw new Error(`Invalid file URL: ${imageSource}`);
+    }
+  }
+
+  if (
+    imageSource.startsWith("/")
+    || WINDOWS_DRIVE_PATH_RE.test(imageSource)
+    || WINDOWS_UNC_PATH_RE.test(imageSource)
+  ) {
+    return imageSource;
+  }
+
+  return undefined;
+}
 
 // ==========================================================================
 // Shared schema definitions
@@ -52,31 +103,15 @@ export async function imageToDataUrl(imageSource: string): Promise<string> {
     return imageSource;
   }
 
-  // Local media path - read from local storage
-  if (imageSource.startsWith("/api/media/") || imageSource.startsWith("local-media://")) {
-    let relativePath = imageSource;
-    if (imageSource.startsWith("/api/media/")) {
-      relativePath = imageSource.replace("/api/media/", "");
-    } else if (imageSource.startsWith("local-media://")) {
-      relativePath = imageSource.replace("local-media://", "").replace(/^\/+/, "");
-    }
+  if (ATTACHMENT_HELPER_TEXT_RE.test(imageSource)) {
+    throw new Error(
+      `Unsupported image source for describeImage: ${imageSource.substring(0, 120)}. ${DESCRIBE_IMAGE_SOURCE_HINT}`,
+    );
+  }
 
-    if (!fileExists(relativePath)) {
-      throw new Error(`Local image file not found: ${relativePath}`);
-    }
-
-    const buffer = readLocalFile(relativePath);
-    const base64 = buffer.toString("base64");
-    const ext = relativePath.split(".").pop()?.toLowerCase() || "png";
-    const mimeTypes: Record<string, string> = {
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      gif: "image/gif",
-      webp: "image/webp",
-    };
-    const mimeType = mimeTypes[ext] || "image/png";
-    return `data:${mimeType};base64,${base64}`;
+  const storagePath = getFullPathFromMediaRef(imageSource);
+  if (storagePath) {
+    return readAbsoluteImageFile(storagePath);
   }
 
   // Remote URL - fetch and convert
@@ -92,33 +127,14 @@ export async function imageToDataUrl(imageSource: string): Promise<string> {
     return `data:${contentType};base64,${base64}`;
   }
 
-  // Local filesystem path (file:// URL or absolute path)
-  let absolutePath: string | undefined;
-  if (imageSource.startsWith("file://")) {
-    absolutePath = decodeURIComponent(imageSource.replace(/^file:\/\//, ""));
-  } else if (imageSource.startsWith("/")) {
-    absolutePath = imageSource;
-  }
-
+  const absolutePath = resolveAbsoluteImagePath(imageSource);
   if (absolutePath) {
-    if (!existsSync(absolutePath)) {
-      throw new Error(`Local file not found: ${absolutePath}`);
-    }
-    const buffer = readFileSync(absolutePath);
-    const base64 = buffer.toString("base64");
-    const ext = absolutePath.split(".").pop()?.toLowerCase() || "png";
-    const mimeTypes: Record<string, string> = {
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      gif: "image/gif",
-      webp: "image/webp",
-    };
-    const mimeType = mimeTypes[ext] || "image/png";
-    return `data:${mimeType};base64,${base64}`;
+    return readAbsoluteImageFile(absolutePath);
   }
 
-  throw new Error(`Unsupported image format: ${imageSource.substring(0, 50)}...`);
+  throw new Error(
+    `Unsupported image source for describeImage: ${imageSource.substring(0, 120)}. ${DESCRIBE_IMAGE_SOURCE_HINT}`,
+  );
 }
 
 // ==========================================================================
