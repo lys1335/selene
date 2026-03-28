@@ -53,7 +53,8 @@ Every part of Selene (chat, embeddings, voice, images) lets you choose between l
 
 ## Agent-First, Not Button-First
 
-Every UI action is also an agent action — step in anywhere or let it run end-to-end. 99% of this codebase was written by Selene agents. You may think how Selene came to exist then? Boom. Your mind, exploded. Go on reading. 
+Every UI action is also an agent action — step in anywhere or let it run end-to-end. 99% of this codebase was written by Selene agents. How Selene came to exist in the first place is left as an exercise for the reader.
+
 
 ## Why We Built It
 
