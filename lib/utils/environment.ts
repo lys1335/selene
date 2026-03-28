@@ -16,12 +16,15 @@
  * - ELECTRON_RESOURCES_PATH is set
  */
 export function isElectronProduction(): boolean {
+  // Use Electron-specific signals (resourcesPath, SELENE_PRODUCTION_BUILD,
+  // ELECTRON_IS_DEV) instead of NODE_ENV. NODE_ENV can be stale or leaked
+  // from parent processes — the Electron team recommends app.isPackaged,
+  // and resourcesPath is its equivalent in renderer/server processes.
   return (
     (process.env.SELENE_PRODUCTION_BUILD === "1" ||
       !!(process as any).resourcesPath ||
       !!process.env.ELECTRON_RESOURCES_PATH) &&
-    process.env.ELECTRON_IS_DEV !== "1" &&
-    process.env.NODE_ENV !== "development"
+    process.env.ELECTRON_IS_DEV !== "1"
   );
 }
 

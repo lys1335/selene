@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { existsSync } from "fs";
 
 vi.mock("@/lib/shell-env/resolver", () => ({
     getResolvedShellEnvironment: vi.fn(() => ({})),
 }));
 
+vi.mock("fs", async (importOriginal) => {
+    const actual = await importOriginal<typeof import("fs")>();
+    return { ...actual, existsSync: vi.fn(actual.existsSync) };
+});
+
 import * as shellEnvResolver from "@/lib/shell-env/resolver";
 import { buildSafeEnvironment, normalizeUnixPath, normalizeArgs, type BundledRuntimeInfo } from "@/lib/command-execution/executor-runtime";
+import { ensureWindowsSystemPaths } from "@/lib/utils/windows-env";
 import { tmpdir } from "os";
 import { join, delimiter } from "path";
 
@@ -129,8 +136,13 @@ describe("buildSafeEnvironment", () => {
 
     it("prepends bundled binary dirs to the resolved PATH", () => {
         const sep = delimiter; // ";" on Windows, ":" elsewhere
+        // Use platform-appropriate paths — on Windows, forward-slash Unix paths
+        // are filtered by the MSYS2 cleanup logic.
+        const userPaths = process.platform === "win32"
+            ? `C:\\tools\\local${sep}C:\\tools\\bin`
+            : `/usr/local/bin${sep}/usr/bin`;
         vi.mocked(shellEnvResolver.getResolvedShellEnvironment).mockReturnValue({
-            PATH: `/usr/local/bin${sep}/usr/bin`,
+            PATH: userPaths,
         });
 
         const env = buildSafeEnvironment({
@@ -138,7 +150,9 @@ describe("buildSafeEnvironment", () => {
             bundledBinDirs: ["/bundle/node/.bin", "/bundle/tools/bin", bundledRipgrepBinDir],
         });
 
-        expect(env.PATH).toBe(`/bundle/node/.bin${sep}/bundle/tools/bin${sep}${bundledRipgrepBinDir}${sep}/usr/local/bin${sep}/usr/bin`);
+        const expectedPrefix = `/bundle/node/.bin${sep}/bundle/tools/bin${sep}${bundledRipgrepBinDir}${sep}${userPaths}`;
+        // On Windows, ensureWindowsSystemPaths may append system dirs after user paths
+        expect(env.PATH!.startsWith(expectedPrefix)).toBe(true);
     });
 
     it("removes Electron-only env keys from shell env", () => {
@@ -348,5 +362,82 @@ describe("normalizeArgs", () => {
 
         const args = ["/tmp/file.json", "--output=/tmp/data.json"];
         expect(normalizeArgs(args)).toBe(args); // same reference
+    });
+});
+
+describe("ensureWindowsSystemPaths", () => {
+    const originalPlatform = process.platform;
+    const originalEnv = { ...process.env };
+
+    beforeEach(() => {
+        vi.mocked(existsSync).mockReturnValue(true);
+        process.env.SystemRoot = "C:\\WINDOWS";
+    });
+
+    afterEach(() => {
+        Object.defineProperty(process, "platform", { value: originalPlatform });
+        process.env = { ...originalEnv };
+    });
+
+    it("appends missing system dirs on Windows", () => {
+        Object.defineProperty(process, "platform", { value: "win32" });
+
+        const result = ensureWindowsSystemPaths("C:\\tools\\bin");
+
+        expect(result).toContain("C:\\WINDOWS\\system32");
+        expect(result).toContain("C:\\WINDOWS");
+        expect(result).toContain("C:\\WINDOWS\\System32\\Wbem");
+        expect(result).toContain("C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0");
+        // Original path preserved at front
+        expect(result.startsWith("C:\\tools\\bin;")).toBe(true);
+    });
+
+    it("does not duplicate existing system dirs (case-insensitive)", () => {
+        Object.defineProperty(process, "platform", { value: "win32" });
+
+        const path = "C:\\tools;C:\\windows\\system32;C:\\WINDOWS";
+        const result = ensureWindowsSystemPaths(path);
+
+        // System32 and WINDOWS should NOT be duplicated
+        const segments = result.split(";");
+        const system32Count = segments.filter((s) => s.toLowerCase() === "c:\\windows\\system32").length;
+        const windowsCount = segments.filter((s) => s.toLowerCase() === "c:\\windows").length;
+        expect(system32Count).toBe(1);
+        expect(windowsCount).toBe(1);
+    });
+
+    it("skips dirs that do not exist on disk", () => {
+        Object.defineProperty(process, "platform", { value: "win32" });
+        vi.mocked(existsSync).mockReturnValue(false);
+
+        const result = ensureWindowsSystemPaths("C:\\tools");
+
+        // Nothing appended because existsSync returns false
+        expect(result).toBe("C:\\tools");
+    });
+
+    it("handles empty path string on Windows", () => {
+        Object.defineProperty(process, "platform", { value: "win32" });
+
+        const result = ensureWindowsSystemPaths("");
+
+        expect(result).toContain("C:\\WINDOWS\\system32");
+    });
+
+    it("is a no-op on non-Windows", () => {
+        Object.defineProperty(process, "platform", { value: "linux" });
+
+        const path = "/usr/local/bin:/usr/bin";
+        expect(ensureWindowsSystemPaths(path)).toBe(path);
+    });
+
+    it("uses SYSTEMROOT fallback when SystemRoot is unset", () => {
+        Object.defineProperty(process, "platform", { value: "win32" });
+        delete process.env.SystemRoot;
+        process.env.SYSTEMROOT = "D:\\Windows";
+
+        const result = ensureWindowsSystemPaths("C:\\tools");
+
+        expect(result).toContain("D:\\Windows\\system32");
     });
 });

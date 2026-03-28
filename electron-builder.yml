@@ -139,13 +139,13 @@ compression: "normal"
 npmRebuild: false
 
 # macOS specific configuration
-# afterSign: "scripts/notarize.js"
+afterSign: "scripts/notarize.js"
 
 mac:
   category: "public.app-category.entertainment"
-  identity: null
-  hardenedRuntime: false
-  gatekeeperAssess: false
+  # identity: null
+  hardenedRuntime: true
+  gatekeeperAssess: true
   # Build only for current architecture by default (use CLI flags to override)
   target:
     - target: "dir"
@@ -160,6 +160,7 @@ mac:
 win:
   icon: "build-resources/icon.ico"
   signAndEditExecutable: true
+  forceCodeSigning: false
   target:
     - target: "nsis"
     - target: "portable"

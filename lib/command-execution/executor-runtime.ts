@@ -9,6 +9,17 @@ import { existsSync } from "fs";
 import { basename, isAbsolute, join } from "path";
 import { tmpdir } from "os";
 import { getResolvedShellEnvironment } from "@/lib/shell-env/resolver";
+import { filterGitBashFromPath, ensureWindowsSystemPaths } from "@/lib/utils/windows-env";
+
+// On Windows, fix the server process's own PATH at module load time so that
+// spawn() can find system executables (cmd.exe, powershell.exe, etc.).
+// spawn() with shell:false uses the PARENT process's PATH to locate
+// executables, not the custom env passed to the child. Without this,
+// System32 may be missing from the server's PATH when launched from
+// Git Bash or npm lifecycle scripts.
+if (process.platform === "win32") {
+    process.env.PATH = ensureWindowsSystemPaths(process.env.PATH || "");
+}
 
 /**
  * Keys that are always stripped from the child environment, regardless of
@@ -16,9 +27,8 @@ import { getResolvedShellEnvironment } from "@/lib/shell-env/resolver";
  * These are Electron/Selene internals that should never reach user commands.
  */
 const ALWAYS_BLOCKED_ENV_KEYS = new Set([
-    "ELECTRON_RUN_AS_NODE",
-    "ELECTRON_NO_ATTACH_CONSOLE",
-    "ELECTRON_ENABLE_LOGGING",
+    // Note: ELECTRON_* vars are now covered by BLOCKED_ENV_PREFIXES.
+    // Individual Electron entries removed to avoid redundancy.
     "SELENE_PRODUCTION_BUILD",
     "TURBOPACK",
     "NEXT_RUNTIME",
@@ -50,7 +60,16 @@ const PROCESS_ENV_FALLBACK_BLOCKED_KEYS = new Set([
  * because those may be user-facing env vars. We only strip known Next.js
  * runtime internals via __NEXT_* and NEXT_PRIVATE_* prefixes.
  */
-const BLOCKED_ENV_PREFIXES = ["__NEXT_", "NEXT_PRIVATE_"];
+const BLOCKED_ENV_PREFIXES = [
+    "__NEXT_",
+    "NEXT_PRIVATE_",
+    // Electron/Chromium internals that shouldn't leak to child processes.
+    // VS Code follows the same pattern in terminalEnvironment.ts.
+    // Specific vars like ELECTRON_RESOURCES_PATH and ELECTRON_RUN_AS_NODE
+    // are re-added explicitly where needed (buildSafeEnvironment, getSdkExecutableConfig).
+    "ELECTRON_",
+    "CHROME_",
+];
 
 export function sanitizeEnvironment(
     env: Record<string, string | undefined>,
@@ -119,7 +138,11 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
 
     return {
         resourcesPath,
-        isProductionBuild: !!resourcesPath && process.env.ELECTRON_IS_DEV !== "1" && process.env.NODE_ENV !== "development",
+        // Use resourcesPath + ELECTRON_IS_DEV as production signals — not NODE_ENV,
+        // which can be stale/leaked from parent processes. app.isPackaged is the
+        // Electron-recommended approach; resourcesPath is its equivalent in
+        // renderer/server processes.
+        isProductionBuild: !!resourcesPath && process.env.ELECTRON_IS_DEV !== "1",
         nodeBinDir,
         toolsBinDir,
         ripgrepBinDir,
@@ -200,6 +223,11 @@ export function buildSafeEnvironment(runtime: BundledRuntimeInfo): Record<string
                 delete baseEnv[key];
             }
         }
+        // Filter Git Bash / MSYS2 / Cygwin PATH segments so child processes
+        // don't discover bash.exe. Keeps \Git\cmd for git.exe access.
+        currentPath = filterGitBashFromPath(currentPath);
+        // Ensure essential system dirs (System32, Wbem, etc.) survived filtering.
+        currentPath = ensureWindowsSystemPaths(currentPath);
     } else {
         currentPath = (baseEnv.PATH as string) || "";
     }
@@ -224,16 +252,24 @@ export function buildSafeEnvironment(runtime: BundledRuntimeInfo): Record<string
         ? undefined
         : PROCESS_ENV_FALLBACK_BLOCKED_KEYS;
 
-    return sanitizeEnvironment({
+    const sanitized = sanitizeEnvironment({
         ...baseEnv,
         ...tmpOverrides,
         PATH: pathValue,
         TERM: baseEnv.TERM && baseEnv.TERM !== "dumb" ? baseEnv.TERM : "xterm-256color",
         HOME: baseEnv.HOME || baseEnv.USERPROFILE,
         USER: baseEnv.USER || baseEnv.USERNAME,
-        // Selene-specific: needed for bundled binary resolution in child processes
-        ELECTRON_RESOURCES_PATH: process.env.ELECTRON_RESOURCES_PATH || runtime.resourcesPath || undefined,
     }, extraBlocked);
+
+    // Re-add platform vars AFTER sanitization. ELECTRON_RESOURCES_PATH is
+    // stripped by the ELECTRON_* prefix rule but child processes need it for
+    // bundled binary resolution.
+    const resourcesPath = process.env.ELECTRON_RESOURCES_PATH || runtime.resourcesPath || undefined;
+    if (resourcesPath) {
+        sanitized.ELECTRON_RESOURCES_PATH = resourcesPath;
+    }
+
+    return sanitized;
 }
 
 // ── Unix-to-Windows path normalization ────────────────────────────────────────

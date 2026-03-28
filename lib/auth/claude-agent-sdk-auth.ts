@@ -4,6 +4,7 @@ import { isElectronProduction } from "@/lib/utils/environment";
 import { getNodeBinary } from "@/lib/auth/claude-login-process";
 import { getResolvedShellEnvironment } from "@/lib/shell-env/resolver";
 import { sanitizeEnvironment } from "@/lib/command-execution/executor-runtime";
+import { stripMsysEnvVars, consolidatePathKeys, ensureWindowsSystemPaths } from "@/lib/utils/windows-env";
 
 const DEFAULT_CLAUDE_AGENT_MODEL = "claude-sonnet-4-5-20250929";
 
@@ -35,6 +36,24 @@ export function getSdkExecutableConfig(): {
   // a stale placeholder like "123"). The SDK must use its own OAuth flow, so
   // strip any app-level API key to prevent it from overriding OAuth auth.
   delete env.ANTHROPIC_API_KEY;
+  // NODE_ENV=production comes from the Electron/Next.js runtime. If it leaks
+  // into the Claude Code SDK subprocess, npm install skips devDependencies and
+  // other dev tooling breaks. The shell env resolver returns empty on Windows,
+  // so buildSafeEnvironment() strips this via its fallback path — but this
+  // function builds its own env from process.env, so we must strip it here too.
+  delete env.NODE_ENV;
+
+  // On Windows, strip MSYS/Git Bash env vars so the Claude Code SDK
+  // subprocess doesn't detect a Unix-shell context. We intentionally do NOT
+  // filter Git Bash from PATH here — Claude Code hardcodes Git Bash as the
+  // shell, so filtering only removes paths that Git Bash needs (Docker,
+  // PowerShell, cmd.exe, etc.). Instead we consolidate PATH case duplicates
+  // and let MSYS2_PATH_TYPE=inherit (set below) preserve the full Windows PATH.
+  if (process.platform === "win32") {
+    stripMsysEnvVars(env);
+    const mergedPath = consolidatePathKeys(env);
+    env.PATH = ensureWindowsSystemPaths(mergedPath);
+  }
 
   if (isElectronProduction()) {
     env.ELECTRON_RUN_AS_NODE = "1";
@@ -65,6 +84,21 @@ export function getSdkExecutableConfig(): {
     // In dev mode, ensure ELECTRON_RUN_AS_NODE is not inherited from the
     // parent process (e.g. when the test runner or dev server runs inside Electron).
     delete env.ELECTRON_RUN_AS_NODE;
+  }
+
+  // On Windows, Claude Code's Bash tool hardcodes Git Bash as the shell
+  // (probes known install paths like C:\Program Files\Git\bin\bash.exe).
+  // Filtering Git Bash from PATH does NOT prevent this — it only strips
+  // legitimate Windows paths that Git Bash needs to function (Docker,
+  // PowerShell, cmd.exe, etc.).
+  //
+  // Instead of filtering, we set MSYS2_PATH_TYPE=inherit so Git Bash
+  // preserves the full Windows PATH instead of replacing it with minimal
+  // MSYS2 defaults (/usr/bin, /mingw64/bin).
+  if (process.platform === "win32") {
+    env.MSYS2_PATH_TYPE = "inherit";
+    env.MSYS_NO_PATHCONV = "1";
+    env.CHERE_INVOKING = "1";
   }
 
   return { executable: "node", env };

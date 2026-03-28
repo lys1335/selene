@@ -110,9 +110,121 @@ function parseNullSeparatedEnvironment(raw: string): Record<string, string> {
     return parsed;
 }
 
+/**
+ * Resolve a clean Windows environment by reading Machine + User env vars
+ * from the registry via PowerShell. This gives us the real system PATH
+ * (Docker, system32, etc.) without npm lifecycle pollution or MSYS2 changes.
+ *
+ * Falls back to {} if PowerShell is unavailable or times out.
+ */
+function resolveWindowsShellEnvironment(): Record<string, string> {
+    // Strategy 1: Use PowerShell to read env vars directly from the registry.
+    // This gives the clean system+user environment without npm/MSYS2 pollution.
+    const psResult = resolveWindowsViaPs();
+    if (psResult) return psResult;
+
+    // Strategy 2: Fall back to cmd.exe /c set (inherits process.env but still
+    // better than raw process.env because cmd.exe normalises PATH casing).
+    const cmdResult = resolveWindowsViaCmd();
+    if (cmdResult) return cmdResult;
+
+    console.warn("[Shell Env] All Windows resolution strategies failed, using process.env fallback");
+    return {};
+}
+
+/**
+ * Read Machine + User env vars from the Windows registry via PowerShell.
+ * Returns null on failure so the caller can try the next strategy.
+ */
+function resolveWindowsViaPs(): Record<string, string> | null {
+    try {
+        const systemRoot = process.env.SystemRoot || "C:\\WINDOWS";
+        const psPath = join(systemRoot, "system32", "WindowsPowerShell", "v1.0", "powershell.exe");
+
+        // PowerShell script that reads Machine + User env vars from the registry
+        // and outputs them as NUL-separated KEY=VALUE pairs (same format as `env -0`).
+        // User vars override Machine vars. Path is special-cased: Machine Path + User Path.
+        const psScript = [
+            "$out = @{}",
+            "[Environment]::GetEnvironmentVariables('Machine').GetEnumerator() | ForEach-Object { $out[$_.Key] = $_.Value }",
+            "[Environment]::GetEnvironmentVariables('User').GetEnumerator() | ForEach-Object {",
+            "  if ($_.Key -eq 'Path') { $out['Path'] = $out['Path'] + ';' + $_.Value }",
+            "  else { $out[$_.Key] = $_.Value }",
+            "}",
+            "$out.GetEnumerator() | ForEach-Object { [Console]::Write(\"$($_.Key)=$($_.Value)`0\") }",
+        ].join("; ");
+
+        const result = spawnSync(psPath, [
+            "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+            "-Command", psScript,
+        ], {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+            timeout: SHELL_RESOLVE_TIMEOUT_MS,
+            windowsHide: true,
+        });
+
+        if (result.error || result.status !== 0 || !result.stdout) {
+            console.warn("[Shell Env] PowerShell resolution failed:", result.error?.message || `exit ${result.status}`);
+            return null;
+        }
+
+        const parsed = parseNullSeparatedEnvironment(result.stdout);
+        if (Object.keys(parsed).length > 0) {
+            console.log(`[Shell Env] Resolved ${Object.keys(parsed).length} Windows env vars via PowerShell (registry)`);
+            return parsed;
+        }
+    } catch (err) {
+        console.warn("[Shell Env] PowerShell resolution error:", err);
+    }
+    return null;
+}
+
+/**
+ * Fallback: capture env from cmd.exe. This inherits the current process env
+ * (including npm PATH modifications), but normalises casing and avoids MSYS2
+ * shell-level transformations. Better than raw process.env in dev mode.
+ */
+function resolveWindowsViaCmd(): Record<string, string> | null {
+    try {
+        const comspec = process.env.ComSpec || "C:\\WINDOWS\\system32\\cmd.exe";
+        const result = spawnSync(comspec, ["/c", "set"], {
+            encoding: "utf8",
+            stdio: ["ignore", "pipe", "ignore"],
+            timeout: SHELL_RESOLVE_TIMEOUT_MS,
+            windowsHide: true,
+        });
+
+        if (result.error || result.status !== 0 || !result.stdout) {
+            console.warn("[Shell Env] cmd.exe resolution failed:", result.error?.message || `exit ${result.status}`);
+            return null;
+        }
+
+        // `set` output is newline-separated KEY=VALUE pairs. Parse like env -0 but with \n.
+        const parsed: Record<string, string> = {};
+        for (const line of result.stdout.split(/\r?\n/)) {
+            const eqIdx = line.indexOf("=");
+            if (eqIdx <= 0) continue;
+            const key = line.slice(0, eqIdx);
+            const value = line.slice(eqIdx + 1);
+            if (BLOCKED_ENV_KEYS.has(key)) continue;
+            if (BLOCKED_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
+            parsed[key] = value;
+        }
+
+        if (Object.keys(parsed).length > 0) {
+            console.log(`[Shell Env] Resolved ${Object.keys(parsed).length} Windows env vars via cmd.exe`);
+            return parsed;
+        }
+    } catch (err) {
+        console.warn("[Shell Env] cmd.exe resolution error:", err);
+    }
+    return null;
+}
+
 function resolveShellEnvironmentOnce(): Record<string, string> {
     if (process.platform === "win32") {
-        return {};
+        return resolveWindowsShellEnvironment();
     }
 
     // Start the login shell with a clean env so Electron/Next.js vars
