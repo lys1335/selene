@@ -143,8 +143,9 @@ afterSign: "scripts/notarize.js"
 
 mac:
   category: "public.app-category.entertainment"
+  # identity: null
   hardenedRuntime: true
-  gatekeeperAssess: false
+  gatekeeperAssess: true
   entitlements: "build-resources/entitlements.mac.plist"
   entitlementsInherit: "build-resources/entitlements.mac.inherit.plist"
   # Build only for current architecture by default (use CLI flags to override)
@@ -161,6 +162,7 @@ mac:
 win:
   icon: "build-resources/icon.ico"
   signAndEditExecutable: true
+  forceCodeSigning: false
   target:
     - target: "nsis"
     - target: "portable"

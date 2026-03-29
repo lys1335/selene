@@ -118,6 +118,7 @@ export function BrowserBackdrop({ sessionId, className, onActiveChange }: Browse
   }, [chatBackground.opacity, resolvedTheme]);
 
   // Listen for browser tool calls in background-task-progress events
+  // AND foreground browser-tool-detected events (dispatched by ChromiumWorkspaceToolUI)
   useEffect(() => {
     if (!sessionId) return;
 
@@ -144,11 +145,20 @@ export function BrowserBackdrop({ sessionId, className, onActiveChange }: Browse
       }
     };
 
+    // Foreground streaming bridge: ChromiumWorkspaceToolUI dispatches this
+    // when it renders as running, since background-task-progress events
+    // don't fire during foreground AI SDK streams.
+    const handleForegroundDetected = () => {
+      setBrowserDetected(true);
+    };
+
     window.addEventListener("background-task-progress", handleProgress);
     window.addEventListener("background-task-completed", handleCompleted);
+    window.addEventListener("browser-tool-detected", handleForegroundDetected);
     return () => {
       window.removeEventListener("background-task-progress", handleProgress);
       window.removeEventListener("background-task-completed", handleCompleted);
+      window.removeEventListener("browser-tool-detected", handleForegroundDetected);
     };
   }, [sessionId]);
 

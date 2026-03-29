@@ -10,6 +10,7 @@ import { app, globalShortcut, session } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import { initializeRTK } from "../lib/rtk";
+import { initializeProcessEnvironment } from "../lib/process-env/policy";
 
 // ---------------------------------------------------------------------------
 // Dev-mode detection
@@ -135,6 +136,20 @@ function fixMacOSPath(): void {
 }
 
 fixMacOSPath();
+
+// ---------------------------------------------------------------------------
+// Windows environment fix — clean Unix-style vars inherited from Git Bash
+// ---------------------------------------------------------------------------
+
+function initializeElectronProcessEnvironment(): void {
+  initializeProcessEnvironment({
+    filterGitBashPath: false,
+    ensureComSpec: true,
+    ensureSystemPaths: true,
+  });
+}
+
+initializeElectronProcessEnvironment();
 
 // ---------------------------------------------------------------------------
 // Environment / path setup

@@ -76,39 +76,57 @@ describe("getSdkExecutableConfig", () => {
     });
 
     it("uses shell-resolved PATH when available", () => {
-      process.env.PATH = "/usr/bin:/bin";
-      const shellPath = "/opt/homebrew/opt/node@22/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
-      shellEnvMocks.getResolvedShellEnvironment.mockReturnValue({ PATH: shellPath });
+      const originalPlatform = process.platform;
+      try {
+        Object.defineProperty(process, "platform", { value: "darwin" });
+        process.env.PATH = "/usr/bin:/bin";
+        const shellPath = "/opt/homebrew/opt/node@22/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+        shellEnvMocks.getResolvedShellEnvironment.mockReturnValue({ PATH: shellPath });
 
-      const { env } = getSdkExecutableConfig();
+        const { env } = getSdkExecutableConfig();
 
-      expect(env.PATH).toBe(shellPath);
-      expect(process.env.PATH).toBe(shellPath);
-      // Should NOT call getNodeBinary when shell env succeeds
-      expect(loginMocks.getNodeBinary).not.toHaveBeenCalled();
+        expect(env.PATH).toBe(shellPath);
+        expect(process.env.PATH).toBe(shellPath);
+        // Should NOT call getNodeBinary when shell env succeeds
+        expect(loginMocks.getNodeBinary).not.toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(process, "platform", { value: originalPlatform });
+      }
     });
 
     it("falls back to getNodeBinary PATH augmentation when shell env has no PATH", () => {
-      process.env.PATH = "/usr/bin:/bin";
-      shellEnvMocks.getResolvedShellEnvironment.mockReturnValue({});
-      loginMocks.getNodeBinary.mockReturnValue("/opt/homebrew/bin/node");
+      const originalPlatform = process.platform;
+      try {
+        Object.defineProperty(process, "platform", { value: "darwin" });
+        process.env.PATH = "/usr/bin:/bin";
+        shellEnvMocks.getResolvedShellEnvironment.mockReturnValue({});
+        loginMocks.getNodeBinary.mockReturnValue("/opt/homebrew/bin/node");
 
-      const { env } = getSdkExecutableConfig();
+        const { env } = getSdkExecutableConfig();
 
-      expect(env.PATH).toContain("/opt/homebrew/bin");
-      expect(loginMocks.getNodeBinary).toHaveBeenCalled();
+        expect(env.PATH).toContain("/opt/homebrew/bin");
+        expect(loginMocks.getNodeBinary).toHaveBeenCalled();
+      } finally {
+        Object.defineProperty(process, "platform", { value: originalPlatform });
+      }
     });
 
     it("falls back to process.execPath dir when no shell env and no system node", () => {
+      const originalPlatform = process.platform;
       const execDir = require("path").dirname(process.execPath);
-      process.env.PATH = "/usr/bin:/bin";
-      shellEnvMocks.getResolvedShellEnvironment.mockReturnValue({});
-      loginMocks.getNodeBinary.mockReturnValue(process.execPath);
+      try {
+        Object.defineProperty(process, "platform", { value: "darwin" });
+        process.env.PATH = "/usr/bin:/bin";
+        shellEnvMocks.getResolvedShellEnvironment.mockReturnValue({});
+        loginMocks.getNodeBinary.mockReturnValue(process.execPath);
 
-      const { env } = getSdkExecutableConfig();
+        const { env } = getSdkExecutableConfig();
 
-      expect(env.ELECTRON_RUN_AS_NODE).toBe("1");
-      expect(env.PATH).toContain(execDir);
+        expect(env.ELECTRON_RUN_AS_NODE).toBe("1");
+        expect(env.PATH).toContain(execDir);
+      } finally {
+        Object.defineProperty(process, "platform", { value: originalPlatform });
+      }
     });
   });
 
