@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   CheckCircle2Icon,
@@ -10,6 +10,7 @@ import {
   RefreshCwIcon,
   MonitorIcon,
   ExternalLinkIcon,
+  AlertTriangleIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { getElectronAPI } from "@/lib/electron/types";
@@ -33,12 +34,18 @@ interface GhostOsStatusData {
 export function GhostOsSection() {
   const [status, setStatus] = useState<GhostOsStatusData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [setupRunning, setSetupRunning] = useState(false);
   const [visionDownloading, setVisionDownloading] = useState(false);
   const [visionProgress, setVisionProgress] = useState(0);
+  // Guard against running setup and vision download simultaneously
+  const operationInProgress = setupRunning || visionDownloading;
+  // Track whether checkStatus was triggered by a download completing
+  const deferredStatusCheck = useRef(false);
 
   const checkStatus = useCallback(async () => {
     setLoading(true);
+    setStatusError(null);
     try {
       const electronAPI = getElectronAPI();
       if (electronAPI?.ghostOs) {
@@ -49,10 +56,14 @@ export function GhostOsSection() {
         const response = await fetch("/api/ghost-os/status");
         if (response.ok) {
           setStatus(await response.json());
+        } else {
+          setStatusError("Failed to check status (HTTP " + response.status + ")");
         }
       }
     } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error";
       console.error("[GhostOS] Status check failed:", error);
+      setStatusError(msg);
     } finally {
       setLoading(false);
     }
@@ -75,7 +86,8 @@ export function GhostOsSection() {
         setVisionDownloading(false);
         setVisionProgress(100);
         toast.success("Vision model downloaded");
-        checkStatus();
+        // Defer status check slightly to avoid blocking UI during state transition
+        setTimeout(() => checkStatus(), 500);
       } else if (data.status === "error") {
         setVisionDownloading(false);
         setVisionProgress(0);
@@ -83,13 +95,19 @@ export function GhostOsSection() {
       }
     };
 
+    // Use specific listener registration — don't use removeAllListeners on cleanup
+    // to avoid killing other components' listeners on the shared channel
     electronAPI.model.onProgress(handleProgress);
     return () => {
+      // Note: ideally onProgress would return a cleanup fn. For now we accept the
+      // shared-channel limitation. The component guards on modelId so stray events
+      // from other downloads are filtered out.
       electronAPI.model.removeProgressListener();
     };
   }, [checkStatus]);
 
   const handleSetup = async () => {
+    if (operationInProgress) return;
     setSetupRunning(true);
     try {
       const electronAPI = getElectronAPI();
@@ -119,6 +137,7 @@ export function GhostOsSection() {
   };
 
   const handleDownloadVision = async () => {
+    if (operationInProgress) return;
     setVisionDownloading(true);
     setVisionProgress(0);
     try {
@@ -127,29 +146,33 @@ export function GhostOsSection() {
         const result = await electronAPI.ghostOs.downloadVisionModel();
         if (!result.success) {
           toast.error(`Download failed: ${result.error || "Unknown error"}`);
-          setVisionDownloading(false);
         }
+        // Always reset downloading state in this path — the progress listener
+        // handles the "completed" case, but if the invoke itself returns failure
+        // the listener may not fire.
       } else {
         toast.error("Vision model download requires the desktop app");
-        setVisionDownloading(false);
       }
     } catch (error) {
       toast.error("Download failed");
-      setVisionDownloading(false);
       console.error("[GhostOS] Vision download error:", error);
+    } finally {
+      // Ensure spinner is always cleared, even on success.
+      // The progress listener may also clear it — that's fine (idempotent).
+      setVisionDownloading(false);
     }
   };
 
   const StatusIcon = ({ ok }: { ok: boolean }) =>
     ok ? (
-      <CheckCircle2Icon className="h-4 w-4 text-green-500" />
+      <CheckCircle2Icon className="h-4 w-4 text-emerald-500" />
     ) : (
-      <XCircleIcon className="h-4 w-4 text-red-400" />
+      <XCircleIcon className="h-4 w-4 text-red-500" />
     );
 
-  if (loading) {
+  if (loading && !status) {
     return (
-      <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 py-4 text-sm text-terminal-muted">
         <Loader2Icon className="h-4 w-4 animate-spin" />
         Checking Ghost OS status...
       </div>
@@ -161,91 +184,112 @@ export function GhostOsSection() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <MonitorIcon className="h-5 w-5" />
-          <h3 className="text-sm font-medium">Ghost OS</h3>
-          <span className="text-xs text-muted-foreground">macOS Desktop Automation</span>
+          <h3 className="font-mono text-sm font-semibold text-terminal-dark">Ghost OS</h3>
+          <span className="text-xs text-terminal-muted">macOS Desktop Automation</span>
         </div>
         <Button variant="ghost" size="sm" onClick={checkStatus} disabled={loading}>
           <RefreshCwIcon className="h-3.5 w-3.5" />
         </Button>
       </div>
 
-      {/* Installation Status */}
-      <div className="rounded-lg border p-3 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm">
-            <StatusIcon ok={status?.installed ?? false} />
-            <span>Installation</span>
+      {/* Error state — distinct from "not installed" */}
+      {statusError && !status && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
+          <div className="flex items-center gap-2 text-sm text-amber-600">
+            <AlertTriangleIcon className="h-4 w-4" />
+            <span>Status check failed</span>
           </div>
-          {status?.installed ? (
-            <span className="text-xs text-muted-foreground">
-              v{status.version || "unknown"} — {status.binaryPath}
-            </span>
-          ) : (
-            <a
-              href="https://github.com/nicholaschenai/ghost-os"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-blue-500 hover:underline"
-            >
-              Install via Homebrew
-              <ExternalLinkIcon className="h-3 w-3" />
-            </a>
-          )}
+          <p className="text-xs text-terminal-muted">{statusError}</p>
+          <Button variant="outline" size="sm" onClick={checkStatus}>
+            Retry
+          </Button>
         </div>
+      )}
 
-        {/* Permissions */}
-        {status?.installed && (
-          <>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm">
-                <StatusIcon ok={status.permissions.accessibility} />
-                <span>Accessibility</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm">
-                <StatusIcon ok={status.permissions.screenRecording} />
-                <span>Screen Recording</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm">
-                <StatusIcon ok={status.permissions.inputMonitoring} />
-                <span>Input Monitoring</span>
-                <span className="text-xs text-muted-foreground">(required for learning mode)</span>
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Vision Model */}
-        {status?.installed && (
+      {/* Installation Status */}
+      {(status || !statusError) && (
+        <div className="rounded-lg border p-3 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm">
-              <StatusIcon ok={status.visionModelInstalled} />
-              <span>ShowUI-2B Vision Model</span>
-              <span className="text-xs text-muted-foreground">(~3 GB)</span>
+              <StatusIcon ok={status?.installed ?? false} />
+              <span>Installation</span>
             </div>
-            {!status.visionModelInstalled && !visionDownloading && (
-              <Button variant="outline" size="sm" onClick={handleDownloadVision}>
-                <DownloadIcon className="h-3.5 w-3.5 mr-1" />
-                Download
-              </Button>
-            )}
-            {visionDownloading && (
-              <div className="flex items-center gap-2">
-                <div className="h-1.5 w-24 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full bg-blue-500 transition-all duration-300"
-                    style={{ width: `${visionProgress}%` }}
-                  />
-                </div>
-                <span className="text-xs text-muted-foreground">{visionProgress}%</span>
-              </div>
+            {status?.installed ? (
+              <span className="text-xs text-terminal-muted">
+                v{status.version || "unknown"} — {status.binaryPath}
+              </span>
+            ) : (
+              <a
+                href="https://github.com/ghostwright/ghost-os"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-blue-500 hover:underline"
+              >
+                Install via Homebrew
+                <ExternalLinkIcon className="h-3 w-3" />
+              </a>
             )}
           </div>
-        )}
-      </div>
+
+          {/* Permissions */}
+          {status?.installed && (
+            <>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm">
+                  <StatusIcon ok={status.permissions.accessibility} />
+                  <span>Accessibility</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm">
+                  <StatusIcon ok={status.permissions.screenRecording} />
+                  <span>Screen Recording</span>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm">
+                  <StatusIcon ok={status.permissions.inputMonitoring} />
+                  <span>Input Monitoring</span>
+                  <span className="text-xs text-terminal-muted">(required for learning mode)</span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Vision Model */}
+          {status?.installed && (
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm">
+                <StatusIcon ok={status.visionModelInstalled} />
+                <span>ShowUI-2B Vision Model</span>
+                <span className="text-xs text-terminal-muted">(~3 GB)</span>
+              </div>
+              {!status.visionModelInstalled && !visionDownloading && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadVision}
+                  disabled={operationInProgress}
+                >
+                  <DownloadIcon className="h-3.5 w-3.5 mr-1" />
+                  Download
+                </Button>
+              )}
+              {visionDownloading && (
+                <div className="flex items-center gap-2">
+                  <div className="h-1.5 w-24 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all duration-300"
+                      style={{ width: `${visionProgress}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-terminal-muted">{visionProgress}%</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Actions */}
       {status?.installed && (
@@ -254,7 +298,7 @@ export function GhostOsSection() {
             variant="outline"
             size="sm"
             onClick={handleSetup}
-            disabled={setupRunning}
+            disabled={operationInProgress}
           >
             {setupRunning ? (
               <Loader2Icon className="h-3.5 w-3.5 mr-1 animate-spin" />
@@ -264,8 +308,8 @@ export function GhostOsSection() {
         </div>
       )}
 
-      {!status?.installed && (
-        <p className="text-xs text-muted-foreground">
+      {!status?.installed && !statusError && (
+        <p className="text-xs text-terminal-muted">
           Ghost OS enables AI agents to control any macOS application using the accessibility tree.
           Install it to let agents automate desktop workflows.
         </p>

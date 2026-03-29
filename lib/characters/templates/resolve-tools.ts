@@ -128,11 +128,17 @@ export function resolveSeleneTemplateTools(settings: AppSettings): ToolResolutio
   enabledTools.push("chromiumWorkspace");
   console.log("[SeleneTemplate] Chromium Workspace enabled: embedded browser automation");
 
-  // 5b. Ghost OS (enabled if ghost binary is detected — macOS desktop automation)
-  // Note: Detection is async but template resolution is sync, so we just pre-enable
-  // the tool entry. The actual MCP connection happens at chat time via config resolution.
-  enabledTools.push("ghostOs");
-  console.log("[SeleneTemplate] Ghost OS pre-enabled: macOS desktop automation (MCP auto-detected at chat time)");
+  // 5b. Ghost OS (macOS only — desktop automation via accessibility tree)
+  // Only pre-enable on macOS where Ghost OS can actually run.
+  // Binary detection is async but template resolution is sync, so we check platform
+  // as a sync gate. The actual MCP connection happens at chat time via config resolution
+  // which will validate the binary exists.
+  if (process.platform === "darwin") {
+    enabledTools.push("ghostOs");
+    console.log("[SeleneTemplate] Ghost OS pre-enabled: macOS desktop automation (MCP auto-detected at chat time)");
+  } else {
+    console.log("[SeleneTemplate] Ghost OS skipped: not on macOS");
+  }
 
   // 6. Pre-selected conditional tools (enabled by default, user can toggle off)
   enabledTools.push("workspace");

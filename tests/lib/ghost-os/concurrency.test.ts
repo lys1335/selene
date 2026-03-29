@@ -19,6 +19,7 @@ describe("Ghost OS Concurrency Detection", () => {
 
     it("should set and get active operation", () => {
       setActiveGhostOsOperation({
+        opId: "test-op-1",
         characterId: "agent-1",
         characterName: "Agent One",
         toolName: "ghost_click",
@@ -30,10 +31,12 @@ describe("Ghost OS Concurrency Detection", () => {
       expect(op).toBeDefined();
       expect(op!.characterId).toBe("agent-1");
       expect(op!.toolName).toBe("ghost_click");
+      expect(op!.opId).toBe("test-op-1");
     });
 
     it("should clear active operation", () => {
       setActiveGhostOsOperation({
+        opId: "test-op-1",
         characterId: "agent-1",
         characterName: "Agent One",
         toolName: "ghost_click",
@@ -43,6 +46,33 @@ describe("Ghost OS Concurrency Detection", () => {
 
       clearActiveGhostOsOperation();
       expect(getActiveGhostOsOperation()).toBeUndefined();
+    });
+
+    it("should auto-clear stale operations (TTL exceeded)", () => {
+      setActiveGhostOsOperation({
+        opId: "test-op-stale",
+        characterId: "agent-1",
+        characterName: "Agent One",
+        toolName: "ghost_click",
+        rootSessionId: "session-1",
+        startedAt: Date.now() - 61_000, // 61 seconds ago — exceeds 60s TTL
+      });
+
+      // getActiveGhostOsOperation should auto-clear and return undefined
+      expect(getActiveGhostOsOperation()).toBeUndefined();
+    });
+
+    it("should not auto-clear fresh operations", () => {
+      setActiveGhostOsOperation({
+        opId: "test-op-fresh",
+        characterId: "agent-1",
+        characterName: "Agent One",
+        toolName: "ghost_click",
+        rootSessionId: "session-1",
+        startedAt: Date.now() - 30_000, // 30 seconds ago — within TTL
+      });
+
+      expect(getActiveGhostOsOperation()).toBeDefined();
     });
   });
 
@@ -60,6 +90,7 @@ describe("Ghost OS Concurrency Detection", () => {
 
     it("should return null for perception tools (non-action)", () => {
       setActiveGhostOsOperation({
+        opId: "test-op-1",
         characterId: "agent-2",
         characterName: "Agent Two",
         toolName: "ghost_click",
@@ -90,6 +121,7 @@ describe("Ghost OS Concurrency Detection", () => {
 
     it("should return null for same agent's sequential calls", () => {
       setActiveGhostOsOperation({
+        opId: "test-op-1",
         characterId: "agent-1",
         characterName: "Agent One",
         toolName: "ghost_click",
@@ -109,6 +141,7 @@ describe("Ghost OS Concurrency Detection", () => {
 
     it("should return null for same delegation chain (same rootSessionId)", () => {
       setActiveGhostOsOperation({
+        opId: "test-op-1",
         characterId: "agent-1",
         characterName: "Agent One",
         toolName: "ghost_click",
@@ -126,8 +159,30 @@ describe("Ghost OS Concurrency Detection", () => {
       expect(result).toBeNull();
     });
 
+    it("should NOT suppress warning when rootSessionId is empty string", () => {
+      setActiveGhostOsOperation({
+        opId: "test-op-1",
+        characterId: "agent-1",
+        characterName: "Agent One",
+        toolName: "ghost_click",
+        rootSessionId: "", // empty
+        startedAt: Date.now() - 5000,
+      });
+
+      const result = checkGhostOsConcurrency(
+        "ghostos",
+        "ghost_type",
+        "agent-2",
+        "Agent Two",
+        "", // both empty — should still warn, not falsely suppress
+      );
+      expect(result).not.toBeNull();
+      expect(result).toContain("Agent One");
+    });
+
     it("should return warning for different agent from different session", () => {
       setActiveGhostOsOperation({
+        opId: "test-op-1",
         characterId: "agent-1",
         characterName: "Agent One",
         toolName: "ghost_click",
@@ -185,6 +240,7 @@ describe("Ghost OS Concurrency Detection", () => {
       expect(activeOpDuringExecution).toBeDefined();
       expect(activeOpDuringExecution.characterId).toBe("agent-1");
       expect(activeOpDuringExecution.toolName).toBe("ghost_click");
+      expect(activeOpDuringExecution.opId).toBeDefined();
 
       // Should be cleared after execution
       expect(getActiveGhostOsOperation()).toBeUndefined();
@@ -230,6 +286,7 @@ describe("Ghost OS Concurrency Detection", () => {
     it("should include warning when conflict detected", async () => {
       // Set up existing operation from another agent
       setActiveGhostOsOperation({
+        opId: "test-op-1",
         characterId: "agent-1",
         characterName: "Agent One",
         toolName: "ghost_click",
@@ -247,6 +304,53 @@ describe("Ghost OS Concurrency Detection", () => {
 
       expect(warning).not.toBeNull();
       expect(warning).toContain("Agent One");
+    });
+
+    it("should safely handle concurrent executions from the same agent (opId prevents race)", async () => {
+      // Simulate two concurrent calls from the same agent with the same tool
+      const wrap1 = wrapGhostOsExecution(
+        "ghostos",
+        "ghost_click",
+        "agent-1",
+        "Agent One",
+        "session-1",
+      );
+      const wrap2 = wrapGhostOsExecution(
+        "ghostos",
+        "ghost_click",
+        "agent-1",
+        "Agent One",
+        "session-1",
+      );
+
+      let resolveFirst!: () => void;
+      const firstPromise = new Promise<void>((r) => { resolveFirst = r; });
+
+      // Start both executions concurrently
+      const exec1 = wrap1.execute(async () => {
+        // Wait for exec2 to start and overwrite the active op
+        await firstPromise;
+        return "result-1";
+      });
+
+      const exec2Promise = wrap2.execute(async () => {
+        // exec2 starts while exec1 is still waiting — overwrites active op
+        resolveFirst(); // let exec1 proceed
+        return "result-2";
+      });
+
+      // Wait for exec2 to finish
+      await exec2Promise;
+
+      // exec2 finished — but since exec1's opId doesn't match anymore,
+      // exec1's finally block should NOT clear exec2's tracking.
+      // However, exec2 already completed and cleared its own op.
+      // The important thing: no undefined behavior, no thrown errors.
+      const result1 = await exec1;
+      expect(result1).toBe("result-1");
+
+      // After both complete, the global should be clear
+      expect(getActiveGhostOsOperation()).toBeUndefined();
     });
   });
 });

@@ -277,7 +277,7 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 10 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace = 19 tools minimum
+      // 6 core + 10 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace + 1 ghostOs (macOS) = 20 tools minimum
       expect(result.enabledTools.length).toBeGreaterThanOrEqual(19);
       expect(result.enabledTools).not.toContain("vectorSearch");
       expect(result.enabledTools).toContain("webSearch");
@@ -288,7 +288,7 @@ describe("resolveSeleneTemplateTools", () => {
   // Tool count verification
   // =========================================================================
   describe("tool count", () => {
-    it("should return exactly 20 tools when all prerequisites are met", () => {
+    it("should return exactly 21 tools when all prerequisites are met (includes ghostOs on macOS)", () => {
       const settings = buildSettings({
         vectorDBEnabled: true,
         tavilyApiKey: "tvly-test-key",
@@ -299,9 +299,10 @@ describe("resolveSeleneTemplateTools", () => {
       // 6 core + 10 utility + 1 workspace + 1 vectorSearch + 1 webSearch + 1 chromiumWorkspace + 1 ghostOs = 21
       expect(result.enabledTools).toHaveLength(21);
       expect(result.enabledTools).toContain("workspace");
+      expect(result.enabledTools).toContain("ghostOs");
     });
 
-    it("should return exactly 19 tools when no optional tools are available (webSearch always on)", () => {
+    it("should return exactly 20 tools when no optional tools are available (webSearch always on, ghostOs on macOS)", () => {
       const settings = buildSettings({
         vectorDBEnabled: false,
         tavilyApiKey: undefined,

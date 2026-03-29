@@ -27,7 +27,7 @@ describe("Ghost OS Config", () => {
   });
 
   describe("isGhostOsActionTool", () => {
-    it("should identify action tools", () => {
+    it("should identify core input action tools", () => {
       expect(isGhostOsActionTool("ghost_click")).toBe(true);
       expect(isGhostOsActionTool("ghost_type")).toBe(true);
       expect(isGhostOsActionTool("ghost_press")).toBe(true);
@@ -36,8 +36,23 @@ describe("Ghost OS Config", () => {
       expect(isGhostOsActionTool("ghost_hover")).toBe(true);
       expect(isGhostOsActionTool("ghost_drag")).toBe(true);
       expect(isGhostOsActionTool("ghost_long_press")).toBe(true);
+    });
+
+    it("should identify window management action tools", () => {
       expect(isGhostOsActionTool("ghost_focus")).toBe(true);
       expect(isGhostOsActionTool("ghost_window")).toBe(true);
+    });
+
+    it("should identify extended/future action tools", () => {
+      expect(isGhostOsActionTool("ghost_double_click")).toBe(true);
+      expect(isGhostOsActionTool("ghost_right_click")).toBe(true);
+      expect(isGhostOsActionTool("ghost_select")).toBe(true);
+      expect(isGhostOsActionTool("ghost_write")).toBe(true);
+      expect(isGhostOsActionTool("ghost_resize")).toBe(true);
+    });
+
+    it("should identify recipe execution as action", () => {
+      expect(isGhostOsActionTool("ghost_run")).toBe(true);
     });
 
     it("should not identify perception tools as actions", () => {
@@ -49,11 +64,28 @@ describe("Ghost OS Config", () => {
       expect(isGhostOsActionTool("ghost_screenshot")).toBe(false);
     });
 
-    it("should not identify recipe/learning tools as actions", () => {
+    it("should not identify recipe management tools as actions", () => {
       expect(isGhostOsActionTool("ghost_recipes")).toBe(false);
       expect(isGhostOsActionTool("ghost_recipe_save")).toBe(false);
+      expect(isGhostOsActionTool("ghost_recipe_show")).toBe(false);
+      expect(isGhostOsActionTool("ghost_recipe_delete")).toBe(false);
+    });
+
+    it("should not identify learning tools as actions", () => {
       expect(isGhostOsActionTool("ghost_learn_start")).toBe(false);
       expect(isGhostOsActionTool("ghost_learn_stop")).toBe(false);
+      expect(isGhostOsActionTool("ghost_learn_status")).toBe(false);
+    });
+
+    it("should not identify vision tools as actions", () => {
+      expect(isGhostOsActionTool("ghost_ground")).toBe(false);
+      expect(isGhostOsActionTool("ghost_parse_screen")).toBe(false);
+      expect(isGhostOsActionTool("ghost_annotate")).toBe(false);
+      expect(isGhostOsActionTool("ghost_element_at")).toBe(false);
+    });
+
+    it("should not identify utility tools as actions", () => {
+      expect(isGhostOsActionTool("ghost_wait")).toBe(false);
     });
   });
 });

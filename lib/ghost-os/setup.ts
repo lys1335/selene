@@ -9,6 +9,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import type { GhostOsStatus, GhostDoctorResult } from "./types";
 
 const execFileAsync = promisify(execFile);
@@ -20,16 +21,16 @@ const HOMEBREW_PATHS = [
 ];
 
 /** Ghost OS model storage directory */
-const GHOST_OS_HOME = path.join(
-  process.env.HOME || "~",
-  ".ghost-os"
-);
+const GHOST_OS_HOME = path.join(os.homedir(), ".ghost-os");
 
 const VISION_MODEL_DIR = path.join(GHOST_OS_HOME, "models", "ShowUI-2B");
 
+/** Known required files for a valid ShowUI-2B installation */
+const VISION_MODEL_SENTINEL_FILES = ["config.json", ".safetensors"];
+
 /**
  * Resolve the ghost binary path from PATH or known locations.
- * Returns null if not found.
+ * Returns null if not found or if the binary is not Ghost OS (e.g., Ghost CMS CLI).
  */
 export async function resolveGhostBinary(): Promise<string | null> {
   // Try `which ghost` first (works on macOS/Linux)
@@ -46,7 +47,8 @@ export async function resolveGhostBinary(): Promise<string | null> {
     });
     const resolved = stdout.trim();
     if (resolved && fs.existsSync(resolved)) {
-      return resolved;
+      const verified = await verifyGhostOsBinary(resolved);
+      if (verified) return resolved;
     }
   } catch {
     // `which` failed — try known paths directly
@@ -56,7 +58,8 @@ export async function resolveGhostBinary(): Promise<string | null> {
   for (const dir of HOMEBREW_PATHS) {
     const candidate = path.join(dir, "ghost");
     if (fs.existsSync(candidate)) {
-      return candidate;
+      const verified = await verifyGhostOsBinary(candidate);
+      if (verified) return candidate;
     }
   }
 
@@ -64,8 +67,31 @@ export async function resolveGhostBinary(): Promise<string | null> {
 }
 
 /**
+ * Verify that a binary is actually Ghost OS (not Ghost CMS CLI or something else).
+ * Checks that --version output contains "ghost-os" or "ghost os".
+ */
+async function verifyGhostOsBinary(binaryPath: string): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync(binaryPath, ["--version"], {
+      timeout: 3000,
+    });
+    const lower = stdout.toLowerCase();
+    // Ghost OS version output should contain "ghost-os" or "ghost os"
+    // Ghost CMS CLI outputs "Ghost-CLI version X.Y.Z"
+    return (
+      lower.includes("ghost-os") ||
+      lower.includes("ghost os") ||
+      // Also accept if it contains "axorcist" (Ghost OS internal component)
+      lower.includes("axorcist")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Get Ghost OS version from the binary.
- * Returns null if binary not found or version command fails.
+ * Returns null if binary not found or version cannot be parsed.
  */
 export async function getGhostVersion(binaryPath: string): Promise<string | null> {
   try {
@@ -74,7 +100,7 @@ export async function getGhostVersion(binaryPath: string): Promise<string | null
     });
     // Expected format: "ghost-os 2.2.1" or "Ghost OS v2.2.1"
     const match = stdout.match(/(\d+\.\d+\.\d+)/);
-    return match ? match[1] : stdout.trim();
+    return match ? match[1] : null;
   } catch {
     return null;
   }
@@ -82,17 +108,20 @@ export async function getGhostVersion(binaryPath: string): Promise<string | null
 
 /**
  * Check if ShowUI-2B vision model is installed.
- * Looks for the model directory and a sentinel file.
+ * Looks for the model directory and a known sentinel file (config.json or .safetensors).
  */
 export function isVisionModelInstalled(): boolean {
   try {
-    // Check for model directory existence and a known file
     if (!fs.existsSync(VISION_MODEL_DIR)) {
       return false;
     }
-    // Check for at least one model file (config.json or model files)
     const files = fs.readdirSync(VISION_MODEL_DIR);
-    return files.length > 0;
+    // Check for a known required file — not just "any file exists"
+    return files.some((f) =>
+      VISION_MODEL_SENTINEL_FILES.some(
+        (sentinel) => f === sentinel || f.endsWith(sentinel)
+      )
+    );
   } catch {
     return false;
   }
@@ -161,11 +190,14 @@ export async function runGhostDoctor(binaryPath?: string): Promise<GhostDoctorRe
 
     return { raw, healthy, checks };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const errObj = error as { message?: string; stdout?: string; stderr?: string };
+    const message = errObj.message || String(error);
+    // Preserve stdout from partial output before failure
+    const stdout = errObj.stdout || "";
     return {
-      raw: `ghost doctor failed: ${message}`,
+      raw: `ghost doctor failed: ${message}${stdout ? `\n${stdout}` : ""}`,
       healthy: false,
-      checks: [],
+      checks: stdout ? parseDoctorChecks(stdout) : [],
     };
   }
 }
@@ -197,8 +229,10 @@ export async function runGhostSetup(binaryPath?: string): Promise<{
     });
     return { success: true, stdout, stderr };
   } catch (error) {
-    const stderr = error instanceof Error ? error.message : String(error);
-    return { success: false, stdout: "", stderr };
+    const errObj = error as { message?: string; stdout?: string; stderr?: string };
+    const stderr = errObj.stderr || errObj.message || String(error);
+    const stdout = errObj.stdout || "";
+    return { success: false, stdout, stderr };
   }
 }
 
@@ -209,6 +243,9 @@ export async function runGhostSetup(binaryPath?: string): Promise<{
 /**
  * Parse `ghost doctor` output into structured checks.
  * Ghost doctor output format varies by version, so we parse conservatively.
+ *
+ * Uses non-capturing alternation groups to properly match multi-char tokens
+ * like [PASS] and [FAIL], not just individual characters.
  */
 function parseDoctorChecks(
   output: string
@@ -220,10 +257,10 @@ function parseDoctorChecks(
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    // Look for check/pass/fail indicators
-    // Common patterns: "✓ Accessibility", "✗ Screen Recording", "[PASS]", "[FAIL]"
-    const passMatch = trimmed.match(/^[✓✅☑\[PASS\]]\s*(.+)/i);
-    const failMatch = trimmed.match(/^[✗❌☐\[FAIL\]]\s*(.+)/i);
+    // Match pass indicators: ✓, ✅, ☑, or [PASS]
+    const passMatch = trimmed.match(/^(?:[✓✅☑]|\[PASS\])\s*(.+)/i);
+    // Match fail indicators: ✗, ❌, ☐, or [FAIL]
+    const failMatch = trimmed.match(/^(?:[✗❌☐]|\[FAIL\])\s*(.+)/i);
 
     if (passMatch) {
       checks.push({ name: passMatch[1].trim(), passed: true });

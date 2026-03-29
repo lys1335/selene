@@ -8,6 +8,7 @@
  * to proceed or wait based on the warning.
  */
 
+import { randomUUID } from "crypto";
 import type { GhostOsActiveOperation } from "./types";
 import { GHOST_OS_SERVER_NAME, isGhostOsActionTool } from "./config";
 
@@ -20,11 +21,21 @@ declare global {
   var __ghostOsActiveOp: GhostOsActiveOperation | undefined;
 }
 
+/** Operations older than this are considered stale and auto-cleared */
+const STALE_THRESHOLD_MS = 60_000; // 60 seconds
+
 /**
  * Get the currently active Ghost OS operation, if any.
+ * Automatically clears stale operations (older than STALE_THRESHOLD_MS).
  */
 export function getActiveGhostOsOperation(): GhostOsActiveOperation | undefined {
-  return globalThis.__ghostOsActiveOp;
+  const op = globalThis.__ghostOsActiveOp;
+  if (op && Date.now() - op.startedAt > STALE_THRESHOLD_MS) {
+    // Auto-clear stale operation (hung tool, crashed subprocess, etc.)
+    clearActiveGhostOsOperation();
+    return undefined;
+  }
+  return op;
 }
 
 /**
@@ -82,7 +93,8 @@ export function checkGhostOsConcurrency(
   }
 
   // Same delegation chain (root session) — cooperative access, no conflict
-  if (active.rootSessionId === rootSessionId) {
+  // Guard against empty string rootSessionId which would falsely suppress warnings
+  if (rootSessionId && active.rootSessionId && active.rootSessionId === rootSessionId) {
     return null;
   }
 
@@ -98,6 +110,10 @@ export function checkGhostOsConcurrency(
 /**
  * Wrap a Ghost OS tool execution with concurrency tracking.
  * Sets the active operation before execution and clears it after.
+ *
+ * Uses a unique opId per invocation to safely handle concurrent async
+ * executions from the same agent — only the specific invocation that set
+ * the operation will clear it.
  *
  * @returns An object with:
  *   - `warning`: concurrency warning (null if no conflict)
@@ -132,9 +148,13 @@ export function wrapGhostOsExecution(
   return {
     warning,
     execute: async <T>(fn: () => Promise<T>): Promise<T> => {
+      // Generate unique ID for this specific invocation
+      const opId = randomUUID();
+
       // Only track action tools in the active operation
       if (isGhostOsActionTool(toolName)) {
         setActiveGhostOsOperation({
+          opId,
           characterId,
           characterName,
           toolName,
@@ -146,9 +166,11 @@ export function wrapGhostOsExecution(
       try {
         return await fn();
       } finally {
-        // Clear if this agent's operation is still the active one
+        // Only clear if THIS specific invocation's operation is still the active one.
+        // This prevents concurrent executions from the same agent from clearing
+        // each other's tracking state.
         const current = getActiveGhostOsOperation();
-        if (current?.characterId === characterId && current?.toolName === toolName) {
+        if (current?.opId === opId) {
           clearActiveGhostOsOperation();
         }
       }

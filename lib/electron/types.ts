@@ -219,7 +219,7 @@ export interface ElectronAPI {
   screenCapture?: ElectronScreenCaptureAPI;
   unifiedCapture?: ElectronUnifiedCaptureAPI;
   permissions?: ElectronPermissionsAPI;
-  ghostOs?: ElectronGhostOsAPI;
+  ghostOs: ElectronGhostOsAPI;
 }
 
 /**

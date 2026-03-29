@@ -10,6 +10,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import type { IpcHandlerContext } from "./ipc-handlers";
 import { debugLog, debugError } from "./debug-logger";
 
@@ -19,11 +20,15 @@ const execFileAsync = promisify(execFile);
 const HOMEBREW_PATHS = ["/opt/homebrew/bin", "/usr/local/bin"];
 
 /** Ghost OS home directory */
-const GHOST_OS_HOME = path.join(process.env.HOME || "~", ".ghost-os");
+const GHOST_OS_HOME = path.join(os.homedir(), ".ghost-os");
 const VISION_MODEL_DIR = path.join(GHOST_OS_HOME, "models", "ShowUI-2B");
+
+/** Known sentinel files for a valid ShowUI-2B installation */
+const VISION_SENTINEL_SUFFIXES = ["config.json", ".safetensors"];
 
 /**
  * Resolve ghost binary from PATH or known locations.
+ * Verifies the binary is actually Ghost OS (not Ghost CMS CLI).
  */
 async function resolveGhostBinary(): Promise<string | null> {
   try {
@@ -35,17 +40,54 @@ async function resolveGhostBinary(): Promise<string | null> {
       },
     });
     const resolved = stdout.trim();
-    if (resolved && fs.existsSync(resolved)) return resolved;
+    if (resolved && fs.existsSync(resolved)) {
+      if (await verifyGhostOsBinary(resolved)) return resolved;
+    }
   } catch {
     // which failed
   }
 
   for (const dir of HOMEBREW_PATHS) {
     const candidate = path.join(dir, "ghost");
-    if (fs.existsSync(candidate)) return candidate;
+    if (fs.existsSync(candidate)) {
+      if (await verifyGhostOsBinary(candidate)) return candidate;
+    }
   }
 
   return null;
+}
+
+/**
+ * Verify a binary is Ghost OS, not Ghost CMS CLI or something else.
+ */
+async function verifyGhostOsBinary(binaryPath: string): Promise<boolean> {
+  try {
+    const { stdout } = await execFileAsync(binaryPath, ["--version"], {
+      timeout: 3000,
+    });
+    const lower = stdout.toLowerCase();
+    return (
+      lower.includes("ghost-os") ||
+      lower.includes("ghost os") ||
+      lower.includes("axorcist")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Safely send IPC event to renderer, checking if sender is still alive.
+ */
+function safeSend(
+  sender: Electron.WebContents,
+  channel: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: any,
+): void {
+  if (!sender.isDestroyed()) {
+    sender.send(channel, data);
+  }
 }
 
 /**
@@ -77,17 +119,21 @@ export function registerGhostOsHandlers(_ctx: IpcHandlerContext): void {
     try {
       const { stdout } = await execFileAsync(binaryPath, ["--version"], { timeout: 5000 });
       const match = stdout.match(/(\d+\.\d+\.\d+)/);
-      version = match ? match[1] : stdout.trim();
+      version = match ? match[1] : undefined;
     } catch {
       debugError("[GhostOS] Failed to get version");
     }
 
-    // Check vision model
+    // Check vision model — look for actual model files, not just any file
     let visionModelInstalled = false;
     try {
       if (fs.existsSync(VISION_MODEL_DIR)) {
         const files = fs.readdirSync(VISION_MODEL_DIR);
-        visionModelInstalled = files.length > 0;
+        visionModelInstalled = files.some((f) =>
+          VISION_SENTINEL_SUFFIXES.some(
+            (sentinel) => f === sentinel || f.endsWith(sentinel)
+          )
+        );
       }
     } catch {
       // ignore
@@ -158,9 +204,11 @@ export function registerGhostOsHandlers(_ctx: IpcHandlerContext): void {
       debugLog("[GhostOS] Setup completed successfully");
       return { success: true, stdout, stderr };
     } catch (error) {
-      const stderr = error instanceof Error ? error.message : String(error);
+      const errObj = error as { message?: string; stdout?: string; stderr?: string };
+      const stderr = errObj.stderr || errObj.message || String(error);
+      const stdout = errObj.stdout || "";
       debugError("[GhostOS] Setup failed:", stderr);
-      return { success: false, stdout: "", stderr };
+      return { success: false, stdout, stderr };
     }
   });
 
@@ -179,7 +227,7 @@ export function registerGhostOsHandlers(_ctx: IpcHandlerContext): void {
     }
 
     // Emit initial progress
-    event.sender.send("model:downloadProgress", {
+    safeSend(event.sender, "model:downloadProgress", {
       modelId: "ghostos-showui-2b",
       status: "downloading",
       progress: 0,
@@ -205,7 +253,7 @@ export function registerGhostOsHandlers(_ctx: IpcHandlerContext): void {
           const progressMatch = text.match(/(\d+)%/);
           if (progressMatch) {
             lastProgress = parseInt(progressMatch[1], 10);
-            event.sender.send("model:downloadProgress", {
+            safeSend(event.sender, "model:downloadProgress", {
               modelId: "ghostos-showui-2b",
               status: "downloading",
               progress: lastProgress,
@@ -223,7 +271,7 @@ export function registerGhostOsHandlers(_ctx: IpcHandlerContext): void {
         child.on("error", reject);
       });
 
-      event.sender.send("model:downloadProgress", {
+      safeSend(event.sender, "model:downloadProgress", {
         modelId: "ghostos-showui-2b",
         status: "completed",
         progress: 100,
@@ -236,7 +284,7 @@ export function registerGhostOsHandlers(_ctx: IpcHandlerContext): void {
       const errorMsg = error instanceof Error ? error.message : String(error);
       debugError("[GhostOS] Vision model download failed:", errorMsg);
 
-      event.sender.send("model:downloadProgress", {
+      safeSend(event.sender, "model:downloadProgress", {
         modelId: "ghostos-showui-2b",
         status: "error",
         progress: 0,

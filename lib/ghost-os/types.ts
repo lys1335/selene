@@ -43,6 +43,8 @@ export interface GhostOsMCPConfig {
  * Active Ghost OS operation — used for multi-agent conflict detection
  */
 export interface GhostOsActiveOperation {
+  /** Unique ID for this specific invocation (prevents concurrent clear races) */
+  opId: string;
   /** Character/agent ID that initiated the operation */
   characterId: string;
   /** Human-readable agent name */
