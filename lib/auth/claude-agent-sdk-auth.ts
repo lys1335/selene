@@ -1,7 +1,8 @@
 import path from "path";
+import { execFile } from "child_process";
 import { query as claudeAgentQuery } from "@anthropic-ai/claude-agent-sdk";
 import { isElectronProduction } from "@/lib/utils/environment";
-import { getNodeBinary } from "@/lib/auth/claude-login-process";
+import { getNodeBinary, getCliPath } from "@/lib/auth/claude-login-process";
 import { buildEnvironmentForTarget } from "@/lib/process-env/policy";
 
 const DEFAULT_CLAUDE_AGENT_MODEL = "claude-sonnet-4-5-20250929";
@@ -113,6 +114,19 @@ export async function readClaudeAgentSdkAuthStatus(
       continue;
     }
 
+    // If SDK query failed (not authenticated, has error), try CLI fallback
+    if (!result.authenticated && result.error) {
+      console.log(
+        `[Agent SDK] SDK query failed (${result.error}), trying CLI fallback...`,
+      );
+      const cliFallback = await readAuthStatusViaCli(
+        Math.min(options.timeoutMs, 10_000),
+      );
+      if (cliFallback) {
+        return cliFallback;
+      }
+    }
+
     return result;
   }
 
@@ -215,6 +229,121 @@ async function readClaudeAgentSdkAuthStatusOnce(
     authUrl: extractAuthUrl(trimmedOutput),
     error: errorMessage,
   };
+}
+
+/**
+ * CLI fallback: runs `node cli.js auth status` and parses the output.
+ * Used when the SDK query approach fails (e.g. spawn issues on Windows).
+ * Inspired by t3code's approach.
+ */
+async function readAuthStatusViaCli(
+  timeoutMs: number,
+): Promise<ClaudeAgentSdkAuthStatus | null> {
+  const nodeBinary = getNodeBinary();
+  const cliPath = getCliPath();
+  const { env } = getSdkExecutableConfig();
+
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      child.kill();
+      resolve(null);
+    }, timeoutMs);
+
+    const child = execFile(
+      nodeBinary,
+      [cliPath, "auth", "status"],
+      {
+        env: env as NodeJS.ProcessEnv,
+        shell: process.platform === "win32",
+        windowsHide: true,
+        timeout: timeoutMs,
+      },
+      (error, stdout, stderr) => {
+        clearTimeout(timer);
+        const combined = `${stdout}\n${stderr}`.toLowerCase();
+
+        if (error && /enoent/i.test(error.message)) {
+          resolve(null); // binary not found, can't fallback
+          return;
+        }
+
+        // Check for "not logged in" patterns
+        if (
+          combined.includes("not logged in") ||
+          combined.includes("login required") ||
+          combined.includes("authentication required") ||
+          combined.includes("run `claude login`") ||
+          combined.includes("run claude login")
+        ) {
+          console.log("[Agent SDK] CLI fallback: not authenticated");
+          resolve({
+            authenticated: false,
+            isAuthenticating: false,
+            output: [stdout.trim(), stderr.trim()].filter(Boolean),
+            error: "Not logged in. Run `claude login` in your terminal.",
+          });
+          return;
+        }
+
+        // Try JSON parse for auth boolean
+        const trimmed = stdout.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+          try {
+            const parsed = JSON.parse(trimmed);
+            const authBool = extractAuthBooleanFromJson(parsed);
+            if (authBool !== undefined) {
+              console.log(`[Agent SDK] CLI fallback: authenticated=${authBool}`);
+              resolve({
+                authenticated: authBool,
+                isAuthenticating: false,
+                output: [trimmed],
+                email: typeof parsed?.email === "string" ? parsed.email : undefined,
+              });
+              return;
+            }
+          } catch {
+            // Not valid JSON, continue
+          }
+        }
+
+        // Exit code 0 = likely authenticated
+        if (!error) {
+          console.log("[Agent SDK] CLI fallback: exit code 0, assuming authenticated");
+          resolve({
+            authenticated: true,
+            isAuthenticating: false,
+            output: [stdout.trim()].filter(Boolean),
+          });
+          return;
+        }
+
+        resolve(null); // Couldn't determine status
+      },
+    );
+  });
+}
+
+/**
+ * Recursively search for auth boolean in parsed JSON.
+ */
+function extractAuthBooleanFromJson(value: unknown): boolean | undefined {
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const nested = extractAuthBooleanFromJson(entry);
+      if (nested !== undefined) return nested;
+    }
+    return undefined;
+  }
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ["authenticated", "isAuthenticated", "loggedIn", "isLoggedIn"]) {
+    if (typeof record[key] === "boolean") return record[key] as boolean;
+  }
+  for (const key of ["auth", "status", "session", "account"]) {
+    const nested = extractAuthBooleanFromJson(record[key]);
+    if (nested !== undefined) return nested;
+  }
+  return undefined;
 }
 
 export async function attemptClaudeAgentSdkLogout(timeoutMs = 20_000): Promise<boolean> {

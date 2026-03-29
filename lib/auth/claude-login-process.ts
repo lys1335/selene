@@ -6,7 +6,7 @@ import { consolidatePathKeys } from "@/lib/utils/windows-env";
 
 // Resolved lazily so process.cwd() is evaluated at runtime, not build time.
 // In production Electron builds, node_modules live under resourcesPath/standalone/.
-function getCliPath(): string {
+export function getCliPath(): string {
   const resourcesPath =
     (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath ||
     process.env.ELECTRON_RESOURCES_PATH;
@@ -295,6 +295,8 @@ async function startClaudeLoginProcessOnce(
     process: spawn(nodeBinary, [getCliPath(), "login"], {
       stdio: ["pipe", "pipe", "pipe"],
       env: spawnEnv,
+      shell: process.platform === "win32",
+      windowsHide: true,
     }),
     url: null,
     outputLines: [],
