@@ -11,6 +11,7 @@ import { clearMCPAuthCache, clearMCPAuthCacheForServer } from "@/lib/mcp/auth-ca
 import { getActivePluginMCPServers } from "@/lib/plugins/registry";
 import { connectPluginMCPServers } from "@/lib/plugins/mcp-integration";
 import type { PluginMCPServerEntry } from "@/lib/plugins/types";
+import { getGhostOsServerConfig, GHOST_OS_SERVER_NAME } from "@/lib/ghost-os/config";
 
 /**
  * POST /api/mcp/connect
@@ -33,7 +34,17 @@ export async function POST(request: NextRequest) {
         const manager = MCPClientManager.getInstance();
         const env = settings.mcpEnvironment || {};
 
-        const mcpConfig = settings.mcpServers?.mcpServers || {};
+        let mcpConfig = settings.mcpServers?.mcpServers || {};
+
+        // Auto-inject Ghost OS if installed and not already in user config
+        if (process.platform === "darwin" && !mcpConfig[GHOST_OS_SERVER_NAME]) {
+            try {
+                const ghostConfig = await getGhostOsServerConfig();
+                if (Object.keys(ghostConfig).length > 0) {
+                    mcpConfig = { ...ghostConfig, ...mcpConfig } as typeof mcpConfig;
+                }
+            } catch { /* Ghost OS not installed — skip */ }
+        }
 
         // Filter to only enabled servers (undefined or true = enabled)
         const enabledServers = Object.entries(mcpConfig)

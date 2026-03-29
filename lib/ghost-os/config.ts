@@ -9,21 +9,30 @@ import type { GhostOsMCPConfig } from "./types";
 import { resolveGhostBinary } from "./setup";
 
 /**
+ * Cached Ghost OS binary path and config.
+ * Avoids shelling out to `which` on every chat request / API call.
+ * Cache is per-process and resets on restart.
+ */
+let _cachedBinaryPath: string | null | undefined; // undefined = not yet checked
+let _cachedConfig: GhostOsMCPConfig | null | undefined;
+
+/**
  * Generate MCP server configuration for Ghost OS.
  * Returns null if Ghost OS is not installed.
- *
- * TODO(Phase 1.1): Wire this into the MCP config resolver pipeline
- * (lib/mcp/mcp-config-resolver.ts) so Ghost OS is auto-detected and
- * injected into agent MCP configs when the binary is present.
+ * Result is cached per-process to avoid repeated binary lookups.
  */
 export async function generateGhostOsMCPConfig(): Promise<GhostOsMCPConfig | null> {
+  if (_cachedConfig !== undefined) return _cachedConfig;
+
   const binaryPath = await resolveGhostBinary();
+  _cachedBinaryPath = binaryPath;
 
   if (!binaryPath) {
+    _cachedConfig = null;
     return null;
   }
 
-  return {
+  _cachedConfig = {
     mcpServers: {
       ghostos: {
         type: "stdio",
@@ -33,6 +42,24 @@ export async function generateGhostOsMCPConfig(): Promise<GhostOsMCPConfig | nul
       },
     },
   };
+  return _cachedConfig;
+}
+
+/**
+ * Get the Ghost OS MCP server config as a flat Record for merging into combinedConfig.
+ * Returns empty object if Ghost OS is not installed.
+ * This is the primary integration point for chat-integration.ts and API routes.
+ */
+export async function getGhostOsServerConfig(): Promise<Record<string, { type: string; command: string; args: string[]; enabled: boolean }>> {
+  const config = await generateGhostOsMCPConfig();
+  if (!config) return {};
+  return config.mcpServers;
+}
+
+/** Clear the cached config (for testing or when installation state changes) */
+export function clearGhostOsConfigCache(): void {
+  _cachedBinaryPath = undefined;
+  _cachedConfig = undefined;
 }
 
 /**

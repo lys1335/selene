@@ -19,6 +19,7 @@ import {
   resolveGhostBinary,
   isVisionModelInstalled,
 } from "@/lib/ghost-os/setup";
+import { clearGhostOsConfigCache } from "@/lib/ghost-os/config";
 
 /**
  * Safely send IPC event to renderer, checking if sender is still alive.
@@ -71,6 +72,8 @@ export function registerGhostOsHandlers(_ctx: IpcHandlerContext): void {
   ipcMain.handle("ghostos:runSetup", async () => {
     debugLog("[GhostOS] Running setup...");
     const result = await runGhostSetup();
+    // Clear cached config so MCP pipeline re-detects after setup
+    clearGhostOsConfigCache();
     if (result.success) {
       debugLog("[GhostOS] Setup completed successfully");
     } else {

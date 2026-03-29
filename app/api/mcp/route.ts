@@ -10,6 +10,7 @@ import { MCPClientManager } from "@/lib/mcp/client-manager";
 import { ToolRegistry } from "@/lib/ai/tool-registry/registry";
 import { getActivePluginMCPServers, updatePluginMCPServerConfig } from "@/lib/plugins/registry";
 import type { MCPConfig, MCPServerConfig } from "@/lib/mcp/types";
+import { getGhostOsServerConfig, GHOST_OS_SERVER_NAME } from "@/lib/ghost-os/config";
 
 /**
  * GET /api/mcp
@@ -21,7 +22,18 @@ export async function GET() {
         const manager = MCPClientManager.getInstance();
 
         // Mask headers in server configs
-        const mcpServers = settings.mcpServers?.mcpServers || {};
+        let mcpServers = settings.mcpServers?.mcpServers || {};
+
+        // Auto-inject Ghost OS if installed and not already in user config
+        if (process.platform === "darwin" && !mcpServers[GHOST_OS_SERVER_NAME]) {
+            try {
+                const ghostConfig = await getGhostOsServerConfig();
+                if (Object.keys(ghostConfig).length > 0) {
+                    mcpServers = { ...ghostConfig, ...mcpServers } as Record<string, MCPServerConfig>;
+                }
+            } catch { /* Ghost OS not installed — skip */ }
+        }
+
         const maskedServers: Record<string, MCPServerConfig> = {};
 
         for (const [name, config] of Object.entries(mcpServers)) {

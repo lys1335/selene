@@ -11,6 +11,7 @@ import {
     type MCPToolLoadingPreference,
 } from "@/lib/ai/tool-registry/mcp-tool-adapter";
 import { loadSettings } from "@/lib/settings/settings-manager";
+import { getGhostOsServerConfig, GHOST_OS_SERVER_NAME } from "@/lib/ghost-os/config";
 
 /**
  * Result structure for MCP tool loading with loading mode separation
@@ -53,7 +54,20 @@ export async function loadMCPToolsForCharacter(
     const globalConfig = settings.mcpServers?.mcpServers || {};
     const metadata = character?.metadata as AgentMetadata | undefined;
     const agentConfig = metadata?.mcpServers?.mcpServers || {};
-    const combinedConfig = { ...globalConfig, ...agentConfig };
+    let combinedConfig = { ...globalConfig, ...agentConfig };
+
+    // Auto-inject Ghost OS MCP server if installed and not already configured
+    if (process.platform === "darwin" && !combinedConfig[GHOST_OS_SERVER_NAME]) {
+        try {
+            const ghostConfig = await getGhostOsServerConfig();
+            if (Object.keys(ghostConfig).length > 0) {
+                combinedConfig = { ...ghostConfig, ...combinedConfig } as typeof combinedConfig;
+                console.log("[MCP] Ghost OS auto-detected, injecting MCP server config");
+            }
+        } catch (error) {
+            console.warn("[MCP] Failed to detect Ghost OS:", error);
+        }
+    }
 
     // Get enabled servers and tools for this agent
     const enabledServers = metadata?.enabledMcpServers;

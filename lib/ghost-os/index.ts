@@ -26,6 +26,8 @@ export {
 // MCP config
 export {
   generateGhostOsMCPConfig,
+  getGhostOsServerConfig,
+  clearGhostOsConfigCache,
   GHOST_OS_SERVER_NAME,
   isGhostOsTool,
   isGhostOsActionTool,
