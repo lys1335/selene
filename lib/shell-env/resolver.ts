@@ -148,7 +148,7 @@ function resolveWindowsViaPs(): Record<string, string> | null {
             "$out = @{}",
             "[Environment]::GetEnvironmentVariables('Machine').GetEnumerator() | ForEach-Object { $out[$_.Key] = $_.Value }",
             "[Environment]::GetEnvironmentVariables('User').GetEnumerator() | ForEach-Object {",
-            "  if ($_.Key -eq 'Path') { $out['Path'] = $out['Path'] + ';' + $_.Value }",
+            "  if ($_.Key -eq 'Path') { if ($out['Path']) { $out['Path'] = $out['Path'] + ';' + $_.Value } else { $out['Path'] = $_.Value } }",
             "  else { $out[$_.Key] = $_.Value }",
             "}",
             "$out.GetEnumerator() | ForEach-Object { [Console]::Write(\"$($_.Key)=$($_.Value)`0\") }",

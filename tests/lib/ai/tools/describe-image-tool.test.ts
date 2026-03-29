@@ -32,16 +32,20 @@ describe("describeImage tool", () => {
     vi.restoreAllMocks();
   });
 
-  it("converts absolute PNG file paths to data URLs", async () => {
-    const fixturePath = process.platform === "win32"
-      ? path.join(os.tmpdir(), `describe-image-${Date.now()}.png`)
-      : "C:\\Users\\tester\\Desktop\\shot.png";
+  it("converts approved absolute media file paths to data URLs", async () => {
+    const upload = await saveBase64Image("data:image/png;base64,bW9jaw==", "describe-image-abs", "upload", "png");
 
+    const result = await imageToDataUrl(upload.filePath);
+
+    expect(result).toBe("data:image/png;base64,bW9jaw==");
+  });
+
+  it("rejects unapproved absolute file paths", async () => {
+    const fixturePath = path.join(os.tmpdir(), `describe-image-${Date.now()}.png`);
     writeFileSync(fixturePath, Buffer.from("mock"));
 
     try {
-      const result = await imageToDataUrl(fixturePath);
-      expect(result).toBe("data:image/png;base64,bW9jaw==");
+      await expect(imageToDataUrl(fixturePath)).rejects.toThrow("Only files under Selene's local media storage can be read");
     } finally {
       unlinkSync(fixturePath);
     }

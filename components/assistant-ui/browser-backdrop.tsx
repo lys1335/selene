@@ -145,10 +145,14 @@ export function BrowserBackdrop({ sessionId, className, onActiveChange }: Browse
       }
     };
 
-    // Foreground streaming bridge: ChromiumWorkspaceToolUI dispatches this
-    // when it renders as running, since background-task-progress events
-    // don't fire during foreground AI SDK streams.
-    const handleForegroundDetected = () => {
+    // Foreground streaming bridge: ChromiumWorkspaceToolUI dispatches active=true/false
+    // since background-task-progress events don't fire during foreground AI SDK streams.
+    const handleForegroundDetected = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { active?: unknown } | undefined;
+      if (typeof detail?.active === "boolean") {
+        setBrowserDetected(detail.active);
+        return;
+      }
       setBrowserDetected(true);
     };
 

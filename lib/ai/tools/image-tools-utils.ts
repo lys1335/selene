@@ -2,7 +2,7 @@ import { tool, jsonSchema, generateText } from "ai";
 import { readFileSync, existsSync } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { getFullPathFromMediaRef } from "@/lib/storage/local-storage";
+import { getFullPathFromMediaRef, getMediaStoragePath } from "@/lib/storage/local-storage";
 import { getVisionModel } from "@/lib/ai/providers";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
 
@@ -17,7 +17,15 @@ const IMAGE_MIME_TYPES: Record<string, string> = {
 const WINDOWS_DRIVE_PATH_RE = /^[a-zA-Z]:[\\/]/;
 const WINDOWS_UNC_PATH_RE = /^\\\\[^\\]+\\[^\\]+/;
 const ATTACHMENT_HELPER_TEXT_RE = /^\[Attachment:/;
-const DESCRIBE_IMAGE_SOURCE_HINT = "Expected a data URL, http(s) URL, /api/media/ URL, local-media:// reference, storage-relative path, or absolute file path.";
+const DESCRIBE_IMAGE_SOURCE_HINT = "Expected a data URL, http(s) URL, /api/media/ URL, local-media:// reference, storage-relative path, or an approved local media file path.";
+
+function isApprovedAbsoluteImagePath(absolutePath: string): boolean {
+  const storageRoot = path.resolve(getMediaStoragePath());
+  const resolvedPath = path.resolve(absolutePath);
+  const relativeToStorage = path.relative(storageRoot, resolvedPath);
+
+  return relativeToStorage === "" || (!relativeToStorage.startsWith("..") && !path.isAbsolute(relativeToStorage));
+}
 
 function inferImageMimeType(filePath: string): string {
   return IMAGE_MIME_TYPES[path.extname(filePath).toLowerCase()] || "image/png";
@@ -28,31 +36,51 @@ function toImageDataUrl(buffer: Buffer, filePath: string): string {
 }
 
 function readAbsoluteImageFile(absolutePath: string): string {
-  if (!existsSync(absolutePath)) {
-    throw new Error(`Local file not found: ${absolutePath}`);
+  const resolvedPath = path.resolve(absolutePath);
+
+  if (!isApprovedAbsoluteImagePath(resolvedPath)) {
+    throw new Error(
+      `Unsupported local image path for describeImage: ${absolutePath}. ` +
+      "Only files under Selene's local media storage can be read.",
+    );
   }
 
-  return toImageDataUrl(readFileSync(absolutePath), absolutePath);
+  if (!existsSync(resolvedPath)) {
+    throw new Error(`Local file not found: ${resolvedPath}`);
+  }
+
+  return toImageDataUrl(readFileSync(resolvedPath), resolvedPath);
 }
 
 function resolveAbsoluteImagePath(imageSource: string): string | undefined {
+  let resolvedPath: string | undefined;
+
   if (imageSource.startsWith("file://")) {
     try {
-      return fileURLToPath(imageSource);
+      resolvedPath = fileURLToPath(imageSource);
     } catch {
       throw new Error(`Invalid file URL: ${imageSource}`);
     }
-  }
-
-  if (
+  } else if (
     imageSource.startsWith("/")
     || WINDOWS_DRIVE_PATH_RE.test(imageSource)
     || WINDOWS_UNC_PATH_RE.test(imageSource)
   ) {
-    return imageSource;
+    resolvedPath = imageSource;
   }
 
-  return undefined;
+  if (!resolvedPath) {
+    return undefined;
+  }
+
+  if (!isApprovedAbsoluteImagePath(resolvedPath)) {
+    throw new Error(
+      `Unsupported local image path for describeImage: ${imageSource}. ` +
+      "Only files under Selene's local media storage can be read.",
+    );
+  }
+
+  return resolvedPath;
 }
 
 // ==========================================================================
@@ -109,9 +137,12 @@ export async function imageToDataUrl(imageSource: string): Promise<string> {
     );
   }
 
-  const storagePath = getFullPathFromMediaRef(imageSource);
-  if (storagePath) {
-    return readAbsoluteImageFile(storagePath);
+  // Explicit storage-backed media refs.
+  if (imageSource.startsWith("/api/media/") || imageSource.startsWith("local-media://")) {
+    const storagePath = getFullPathFromMediaRef(imageSource);
+    if (storagePath) {
+      return readAbsoluteImageFile(storagePath);
+    }
   }
 
   // Remote URL - fetch and convert
@@ -130,6 +161,12 @@ export async function imageToDataUrl(imageSource: string): Promise<string> {
   const absolutePath = resolveAbsoluteImagePath(imageSource);
   if (absolutePath) {
     return readAbsoluteImageFile(absolutePath);
+  }
+
+  // Storage-relative paths remain supported after excluding true absolute paths.
+  const storagePath = getFullPathFromMediaRef(imageSource);
+  if (storagePath) {
+    return readAbsoluteImageFile(storagePath);
   }
 
   throw new Error(

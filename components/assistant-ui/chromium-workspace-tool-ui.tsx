@@ -516,9 +516,12 @@ export const ChromiumWorkspaceToolUI: ToolCallContentPartComponent = memo(({
   // background-task-progress events only fire in background mode, so foreground streams
   // need this bridge to activate the workspace panel.
   useEffect(() => {
-    if (isRunning && !isClose && typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("browser-tool-detected"));
-    }
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("browser-tool-detected", {
+        detail: { active: isRunning && !isClose },
+      })
+    );
   }, [isRunning, isClose]);
 
   // In glass/compact mode: render a single-line row for non-close/non-replay completed actions

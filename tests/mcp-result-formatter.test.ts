@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { clearSession } from "@/lib/ai/truncated-content-store";
 
 const mocks = vi.hoisted(() => ({
   saveBase64Image: vi.fn().mockResolvedValue({
