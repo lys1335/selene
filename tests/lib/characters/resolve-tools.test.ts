@@ -296,8 +296,8 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 10 utility + 1 workspace + 1 vectorSearch + 1 webSearch + 1 chromiumWorkspace = 20
-      expect(result.enabledTools).toHaveLength(20);
+      // 6 core + 10 utility + 1 workspace + 1 vectorSearch + 1 webSearch + 1 chromiumWorkspace + 1 ghostOs = 21
+      expect(result.enabledTools).toHaveLength(21);
       expect(result.enabledTools).toContain("workspace");
     });
 
@@ -310,8 +310,8 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 10 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace = 19
-      expect(result.enabledTools).toHaveLength(19);
+      // 6 core + 10 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace + 1 ghostOs = 20
+      expect(result.enabledTools).toHaveLength(20);
     });
   });
 

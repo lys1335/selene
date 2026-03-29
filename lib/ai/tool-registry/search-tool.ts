@@ -111,8 +111,9 @@ const toolSearchSchema = jsonSchema<ToolSearchInput>({
         "search",
         "mcp",
         "browser",
+        "computer-use",
       ],
-      description: "Optional category filter to narrow down results. Use 'mcp' for MCP server tools. Use 'browser' for the embedded Chromium workspace.",
+      description: "Optional category filter to narrow down results. Use 'mcp' for MCP server tools. Use 'browser' for the embedded Chromium workspace. Use 'computer-use' for Ghost OS macOS desktop automation.",
     },
     limit: {
       type: "number",

@@ -25,6 +25,7 @@ import { PreferencesSection } from "./preferences-section";
 import { MemorySection } from "./memory-section";
 import { ApiKeysSection } from "./api-keys-section";
 import { ModelsSection } from "./models-section";
+import { GhostOsSection } from "./ghost-os-section";
 import { LocalEmbeddingModelSelector } from "./embedding-model-selector";
 import { ShortcutRecorder } from "@/components/settings/shortcut-recorder";
 import { getElectronAPI, type PermissionCheckResult } from "@/lib/electron/types";
@@ -590,6 +591,9 @@ export function SettingsPanel({
           </p>
         </div>
         <MCPSettings />
+        <div className="mt-6 border-t pt-6">
+          <GhostOsSection />
+        </div>
       </div>
     );
   }
