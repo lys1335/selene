@@ -7,13 +7,19 @@ interface ToolStatusPartLike {
 }
 
 export function getToolBadgeStatus(part: ToolStatusPartLike): ToolCallBadgeStatus {
-  const result = part.result as Record<string, unknown> | undefined;
+  if (part.isError) return "error";
+
+  const hasResult = part.result != null;
+  const result =
+    hasResult && typeof part.result === "object"
+      ? (part.result as Record<string, unknown>)
+      : undefined;
   const status = typeof result?.status === "string" ? result.status.toLowerCase() : undefined;
   const resultIndicatesError =
     status === "error" || status === "failed" || status === "denied" || typeof result?.error === "string";
 
-  if (result !== undefined) {
-    if (part.isError || resultIndicatesError) return "error";
+  if (hasResult) {
+    if (resultIndicatesError) return "error";
     if (status === "processing") return "running";
     return "completed";
   }

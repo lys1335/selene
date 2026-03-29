@@ -37,7 +37,7 @@ export async function generateGhostOsMCPConfig(): Promise<GhostOsMCPConfig | nul
       ghostos: {
         type: "stdio",
         command: binaryPath,
-        args: ["--mcp"],
+        args: ["mcp"],
         enabled: true,
       },
     },

@@ -89,23 +89,23 @@ export function registerGhostOsHandlers(_ctx: IpcHandlerContext): void {
   ipcMain.handle("ghostos:downloadVisionModel", async (event) => {
     debugLog("[GhostOS] Starting vision model download...");
 
-    const binaryPath = await resolveGhostBinary();
-    if (!binaryPath) {
-      return {
-        success: false,
-        error: "Ghost OS binary not found",
-      };
-    }
-
-    // Emit initial progress
-    safeSend(event.sender, "model:downloadProgress", {
-      modelId: "ghostos-showui-2b",
-      status: "downloading",
-      progress: 0,
-      file: "ShowUI-2B",
-    });
-
     try {
+      const binaryPath = await resolveGhostBinary();
+      if (!binaryPath) {
+        return {
+          success: false,
+          error: "Ghost OS binary not found",
+        };
+      }
+
+      // Emit initial progress
+      safeSend(event.sender, "model:downloadProgress", {
+        modelId: "ghostos-showui-2b",
+        status: "downloading",
+        progress: 0,
+        file: "ShowUI-2B",
+      });
+
       const child = execFile(binaryPath, ["setup", "--vision"], {
         timeout: 600000, // 10 minutes for large model download
         env: {

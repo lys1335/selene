@@ -6,9 +6,119 @@
  */
 
 import { getFullPath, saveBase64Image, saveBase64Video } from "@/lib/storage/local-storage";
+import { MAX_STREAM_TOOL_RESULT_TOKENS } from "@/lib/ai/tool-result-stream-guard";
+import { limitToolOutput } from "@/lib/ai/output-limiter";
 import { getRunContext } from "@/lib/observability/run-context";
 const BASE64_PLACEHOLDER = "[Base64 data removed to prevent context bloat]";
 const MAX_SANITIZE_DEPTH = 6;
+
+function applyMcpTextLimit(
+    formattedResult: Record<string, unknown>,
+    toolName: string,
+    sessionId?: string
+): Record<string, unknown> {
+    const limitResult = limitToolOutput(formattedResult, toolName, sessionId, {
+        maxTokens: MAX_STREAM_TOOL_RESULT_TOKENS,
+    });
+
+    if (!limitResult.limited) {
+        return formattedResult;
+    }
+
+    const limitedResult: Record<string, unknown> = {
+        ...formattedResult,
+        isTruncated: true,
+        truncated: true,
+    };
+
+    if (typeof limitedResult.content === "string") {
+        limitedResult.content = limitResult.output;
+    }
+    if (typeof limitedResult.text === "string") {
+        limitedResult.text = limitResult.output;
+    }
+    if (typeof limitedResult.output === "string") {
+        limitedResult.output = limitResult.output;
+    }
+    if (typeof limitedResult.error === "string") {
+        limitedResult.error = limitResult.output;
+    }
+
+    if (limitResult.contentId) {
+        limitedResult.truncatedContentId = limitResult.contentId;
+    }
+
+    return limitedResult;
+}
+
+function applyMcpStringLimit(
+    formattedResult: Record<string, unknown>,
+    field: "content" | "error",
+    toolName: string,
+    sessionId?: string
+): Record<string, unknown> {
+    const value = formattedResult[field];
+    if (typeof value !== "string") {
+        return formattedResult;
+    }
+
+    const limitResult = limitToolOutput(value, toolName, sessionId, {
+        maxTokens: MAX_STREAM_TOOL_RESULT_TOKENS,
+    });
+
+    if (!limitResult.limited) {
+        return formattedResult;
+    }
+
+    return {
+        ...formattedResult,
+        [field]: limitResult.output,
+        isTruncated: true,
+        truncated: true,
+        ...(limitResult.contentId ? { truncatedContentId: limitResult.contentId } : {}),
+    };
+}
+
+function finalizeMcpResult(
+    formattedResult: Record<string, unknown>,
+    toolName: string,
+    sessionId?: string
+): Record<string, unknown> {
+    if (formattedResult.status === "error") {
+        return applyMcpStringLimit(formattedResult, "error", toolName, sessionId);
+    }
+
+    if (typeof formattedResult.content === "string" || typeof formattedResult.text === "string") {
+        return applyMcpTextLimit(formattedResult, toolName, sessionId);
+    }
+
+    return formattedResult;
+}
+
+function finalizeMcpContent(
+    baseResult: Record<string, unknown>,
+    toolName: string,
+    sessionId?: string
+): Record<string, unknown> {
+    return finalizeMcpResult(baseResult, toolName, sessionId);
+}
+
+function buildBaseResult(
+    status: "success" | "error",
+    serverName: string,
+    toolName: string
+): Record<string, unknown> {
+    return {
+        status,
+        source: "mcp",
+        server: serverName,
+        tool: toolName,
+        metadata: {
+            server: serverName,
+            tool: toolName,
+        },
+    };
+}
 
 function parseDataUrl(value: string): { mimeType: string; data: string } | null {
     const match = value.match(/^data:([^;]+);base64,(.+)$/);
@@ -88,47 +198,30 @@ export async function formatMCPToolResult(
 ): Promise<Record<string, unknown>> {
     const sessionId = options.sessionId ?? getRunContext()?.sessionId;
     if (isError) {
-        return {
-            status: "error",
-            source: "mcp",
-            server: serverName,
-            tool: toolName,
-            metadata: {
-                server: serverName,
-                tool: toolName,
-            },
+        return finalizeMcpResult({
+            ...buildBaseResult("error", serverName, toolName),
             error: typeof result === "string" ? await sanitizeString(result, sessionId) : JSON.stringify(result),
-        };
+        }, toolName, sessionId);
     }
 
     // Handle different result types
     if (typeof result === "string") {
-        return {
-            status: "success",
-            source: "mcp",
-            server: serverName,
-            tool: toolName,
-            metadata: {
-                server: serverName,
-                tool: toolName,
-            },
+        return finalizeMcpContent({
+            ...buildBaseResult("success", serverName, toolName),
             content: await sanitizeString(result, sessionId),
-        };
+        }, toolName, sessionId);
     }
 
     if (Array.isArray(result)) {
-        return {
-            status: "success",
-            source: "mcp",
-            server: serverName,
-            tool: toolName,
+        return finalizeMcpContent({
+            ...buildBaseResult("success", serverName, toolName),
             metadata: {
                 server: serverName,
                 tool: toolName,
                 itemCount: result.length,
             },
             content: await sanitizeValue(result, sessionId),
-        };
+        }, toolName, sessionId);
     }
 
     if (typeof result === "object" && result !== null) {
@@ -178,43 +271,22 @@ export async function formatMCPToolResult(
             }
             const textContent = textParts.join("\n");
 
-            return {
-                status: "success",
-                source: "mcp",
-                server: serverName,
-                tool: toolName,
-                metadata: {
-                    server: serverName,
-                    tool: toolName,
-                },
+            return finalizeMcpContent({
+                ...buildBaseResult("success", serverName, toolName),
                 ...(images.length > 0 ? { images } : {}),
                 ...(textContent ? { text: textContent } : {}),
                 content: textContent || sanitizedContent,
-            };
+            }, toolName, sessionId);
         }
 
-        return {
-            status: "success",
-            source: "mcp",
-            server: serverName,
-            tool: toolName,
-            metadata: {
-                server: serverName,
-                tool: toolName,
-            },
+        return finalizeMcpContent({
+            ...buildBaseResult("success", serverName, toolName),
             content: await sanitizeValue(result, sessionId),
-        };
+        }, toolName, sessionId);
     }
 
-    return {
-        status: "success",
-        source: "mcp",
-        server: serverName,
-        tool: toolName,
-        metadata: {
-            server: serverName,
-            tool: toolName,
-        },
+    return finalizeMcpContent({
+        ...buildBaseResult("success", serverName, toolName),
         content: String(result),
-    };
+    }, toolName, sessionId);
 }

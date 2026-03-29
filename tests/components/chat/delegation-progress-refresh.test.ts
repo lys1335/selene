@@ -47,7 +47,7 @@ describe("delegated progress refresh gating", () => {
     ).toBe(true);
   });
 
-  it("reloads when one of several parallel delegations completes while siblings are still running", () => {
+  it("reloads when task progress contains delegateToSubagent activity", () => {
     const detail = makeProgressEvent({
       progressContent: [
         {
