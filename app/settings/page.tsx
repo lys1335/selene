@@ -417,6 +417,8 @@ export default function SettingsPage() {
 
   const [claudeCodePasteMode, setClaudeCodePasteMode] = useState(false);
   const [claudeCodeAuthSuccess, setClaudeCodeAuthSuccess] = useState(false);
+  const [claudeCodeBrowserOpened, setClaudeCodeBrowserOpened] = useState(true);
+  const [claudeCodeDiagnosticOutput, setClaudeCodeDiagnosticOutput] = useState<string[]>([]);
 
   const handleClaudeCodeLogin = async () => {
     setClaudecodeLoading(true);
@@ -440,6 +442,10 @@ export default function SettingsPage() {
         } else {
           window.open(authData.url, "_blank");
         }
+        setClaudeCodeBrowserOpened(true);
+      } else {
+        setClaudeCodeBrowserOpened(false);
+        setClaudeCodeDiagnosticOutput(authData.output || []);
       }
 
       // Show the verification panel while auth is completed via Agent SDK.
@@ -753,6 +759,8 @@ export default function SettingsPage() {
               onClaudeCodeLogout={handleClaudeCodeLogout}
               claudeCodePasteMode={claudeCodePasteMode}
               claudeCodeAuthSuccess={claudeCodeAuthSuccess}
+              claudeCodeBrowserOpened={claudeCodeBrowserOpened}
+              claudeCodeDiagnosticOutput={claudeCodeDiagnosticOutput}
               onClaudeCodePasteSubmit={handleClaudeCodePasteSubmit}
               onClaudeCodePasteCancel={() => {
                 setClaudeCodePasteMode(false);

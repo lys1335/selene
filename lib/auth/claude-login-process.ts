@@ -2,6 +2,7 @@ import { spawn, ChildProcess } from "child_process";
 import path from "path";
 import { isElectronProduction } from "@/lib/utils/environment";
 import { buildEnvironmentForTarget } from "@/lib/process-env/policy";
+import { consolidatePathKeys } from "@/lib/utils/windows-env";
 
 // Resolved lazily so process.cwd() is evaluated at runtime, not build time.
 // In production Electron builds, node_modules live under resourcesPath/standalone/.
@@ -33,8 +34,18 @@ function fileExistsAndExecutable(filePath: string): boolean {
 }
 
 function getSystemNodeBinary(nodeName: string): string | null {
-  const pathEntries = (process.env.PATH || process.env.Path || "").split(path.delimiter).filter(Boolean);
   const isWindows = process.platform === "win32";
+
+  // On Windows, PATH and Path can coexist with different segments.
+  // Use consolidatePathKeys to merge them properly instead of picking one.
+  let resolvedPath: string;
+  if (isWindows) {
+    const envCopy = { ...process.env } as Record<string, string | undefined>;
+    resolvedPath = consolidatePathKeys(envCopy);
+  } else {
+    resolvedPath = process.env.PATH || "";
+  }
+  const pathEntries = resolvedPath.split(path.delimiter).filter(Boolean);
   const fs = require("fs") as typeof import("fs");
 
   // Platform-specific well-known install directories
@@ -100,9 +111,10 @@ function getSystemNodeBinary(nodeName: string): string | null {
         ...(process.env.NVM_HOME ? [process.env.NVM_HOME] : []),
         ...(process.env.NVM_SYMLINK ? [process.env.NVM_SYMLINK] : []),
         path.join(appData, "nvm"),
-        // fnm on Windows
+        // fnm on Windows — check multishells, aliases, and FNM_MULTISHELL_PATH
         path.join(localAppData, "fnm_multishells"),
         path.join(appData, "fnm", "aliases", "default"),
+        ...(process.env.FNM_MULTISHELL_PATH ? [process.env.FNM_MULTISHELL_PATH] : []),
         // volta on Windows
         path.join(localAppData, "Volta", "bin"),
       );
@@ -136,6 +148,22 @@ function getSystemNodeBinary(nodeName: string): string | null {
         // nvm not installed
       }
     }
+
+    // fnm on Windows: check node-versions directory
+    // Layout: %APPDATA%\fnm\node-versions\v20.11.0\installation\node.exe
+    if (isWindows) {
+      const appData = process.env.APPDATA || path.join(home, "AppData", "Roaming");
+      const fnmVersionsDir = path.join(appData, "fnm", "node-versions");
+      try {
+        const versions = fs.readdirSync(fnmVersionsDir).sort().reverse();
+        for (const ver of versions) {
+          const candidate = path.join(fnmVersionsDir, ver, "installation", nodeName);
+          if (fileExistsAndExecutable(candidate)) return candidate;
+        }
+      } catch {
+        // fnm not installed
+      }
+    }
   }
 
   return null;
@@ -153,17 +181,27 @@ export function getNodeBinary(): string {
   const nodeName = process.platform === "win32" ? "node.exe" : "node";
 
   const systemNode = getSystemNodeBinary(nodeName);
-  if (systemNode) return systemNode;
+  if (systemNode) {
+    console.log(`[claude-login] Node binary resolved: ${systemNode} (system)`);
+    return systemNode;
+  }
 
   const resourcesPath = process.env.ELECTRON_RESOURCES_PATH;
   if (resourcesPath) {
     const candidate = path.join(resourcesPath, "standalone", "node_modules", ".bin", nodeName);
-    if (fileExistsAndExecutable(candidate)) return candidate;
+    if (fileExistsAndExecutable(candidate)) {
+      console.log(`[claude-login] Node binary resolved: ${candidate} (bundled)`);
+      return candidate;
+    }
   }
 
   const cwdCandidate = path.join(process.cwd(), "node_modules", ".bin", nodeName);
-  if (fileExistsAndExecutable(cwdCandidate)) return cwdCandidate;
+  if (fileExistsAndExecutable(cwdCandidate)) {
+    console.log(`[claude-login] Node binary resolved: ${cwdCandidate} (cwd)`);
+    return cwdCandidate;
+  }
 
+  console.warn(`[claude-login] No system/bundled node found, falling back to process.execPath: ${process.execPath}`);
   return process.execPath;
 }
 
@@ -248,7 +286,7 @@ async function startClaudeLoginProcessOnce(
   });
 
   const spawnEnv = { ...sdkEnv } as NodeJS.ProcessEnv;
-  delete spawnEnv.CLAUDECODE; // prevent "nested session" detection
+  // CLAUDECODE is already removed by CLAUDE_SDK_BLOCKED_KEYS in sanitizeEnvironment
   if (useElectronRunAsNode) {
     spawnEnv.ELECTRON_RUN_AS_NODE = "1";
   }
