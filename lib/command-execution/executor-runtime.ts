@@ -6,6 +6,7 @@
  */
 
 import { existsSync } from "fs";
+import { tmpdir } from "os";
 import { basename, isAbsolute, join } from "path";
 import {
     buildEnvironmentForTarget,

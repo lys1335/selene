@@ -9,12 +9,19 @@ import type { GhostOsMCPConfig } from "./types";
 import { resolveGhostBinary } from "./setup";
 
 /**
+ * Get the Ghost OS MCP server name used for tool ID generation.
+ * This must match the key in the mcpServers config.
+ */
+export const GHOST_OS_SERVER_NAME = "ghostos";
+
+/**
  * Cached Ghost OS binary path and config.
  * Avoids shelling out to `which` on every chat request / API call.
  * Cache is per-process and resets on restart.
  */
 let _cachedBinaryPath: string | null | undefined; // undefined = not yet checked
 let _cachedConfig: GhostOsMCPConfig | null | undefined;
+let _resolvingConfigPromise: Promise<GhostOsMCPConfig | null> | undefined;
 
 /**
  * Generate MCP server configuration for Ghost OS.
