@@ -19,6 +19,7 @@ import {
   Clock,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { useChatSessionId } from "@/components/chat-provider";
 import { useBrowserActive } from "./browser-active-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -505,6 +506,7 @@ export const ChromiumWorkspaceToolUI: ToolCallContentPartComponent = memo(({
   args,
   result,
 }) => {
+  const sessionId = useChatSessionId();
   const { isBrowserActive } = useBrowserActive();
   const isRunning = result === undefined;
   const parsed = result as ChromiumWorkspaceResult | undefined;
@@ -519,7 +521,7 @@ export const ChromiumWorkspaceToolUI: ToolCallContentPartComponent = memo(({
     if (typeof window === "undefined") return;
     window.dispatchEvent(
       new CustomEvent("browser-tool-detected", {
-        detail: { active: isRunning && !isClose },
+        detail: { active: isRunning && !isClose, sessionId },
       })
     );
   }, [isRunning, isClose]);

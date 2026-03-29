@@ -99,7 +99,18 @@ function main(): void {
   let failed = 0;
 
   for (const check of checks) {
-    const fileContent = readUtf8(check.filePath);
+    let fileContent: string;
+    try {
+      fileContent = readUtf8(check.filePath);
+    } catch (error) {
+      failed += 1;
+      console.error(`FAIL ${check.id}`);
+      console.error(`  ${check.description}`);
+      console.error(`  File: ${check.filePath}`);
+      console.error(`  Read error: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
+
     const missing = check.requiredSnippets.filter((snippet) => !fileContent.includes(snippet));
 
     if (missing.length === 0) {

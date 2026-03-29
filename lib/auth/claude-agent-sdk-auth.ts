@@ -32,16 +32,13 @@ export function getSdkExecutableConfig(): {
   });
 
   if (isProduction && source === "shell") {
-    process.env.PATH = env.PATH || process.env.PATH;
+    env.PATH = env.PATH || process.env.PATH;
     console.log("[Agent SDK] Production mode - using shell-resolved PATH");
   } else if (isProduction) {
     const nodeBin = getNodeBinary();
     const nodeDir = path.dirname(nodeBin);
     if (!env.PATH?.includes(nodeDir)) {
       env.PATH = `${nodeDir}${path.delimiter}${env.PATH || ""}`;
-    }
-    if (!process.env.PATH?.includes(nodeDir)) {
-      process.env.PATH = `${nodeDir}${path.delimiter}${process.env.PATH || ""}`;
     }
     console.log("[Agent SDK] Production mode - fallback node binary:", nodeBin);
   }
