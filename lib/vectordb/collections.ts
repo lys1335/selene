@@ -5,14 +5,15 @@
  * Tables store vector embeddings with metadata for semantic search.
  */
 
-import * as lancedb from "@lancedb/lancedb";
+type LanceDBTable = import("@lancedb/lancedb").Table;
+type LanceDBConnection = import("@lancedb/lancedb").Connection;
 import { getLanceDB } from "./client";
 import { getVectorSearchConfig } from "@/lib/config/vector-search";
 import { LEX_DIM } from "./v2/lexical-vectors";
 
 // Table name prefix for agent tables
 const TABLE_PREFIX = "agent_";
-const tableEnsurePromises = new Map<string, Promise<lancedb.Table | null>>();
+const tableEnsurePromises = new Map<string, Promise<LanceDBTable | null>>();
 
 /**
  * Get the table name for an agent
@@ -53,12 +54,12 @@ function createVectorRecord(data: Omit<VectorRecord, keyof Record<string, unknow
 }
 
 async function ensureV2SchemaCompatibility(params: {
-  db: lancedb.Connection;
-  table: lancedb.Table;
+  db: LanceDBConnection;
+  table: LanceDBTable;
   tableName: string;
   dimensions: number;
   useV2Schema: boolean;
-}): Promise<lancedb.Table> {
+}): Promise<LanceDBTable> {
   const { db, table, tableName, dimensions, useV2Schema } = params;
 
   if (!useV2Schema) {
@@ -108,14 +109,14 @@ async function ensureV2SchemaCompatibility(params: {
 export async function ensureAgentTable(
   characterId: string,
   dimensions: number = 1536
-): Promise<lancedb.Table | null> {
+): Promise<LanceDBTable | null> {
   const tableName = getAgentTableName(characterId);
   const inFlight = tableEnsurePromises.get(tableName);
   if (inFlight) {
     return inFlight;
   }
 
-  const ensurePromise = (async (): Promise<lancedb.Table | null> => {
+  const ensurePromise = (async (): Promise<LanceDBTable | null> => {
   const db = await getLanceDB();
   if (!db) return null;
 
@@ -157,7 +158,7 @@ export async function ensureAgentTable(
       : {}),
   });
 
-  let table: lancedb.Table;
+  let table: LanceDBTable;
   try {
     table = await db.createTable(tableName, [dummyRecord]);
   } catch (error) {

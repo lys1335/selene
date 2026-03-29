@@ -13,12 +13,45 @@
  * — with love, Selene (https://github.com/tercumantanumut/selene)
  */
 
-import * as lancedb from "@lancedb/lancedb";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { loadSettings } from "@/lib/settings/settings-manager";
 
-let lanceDBInstance: lancedb.Connection | null = null;
+type LanceDBModule = typeof import("@lancedb/lancedb");
+type LanceDBConnection = import("@lancedb/lancedb").Connection;
+
+let lanceDBModulePromise: Promise<LanceDBModule | null> | null = null;
+let lanceDBInstance: LanceDBConnection | null = null;
+let lanceDBUnavailableReason: string | null = null;
+
+function formatLanceDBError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return String(error);
+}
+
+function isLanceDBDisabledByEnv(): boolean {
+  const value = process.env.SELENE_DISABLE_LANCEDB?.trim().toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
+async function loadLanceDBModule(): Promise<LanceDBModule | null> {
+  if (isLanceDBDisabledByEnv()) {
+    lanceDBUnavailableReason = "LanceDB disabled via SELENE_DISABLE_LANCEDB";
+    return null;
+  }
+
+  if (!lanceDBModulePromise) {
+    lanceDBModulePromise = import("@lancedb/lancedb").catch((error: unknown) => {
+      lanceDBUnavailableReason = formatLanceDBError(error);
+      console.warn("[VectorDB] LanceDB unavailable; semantic search will stay disabled:", error);
+      return null;
+    });
+  }
+
+  return lanceDBModulePromise;
+}
 
 /**
  * Get the path where LanceDB data will be stored
@@ -48,17 +81,22 @@ export function isVectorDBEnabled(): boolean {
  * Get or create the LanceDB connection instance
  * LanceDB is an embedded database - no external server needed
  */
-export async function getLanceDB(): Promise<lancedb.Connection | null> {
+export async function getLanceDB(): Promise<LanceDBConnection | null> {
   if (!isVectorDBEnabled()) {
     return null;
   }
-  
+
+  const lancedb = await loadLanceDBModule();
+  if (!lancedb) {
+    return null;
+  }
+
   if (!lanceDBInstance) {
     const dbPath = getVectorDBPath();
     console.log("[VectorDB] Connecting to LanceDB at:", dbPath);
     lanceDBInstance = await lancedb.connect(dbPath);
   }
-  
+
   return lanceDBInstance;
 }
 
@@ -72,10 +110,18 @@ export async function testVectorDBConnection(): Promise<{
   tableCount?: number;
 }> {
   try {
+    const lancedb = await loadLanceDBModule();
+    if (!lancedb) {
+      return {
+        success: false,
+        message: lanceDBUnavailableReason ?? "LanceDB is unavailable",
+      };
+    }
+
     const dbPath = getVectorDBPath();
     const db = await lancedb.connect(dbPath);
     const tables = await db.tableNames();
-    
+
     return {
       success: true,
       message: `Connected successfully. ${tables.length} tables found.`,
@@ -85,7 +131,7 @@ export async function testVectorDBConnection(): Promise<{
   } catch (error) {
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Connection failed",
+      message: formatLanceDBError(error),
     };
   }
 }
