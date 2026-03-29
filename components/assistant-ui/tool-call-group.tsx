@@ -21,6 +21,7 @@ import {
   type LiveToolPhase,
 } from "./tool-live-status";
 import { getCanonicalToolName } from "./tool-name-utils";
+import { getToolBadgeStatus } from "./tool-status";
 
 type ToolCallPart = Extract<MessagePartState, { type: "tool-call" }>;
 type ToolCallPartLike = ToolCallPart & {
@@ -93,27 +94,6 @@ function getResultCount(result: unknown): number | null {
   if (typeof record.matchCount === "number") return record.matchCount;
 
   return null;
-}
-
-function getStatus(part: ToolCallPartLike): ToolCallBadgeStatus {
-  const result = part.result as Record<string, unknown> | undefined;
-  const status = typeof result?.status === "string" ? result.status.toLowerCase() : undefined;
-  const resultIndicatesError =
-    status === "error" || status === "failed" || status === "denied" || typeof result?.error === "string";
-
-  // When a result exists, trust the result content over framework-level signals.
-  // part.status.type === "incomplete" means the *stream* was interrupted, not
-  // that the *tool* failed.  If we already have the result, the tool is done.
-  if (result !== undefined) {
-    if (part.isError || resultIndicatesError) return "error";
-    if (status === "processing") return "running";
-    return "completed";
-  }
-
-  // No result yet — fall back to framework signals
-  if (part.status?.type === "incomplete") return "error";
-  if (part.status?.type === "running" || part.status?.type === "requires-action") return "running";
-  return "running";
 }
 
 function extractMediaFromResult(result: unknown): Array<{ type: "image" | "video"; url: string }> {
@@ -255,7 +235,7 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
         : t.has(part.toolName)
           ? t(part.toolName)
           : canonicalToolName;
-      const canonicalStatus = getStatus(partLike);
+      const canonicalStatus = getToolBadgeStatus(partLike);
       // Always read liveStatus — even for completed tools — so elapsedMs and steps survive past completion.
       const liveStatus = partLike.toolCallId ? liveStatuses[partLike.toolCallId] : undefined;
       // When the tool has a result (DB-persisted), trust canonical status over

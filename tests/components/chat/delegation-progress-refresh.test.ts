@@ -47,6 +47,57 @@ describe("delegated progress refresh gating", () => {
     ).toBe(true);
   });
 
+  it("reloads when one of several parallel delegations completes while siblings are still running", () => {
+    const detail = makeProgressEvent({
+      progressContent: [
+        {
+          type: "tool-call",
+          toolCallId: "toolu_delegate_1",
+          toolName: "delegateToSubagent",
+          state: "input-available",
+          active: true,
+          args: { action: "start", delegationId: "del-1" },
+        },
+        {
+          type: "tool-result",
+          toolCallId: "toolu_delegate_1",
+          toolName: "delegateToSubagent",
+          state: "output-available",
+          result: {
+            delegationId: "del-1",
+            completed: true,
+            running: false,
+          },
+        },
+        {
+          type: "tool-call",
+          toolCallId: "toolu_delegate_2",
+          toolName: "delegateToSubagent",
+          state: "input-available",
+          active: true,
+          args: { action: "start", delegationId: "del-2" },
+        },
+        {
+          type: "tool-call",
+          toolCallId: "toolu_delegate_3",
+          toolName: "delegateToSubagent",
+          state: "input-available",
+          active: true,
+          args: { action: "start", delegationId: "del-3" },
+        },
+      ],
+    });
+
+    expect(
+      shouldReloadSessionFromTaskProgress({
+        detail,
+        sessionId: "session-parent-1",
+        isChannelSession: false,
+        isProcessingInBackground: false,
+      })
+    ).toBe(true);
+  });
+
   it("does not reload unrelated sessions for delegated task progress", () => {
     const detail = makeProgressEvent({
       progressContent: [

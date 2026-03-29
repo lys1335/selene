@@ -6,6 +6,7 @@ import {
   shouldShowIdleThinking,
   SYNTHETIC_THINKING_IDLE_DELAY_MS,
 } from "@/components/assistant-ui/thread-message-activity";
+import { getToolBadgeStatus } from "@/components/assistant-ui/tool-status";
 
 describe("thread message activity helpers", () => {
   it("treats running messages without visible text as initial thinking", () => {
@@ -80,5 +81,34 @@ describe("thread message activity helpers", () => {
 
     expect(after).not.toBe(before);
     expect(after).toContain("Final answer");
+  });
+});
+
+describe("getToolBadgeStatus", () => {
+  it("keeps unresolved tool calls running when the assistant message is incomplete", () => {
+    expect(
+      getToolBadgeStatus({
+        status: { type: "incomplete" },
+      })
+    ).toBe("running");
+  });
+
+  it("still marks unresolved tool calls running when sibling delegations have settled", () => {
+    expect(
+      getToolBadgeStatus({
+        toolCallId: "delegate-2",
+        toolName: "delegateToSubagent",
+        status: { type: "incomplete" },
+      })
+    ).toBe("running");
+
+    expect(
+      getToolBadgeStatus({
+        toolCallId: "delegate-1",
+        toolName: "delegateToSubagent",
+        status: { type: "complete" },
+        result: { completed: true },
+      })
+    ).toBe("completed");
   });
 });
