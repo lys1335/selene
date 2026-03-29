@@ -26,6 +26,13 @@ function buildSettings(overrides: Partial<AppSettings> = {}): AppSettings {
   } as AppSettings;
 }
 
+/**
+ * Ghost OS is conditionally added on macOS only (process.platform === "darwin").
+ * Tests run on CI (Linux) won't include it. We detect and adjust counts accordingly.
+ */
+const isMacOS = process.platform === "darwin";
+const GHOST_OS_TOOL_COUNT = isMacOS ? 1 : 0;
+
 describe("resolveSeleneTemplateTools", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -277,8 +284,10 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 10 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace + 1 ghostOs (macOS) = 20 tools minimum
-      expect(result.enabledTools.length).toBeGreaterThanOrEqual(19);
+      // 6 core + 10 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace = 19 base
+      // + 1 ghostOs on macOS = 20
+      const expectedMin = 19 + GHOST_OS_TOOL_COUNT;
+      expect(result.enabledTools.length).toBeGreaterThanOrEqual(expectedMin);
       expect(result.enabledTools).not.toContain("vectorSearch");
       expect(result.enabledTools).toContain("webSearch");
     });
@@ -288,7 +297,7 @@ describe("resolveSeleneTemplateTools", () => {
   // Tool count verification
   // =========================================================================
   describe("tool count", () => {
-    it("should return exactly 21 tools when all prerequisites are met (includes ghostOs on macOS)", () => {
+    it("should return correct tool count when all prerequisites are met", () => {
       const settings = buildSettings({
         vectorDBEnabled: true,
         tavilyApiKey: "tvly-test-key",
@@ -296,13 +305,19 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 10 utility + 1 workspace + 1 vectorSearch + 1 webSearch + 1 chromiumWorkspace + 1 ghostOs = 21
-      expect(result.enabledTools).toHaveLength(21);
+      // 6 core + 10 utility + 1 workspace + 1 vectorSearch + 1 webSearch + 1 chromiumWorkspace = 20 base
+      // + 1 ghostOs on macOS = 21
+      const expected = 20 + GHOST_OS_TOOL_COUNT;
+      expect(result.enabledTools).toHaveLength(expected);
       expect(result.enabledTools).toContain("workspace");
-      expect(result.enabledTools).toContain("ghostOs");
+      if (isMacOS) {
+        expect(result.enabledTools).toContain("ghostOs");
+      } else {
+        expect(result.enabledTools).not.toContain("ghostOs");
+      }
     });
 
-    it("should return exactly 20 tools when no optional tools are available (webSearch always on, ghostOs on macOS)", () => {
+    it("should return correct tool count when no optional tools are available", () => {
       const settings = buildSettings({
         vectorDBEnabled: false,
         tavilyApiKey: undefined,
@@ -311,8 +326,10 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 10 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace + 1 ghostOs = 20
-      expect(result.enabledTools).toHaveLength(20);
+      // 6 core + 10 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace = 19 base
+      // + 1 ghostOs on macOS = 20
+      const expected = 19 + GHOST_OS_TOOL_COUNT;
+      expect(result.enabledTools).toHaveLength(expected);
     });
   });
 

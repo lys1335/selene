@@ -11,6 +11,10 @@ import { resolveGhostBinary } from "./setup";
 /**
  * Generate MCP server configuration for Ghost OS.
  * Returns null if Ghost OS is not installed.
+ *
+ * TODO(Phase 1.1): Wire this into the MCP config resolver pipeline
+ * (lib/mcp/mcp-config-resolver.ts) so Ghost OS is auto-detected and
+ * injected into agent MCP configs when the binary is present.
  */
 export async function generateGhostOsMCPConfig(): Promise<GhostOsMCPConfig | null> {
   const binaryPath = await resolveGhostBinary();
@@ -86,7 +90,9 @@ const GHOST_OS_ACTION_TOOLS = new Set([
  * ghost_recipe_delete) are also safe — they only read/write recipe JSON files.
  *
  * Learning tools (ghost_learn_start, ghost_learn_stop, ghost_learn_status) are observers
- * and don't conflict with actions.
+ * and don't conflict with actions. NOTE: ghost_learn_start does capture a global CGEvent
+ * tap — concurrent learning sessions from multiple agents would conflict, but this is a
+ * Phase 3 concern (learning mode not yet exposed).
  */
 export function isGhostOsActionTool(toolName: string): boolean {
   return GHOST_OS_ACTION_TOOLS.has(toolName);

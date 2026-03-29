@@ -48,7 +48,7 @@ describe("Ghost OS Concurrency Detection", () => {
       expect(getActiveGhostOsOperation()).toBeUndefined();
     });
 
-    it("should auto-clear stale operations (TTL exceeded)", () => {
+    it("should auto-clear stale action operations (default 60s TTL)", () => {
       setActiveGhostOsOperation({
         opId: "test-op-stale",
         characterId: "agent-1",
@@ -58,7 +58,32 @@ describe("Ghost OS Concurrency Detection", () => {
         startedAt: Date.now() - 61_000, // 61 seconds ago — exceeds 60s TTL
       });
 
-      // getActiveGhostOsOperation should auto-clear and return undefined
+      expect(getActiveGhostOsOperation()).toBeUndefined();
+    });
+
+    it("should NOT auto-clear ghost_run within 5 minute TTL", () => {
+      setActiveGhostOsOperation({
+        opId: "test-op-recipe",
+        characterId: "agent-1",
+        characterName: "Agent One",
+        toolName: "ghost_run",
+        rootSessionId: "session-1",
+        startedAt: Date.now() - 120_000, // 2 minutes ago — within 5min TTL
+      });
+
+      expect(getActiveGhostOsOperation()).toBeDefined();
+    });
+
+    it("should auto-clear ghost_run after 5 minute TTL", () => {
+      setActiveGhostOsOperation({
+        opId: "test-op-recipe-stale",
+        characterId: "agent-1",
+        characterName: "Agent One",
+        toolName: "ghost_run",
+        rootSessionId: "session-1",
+        startedAt: Date.now() - 301_000, // 5+ minutes ago
+      });
+
       expect(getActiveGhostOsOperation()).toBeUndefined();
     });
 
@@ -73,6 +98,40 @@ describe("Ghost OS Concurrency Detection", () => {
       });
 
       expect(getActiveGhostOsOperation()).toBeDefined();
+    });
+
+    it("should support opId-scoped clear (only clears matching op)", () => {
+      setActiveGhostOsOperation({
+        opId: "op-A",
+        characterId: "agent-1",
+        characterName: "Agent One",
+        toolName: "ghost_click",
+        rootSessionId: "session-1",
+        startedAt: Date.now(),
+      });
+
+      // Try to clear with wrong opId — should NOT clear
+      clearActiveGhostOsOperation("op-B");
+      expect(getActiveGhostOsOperation()).toBeDefined();
+      expect(getActiveGhostOsOperation()!.opId).toBe("op-A");
+
+      // Clear with correct opId — should clear
+      clearActiveGhostOsOperation("op-A");
+      expect(getActiveGhostOsOperation()).toBeUndefined();
+    });
+
+    it("should unconditionally clear when no opId provided (backward compat/tests)", () => {
+      setActiveGhostOsOperation({
+        opId: "op-any",
+        characterId: "agent-1",
+        characterName: "Agent One",
+        toolName: "ghost_click",
+        rootSessionId: "session-1",
+        startedAt: Date.now(),
+      });
+
+      clearActiveGhostOsOperation();
+      expect(getActiveGhostOsOperation()).toBeUndefined();
     });
   });
 

@@ -6,6 +6,10 @@
  *
  * Strategy: awareness-based (warn, don't block). Agents decide whether
  * to proceed or wait based on the warning.
+ *
+ * TODO(Phase 1.1): Wire wrapGhostOsExecution into the MCP tool execution
+ * pipeline via tools-builder.ts or mcp-tool-adapter.ts. Currently exported
+ * and fully tested but not yet called from the runtime path.
  */
 
 import { randomUUID } from "crypto";
@@ -21,18 +25,33 @@ declare global {
   var __ghostOsActiveOp: GhostOsActiveOperation | undefined;
 }
 
-/** Operations older than this are considered stale and auto-cleared */
-const STALE_THRESHOLD_MS = 60_000; // 60 seconds
+/**
+ * Default TTL for action tools (60s). Most actions complete in <5s.
+ * ghost_run (recipe execution) gets a longer TTL since recipes can
+ * involve multi-step workflows.
+ */
+const DEFAULT_STALE_THRESHOLD_MS = 60_000;
+const RECIPE_STALE_THRESHOLD_MS = 300_000; // 5 minutes for ghost_run
+
+/**
+ * Get the stale threshold for a given tool name.
+ * ghost_run gets a longer TTL since recipe execution can take minutes.
+ */
+function getStaleThreshold(toolName: string): number {
+  return toolName === "ghost_run"
+    ? RECIPE_STALE_THRESHOLD_MS
+    : DEFAULT_STALE_THRESHOLD_MS;
+}
 
 /**
  * Get the currently active Ghost OS operation, if any.
- * Automatically clears stale operations (older than STALE_THRESHOLD_MS).
+ * Automatically clears stale operations (older than tool-specific TTL).
  */
 export function getActiveGhostOsOperation(): GhostOsActiveOperation | undefined {
   const op = globalThis.__ghostOsActiveOp;
-  if (op && Date.now() - op.startedAt > STALE_THRESHOLD_MS) {
+  if (op && Date.now() - op.startedAt > getStaleThreshold(op.toolName)) {
     // Auto-clear stale operation (hung tool, crashed subprocess, etc.)
-    clearActiveGhostOsOperation();
+    globalThis.__ghostOsActiveOp = undefined;
     return undefined;
   }
   return op;
@@ -48,10 +67,19 @@ export function setActiveGhostOsOperation(op: GhostOsActiveOperation): void {
 
 /**
  * Clear the active Ghost OS operation.
- * Called after a Ghost OS tool completes (success or error).
+ * When called with an opId, only clears if the current operation matches —
+ * prevents one invocation from clearing another's tracking state.
+ * When called without arguments, unconditionally clears (for cleanup/tests).
  */
-export function clearActiveGhostOsOperation(): void {
-  globalThis.__ghostOsActiveOp = undefined;
+export function clearActiveGhostOsOperation(opId?: string): void {
+  if (opId) {
+    const current = globalThis.__ghostOsActiveOp;
+    if (current?.opId === opId) {
+      globalThis.__ghostOsActiveOp = undefined;
+    }
+  } else {
+    globalThis.__ghostOsActiveOp = undefined;
+  }
 }
 
 /**
@@ -167,12 +195,9 @@ export function wrapGhostOsExecution(
         return await fn();
       } finally {
         // Only clear if THIS specific invocation's operation is still the active one.
-        // This prevents concurrent executions from the same agent from clearing
+        // Uses opId-scoped clear to prevent concurrent executions from clearing
         // each other's tracking state.
-        const current = getActiveGhostOsOperation();
-        if (current?.opId === opId) {
-          clearActiveGhostOsOperation();
-        }
+        clearActiveGhostOsOperation(opId);
       }
     },
   };

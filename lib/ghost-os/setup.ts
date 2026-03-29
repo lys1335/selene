@@ -25,8 +25,14 @@ const GHOST_OS_HOME = path.join(os.homedir(), ".ghost-os");
 
 const VISION_MODEL_DIR = path.join(GHOST_OS_HOME, "models", "ShowUI-2B");
 
-/** Known required files for a valid ShowUI-2B installation */
-const VISION_MODEL_SENTINEL_FILES = ["config.json", ".safetensors"];
+/**
+ * Sentinel file names that indicate a valid ShowUI-2B installation.
+ * We check if any file in the model dir matches one of these exactly (for "config.json")
+ * or ends with the suffix (for ".safetensors" — model files are sharded like
+ * "model-00001-of-00004.safetensors").
+ */
+const VISION_MODEL_SENTINEL_EXACT = ["config.json"];
+const VISION_MODEL_SENTINEL_SUFFIX = [".safetensors"];
 
 /**
  * Resolve the ghost binary path from PATH or known locations.
@@ -117,10 +123,10 @@ export function isVisionModelInstalled(): boolean {
     }
     const files = fs.readdirSync(VISION_MODEL_DIR);
     // Check for a known required file — not just "any file exists"
-    return files.some((f) =>
-      VISION_MODEL_SENTINEL_FILES.some(
-        (sentinel) => f === sentinel || f.endsWith(sentinel)
-      )
+    return files.some(
+      (f) =>
+        VISION_MODEL_SENTINEL_EXACT.includes(f) ||
+        VISION_MODEL_SENTINEL_SUFFIX.some((suffix) => f.endsWith(suffix)),
     );
   } catch {
     return false;
@@ -192,10 +198,12 @@ export async function runGhostDoctor(binaryPath?: string): Promise<GhostDoctorRe
   } catch (error) {
     const errObj = error as { message?: string; stdout?: string; stderr?: string };
     const message = errObj.message || String(error);
-    // Preserve stdout from partial output before failure
+    // Preserve stdout and stderr from partial output before failure
     const stdout = errObj.stdout || "";
+    const stderr = errObj.stderr || "";
+    const combined = [stdout, stderr].filter(Boolean).join("\n");
     return {
-      raw: `ghost doctor failed: ${message}${stdout ? `\n${stdout}` : ""}`,
+      raw: `ghost doctor failed: ${message}${combined ? `\n${combined}` : ""}`,
       healthy: false,
       checks: stdout ? parseDoctorChecks(stdout) : [],
     };
@@ -237,7 +245,7 @@ export async function runGhostSetup(binaryPath?: string): Promise<{
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Parsing helpers — exported for direct unit testing
 // ---------------------------------------------------------------------------
 
 /**
@@ -247,7 +255,7 @@ export async function runGhostSetup(binaryPath?: string): Promise<{
  * Uses non-capturing alternation groups to properly match multi-char tokens
  * like [PASS] and [FAIL], not just individual characters.
  */
-function parseDoctorChecks(
+export function parseDoctorChecks(
   output: string
 ): { name: string; passed: boolean; detail?: string }[] {
   const checks: { name: string; passed: boolean; detail?: string }[] = [];
@@ -275,7 +283,7 @@ function parseDoctorChecks(
 /**
  * Extract permission status from ghost doctor results.
  */
-function parsePermissionsFromDoctor(
+export function parsePermissionsFromDoctor(
   doctor: GhostDoctorResult
 ): GhostOsStatus["permissions"] {
   const permissions = {
@@ -296,10 +304,12 @@ function parsePermissionsFromDoctor(
     }
   }
 
-  // If no checks were parsed but doctor was healthy, assume permissions granted
+  // If no checks were parsed but doctor was healthy, assume all permissions granted.
+  // Consistent: either all three are true (healthy) or all three stay false (unhealthy).
   if (doctor.healthy && doctor.checks.length === 0) {
     permissions.accessibility = true;
     permissions.screenRecording = true;
+    permissions.inputMonitoring = true;
   }
 
   return permissions;

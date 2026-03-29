@@ -38,39 +38,45 @@ export function GhostOsSection() {
   const [setupRunning, setSetupRunning] = useState(false);
   const [visionDownloading, setVisionDownloading] = useState(false);
   const [visionProgress, setVisionProgress] = useState(0);
+  const mountedRef = useRef(true);
   // Guard against running setup and vision download simultaneously
   const operationInProgress = setupRunning || visionDownloading;
-  // Track whether checkStatus was triggered by a download completing
-  const deferredStatusCheck = useRef(false);
 
   const checkStatus = useCallback(async () => {
+    if (!mountedRef.current) return;
     setLoading(true);
     setStatusError(null);
     try {
       const electronAPI = getElectronAPI();
       if (electronAPI?.ghostOs) {
         const result = await electronAPI.ghostOs.getStatus();
-        setStatus(result);
+        if (mountedRef.current) setStatus(result);
       } else {
         // Fallback to API route for non-Electron
         const response = await fetch("/api/ghost-os/status");
         if (response.ok) {
-          setStatus(await response.json());
+          if (mountedRef.current) setStatus(await response.json());
         } else {
-          setStatusError("Failed to check status (HTTP " + response.status + ")");
+          if (mountedRef.current) {
+            setStatusError("Failed to check status (HTTP " + response.status + ")");
+          }
         }
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unknown error";
       console.error("[GhostOS] Status check failed:", error);
-      setStatusError(msg);
+      if (mountedRef.current) setStatusError(msg);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     checkStatus();
+    return () => {
+      mountedRef.current = false;
+    };
   }, [checkStatus]);
 
   // Listen for vision model download progress
@@ -80,14 +86,15 @@ export function GhostOsSection() {
 
     const handleProgress = (data: { modelId: string; status: string; progress?: number; error?: string }) => {
       if (data.modelId !== "ghostos-showui-2b") return;
+      if (!mountedRef.current) return;
+
       if (data.status === "downloading" && data.progress !== undefined) {
         setVisionProgress(data.progress);
       } else if (data.status === "completed") {
         setVisionDownloading(false);
         setVisionProgress(100);
         toast.success("Vision model downloaded");
-        // Defer status check slightly to avoid blocking UI during state transition
-        setTimeout(() => checkStatus(), 500);
+        checkStatus();
       } else if (data.status === "error") {
         setVisionDownloading(false);
         setVisionProgress(0);
@@ -95,8 +102,6 @@ export function GhostOsSection() {
       }
     };
 
-    // Use specific listener registration — don't use removeAllListeners on cleanup
-    // to avoid killing other components' listeners on the shared channel
     electronAPI.model.onProgress(handleProgress);
     return () => {
       // Note: ideally onProgress would return a cleanup fn. For now we accept the
@@ -132,7 +137,7 @@ export function GhostOsSection() {
       toast.error("Setup failed");
       console.error("[GhostOS] Setup error:", error);
     } finally {
-      setSetupRunning(false);
+      if (mountedRef.current) setSetupRunning(false);
     }
   };
 
@@ -145,21 +150,24 @@ export function GhostOsSection() {
       if (electronAPI?.ghostOs) {
         const result = await electronAPI.ghostOs.downloadVisionModel();
         if (!result.success) {
-          toast.error(`Download failed: ${result.error || "Unknown error"}`);
+          // Only reset here on IPC-level failure; progress listener handles
+          // success/error from the streaming path to avoid double-clear flicker.
+          if (mountedRef.current) {
+            setVisionDownloading(false);
+            toast.error(`Download failed: ${result.error || "Unknown error"}`);
+          }
         }
-        // Always reset downloading state in this path — the progress listener
-        // handles the "completed" case, but if the invoke itself returns failure
-        // the listener may not fire.
+        // Don't reset visionDownloading on success — the progress listener's
+        // "completed" event handles that, preventing a flash of the download
+        // button between the invoke return and the progress event.
       } else {
         toast.error("Vision model download requires the desktop app");
+        setVisionDownloading(false);
       }
     } catch (error) {
       toast.error("Download failed");
       console.error("[GhostOS] Vision download error:", error);
-    } finally {
-      // Ensure spinner is always cleared, even on success.
-      // The progress listener may also clear it — that's fine (idempotent).
-      setVisionDownloading(false);
+      if (mountedRef.current) setVisionDownloading(false);
     }
   };
 
@@ -187,7 +195,13 @@ export function GhostOsSection() {
           <h3 className="font-mono text-sm font-semibold text-terminal-dark">Ghost OS</h3>
           <span className="text-xs text-terminal-muted">macOS Desktop Automation</span>
         </div>
-        <Button variant="ghost" size="sm" onClick={checkStatus} disabled={loading}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={checkStatus}
+          disabled={loading}
+          aria-label="Refresh Ghost OS status"
+        >
           <RefreshCwIcon className="h-3.5 w-3.5" />
         </Button>
       </div>
