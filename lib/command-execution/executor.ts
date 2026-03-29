@@ -29,6 +29,7 @@ import type {
 import {
     getBundledRuntimeInfo,
     buildSafeEnvironment,
+    initializeCommandExecutionProcessEnv,
     resolveBundledNodeCommand,
     buildNotFoundDiagnostic,
     normalizeArgs,
@@ -90,6 +91,7 @@ export async function startBackgroundProcess(
     }
     const resolvedCwd = cwdValidation.resolvedPath ?? cwd;
 
+    initializeCommandExecutionProcessEnv();
     const runtime = getBundledRuntimeInfo();
     const baseEnv = buildSafeEnvironment(runtime) as NodeJS.ProcessEnv;
 
@@ -413,6 +415,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
             });
         };
 
+        initializeCommandExecutionProcessEnv();
         const runtime = getBundledRuntimeInfo();
         const baseEnv = buildSafeEnvironment(runtime) as NodeJS.ProcessEnv;
         const wrapped = wrapWithRTK(command, args, baseEnv, { forceDirect: forceDirectExecution });

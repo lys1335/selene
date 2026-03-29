@@ -2,9 +2,7 @@ import path from "path";
 import { query as claudeAgentQuery } from "@anthropic-ai/claude-agent-sdk";
 import { isElectronProduction } from "@/lib/utils/environment";
 import { getNodeBinary } from "@/lib/auth/claude-login-process";
-import { getResolvedShellEnvironment } from "@/lib/shell-env/resolver";
-import { sanitizeEnvironment } from "@/lib/command-execution/executor-runtime";
-import { stripMsysEnvVars, consolidatePathKeys, ensureWindowsSystemPaths } from "@/lib/utils/windows-env";
+import { buildEnvironmentForTarget } from "@/lib/process-env/policy";
 
 const DEFAULT_CLAUDE_AGENT_MODEL = "claude-sonnet-4-5-20250929";
 
@@ -27,78 +25,25 @@ export function getSdkExecutableConfig(): {
   executable: "node";
   env: Record<string, string | undefined>;
 } {
-  // Always strip CLAUDECODE to prevent "cannot be launched inside another
-  // Claude Code session" errors when the server inherits the env from a
-  // Claude Code terminal session or similar wrapper.
-  const env: Record<string, string | undefined> = sanitizeEnvironment({ ...process.env });
-  delete env.CLAUDECODE;
-  // The settings manager may inject ANTHROPIC_API_KEY into process.env (e.g.
-  // a stale placeholder like "123"). The SDK must use its own OAuth flow, so
-  // strip any app-level API key to prevent it from overriding OAuth auth.
-  delete env.ANTHROPIC_API_KEY;
-  // NODE_ENV=production comes from the Electron/Next.js runtime. If it leaks
-  // into the Claude Code SDK subprocess, npm install skips devDependencies and
-  // other dev tooling breaks. The shell env resolver returns empty on Windows,
-  // so buildSafeEnvironment() strips this via its fallback path — but this
-  // function builds its own env from process.env, so we must strip it here too.
-  delete env.NODE_ENV;
+  const isProduction = isElectronProduction();
+  const { env, source } = buildEnvironmentForTarget({
+    target: "claude-sdk",
+    isProduction,
+  });
 
-  // On Windows, strip MSYS/Git Bash env vars so the Claude Code SDK
-  // subprocess doesn't detect a Unix-shell context. We intentionally do NOT
-  // filter Git Bash from PATH here — Claude Code hardcodes Git Bash as the
-  // shell, so filtering only removes paths that Git Bash needs (Docker,
-  // PowerShell, cmd.exe, etc.). Instead we consolidate PATH case duplicates
-  // and let MSYS2_PATH_TYPE=inherit (set below) preserve the full Windows PATH.
-  if (process.platform === "win32") {
-    stripMsysEnvVars(env);
-    const mergedPath = consolidatePathKeys(env);
-    env.PATH = ensureWindowsSystemPaths(mergedPath);
-  }
-
-  if (isElectronProduction()) {
-    env.ELECTRON_RUN_AS_NODE = "1";
-
-    // Resolve the user's full login-shell environment so the SDK subprocess
-    // gets the same PATH as the user's terminal (includes homebrew, nvm, volta, etc.)
-    const shellEnv = getResolvedShellEnvironment();
-    const shellPath = shellEnv.PATH;
-
-    if (shellPath) {
-      // Use the shell-resolved PATH — this is exactly what the user's terminal sees
-      env.PATH = shellPath;
-      process.env.PATH = shellPath;
-      console.log("[Agent SDK] Production mode — using shell-resolved PATH");
-    } else {
-      // Fallback: augment PATH with the resolved node binary's directory
-      const nodeBin = getNodeBinary();
-      const nodeDir = path.dirname(nodeBin);
-      if (!env.PATH?.includes(nodeDir)) {
-        env.PATH = `${nodeDir}${path.delimiter}${env.PATH || ""}`;
-      }
-      if (!process.env.PATH?.includes(nodeDir)) {
-        process.env.PATH = `${nodeDir}${path.delimiter}${process.env.PATH || ""}`;
-      }
-      console.log("[Agent SDK] Production mode — fallback node binary:", nodeBin);
+  if (isProduction && source === "shell") {
+    process.env.PATH = env.PATH || process.env.PATH;
+    console.log("[Agent SDK] Production mode - using shell-resolved PATH");
+  } else if (isProduction) {
+    const nodeBin = getNodeBinary();
+    const nodeDir = path.dirname(nodeBin);
+    if (!env.PATH?.includes(nodeDir)) {
+      env.PATH = `${nodeDir}${path.delimiter}${env.PATH || ""}`;
     }
-  } else {
-    // In dev mode, ensure ELECTRON_RUN_AS_NODE is not inherited from the
-    // parent process (e.g. when the test runner or dev server runs inside Electron).
-    delete env.ELECTRON_RUN_AS_NODE;
-  }
-
-  // On Windows, Claude Code's Bash tool hardcodes Git Bash as the shell
-  // (probes known install paths like C:\Program Files\Git\bin\bash.exe).
-  // Filtering Git Bash from PATH does NOT prevent this — it only strips
-  // legitimate Windows paths that Git Bash needs to function (Docker,
-  // PowerShell, cmd.exe, etc.).
-  //
-  // Instead of filtering, we set MSYS2_PATH_TYPE=inherit so Git Bash
-  // preserves the full Windows PATH instead of replacing it with minimal
-  // MSYS2 defaults (/usr/bin, /mingw64/bin).
-  if (process.platform === "win32") {
-    env.MSYS2_PATH_TYPE = "inherit";
-    env.MSYS_NO_PATHCONV = "1";
-    env.CHERE_INVOKING = "1";
+    if (!process.env.PATH?.includes(nodeDir)) {
+      process.env.PATH = `${nodeDir}${path.delimiter}${process.env.PATH || ""}`;
+    }
+    console.log("[Agent SDK] Production mode - fallback node binary:", nodeBin);
   }
 
   return { executable: "node", env };

@@ -11,7 +11,13 @@ vi.mock("fs", async (importOriginal) => {
 });
 
 import * as shellEnvResolver from "@/lib/shell-env/resolver";
-import { buildSafeEnvironment, normalizeUnixPath, normalizeArgs, type BundledRuntimeInfo } from "@/lib/command-execution/executor-runtime";
+import {
+  buildSafeEnvironment,
+  initializeCommandExecutionProcessEnv,
+  normalizeUnixPath,
+  normalizeArgs,
+  type BundledRuntimeInfo,
+} from "@/lib/command-execution/executor-runtime";
 import { ensureWindowsSystemPaths } from "@/lib/utils/windows-env";
 import { tmpdir } from "os";
 import { join, delimiter } from "path";
@@ -439,5 +445,35 @@ describe("ensureWindowsSystemPaths", () => {
         const result = ensureWindowsSystemPaths("C:\\tools");
 
         expect(result).toContain("D:\\Windows\\system32");
+    });
+});
+
+describe("initializeCommandExecutionProcessEnv", () => {
+    const originalPlatform = process.platform;
+    const originalEnv = { ...process.env };
+
+    afterEach(() => {
+        Object.defineProperty(process, "platform", { value: originalPlatform });
+        process.env = { ...originalEnv };
+    });
+
+    it("normalizes the live Windows process env without removing Git Bash PATH entries", () => {
+        Object.defineProperty(process, "platform", { value: "win32" });
+        vi.mocked(existsSync).mockReturnValue(true);
+        process.env = {
+            ...originalEnv,
+            PATH: "C:\\Program Files\\Git\\bin;C:\\Tools\\bin",
+            Path: "C:\\WINDOWS\\system32",
+            MSYSTEM: "MINGW64",
+            SystemRoot: "C:\\WINDOWS",
+        };
+
+        initializeCommandExecutionProcessEnv();
+
+        expect(process.env.MSYSTEM).toBeUndefined();
+        expect(process.env.PATH).toContain("C:\\Program Files\\Git\\bin");
+        expect(process.env.PATH).toContain("C:\\WINDOWS\\system32");
+        expect(process.env.ComSpec).toBe("C:\\WINDOWS\\system32\\cmd.exe");
+        expect(Object.keys(process.env).filter((key) => key.toUpperCase() === "PATH")).toEqual(["PATH"]);
     });
 });

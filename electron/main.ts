@@ -10,7 +10,7 @@ import { app, globalShortcut, session } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import { initializeRTK } from "../lib/rtk";
-import { MSYS_ENV_VARS, stripMsysEnvVars, ensureWindowsSystemPaths } from "../lib/utils/windows-env";
+import { initializeProcessEnvironment } from "../lib/process-env/policy";
 
 // ---------------------------------------------------------------------------
 // Dev-mode detection
@@ -141,53 +141,15 @@ fixMacOSPath();
 // Windows environment fix — clean Unix-style vars inherited from Git Bash
 // ---------------------------------------------------------------------------
 
-/**
- * Fix environment for Windows builds.
- *
- * When Selene is launched from Git Bash or a terminal that inherits Git Bash's
- * environment, multiple Unix-style env vars and PATH entries leak in. Claude
- * Code hardcodes Git Bash by probing known install paths, but the env cleanup
- * prevents MSYS2 context from leaking into child processes.
- *
- * This function:
- *  1. Removes MSYS2/MINGW environment variables (SHELL, MSYSTEM, etc.)
- *  2. Ensures ComSpec is set to cmd.exe
- *
- * NOTE: PATH is intentionally NOT filtered here. The Claude Code SDK subprocess
- * uses Git Bash (hardcoded upstream) and needs the full Windows PATH inherited
- * via MSYS2_PATH_TYPE=inherit. PATH filtering only happens in
- * buildSafeEnvironment() for Selene's own executeCommand tool.
- */
-function fixWindowsEnv(): void {
-  if (process.platform !== "win32") return;
-
-  // Strip MSYS2/MINGW env vars but DO NOT filter PATH here.
-  // PATH must remain unfiltered in process.env because:
-  //  - The Claude Code SDK subprocess uses Git Bash (hardcoded upstream)
-  //  - Git Bash with MSYS2_PATH_TYPE=inherit needs the full Windows PATH
-  //  - PATH filtering happens downstream in buildSafeEnvironment() for
-  //    Selene's own executeCommand (which uses cmd.exe/PowerShell)
-  for (const varName of MSYS_ENV_VARS) {
-    if (process.env[varName]) {
-      console.log(`[Env Fix] Removing inherited ${varName}=${process.env[varName]} on Windows`);
-    }
-  }
-
-  stripMsysEnvVars(process.env as Record<string, string | undefined>);
-
-  // Ensure ComSpec is set (Node.js uses it for shell:true on Windows)
-  if (!process.env.ComSpec) {
-    const systemRoot = process.env.SystemRoot || "C:\\WINDOWS";
-    process.env.ComSpec = `${systemRoot}\\system32\\cmd.exe`;
-    console.log(`[Env Fix] Set ComSpec=${process.env.ComSpec}`);
-  }
-
-  // Ensure essential system dirs are in PATH — defense in depth for
-  // minimal launch environments (scheduled tasks, GUI shortcuts, etc.)
-  process.env.PATH = ensureWindowsSystemPaths(process.env.PATH || "");
+function initializeElectronProcessEnvironment(): void {
+  initializeProcessEnvironment({
+    filterGitBashPath: false,
+    ensureComSpec: true,
+    ensureSystemPaths: true,
+  });
 }
 
-fixWindowsEnv();
+initializeElectronProcessEnvironment();
 
 // ---------------------------------------------------------------------------
 // Environment / path setup
