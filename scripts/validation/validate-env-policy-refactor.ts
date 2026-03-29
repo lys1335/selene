@@ -130,7 +130,12 @@ function main(): void {
 
   console.log("\n=== Validation Summary ===");
   if (failed > 0) {
-    console.error(`Failed checks: ${failed}/${checks.length}`);
+    const summary = `Failed checks: ${failed}/${checks.length}`;
+    if (dryRun) {
+      console.warn(`${summary} (dry-run: non-fatal)`);
+      return;
+    }
+    console.error(summary);
     process.exit(1);
   }
 

@@ -23,26 +23,35 @@ let _cachedConfig: GhostOsMCPConfig | null | undefined;
  */
 export async function generateGhostOsMCPConfig(): Promise<GhostOsMCPConfig | null> {
   if (_cachedConfig !== undefined) return _cachedConfig;
+  if (_resolvingConfigPromise) return await _resolvingConfigPromise;
 
-  const binaryPath = await resolveGhostBinary();
-  _cachedBinaryPath = binaryPath;
+  _resolvingConfigPromise = (async () => {
+    const binaryPath = await resolveGhostBinary();
+    _cachedBinaryPath = binaryPath;
 
-  if (!binaryPath) {
-    _cachedConfig = null;
-    return null;
-  }
+    if (!binaryPath) {
+      _cachedConfig = null;
+      return null;
+    }
 
-  _cachedConfig = {
-    mcpServers: {
-      ghostos: {
-        type: "stdio",
-        command: binaryPath,
-        args: ["mcp"],
-        enabled: true,
+    _cachedConfig = {
+      mcpServers: {
+        [GHOST_OS_SERVER_NAME]: {
+          type: "stdio",
+          command: binaryPath,
+          args: ["mcp"],
+          enabled: true,
+        },
       },
-    },
-  };
-  return _cachedConfig;
+    };
+    return _cachedConfig;
+  })();
+
+  try {
+    return await _resolvingConfigPromise;
+  } finally {
+    _resolvingConfigPromise = undefined;
+  }
 }
 
 /**
@@ -60,13 +69,8 @@ export async function getGhostOsServerConfig(): Promise<Record<string, { type: s
 export function clearGhostOsConfigCache(): void {
   _cachedBinaryPath = undefined;
   _cachedConfig = undefined;
+  _resolvingConfigPromise = undefined;
 }
-
-/**
- * Get the Ghost OS MCP server name used for tool ID generation.
- * This must match the key in the mcpServers config.
- */
-export const GHOST_OS_SERVER_NAME = "ghostos";
 
 /**
  * Check if a tool ID belongs to the Ghost OS MCP server.

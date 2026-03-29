@@ -79,6 +79,34 @@ function applyMcpStringLimit(
     };
 }
 
+function applyMcpStructuredLimit(
+    formattedResult: Record<string, unknown>,
+    field: "content" | "text",
+    toolName: string,
+    sessionId?: string
+): Record<string, unknown> {
+    const value = formattedResult[field];
+    if (value === undefined || typeof value === "string") {
+        return formattedResult;
+    }
+
+    const limitResult = limitToolOutput(value, toolName, sessionId, {
+        maxTokens: MAX_STREAM_TOOL_RESULT_TOKENS,
+    });
+
+    if (!limitResult.limited) {
+        return formattedResult;
+    }
+
+    return {
+        ...formattedResult,
+        [field]: limitResult.output,
+        isTruncated: true,
+        truncated: true,
+        ...(limitResult.contentId ? { truncatedContentId: limitResult.contentId } : {}),
+    };
+}
+
 function finalizeMcpResult(
     formattedResult: Record<string, unknown>,
     toolName: string,
@@ -90,6 +118,14 @@ function finalizeMcpResult(
 
     if (typeof formattedResult.content === "string" || typeof formattedResult.text === "string") {
         return applyMcpTextLimit(formattedResult, toolName, sessionId);
+    }
+
+    if (formattedResult.content !== undefined) {
+        return applyMcpStructuredLimit(formattedResult, "content", toolName, sessionId);
+    }
+
+    if (formattedResult.text !== undefined) {
+        return applyMcpStructuredLimit(formattedResult, "text", toolName, sessionId);
     }
 
     return formattedResult;

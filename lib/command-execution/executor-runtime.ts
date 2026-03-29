@@ -178,7 +178,7 @@ export function normalizeUnixPath(arg: string): string {
     for (const unixPrefix of UNIX_TEMP_PREFIXES) {
         if (arg === unixPrefix || arg.startsWith(unixPrefix + "/")) {
             const remainder = arg.slice(unixPrefix.length); // "" or "/file.json"
-            return join(require("os").tmpdir(), remainder.replace(/^\//, ""));
+            return join(tmpdir(), remainder.replace(/^\//, ""));
         }
     }
 

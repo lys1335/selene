@@ -159,7 +159,7 @@ export function initializeProcessEnvironment(
       delete targetEnv[key];
       continue;
     }
-    targetEnv[key] = value ?? undefined;
+    targetEnv[key] = value;
   }
 
   return targetEnv;
