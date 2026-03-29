@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState, type FC } from "react";
+import { memo, useEffect, useMemo, useState, type FC } from "react";
 import {
   Globe,
   CursorClick,
@@ -511,6 +511,15 @@ export const ChromiumWorkspaceToolUI: ToolCallContentPartComponent = memo(({
   const isClose = args?.action === "close";
   const isReplay = args?.action === "replay";
   const isError = parsed?.status === "error";
+
+  // Notify BrowserBackdrop during foreground streaming that a chromium tool is active.
+  // background-task-progress events only fire in background mode, so foreground streams
+  // need this bridge to activate the workspace panel.
+  useEffect(() => {
+    if (isRunning && !isClose && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("browser-tool-detected"));
+    }
+  }, [isRunning, isClose]);
 
   // In glass/compact mode: render a single-line row for non-close/non-replay completed actions
   const useCompact = isBrowserActive && !isClose && !isReplay;
