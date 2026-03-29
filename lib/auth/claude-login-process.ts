@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from "child_process";
 import path from "path";
 import { isElectronProduction } from "@/lib/utils/environment";
+import { buildEnvironmentForTarget } from "@/lib/process-env/policy";
 
 // Resolved lazily so process.cwd() is evaluated at runtime, not build time.
 // In production Electron builds, node_modules live under resourcesPath/standalone/.
@@ -32,59 +33,108 @@ function fileExistsAndExecutable(filePath: string): boolean {
 }
 
 function getSystemNodeBinary(nodeName: string): string | null {
-  const pathEntries = (process.env.PATH || "").split(path.delimiter).filter(Boolean);
-  const candidateDirs = [
-    ...pathEntries,
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
-    "/usr/bin",
-    "/opt/local/bin",
-  ];
+  const pathEntries = (process.env.PATH || process.env.Path || "").split(path.delimiter).filter(Boolean);
+  const isWindows = process.platform === "win32";
+  const fs = require("fs") as typeof import("fs");
+
+  // Platform-specific well-known install directories
+  const platformDirs: string[] = [];
+  if (isWindows) {
+    // Default Node.js installer location
+    const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+    const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+    platformDirs.push(
+      path.join(programFiles, "nodejs"),
+      path.join(programFilesX86, "nodejs"),
+    );
+  } else {
+    platformDirs.push(
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+      "/usr/bin",
+      "/opt/local/bin",
+    );
+  }
+
+  const candidateDirs = [...pathEntries, ...platformDirs];
 
   for (const dir of candidateDirs) {
     const candidate = path.join(dir, nodeName);
     if (fileExistsAndExecutable(candidate)) return candidate;
   }
 
-  // Check versioned homebrew installs (e.g. node@22, node@20)
-  // These don't get symlinked to /opt/homebrew/bin when installed as node@XX
-  const fs = require("fs") as typeof import("fs");
-  for (const prefix of ["/opt/homebrew/opt", "/usr/local/opt"]) {
-    try {
-      const entries = fs.readdirSync(prefix);
-      for (const entry of entries) {
-        if (entry.startsWith("node")) {
-          const candidate = path.join(prefix, entry, "bin", nodeName);
-          if (fileExistsAndExecutable(candidate)) return candidate;
+  if (!isWindows) {
+    // Check versioned homebrew installs (e.g. node@22, node@20)
+    // These don't get symlinked to /opt/homebrew/bin when installed as node@XX
+    for (const prefix of ["/opt/homebrew/opt", "/usr/local/opt"]) {
+      try {
+        const entries = fs.readdirSync(prefix);
+        for (const entry of entries) {
+          if (entry.startsWith("node")) {
+            const candidate = path.join(prefix, entry, "bin", nodeName);
+            if (fileExistsAndExecutable(candidate)) return candidate;
+          }
         }
+      } catch {
+        // directory doesn't exist
       }
-    } catch {
-      // directory doesn't exist
     }
   }
 
   // Check common version manager paths
-  const home = process.env.HOME;
+  // On Windows HOME is often unset; use USERPROFILE as fallback
+  const home = process.env.HOME || process.env.USERPROFILE;
   if (home) {
     const versionManagerPaths = [
       path.join(home, ".volta", "bin"),
       path.join(home, ".fnm", "aliases", "default", "bin"),
     ];
+
+    if (isWindows) {
+      const appData = process.env.APPDATA || path.join(home, "AppData", "Roaming");
+      const localAppData = process.env.LOCALAPPDATA || path.join(home, "AppData", "Local");
+
+      versionManagerPaths.push(
+        // nvm-windows stores node binaries under %APPDATA%\nvm\<version>\
+        // and symlinks to %NVM_SYMLINK% (default: %ProgramFiles%\nodejs)
+        ...(process.env.NVM_HOME ? [process.env.NVM_HOME] : []),
+        ...(process.env.NVM_SYMLINK ? [process.env.NVM_SYMLINK] : []),
+        path.join(appData, "nvm"),
+        // fnm on Windows
+        path.join(localAppData, "fnm_multishells"),
+        path.join(appData, "fnm", "aliases", "default"),
+        // volta on Windows
+        path.join(localAppData, "Volta", "bin"),
+      );
+    }
+
     for (const dir of versionManagerPaths) {
       const candidate = path.join(dir, nodeName);
       if (fileExistsAndExecutable(candidate)) return candidate;
     }
 
-    // nvm: check for any installed version
-    try {
-      const nvmDir = path.join(home, ".nvm", "versions", "node");
-      const versions = fs.readdirSync(nvmDir).sort().reverse();
-      for (const ver of versions) {
-        const candidate = path.join(nvmDir, ver, "bin", nodeName);
-        if (fileExistsAndExecutable(candidate)) return candidate;
+    // nvm (Unix) / nvm-windows: check for any installed version
+    const nvmDirs = isWindows
+      ? [
+          process.env.NVM_HOME,
+          path.join(home, "AppData", "Roaming", "nvm"),
+        ].filter(Boolean) as string[]
+      : [path.join(home, ".nvm", "versions", "node")];
+
+    for (const nvmDir of nvmDirs) {
+      try {
+        const versions = fs.readdirSync(nvmDir).sort().reverse();
+        for (const ver of versions) {
+          // nvm-windows: %NVM_HOME%\v20.11.0\node.exe
+          // nvm (Unix): ~/.nvm/versions/node/v20.11.0/bin/node
+          const candidate = isWindows
+            ? path.join(nvmDir, ver, nodeName)
+            : path.join(nvmDir, ver, "bin", nodeName);
+          if (fileExistsAndExecutable(candidate)) return candidate;
+        }
+      } catch {
+        // nvm not installed
       }
-    } catch {
-      // nvm not installed
     }
   }
 
@@ -187,9 +237,17 @@ async function startClaudeLoginProcessOnce(
   killActive();
 
   const nodeBinary = getNodeBinary();
-  const useElectronRunAsNode = isElectronProduction() && nodeBinary === process.execPath;
+  const isProduction = isElectronProduction();
+  const useElectronRunAsNode = isProduction && nodeBinary === process.execPath;
 
-  const spawnEnv = { ...process.env };
+  // Use the same sanitized env as the SDK auth check for consistency.
+  // This ensures HOME, PATH, and USERPROFILE are set correctly on all platforms.
+  const { env: sdkEnv } = buildEnvironmentForTarget({
+    target: "claude-sdk",
+    isProduction,
+  });
+
+  const spawnEnv = { ...sdkEnv } as NodeJS.ProcessEnv;
   delete spawnEnv.CLAUDECODE; // prevent "nested session" detection
   if (useElectronRunAsNode) {
     spawnEnv.ELECTRON_RUN_AS_NODE = "1";
