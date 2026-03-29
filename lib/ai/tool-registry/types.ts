@@ -24,7 +24,8 @@ export type ToolCategory =
   | "scheduling"
   | "mcp"
   | "custom-comfyui"
-  | "browser";
+  | "browser"
+  | "computer-use";
 
 /**
  * Configuration for when a tool should be loaded

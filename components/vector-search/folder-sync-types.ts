@@ -115,6 +115,7 @@ export const DEFAULT_EXTENSIONS = [
   ".txt", ".md", ".markdown", ".rst", ".tex",
   // Code
   ".js", ".jsx", ".ts", ".tsx", ".py", ".java", ".cpp", ".c", ".h", ".go", ".rs", ".rb", ".php",
+  ".swift", ".kt", ".kts", ".dart", ".scala", ".lua", ".r", ".R",
   // Web
   ".html", ".htm", ".css", ".xml", ".json", ".yaml", ".yml",
   // Other

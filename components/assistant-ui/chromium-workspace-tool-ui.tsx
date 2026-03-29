@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState, type FC } from "react";
+import { memo, useEffect, useMemo, useState, type FC } from "react";
 import {
   Globe,
   CursorClick,
@@ -19,6 +19,7 @@ import {
   Clock,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import { useChatSessionId } from "@/components/chat-provider";
 import { useBrowserActive } from "./browser-active-context";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -505,12 +506,25 @@ export const ChromiumWorkspaceToolUI: ToolCallContentPartComponent = memo(({
   args,
   result,
 }) => {
+  const sessionId = useChatSessionId();
   const { isBrowserActive } = useBrowserActive();
   const isRunning = result === undefined;
   const parsed = result as ChromiumWorkspaceResult | undefined;
   const isClose = args?.action === "close";
   const isReplay = args?.action === "replay";
   const isError = parsed?.status === "error";
+
+  // Notify BrowserBackdrop during foreground streaming that a chromium tool is active.
+  // background-task-progress events only fire in background mode, so foreground streams
+  // need this bridge to activate the workspace panel.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("browser-tool-detected", {
+        detail: { active: isRunning && !isClose, sessionId },
+      })
+    );
+  }, [isRunning, isClose]);
 
   // In glass/compact mode: render a single-line row for non-close/non-replay completed actions
   const useCompact = isBrowserActive && !isClose && !isReplay;

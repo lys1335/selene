@@ -8,6 +8,7 @@
 
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { loadSettings } from "@/lib/settings/settings-manager";
+import { getApiBaseUrl } from "@/lib/utils/environment";
 
 // ---- Configuration -----------------------------------------------------------
 
@@ -22,14 +23,7 @@ export function getOpenRouterApiKey(): string | undefined {
  * Handles both development and production Electron environments.
  */
 export function getAppUrl(): string {
-  const isElectronProduction =
-    (process.env.SELENE_PRODUCTION_BUILD === "1" ||
-      !!(process as any).resourcesPath ||
-      !!process.env.ELECTRON_RESOURCES_PATH) &&
-    process.env.ELECTRON_IS_DEV !== "1" &&
-    process.env.NODE_ENV !== "development";
-
-  return isElectronProduction ? "http://localhost:3456" : "http://localhost:3000";
+  return getApiBaseUrl();
 }
 
 // ---- Lazy singleton ----------------------------------------------------------

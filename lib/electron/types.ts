@@ -182,6 +182,29 @@ export interface ElectronPermissionsAPI {
   onScreenPermissionRequired: (callback: () => void) => (() => void) | undefined;
 }
 
+export interface ElectronGhostOsAPI {
+  getStatus: () => Promise<{
+    installed: boolean;
+    version?: string;
+    visionModelInstalled: boolean;
+    permissions: {
+      accessibility: boolean;
+      screenRecording: boolean;
+      inputMonitoring: boolean;
+    };
+    binaryPath?: string;
+  }>;
+  runSetup: () => Promise<{
+    success: boolean;
+    stdout: string;
+    stderr: string;
+  }>;
+  downloadVisionModel: () => Promise<{
+    success: boolean;
+    error?: string;
+  }>;
+}
+
 export interface ElectronAPI {
   platform: NodeJS.Platform;
   isElectron: boolean;
@@ -196,6 +219,7 @@ export interface ElectronAPI {
   screenCapture?: ElectronScreenCaptureAPI;
   unifiedCapture?: ElectronUnifiedCaptureAPI;
   permissions?: ElectronPermissionsAPI;
+  ghostOs: ElectronGhostOsAPI;
 }
 
 /**

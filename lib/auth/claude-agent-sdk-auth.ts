@@ -2,8 +2,7 @@ import path from "path";
 import { query as claudeAgentQuery } from "@anthropic-ai/claude-agent-sdk";
 import { isElectronProduction } from "@/lib/utils/environment";
 import { getNodeBinary } from "@/lib/auth/claude-login-process";
-import { getResolvedShellEnvironment } from "@/lib/shell-env/resolver";
-import { sanitizeEnvironment } from "@/lib/command-execution/executor-runtime";
+import { buildEnvironmentForTarget } from "@/lib/process-env/policy";
 
 const DEFAULT_CLAUDE_AGENT_MODEL = "claude-sonnet-4-5-20250929";
 
@@ -26,45 +25,22 @@ export function getSdkExecutableConfig(): {
   executable: "node";
   env: Record<string, string | undefined>;
 } {
-  // Always strip CLAUDECODE to prevent "cannot be launched inside another
-  // Claude Code session" errors when the server inherits the env from a
-  // Claude Code terminal session or similar wrapper.
-  const env: Record<string, string | undefined> = sanitizeEnvironment({ ...process.env });
-  delete env.CLAUDECODE;
-  // The settings manager may inject ANTHROPIC_API_KEY into process.env (e.g.
-  // a stale placeholder like "123"). The SDK must use its own OAuth flow, so
-  // strip any app-level API key to prevent it from overriding OAuth auth.
-  delete env.ANTHROPIC_API_KEY;
+  const isProduction = isElectronProduction();
+  const { env, source } = buildEnvironmentForTarget({
+    target: "claude-sdk",
+    isProduction,
+  });
 
-  if (isElectronProduction()) {
-    env.ELECTRON_RUN_AS_NODE = "1";
-
-    // Resolve the user's full login-shell environment so the SDK subprocess
-    // gets the same PATH as the user's terminal (includes homebrew, nvm, volta, etc.)
-    const shellEnv = getResolvedShellEnvironment();
-    const shellPath = shellEnv.PATH;
-
-    if (shellPath) {
-      // Use the shell-resolved PATH — this is exactly what the user's terminal sees
-      env.PATH = shellPath;
-      process.env.PATH = shellPath;
-      console.log("[Agent SDK] Production mode — using shell-resolved PATH");
-    } else {
-      // Fallback: augment PATH with the resolved node binary's directory
-      const nodeBin = getNodeBinary();
-      const nodeDir = path.dirname(nodeBin);
-      if (!env.PATH?.includes(nodeDir)) {
-        env.PATH = `${nodeDir}${path.delimiter}${env.PATH || ""}`;
-      }
-      if (!process.env.PATH?.includes(nodeDir)) {
-        process.env.PATH = `${nodeDir}${path.delimiter}${process.env.PATH || ""}`;
-      }
-      console.log("[Agent SDK] Production mode — fallback node binary:", nodeBin);
+  if (isProduction && source === "shell") {
+    env.PATH = env.PATH || process.env.PATH;
+    console.log("[Agent SDK] Production mode - using shell-resolved PATH");
+  } else if (isProduction) {
+    const nodeBin = getNodeBinary();
+    const nodeDir = path.dirname(nodeBin);
+    if (!env.PATH?.includes(nodeDir)) {
+      env.PATH = `${nodeDir}${path.delimiter}${env.PATH || ""}`;
     }
-  } else {
-    // In dev mode, ensure ELECTRON_RUN_AS_NODE is not inherited from the
-    // parent process (e.g. when the test runner or dev server runs inside Electron).
-    delete env.ELECTRON_RUN_AS_NODE;
+    console.log("[Agent SDK] Production mode - fallback node binary:", nodeBin);
   }
 
   return { executable: "node", env };

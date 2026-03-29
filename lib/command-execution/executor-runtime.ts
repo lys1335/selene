@@ -6,71 +6,29 @@
  */
 
 import { existsSync } from "fs";
-import { basename, isAbsolute, join } from "path";
 import { tmpdir } from "os";
-import { getResolvedShellEnvironment } from "@/lib/shell-env/resolver";
+import { basename, isAbsolute, join } from "path";
+import {
+    buildEnvironmentForTarget,
+    initializeProcessEnvironment,
+    sanitizeEnvironment,
+} from "@/lib/process-env/policy";
+
+export { sanitizeEnvironment } from "@/lib/process-env/policy";
 
 /**
- * Keys that are always stripped from the child environment, regardless of
- * whether we're using shell env or falling back to process.env.
- * These are Electron/Selene internals that should never reach user commands.
- */
-const ALWAYS_BLOCKED_ENV_KEYS = new Set([
-    "ELECTRON_RUN_AS_NODE",
-    "ELECTRON_NO_ATTACH_CONSOLE",
-    "ELECTRON_ENABLE_LOGGING",
-    "SELENE_PRODUCTION_BUILD",
-    "TURBOPACK",
-    "NEXT_RUNTIME",
-    "NEXT_DEPLOYMENT_ID",
-    "PORT",
-]);
-
-/**
- * Additional keys to strip when falling back to process.env (i.e. when shell
- * env resolution failed). These are set by the Electron/Next.js runtime and
- * would break user dev tooling if they leaked through.
+ * Explicitly normalize the parent process environment before command execution.
  *
- * When shell env IS available, these are NOT stripped — the shell env was
- * captured from a clean login shell, so if NODE_ENV is present it's because
- * the user's rcfiles explicitly set it, which is the correct behavior.
+ * spawn() with shell:false uses the parent process PATH to locate executables,
+ * so Windows callers must repair PATH on demand instead of relying on import-time
+ * side effects.
  */
-const PROCESS_ENV_FALLBACK_BLOCKED_KEYS = new Set([
-    "NODE_ENV",
-]);
-
-/**
- * Prefix patterns for env vars that should never leak to child processes.
- * All __NEXT_* vars are internal to the running Next.js instance — they
- * control standalone config, processed env markers, React bundle paths, etc.
- * Leaking them causes child Next.js processes to use Selene's config instead
- * of their own, which crashes with path resolution errors.
- *
- * Note: We intentionally do NOT block NEXT_PUBLIC_* or generic NEXT_* vars,
- * because those may be user-facing env vars. We only strip known Next.js
- * runtime internals via __NEXT_* and NEXT_PRIVATE_* prefixes.
- */
-const BLOCKED_ENV_PREFIXES = ["__NEXT_", "NEXT_PRIVATE_"];
-
-export function sanitizeEnvironment(
-    env: Record<string, string | undefined>,
-    extraBlockedKeys?: Set<string>,
-): Record<string, string | undefined> {
-    const sanitized = { ...env };
-    for (const key of ALWAYS_BLOCKED_ENV_KEYS) {
-        delete sanitized[key];
-    }
-    if (extraBlockedKeys) {
-        for (const key of extraBlockedKeys) {
-            delete sanitized[key];
-        }
-    }
-    for (const key of Object.keys(sanitized)) {
-        if (BLOCKED_ENV_PREFIXES.some((prefix) => key.startsWith(prefix))) {
-            delete sanitized[key];
-        }
-    }
-    return sanitized;
+export function initializeCommandExecutionProcessEnv(): NodeJS.ProcessEnv {
+    return initializeProcessEnvironment({
+        filterGitBashPath: false,
+        ensureComSpec: true,
+        ensureSystemPaths: true,
+    });
 }
 
 export type BundledRuntimeInfo = {
@@ -119,7 +77,11 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
 
     return {
         resourcesPath,
-        isProductionBuild: !!resourcesPath && process.env.ELECTRON_IS_DEV !== "1" && process.env.NODE_ENV !== "development",
+        // Use resourcesPath + ELECTRON_IS_DEV as production signals — not NODE_ENV,
+        // which can be stale/leaked from parent processes. app.isPackaged is the
+        // Electron-recommended approach; resourcesPath is its equivalent in
+        // renderer/server processes.
+        isProductionBuild: !!resourcesPath && process.env.ELECTRON_IS_DEV !== "1",
         nodeBinDir,
         toolsBinDir,
         ripgrepBinDir,
@@ -173,67 +135,16 @@ export function prependBundledPaths(pathValue: string, runtime: BundledRuntimeIn
  * of platform-essential vars (ELECTRON_RESOURCES_PATH, TERM) are set.
  */
 export function buildSafeEnvironment(runtime: BundledRuntimeInfo): Record<string, string | undefined> {
-    const shellEnv = getResolvedShellEnvironment();
-    const shellEnvAvailable = Object.keys(shellEnv).length > 0;
-
-    let baseEnv: Record<string, string | undefined>;
-
-    if (shellEnvAvailable) {
-        // Shell env IS the user's environment — captured from a clean login
-        // shell with no Electron/Next.js vars. Use it directly.
-        baseEnv = { ...shellEnv } as Record<string, string | undefined>;
-    } else {
-        // Fallback: shell env resolution failed. Use process.env but apply
-        // extra sanitization to strip runtime-specific vars.
-        baseEnv = { ...process.env };
-    }
-
-    // On Windows, process.env is a case-insensitive Proxy, but spreading it
-    // creates a plain (case-sensitive) object where PATH is typically stored
-    // as "Path". Collect the value case-insensitively (last match wins) and
-    // remove all variants to avoid duplicate/conflicting PATH entries.
-    let currentPath = "";
-    if (process.platform === "win32") {
-        for (const key of Object.keys(baseEnv)) {
-            if (key.toUpperCase() === "PATH") {
-                currentPath = (baseEnv[key] as string) || currentPath;
-                delete baseEnv[key];
-            }
-        }
-    } else {
-        currentPath = (baseEnv.PATH as string) || "";
-    }
-    const pathValue = prependBundledPaths(currentPath, runtime);
+    const { env } = buildEnvironmentForTarget({
+        target: "execute-command",
+        runtime,
+    });
 
     if (runtime.bundledBinDirs.length > 0) {
         console.log(`[Command Executor] Prepending bundled binaries to PATH: ${runtime.bundledBinDirs.join(", ")}`);
     }
 
-    // On Windows, expose TMPDIR so scripts using $TMPDIR or process.env.TMPDIR
-    // resolve to the correct Windows temp directory instead of failing on /tmp.
-    const tmpOverrides: Record<string, string> = {};
-    if (process.platform === "win32") {
-        tmpOverrides.TMPDIR = tmpdir();
-    }
-
-    // When falling back to process.env, also strip NODE_ENV and other
-    // runtime vars that would break dev tooling. When shell env is the
-    // source, these are either absent (clean bootstrap) or intentionally
-    // set by the user's rcfiles — both are correct.
-    const extraBlocked = shellEnvAvailable
-        ? undefined
-        : PROCESS_ENV_FALLBACK_BLOCKED_KEYS;
-
-    return sanitizeEnvironment({
-        ...baseEnv,
-        ...tmpOverrides,
-        PATH: pathValue,
-        TERM: baseEnv.TERM && baseEnv.TERM !== "dumb" ? baseEnv.TERM : "xterm-256color",
-        HOME: baseEnv.HOME || baseEnv.USERPROFILE,
-        USER: baseEnv.USER || baseEnv.USERNAME,
-        // Selene-specific: needed for bundled binary resolution in child processes
-        ELECTRON_RESOURCES_PATH: process.env.ELECTRON_RESOURCES_PATH || runtime.resourcesPath || undefined,
-    }, extraBlocked);
+    return env;
 }
 
 // ── Unix-to-Windows path normalization ────────────────────────────────────────

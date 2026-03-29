@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { clearSession } from "@/lib/ai/truncated-content-store";
 
 const mocks = vi.hoisted(() => ({
   saveBase64Image: vi.fn().mockResolvedValue({
@@ -20,6 +22,10 @@ vi.mock("@/lib/storage/local-storage", () => ({
 import { formatMCPToolResult } from "@/lib/mcp/result-formatter";
 
 describe("formatMCPToolResult", () => {
+  afterEach(() => {
+    clearSession("session-2");
+    clearSession("session-3");
+  });
   it("converts MCP image data URLs to stored URLs", async () => {
     const result = {
       content: [
@@ -49,5 +55,40 @@ describe("formatMCPToolResult", () => {
       },
     ]);
     expect(JSON.stringify(formatted)).not.toContain("base64,");
+  });
+
+  it("truncates oversized MCP text content and stores full content for retrieval", async () => {
+    const formatted = await formatMCPToolResult(
+      "ghostos",
+      "ghost_read",
+      "x".repeat(140_000),
+      false,
+      { sessionId: "session-2" }
+    );
+
+    expect(formatted.status).toBe("success");
+    expect(formatted.isTruncated).toBe(true);
+    expect(formatted.truncated).toBe(true);
+    expect(typeof formatted.truncatedContentId).toBe("string");
+    expect(typeof formatted.content).toBe("string");
+    expect((formatted.content as string).length).toBeLessThan(140_000);
+    expect(formatted.content).toContain("OUTPUT TRUNCATED");
+  });
+
+  it("truncates oversized MCP error strings", async () => {
+    const formatted = await formatMCPToolResult(
+      "ghostos",
+      "ghost_read",
+      "e".repeat(140_000),
+      true,
+      { sessionId: "session-3" }
+    );
+
+    expect(formatted.status).toBe("error");
+    expect(formatted.isTruncated).toBe(true);
+    expect(formatted.truncated).toBe(true);
+    expect(typeof formatted.error).toBe("string");
+    expect((formatted.error as string).length).toBeLessThan(140_000);
+    expect(formatted.error).toContain("OUTPUT TRUNCATED");
   });
 });

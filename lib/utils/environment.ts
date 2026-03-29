@@ -7,22 +7,36 @@
  * - Server production (deployed web server - hypothetical future use)
  */
 
+type ElectronLikeProcess = NodeJS.Process & {
+  defaultApp?: boolean;
+};
+
 /**
- * Check if running in an Electron production build
+ * Check if running in an Electron production build.
  *
- * Electron production builds have specific markers:
- * - SELENE_PRODUCTION_BUILD=1
- * - process.resourcesPath exists (Electron-specific)
- * - ELECTRON_RESOURCES_PATH is set
+ * Packaged detection must not rely on process.resourcesPath alone because Electron
+ * exposes a resources path in development too. We trust explicit packaged markers
+ * from the main process and Electron's defaultApp flag when running inside Electron.
  */
 export function isElectronProduction(): boolean {
-  return (
-    (process.env.SELENE_PRODUCTION_BUILD === "1" ||
-      !!(process as any).resourcesPath ||
-      !!process.env.ELECTRON_RESOURCES_PATH) &&
-    process.env.ELECTRON_IS_DEV !== "1" &&
-    process.env.NODE_ENV !== "development"
-  );
+  if (process.env.ELECTRON_IS_DEV === "1") {
+    return false;
+  }
+
+  if (process.env.SELENE_PRODUCTION_BUILD === "1") {
+    return true;
+  }
+
+  if (process.env.ELECTRON_RESOURCES_PATH) {
+    return true;
+  }
+
+  if (process.versions?.electron) {
+    const electronProcess = process as ElectronLikeProcess;
+    return electronProcess.defaultApp !== true;
+  }
+
+  return false;
 }
 
 /**

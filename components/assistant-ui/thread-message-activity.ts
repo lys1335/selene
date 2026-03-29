@@ -5,12 +5,11 @@ import {
   summarizeToolOutputByName,
 } from "./tool-live-status";
 import { getCanonicalToolName } from "./tool-name-utils";
+import { getToolBadgeStatus } from "./tool-status";
 
 export const SYNTHETIC_THINKING_IDLE_DELAY_MS = 10_000;
 
 type MessageStatusLike = { type?: string } | null | undefined;
-
-type ToolBadgeStatus = "running" | "completed" | "error";
 
 interface MessagePartLike {
   type?: string;
@@ -33,27 +32,6 @@ function asParts(parts: unknown): MessagePartLike[] {
   return parts.filter(
     (part): part is MessagePartLike => !!part && typeof part === "object"
   );
-}
-
-function getToolBadgeStatus(part: ToolCallPartLike): ToolBadgeStatus {
-  const result = part.result as Record<string, unknown> | undefined;
-  const status = typeof result?.status === "string" ? result.status.toLowerCase() : undefined;
-  const resultIndicatesError =
-    status === "error" || status === "failed" || status === "denied" || typeof result?.error === "string";
-
-  // When a result exists, trust the result content over framework-level signals.
-  // part.status.type === "incomplete" means the *stream* was interrupted, not
-  // that the *tool* failed.  If we already have the result, the tool is done.
-  if (result !== undefined) {
-    if (part.isError || resultIndicatesError) return "error";
-    if (status === "processing") return "running";
-    return "completed";
-  }
-
-  // No result yet — fall back to framework signals
-  if (part.status?.type === "incomplete") return "error";
-  if (part.status?.type === "running" || part.status?.type === "requires-action") return "running";
-  return "running";
 }
 
 function getResultCount(result: unknown): number | null {

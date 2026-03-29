@@ -153,6 +153,36 @@ const electronAPI = {
     },
   },
 
+  // Ghost OS operations
+  ghostOs: {
+    getStatus: (): Promise<{
+      installed: boolean;
+      version?: string;
+      visionModelInstalled: boolean;
+      permissions: {
+        accessibility: boolean;
+        screenRecording: boolean;
+        inputMonitoring: boolean;
+      };
+      binaryPath?: string;
+    }> => {
+      return ipcRenderer.invoke("ghostos:getStatus");
+    },
+    runSetup: (): Promise<{
+      success: boolean;
+      stdout: string;
+      stderr: string;
+    }> => {
+      return ipcRenderer.invoke("ghostos:runSetup");
+    },
+    downloadVisionModel: (): Promise<{
+      success: boolean;
+      error?: string;
+    }> => {
+      return ipcRenderer.invoke("ghostos:downloadVisionModel");
+    },
+  },
+
   // Browser session window operations
   browserSession: {
     open: (sessionId: string): Promise<{ success: boolean; reused?: boolean; error?: string }> => {
@@ -562,6 +592,9 @@ const electronAPI = {
         "browser-session:save-recording",
         "mini-overlay:request-focus-return",
         "mini-overlay:compose-ready",
+        "ghostos:getStatus",
+        "ghostos:runSetup",
+        "ghostos:downloadVisionModel",
       ];
       if (validChannels.includes(channel)) {
         return ipcRenderer.invoke(channel, ...args);

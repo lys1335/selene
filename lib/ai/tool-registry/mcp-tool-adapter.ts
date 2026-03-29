@@ -520,6 +520,27 @@ export function createMCPToolWrapper(mcpTool: MCPDiscoveredTool): Tool {
                     );
                 }
 
+                // Ghost OS vision sidecar pre-flight:
+                // ghost_parse_screen and ghost_annotate need the vision sidecar running,
+                // but unlike ghost_ground they don't auto-start it. We trigger ghost_ground
+                // as a boot mechanism if the sidecar isn't responding.
+                if (serverName === "ghostos") {
+                    const { isVisionSidecarTool, ensureVisionSidecar } = await import("@/lib/ghost-os/vision-sidecar");
+                    if (isVisionSidecarTool(toolName)) {
+                        const sidecarError = await ensureVisionSidecar(
+                            (sn, tn, a) => manager.executeTool(sn, tn, a)
+                        );
+                        if (sidecarError) {
+                            return await formatMCPToolResult(
+                                serverName,
+                                toolName,
+                                sidecarError,
+                                true
+                            );
+                        }
+                    }
+                }
+
                 const result = await manager.executeTool(
                     serverName,
                     toolName,

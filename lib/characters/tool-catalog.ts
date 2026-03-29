@@ -59,6 +59,7 @@ export const CHARACTER_TOOL_CATALOG: CharacterToolCatalogItem[] = [
   { id: "transcribe", category: "utility" },
   { id: "workspace", category: "utility", dependencies: ["devWorkspaceEnabled"] },
   { id: "chromiumWorkspace", category: "browser" },
+  { id: "ghostOs", category: "computer-use", displayName: "Ghost OS", description: "macOS desktop automation via accessibility tree — click, type, scroll any app" },
   { id: "generateImageFlux2Flex", category: "image-generation", dependencies: ["openrouterKey"] },
   { id: "editImageFlux2Flex", category: "image-editing", dependencies: ["openrouterKey"] },
   { id: "referenceImageFlux2Flex", category: "image-generation", dependencies: ["openrouterKey"] },
