@@ -38,6 +38,8 @@ export interface TranscriptionResult {
   language?: string;
 }
 
+let cachedFfmpegBinary: string | null | undefined;
+
 /**
  * Transcribe an audio buffer using the configured STT provider.
  * Supports OpenAI Whisper API (cloud), whisper.cpp (local), and Parakeet (local sherpa-onnx websocket).
@@ -520,8 +522,8 @@ async function transcribeWithWhisperCpp(
     const ffmpegPath = findFfmpegBinary();
     if (!ffmpegPath) {
       throw new Error(
-        "ffmpeg is required for local whisper.cpp transcription but was not found. " +
-        "Install it with your package manager and ensure it is in PATH."
+        "Local whisper.cpp transcription is not available because Selene could not find ffmpeg. " +
+        "Selene normally bundles ffmpeg automatically. Try reinstalling the app, or switch Speech-to-Text to OpenAI Whisper in Settings -> Voice & Audio."
       );
     }
 
@@ -632,6 +634,9 @@ export function isWhisperCppAvailable(): boolean {
     const binaryPath = findWhisperBinary();
     if (!binaryPath) return false;
 
+    const ffmpegPath = findFfmpegBinary();
+    if (!ffmpegPath) return false;
+
     const settings = loadSettings();
     const modelId = settings.sttLocalModel || DEFAULT_WHISPER_MODEL;
     const modelPath = resolveWhisperModelPath(modelId);
@@ -693,16 +698,30 @@ function findWhisperBinary(): string | null {
 }
 
 function findFfmpegBinary(): string | null {
+  if (cachedFfmpegBinary !== undefined) {
+    if (cachedFfmpegBinary && existsSync(cachedFfmpegBinary)) {
+      return cachedFfmpegBinary;
+    }
+    cachedFfmpegBinary = undefined;
+  }
+
   const inPath = findExecutableInPath(["ffmpeg", "ffmpeg.exe"]);
-  if (inPath) return inPath;
+  if (inPath) {
+    cachedFfmpegBinary = inPath;
+    return inPath;
+  }
 
   for (const relativePath of getFfmpegBundledRelativePaths()) {
     const bundledPaths = getBundledBinaryPaths("ffmpeg", relativePath);
     for (const p of bundledPaths) {
-      if (existsSync(p)) return p;
+      if (existsSync(p)) {
+        cachedFfmpegBinary = p;
+        return p;
+      }
     }
   }
 
+  cachedFfmpegBinary = null;
   return null;
 }
 
@@ -943,13 +962,18 @@ function getBundledBinaryPaths(name: string, relativePath: string): string[] {
   if (resourcesPath) {
     paths.push(join(resourcesPath, "binaries", name, relativePath));
     paths.push(join(resourcesPath, "standalone", "binaries", name, relativePath));
+    // ffmpeg is bundled into standalone/node_modules/.bin during electron:prepare
+    paths.push(join(resourcesPath, "standalone", relativePath));
+    paths.push(join(resourcesPath, relativePath));
   }
 
   const cwd = process.cwd();
   paths.push(join(cwd, "binaries", name, relativePath));
   paths.push(join(cwd, "..", "binaries", name, relativePath));
+  paths.push(join(cwd, relativePath));
+  paths.push(join(cwd, "..", relativePath));
 
-  return paths;
+  return [...new Set(paths)];
 }
 
 function resolveWhisperModelPath(modelId: string): string | null {

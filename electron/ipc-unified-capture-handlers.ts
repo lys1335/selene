@@ -54,6 +54,11 @@ async function executeUnifiedCapture(
   }
   lastTriggerTime = now;
 
+  // Snapshot focus state BEFORE any async work so we know whether Selene was
+  // the active window at trigger time, not after the capture completes.
+  const captureWin = ctx.mainWindow();
+  const wasFocusedAtTrigger = captureWin && !captureWin.isDestroyed() ? captureWin.isFocused() : false;
+
   // Check app exclusion list
   const settings = loadSettings();
   const excludedApps = (settings.screenCaptureExcludedApps ?? "")
@@ -124,16 +129,19 @@ async function executeUnifiedCapture(
     }
   }
 
-  // Step 2: Bring Selene window forward
+  // Step 2: Bring Selene window forward — but don't steal focus if user is
+  // currently in another app (e.g. GhostOS automating a background workflow).
   const win = ctx.mainWindow();
   if (win && !win.isDestroyed()) {
     if (win.isMinimized()) {
       win.restore();
-    }
-    if (!win.isVisible()) {
+      win.focus();
+    } else if (!win.isVisible()) {
       win.show();
+      win.focus();
+    } else if (wasFocusedAtTrigger) {
+      win.focus();
     }
-    win.focus();
   }
 
   // Step 3: Emit unified event to renderer

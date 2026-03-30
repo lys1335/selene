@@ -24,6 +24,8 @@ interface ApiKeysSectionProps {
   onClaudeCodeLogout: () => void;
   claudeCodePasteMode: boolean;
   claudeCodeAuthSuccess: boolean;
+  claudeCodeBrowserOpened: boolean;
+  claudeCodeDiagnosticOutput: string[];
   onClaudeCodePasteSubmit: (code: string) => void;
   onClaudeCodePasteCancel: () => void;
   onClaudeCodeAuthComplete: () => void;
@@ -46,6 +48,8 @@ export function ApiKeysSection({
   onClaudeCodeLogout,
   claudeCodePasteMode,
   claudeCodeAuthSuccess,
+  claudeCodeBrowserOpened,
+  claudeCodeDiagnosticOutput,
   onClaudeCodePasteSubmit,
   onClaudeCodePasteCancel,
   onClaudeCodeAuthComplete,
@@ -387,6 +391,8 @@ export function ApiKeysSection({
           <ClaudeCodeAuthFlow
             loading={claudecodeLoading}
             success={claudeCodeAuthSuccess}
+            browserOpened={claudeCodeBrowserOpened}
+            diagnosticOutput={claudeCodeDiagnosticOutput}
             onSubmit={onClaudeCodePasteSubmit}
             onCancel={onClaudeCodePasteCancel}
             onComplete={onClaudeCodeAuthComplete}

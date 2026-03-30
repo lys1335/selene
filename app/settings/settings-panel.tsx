@@ -48,6 +48,8 @@ export interface SettingsPanelProps {
   onClaudeCodeLogout: () => void;
   claudeCodePasteMode: boolean;
   claudeCodeAuthSuccess: boolean;
+  claudeCodeBrowserOpened: boolean;
+  claudeCodeDiagnosticOutput: string[];
   onClaudeCodePasteSubmit: (code: string) => void;
   onClaudeCodePasteCancel: () => void;
   onClaudeCodeAuthComplete: () => void;
@@ -122,12 +124,18 @@ export function ClaudeCodeAuthFlow({
   onSubmit,
   onCancel,
   onComplete,
+  browserOpened = true,
+  diagnosticOutput,
 }: {
   loading: boolean;
   success: boolean;
   onSubmit: (code: string) => void;
   onCancel: () => void;
   onComplete: () => void;
+  /** Whether the browser was successfully opened with the auth URL */
+  browserOpened?: boolean;
+  /** Diagnostic output from the login process when browser failed to open */
+  diagnosticOutput?: string[];
 }) {
   const t = useTranslations("settings.api.auth");
   const [code, setCode] = useState("");
@@ -166,12 +174,34 @@ export function ClaudeCodeAuthFlow({
         <p className="font-mono text-sm font-semibold text-terminal-dark">
           {t("authFlowTitle") || "Complete Authentication"}
         </p>
-        <ol className="ml-4 list-decimal space-y-1.5 font-mono text-xs text-terminal-muted">
-          <li>{t("authStep1") || "A browser window has opened with the Anthropic authentication page"}</li>
-          <li>{t("authStep2") || "Sign in with your Anthropic account if prompted"}</li>
-          <li>{t("authStep3") || "Authorize the Claude Code application"}</li>
-          <li>{t("authStep4") || "Copy the authorization code and paste it below"}</li>
-        </ol>
+        {browserOpened ? (
+          <ol className="ml-4 list-decimal space-y-1.5 font-mono text-xs text-terminal-muted">
+            <li>{t("authStep1") || "A browser window has opened with the Anthropic authentication page"}</li>
+            <li>{t("authStep2") || "Sign in with your Anthropic account if prompted"}</li>
+            <li>{t("authStep3") || "Authorize the Claude Code application"}</li>
+            <li>{t("authStep4") || "Copy the authorization code and paste it below"}</li>
+          </ol>
+        ) : (
+          <div className="space-y-2">
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-600 dark:bg-amber-900/20">
+              <p className="font-mono text-xs text-amber-700 dark:text-amber-400">
+                {"Could not open the authentication page automatically. Run "}
+                <code className="rounded bg-amber-100 px-1 py-0.5 dark:bg-amber-800/40">claude login</code>
+                {" in your terminal, then paste the authorization code below."}
+              </p>
+            </div>
+            {diagnosticOutput && diagnosticOutput.length > 0 && (
+              <details className="rounded border border-terminal-border">
+                <summary className="cursor-pointer px-3 py-1.5 font-mono text-xs text-terminal-muted">
+                  Diagnostic details
+                </summary>
+                <pre className="max-h-24 overflow-auto px-3 py-2 font-mono text-[10px] text-terminal-muted">
+                  {diagnosticOutput.join("\n")}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
       </div>
 
       <div>
@@ -289,6 +319,8 @@ export function SettingsPanel({
   onClaudeCodeLogout,
   claudeCodePasteMode,
   claudeCodeAuthSuccess,
+  claudeCodeBrowserOpened,
+  claudeCodeDiagnosticOutput,
   onClaudeCodePasteSubmit,
   onClaudeCodePasteCancel,
   onClaudeCodeAuthComplete,
@@ -317,6 +349,8 @@ export function SettingsPanel({
         onClaudeCodeLogout={onClaudeCodeLogout}
         claudeCodePasteMode={claudeCodePasteMode}
         claudeCodeAuthSuccess={claudeCodeAuthSuccess}
+        claudeCodeBrowserOpened={claudeCodeBrowserOpened}
+        claudeCodeDiagnosticOutput={claudeCodeDiagnosticOutput}
         onClaudeCodePasteSubmit={onClaudeCodePasteSubmit}
         onClaudeCodePasteCancel={onClaudeCodePasteCancel}
         onClaudeCodeAuthComplete={onClaudeCodeAuthComplete}

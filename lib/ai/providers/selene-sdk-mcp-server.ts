@@ -182,8 +182,9 @@ function extractRichOutputs(result: unknown): string[] {
       if (value.startsWith("data:image/") || value.startsWith("data:video/")) {
         urls.push(value);
       }
-      // Common URL field values ending in media extensions
-      if (/\.(png|jpg|jpeg|gif|webp|mp4|webm|mov)(\?.*)?$/i.test(value) && value.startsWith("http")) {
+      // Common URL field values ending in media extensions (http or /api/media/ after formatting)
+      if (/\.(png|jpg|jpeg|gif|webp|mp4|webm|mov)(\?.*)?$/i.test(value) &&
+          (value.startsWith("http") || value.startsWith("/api/media/"))) {
         urls.push(value);
       }
     } else if (Array.isArray(value)) {
@@ -427,25 +428,34 @@ export function createSeleneSdkMcpServer(
       inputSchema,
       handler: async (args: Record<string, unknown>) => {
         try {
-          // Import MCPClientManager lazily to avoid circular deps
+          // Import lazily to avoid circular deps
           const { MCPClientManager } = await import("@/lib/mcp/client-manager");
+          const { formatMCPToolResult } = await import("@/lib/mcp/result-formatter");
           const mcpManager = MCPClientManager.getInstance();
-          const result = await mcpManager.executeTool(
+          const rawResult = await mcpManager.executeTool(
             mcpTool.serverName,
             mcpTool.name,
             args
           );
 
-          // Rich output detection
+          // Format result: converts base64 data URIs → /api/media/ URLs so raw
+          // screenshot bytes never flow into the context window or DB history.
+          const formattedResult = await formatMCPToolResult(
+            mcpTool.serverName,
+            mcpTool.name,
+            rawResult
+          );
+
+          // Rich output detection on formatted result (URLs are now /api/media/...)
           if (ctx.onRichOutput) {
-            const richUrls = extractRichOutputs(result);
+            const richUrls = extractRichOutputs(formattedResult);
             if (richUrls.length > 0) {
               const toolCallId = nextSdkToolCallId(toolId);
-              ctx.onRichOutput(toolCallId, toolId, result);
+              ctx.onRichOutput(toolCallId, toolId, formattedResult);
             }
           }
 
-          return toCallToolResult(result);
+          return toCallToolResult(formattedResult);
         } catch (err) {
           return toCallToolError(err);
         }

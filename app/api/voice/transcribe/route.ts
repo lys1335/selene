@@ -57,12 +57,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to transcribe audio";
-    const status =
+    const isUserFixable =
       message.includes("disabled") ||
       message.includes("No API key") ||
-      message.includes("Unsupported STT provider")
-        ? 400
-        : 500;
+      message.includes("Unsupported STT provider") ||
+      message.includes("Settings -> Voice & Audio") ||
+      message.includes("could not find ffmpeg") ||
+      message.includes("whisper-cli not found") ||
+      message.includes("model \"") ||
+      message.includes("Please download it in Settings");
+    const status = isUserFixable ? 400 : 500;
     console.error("[Voice API] Transcribe failed:", error);
     return NextResponse.json({ error: message }, { status });
   }

@@ -34,6 +34,10 @@ export async function emitCapturedScreen(ctx: IpcHandlerContext) {
     // the result (with success=false) and can handle it.
   }
 
+  // Snapshot focus state BEFORE the async capture — isFocused() sampled after
+  // an await reflects post-capture state, not trigger-time state.
+  const wasFocused = win && !win.isDestroyed() ? win.isFocused() : false;
+
   const result = await captureDisplay({ mediaDir: ctx.mediaDir });
   if (!win || win.isDestroyed()) {
     return result;
@@ -43,11 +47,14 @@ export async function emitCapturedScreen(ctx: IpcHandlerContext) {
   if (result.success) {
     if (win.isMinimized()) {
       win.restore();
-    }
-    if (!win.isVisible()) {
+      win.focus();
+    } else if (!win.isVisible()) {
       win.show();
+      win.focus();
+    } else if (wasFocused) {
+      win.focus();
     }
-    win.focus();
+    // If visible but not focused, user is in another app — don't steal focus
   }
 
   return result;

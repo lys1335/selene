@@ -259,6 +259,12 @@ function buildClaudeSdkEnvironment(
     env.MSYS2_PATH_TYPE = "inherit";
     env.MSYS_NO_PATHCONV = "1";
     env.CHERE_INVOKING = "1";
+
+    // Ensure HOME is set so the Claude Code CLI can find ~/.claude/ credentials.
+    // Windows doesn't set HOME by default; Node's os.homedir() falls back to
+    // USERPROFILE, but some tools (including shell scripts invoked by the CLI)
+    // rely on the HOME env var directly.
+    env.HOME = env.HOME || env.USERPROFILE || processEnv.USERPROFILE;
   }
 
   return {

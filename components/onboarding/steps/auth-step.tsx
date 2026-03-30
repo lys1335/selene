@@ -26,6 +26,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
     const [claudeCodePasteMode, setClaudeCodePasteMode] = useState(false);
     const [claudeCodePasteValue, setClaudeCodePasteValue] = useState("");
     const [claudeCodeAutoChecking, setClaudeCodeAutoChecking] = useState(false);
+    const [claudeCodeBrowserOpened, setClaudeCodeBrowserOpened] = useState(true);
 
     // Check if already authenticated for OAuth providers
     useEffect(() => {
@@ -313,6 +314,9 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                 } else {
                     window.open(authData.url, "_blank");
                 }
+                setClaudeCodeBrowserOpened(true);
+            } else {
+                setClaudeCodeBrowserOpened(false);
             }
 
             const authenticated = await waitForClaudeCodeAuthentication();
@@ -456,9 +460,19 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                         ) : provider === "claudecode" && claudeCodePasteMode ? (
                             <>
                                 <div className="text-left space-y-3">
-                                    <p className="text-sm text-terminal-muted font-mono">
-                                        {t("pasteInstruction")}
-                                    </p>
+                                    {claudeCodeBrowserOpened ? (
+                                        <p className="text-sm text-terminal-muted font-mono">
+                                            {t("pasteInstruction")}
+                                        </p>
+                                    ) : (
+                                        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+                                            <p className="text-sm text-amber-700 font-mono">
+                                                {"Could not open authentication page automatically. Run "}
+                                                <code className="rounded bg-amber-100 px-1 py-0.5">claude login</code>
+                                                {" in your terminal, then paste the authorization code below."}
+                                            </p>
+                                        </div>
+                                    )}
                                     <label className="block font-mono text-sm text-terminal-muted">
                                         {t("authCodeLabel")}
                                     </label>
@@ -475,9 +489,11 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                                             }
                                         }}
                                     />
-                                    <p className="text-xs text-terminal-muted font-mono">
-                                        {t("pasteInstruction")}
-                                    </p>
+                                    {claudeCodeBrowserOpened && (
+                                        <p className="text-xs text-terminal-muted font-mono">
+                                            {t("pasteInstruction")}
+                                        </p>
+                                    )}
                                 </div>
 
                                 {error && (

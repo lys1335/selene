@@ -21,6 +21,7 @@ import {
   sleepWithAbort,
 } from "@/lib/ai/retry/stream-recovery";
 import { readClaudeAgentSdkAuthStatus, getSdkExecutableConfig } from "@/lib/auth/claude-agent-sdk-auth";
+import { getCliPath } from "@/lib/auth/claude-login-process";
 import {
   mcpContextStore,
   type SeleneMcpContext,
@@ -1041,6 +1042,7 @@ function createStreamingClaudeCodeResponse(options: {
             cwd: resolvedCwd,
             ...(resolvedCwd !== process.cwd() ? { additionalDirectories: [resolvedCwd] } : {}),
             executable: sdkExecutable,
+            pathToClaudeCodeExecutable: getCliPath(),
             includePartialMessages: true,
             settingSources: ["project"] as ("user" | "project" | "local")[],
             maxTurns: sdk?.maxTurns ?? 1000,
@@ -1698,6 +1700,7 @@ async function runClaudeAgentQuery(options: {
       cwd: resolvedCwd,
       ...(resolvedCwd !== process.cwd() ? { additionalDirectories: [resolvedCwd] } : {}),
       executable: sdkExecutable,
+      pathToClaudeCodeExecutable: getCliPath(),
       includePartialMessages: true,
       // Allow multi-step agentic work (read → plan → write → verify).
       maxTurns: sdk?.maxTurns ?? 1000,

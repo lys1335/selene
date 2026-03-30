@@ -1,4 +1,5 @@
-import { existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "fs";
+import { writeFile } from "fs/promises";
 import { dirname, resolve, sep } from "path";
 import { nanoid } from "nanoid";
 
@@ -120,7 +121,7 @@ export async function saveBase64Image(
   const fullPath = resolveUnderStorage(relativePath);
 
   ensureDir(dirname(fullPath));
-  writeFileSync(fullPath, buffer);
+  await writeFile(fullPath, buffer);
 
   return {
     localPath: relativePath,
@@ -145,7 +146,7 @@ export async function saveBase64Video(
   const fullPath = resolveUnderStorage(relativePath);
 
   ensureDir(dirname(fullPath));
-  writeFileSync(fullPath, buffer);
+  await writeFile(fullPath, buffer);
 
   return {
     localPath: relativePath,
@@ -169,7 +170,7 @@ export async function saveFile(
   const fullPath = resolveUnderStorage(relativePath);
 
   ensureDir(dirname(fullPath));
-  writeFileSync(fullPath, file);
+  await writeFile(fullPath, file);
 
   return {
     localPath: relativePath,
@@ -193,7 +194,7 @@ export async function saveDocumentFile(
   const fullPath = resolveUnderStorage(relativePath);
 
   ensureDir(dirname(fullPath));
-  writeFileSync(fullPath, file);
+  await writeFile(fullPath, file);
 
   return {
     localPath: relativePath,
