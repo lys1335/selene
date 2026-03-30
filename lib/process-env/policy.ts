@@ -170,6 +170,7 @@ function buildExecuteCommandEnvironment(
 ): BuildEnvironmentForTargetResult {
   const processEnv = options.processEnv ?? process.env;
   const runtime = options.runtime ?? {};
+  const hostPath = getPathValue(processEnv);
   const base = resolveBaseEnvironment({
     preferShellEnvironment: true,
     processEnv,
@@ -181,10 +182,10 @@ function buildExecuteCommandEnvironment(
     : undefined;
 
   let env = sanitizeEnvironment({ ...base.env }, extraBlockedKeys);
-  const currentPath = getPathValue(env);
+  const resolvedPath = mergePathValues(getPathValue(env), hostPath);
 
   if (process.platform === "win32") {
-    env = normalizeWindowsEnvironment(env, {
+    env = normalizeWindowsEnvironment({ ...env, PATH: resolvedPath }, {
       filterGitBashPath: false,
       ensureComSpec: true,
       ensureSystemPaths: true,
@@ -192,7 +193,7 @@ function buildExecuteCommandEnvironment(
     });
   } else {
     delete env.Path;
-    env.PATH = currentPath;
+    env.PATH = resolvedPath;
   }
 
   env.PATH = prependBundledPaths(env.PATH || "", runtime.bundledBinDirs ?? []);
@@ -214,6 +215,30 @@ function buildExecuteCommandEnvironment(
     source: base.source,
     shellEnvAvailable: base.shellEnvAvailable,
   };
+}
+
+function mergePathValues(primaryPath: string, fallbackPath: string): string {
+  if (!primaryPath) return fallbackPath;
+  if (!fallbackPath || primaryPath === fallbackPath) return primaryPath;
+
+  const separator = delimiter;
+  const seen = new Set<string>();
+  const merged: string[] = [];
+
+  for (const candidate of [primaryPath, fallbackPath]) {
+    for (const segment of candidate.split(separator)) {
+      const trimmed = segment.trim();
+      if (!trimmed) continue;
+      const normalized = process.platform === "win32"
+        ? trimmed.toLowerCase()
+        : trimmed;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      merged.push(trimmed);
+    }
+  }
+
+  return merged.join(separator);
 }
 
 function buildClaudeSdkEnvironment(

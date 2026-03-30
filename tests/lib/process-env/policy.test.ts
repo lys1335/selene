@@ -113,6 +113,25 @@ describe("process-env policy", () => {
       expect(env.ELECTRON_RESOURCES_PATH).toBe("/resources");
     });
 
+    it("preserves host PATH entries after bundled bins in packaged mode", () => {
+      const env = buildEnvironmentForTarget({
+        target: "execute-command",
+        processEnv: {
+          PATH: "/usr/local/bin:/usr/bin:/opt/custom/bin",
+          ELECTRON_RESOURCES_PATH: "/resources",
+        },
+        shellEnv: {
+          PATH: "/bundle-shell/bin:/usr/local/bin",
+        },
+        runtime: {
+          resourcesPath: "/bundle/resources",
+          bundledBinDirs: ["/bundle/bin", "/bundle/tools/bin"],
+        },
+      }).env;
+
+      expect(env.PATH).toBe("/bundle/bin:/bundle/tools/bin:/bundle-shell/bin:/usr/local/bin:/usr/bin:/opt/custom/bin");
+    });
+
     it("falls back to process env and strips NODE_ENV when shell env is unavailable", () => {
       const env = buildEnvironmentForTarget({
         target: "execute-command",

@@ -68,13 +68,13 @@ function MiniOverlayContent() {
 
   // Auto-close after speak (direct mode done) if setting is enabled
   useEffect(() => {
-    if (pipeline.phase !== "done" || mode !== "direct" || !autoCloseAfterSpeak) return;
+    if (pipeline.phase !== "done" || mode !== "direct" || !autoCloseAfterSpeak || !pipeline.shouldAutoClose) return;
     const timer = setTimeout(() => {
       const api = getElectronAPI();
       api?.ipc?.send("mini-overlay:dismiss");
     }, 1500);
     return () => clearTimeout(timer);
-  }, [pipeline.phase, mode, autoCloseAfterSpeak]);
+  }, [pipeline.phase, pipeline.shouldAutoClose, mode, autoCloseAfterSpeak]);
 
   // ---------------------------------------------------------------------------
   // Shortcut toggle: same shortcut toggles recording behavior
@@ -164,6 +164,11 @@ function MiniOverlayContent() {
     }
   }, [pipeline.phase, pipeline.stopRecording]);
 
+  // Stop TTS playback early — transitions to done without resetting transcript/response
+  const handleStopSpeaking = useCallback(() => {
+    pipeline.stopSpeaking();
+  }, [pipeline.stopSpeaking]);
+
   // Allow mode switching during recording — mode only matters after transcription
   const isModeChangeBlocked =
     pipeline.phase !== "idle" &&
@@ -184,6 +189,7 @@ function MiniOverlayContent() {
         onStopRecording={handleStopRecording}
         onConfirmCompose={handleConfirmCompose}
         onDismiss={handleDismiss}
+        onStopSpeaking={handleStopSpeaking}
         screenshotUrls={showScreenPreview ? allScreenshots : undefined}
         agentPicker={
           !agentLoading && agents.length > 0 ? (

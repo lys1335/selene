@@ -13,6 +13,7 @@ vi.mock("fs", async (importOriginal) => {
 import * as shellEnvResolver from "@/lib/shell-env/resolver";
 import {
   buildSafeEnvironment,
+  buildNotFoundDiagnostic,
   initializeCommandExecutionProcessEnv,
   normalizeUnixPath,
   normalizeArgs,
@@ -32,6 +33,7 @@ const baseRuntime: BundledRuntimeInfo = {
     bundledNodePath: null,
     bundledNpmCliPath: null,
     bundledNpxCliPath: null,
+    ffmpegDir: null,
 };
 
 const bundledRipgrepBinDir = "/bundle/node_modules/@vscode/ripgrep/bin";
@@ -287,6 +289,25 @@ describe("buildSafeEnvironment", () => {
     });
 });
 
+describe("buildNotFoundDiagnostic", () => {
+    it("reports whether host PATH fallback remains visible after bundled bins", () => {
+        const diagnostic = buildNotFoundDiagnostic(
+            "python",
+            {
+                ...baseRuntime,
+                bundledBinDirs: ["/bundle/node/.bin", "/bundle/tools/bin"],
+            },
+            {
+                PATH: "/bundle/node/.bin:/bundle/tools/bin:/usr/local/bin:/usr/bin",
+            },
+            null,
+        );
+
+        expect(diagnostic).toContain("host PATH fallback preserved: yes");
+        expect(diagnostic).toContain("effective PATH prefix:\n  /bundle/node/.bin\n  /bundle/tools/bin\n  /usr/local/bin");
+    });
+});
+
 describe("normalizeUnixPath", () => {
     const originalPlatform = process.platform;
 
@@ -390,10 +411,10 @@ describe("ensureWindowsSystemPaths", () => {
 
         const result = ensureWindowsSystemPaths("C:\\tools\\bin");
 
-        expect(result).toContain("C:\\WINDOWS\\system32");
+        expect(result.toLowerCase()).toContain("c:\\windows/system32");
         expect(result).toContain("C:\\WINDOWS");
-        expect(result).toContain("C:\\WINDOWS\\System32\\Wbem");
-        expect(result).toContain("C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0");
+        expect(result.toLowerCase()).toContain("c:\\windows/system32/wbem");
+        expect(result.toLowerCase()).toContain("c:\\windows/system32/windowspowershell/v1.0");
         // Original path preserved at front
         expect(result.startsWith("C:\\tools\\bin;")).toBe(true);
     });
@@ -427,7 +448,7 @@ describe("ensureWindowsSystemPaths", () => {
 
         const result = ensureWindowsSystemPaths("");
 
-        expect(result).toContain("C:\\WINDOWS\\system32");
+        expect(result.toLowerCase()).toContain("c:\\windows/system32");
     });
 
     it("is a no-op on non-Windows", () => {
@@ -444,7 +465,7 @@ describe("ensureWindowsSystemPaths", () => {
 
         const result = ensureWindowsSystemPaths("C:\\tools");
 
-        expect(result).toContain("D:\\Windows\\system32");
+        expect(result.toLowerCase()).toContain("d:\\windows/system32");
     });
 });
 

@@ -281,7 +281,11 @@ export function buildNotFoundDiagnostic(
     resolution: string | null,
 ): string {
     const pathSeparator = process.platform === "win32" ? ";" : ":";
-    const effectivePathHead = (env.PATH || "").split(pathSeparator).slice(0, 5).join("\n  ");
+    const pathSegments = (env.PATH || "").split(pathSeparator).filter(Boolean);
+    const effectivePathHead = pathSegments.slice(0, 5).join("\n  ");
+    const hostPathVisible = runtime.bundledBinDirs.length === 0
+        ? pathSegments.length > 0
+        : pathSegments.slice(runtime.bundledBinDirs.length).length > 0;
     const lines = [
         `Mode: ${runtime.isProductionBuild ? "packaged" : "development"}`,
         `resourcesPath: ${runtime.resourcesPath ?? "<none>"}`,
@@ -291,6 +295,7 @@ export function buildNotFoundDiagnostic(
         `bundled node binary: ${runtime.bundledNodePath ?? "<missing>"}`,
         `bundled npm cli: ${runtime.bundledNpmCliPath ?? "<missing>"}`,
         `bundled npx cli: ${runtime.bundledNpxCliPath ?? "<missing>"}`,
+        `host PATH fallback preserved: ${hostPathVisible ? "yes" : "no"}`,
         `effective PATH prefix:\n  ${effectivePathHead || "<empty>"}`,
     ];
 

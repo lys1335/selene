@@ -83,11 +83,14 @@ interface UseMiniPipelineReturn {
   response: string;
   error: string;
   analyserNode: AnalyserNode | null;
+  shouldAutoClose: boolean;
   startRecording: () => Promise<void>;
   stopRecording: () => void;
   cancel: () => void;
   /** Compose mode: user confirms handoff to main app. */
   confirmCompose: () => void;
+  /** Direct mode: stop TTS playback early but keep the response visible. */
+  stopSpeaking: () => void;
 }
 
 export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelineReturn {
@@ -109,6 +112,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
   const [response, setResponse] = useState("");
   const [error, setError] = useState("");
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
+  const [shouldAutoClose, setShouldAutoClose] = useState(true);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -121,6 +125,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
   const ttsAudioRef = useRef<HTMLAudioElement | null>(null);
   const ttsAudioRejectRef = useRef<((reason?: unknown) => void) | null>(null);
   const cancelledRef = useRef(false);
+  const speechStopRequestedRef = useRef(false);
   const modeRef = useRef(mode);
   const doneTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const objectUrlRef = useRef<string | null>(null);
@@ -182,6 +187,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
   const cancel = useCallback(() => {
     cancelledRef.current = true;
+    speechStopRequestedRef.current = false;
     // Discard any buffered audio chunks so that even if the onstop handler
     // somehow runs past the cancelledRef guard, it produces an empty blob.
     chunksRef.current = [];
@@ -190,6 +196,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     setTranscript("");
     setResponse("");
     setError("");
+    setShouldAutoClose(true);
   }, [stopAllStreams]);
 
   // -------------------------------------------------------------------------
@@ -238,10 +245,12 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
   const startRecording = useCallback(async () => {
     cancelledRef.current = false;
+    speechStopRequestedRef.current = false;
     chunksRef.current = [];
     setTranscript("");
     setResponse("");
     setError("");
+    setShouldAutoClose(true);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -484,6 +493,11 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
           const audioBlob = await ttsRes.blob();
           if (cancelledRef.current) return;
+          if (speechStopRequestedRef.current) {
+            setShouldAutoClose(false);
+            setPhase("done");
+            return;
+          }
 
           const audioUrl = URL.createObjectURL(audioBlob);
           objectUrlRef.current = audioUrl;
@@ -506,12 +520,17 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           }
         } catch (err: unknown) {
           if (cancelledRef.current) return;
+          if (speechStopRequestedRef.current) {
+            setShouldAutoClose(false);
+            setPhase("done");
+            return;
+          }
           // Non-fatal: TTS failure still shows "done"
         }
 
         if (cancelledRef.current) return;
         // Direct mode: enter done phase. The page controls close/dismiss behavior.
-        // No auto-close timer — the user or settings determine when to close.
+        setShouldAutoClose(true);
         setPhase("done");
       };
 
@@ -547,6 +566,22 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     }
   }, []);
 
+  const stopSpeaking = useCallback(() => {
+    speechStopRequestedRef.current = true;
+    setShouldAutoClose(false);
+    ttsAbortRef.current?.abort();
+    ttsAbortRef.current = null;
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current.currentTime = 0;
+    }
+    if (ttsAudioRejectRef.current) {
+      ttsAudioRejectRef.current(new Error("stopped"));
+      ttsAudioRejectRef.current = null;
+    }
+    setPhase("done");
+  }, []);
+
   // autoStart — use a ref to ensure recording starts exactly once, even if
   // startRecording's identity changes (e.g., when the agent picker resolves async)
   const hasAutoStartedRef = useRef(false);
@@ -571,9 +606,11 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     response,
     error,
     analyserNode,
+    shouldAutoClose,
     startRecording,
     stopRecording,
     cancel,
     confirmCompose,
+    stopSpeaking,
   };
 }
