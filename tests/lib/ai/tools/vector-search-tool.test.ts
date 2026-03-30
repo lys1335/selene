@@ -90,7 +90,7 @@ describe("vectorSearch tool empty-state messaging", () => {
     expect(result.status).toBe("no_results");
     expect(result.message).toContain("No searchable embeddings are available for the current agent's synced folders yet.");
     expect(result.message).toContain("another agent shows the same path as indexed");
-    expect(result.message).not.toContain("Some folders are in files-only mode");
+    expect(result.message).not.toMatch(/files[- ]?only/i);
   });
 
   it("still points to files-only mode when the current agent folders are actually files-only", async () => {

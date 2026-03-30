@@ -34,6 +34,7 @@ export type BaseEnvironmentSource = "shell" | "process";
 export interface BundledPathRuntime {
   resourcesPath?: string | null;
   bundledBinDirs?: string[];
+  shouldMergeHostPathFallback?: boolean;
 }
 
 export interface ResolveBaseEnvironmentOptions {
@@ -60,6 +61,7 @@ export interface BuildEnvironmentForTargetResult {
   env: Record<string, string | undefined>;
   source: BaseEnvironmentSource;
   shellEnvAvailable: boolean;
+  hostPathPreserved: boolean;
 }
 
 export interface InitializeProcessEnvironmentOptions {
@@ -171,6 +173,7 @@ function buildExecuteCommandEnvironment(
   const processEnv = options.processEnv ?? process.env;
   const runtime = options.runtime ?? {};
   const hostPath = getPathValue(processEnv);
+  const shouldMergeHostPathFallback = Boolean(runtime.shouldMergeHostPathFallback);
   const base = resolveBaseEnvironment({
     preferShellEnvironment: true,
     processEnv,
@@ -182,7 +185,10 @@ function buildExecuteCommandEnvironment(
     : undefined;
 
   let env = sanitizeEnvironment({ ...base.env }, extraBlockedKeys);
-  const resolvedPath = mergePathValues(getPathValue(env), hostPath);
+  const basePath = getPathValue(env);
+  const resolvedPath = shouldMergeHostPathFallback
+    ? mergePathValues(basePath, hostPath)
+    : basePath;
 
   if (process.platform === "win32") {
     env = normalizeWindowsEnvironment({ ...env, PATH: resolvedPath }, {
@@ -214,7 +220,32 @@ function buildExecuteCommandEnvironment(
     env,
     source: base.source,
     shellEnvAvailable: base.shellEnvAvailable,
+    hostPathPreserved: shouldMergeHostPathFallback && hasAdditionalPathSegments(basePath, hostPath),
   };
+}
+
+function hasAdditionalPathSegments(primaryPath: string, fallbackPath: string): boolean {
+  if (!fallbackPath) return false;
+
+  const separator = delimiter;
+  const primarySegments = new Set(
+    primaryPath
+      .split(separator)
+      .map((segment) => normalizePathSegment(segment))
+      .filter(Boolean)
+  );
+
+  return fallbackPath
+    .split(separator)
+    .map((segment) => normalizePathSegment(segment))
+    .filter(Boolean)
+    .some((segment) => !primarySegments.has(segment));
+}
+
+function normalizePathSegment(segment: string): string {
+  const trimmed = segment.trim();
+  if (!trimmed) return "";
+  return process.platform === "win32" ? trimmed.toLowerCase() : trimmed;
 }
 
 function mergePathValues(primaryPath: string, fallbackPath: string): string {
@@ -296,6 +327,7 @@ function buildClaudeSdkEnvironment(
     env,
     source: base.source,
     shellEnvAvailable: base.shellEnvAvailable,
+    hostPathPreserved: false,
   };
 }
 

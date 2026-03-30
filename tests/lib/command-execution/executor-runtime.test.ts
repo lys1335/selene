@@ -33,8 +33,16 @@ const baseRuntime: BundledRuntimeInfo = {
     bundledNodePath: null,
     bundledNpmCliPath: null,
     bundledNpxCliPath: null,
+    hostPathPreserved: false,
     ffmpegDir: null,
 };
+
+function createRuntime(overrides: Partial<BundledRuntimeInfo> = {}): BundledRuntimeInfo {
+    return {
+        ...baseRuntime,
+        ...overrides,
+    };
+}
 
 const bundledRipgrepBinDir = "/bundle/node_modules/@vscode/ripgrep/bin";
 
@@ -293,10 +301,10 @@ describe("buildNotFoundDiagnostic", () => {
     it("reports whether host PATH fallback remains visible after bundled bins", () => {
         const diagnostic = buildNotFoundDiagnostic(
             "python",
-            {
-                ...baseRuntime,
+            createRuntime({
                 bundledBinDirs: ["/bundle/node/.bin", "/bundle/tools/bin"],
-            },
+                hostPathPreserved: true,
+            }),
             {
                 PATH: "/bundle/node/.bin:/bundle/tools/bin:/usr/local/bin:/usr/bin",
             },

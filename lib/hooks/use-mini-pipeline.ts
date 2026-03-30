@@ -574,6 +574,8 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     if (ttsAudioRef.current) {
       ttsAudioRef.current.pause();
       ttsAudioRef.current.currentTime = 0;
+      ttsAudioRef.current.src = "";
+      ttsAudioRef.current = null;
     }
     if (ttsAudioRejectRef.current) {
       ttsAudioRejectRef.current(new Error("stopped"));

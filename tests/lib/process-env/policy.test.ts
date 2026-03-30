@@ -114,7 +114,7 @@ describe("process-env policy", () => {
     });
 
     it("preserves host PATH entries after bundled bins in packaged mode", () => {
-      const env = buildEnvironmentForTarget({
+      const result = buildEnvironmentForTarget({
         target: "execute-command",
         processEnv: {
           PATH: "/usr/local/bin:/usr/bin:/opt/custom/bin",
@@ -126,10 +126,33 @@ describe("process-env policy", () => {
         runtime: {
           resourcesPath: "/bundle/resources",
           bundledBinDirs: ["/bundle/bin", "/bundle/tools/bin"],
+          shouldMergeHostPathFallback: true,
         },
-      }).env;
+      });
 
-      expect(env.PATH).toBe("/bundle/bin:/bundle/tools/bin:/bundle-shell/bin:/usr/local/bin:/usr/bin:/opt/custom/bin");
+      expect(result.env.PATH).toBe("/bundle/bin:/bundle/tools/bin:/bundle-shell/bin:/usr/local/bin:/usr/bin:/opt/custom/bin");
+      expect(result.hostPathPreserved).toBe(true);
+    });
+
+    it("does not merge host PATH fallback into shell env in development mode", () => {
+      const result = buildEnvironmentForTarget({
+        target: "execute-command",
+        processEnv: {
+          PATH: "/usr/local/bin:/usr/bin:/opt/custom/bin",
+          ELECTRON_RESOURCES_PATH: "/resources",
+        },
+        shellEnv: {
+          PATH: "/bundle-shell/bin:/usr/local/bin",
+        },
+        runtime: {
+          resourcesPath: "/bundle/resources",
+          bundledBinDirs: ["/bundle/bin", "/bundle/tools/bin"],
+          shouldMergeHostPathFallback: false,
+        },
+      });
+
+      expect(result.env.PATH).toBe("/bundle/bin:/bundle/tools/bin:/bundle-shell/bin:/usr/local/bin");
+      expect(result.hostPathPreserved).toBe(false);
     });
 
     it("falls back to process env and strips NODE_ENV when shell env is unavailable", () => {

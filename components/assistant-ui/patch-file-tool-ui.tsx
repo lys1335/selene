@@ -6,25 +6,10 @@ import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "./tool-expansion-context";
 import { DiffStyledPre } from "./diff-styled-pre";
-
-interface DiagnosticResult {
-  tool: string;
-  errors?: number;
-  warnings?: number;
-  output?: string;
-  errorCount?: number;
-  warningCount?: number;
-  diagnostics?: string;
-}
-
-function normalizeDiagnostics(diag: DiagnosticResult) {
-  return {
-    tool: diag.tool,
-    errors: diag.errors ?? diag.errorCount ?? 0,
-    warnings: diag.warnings ?? diag.warningCount ?? 0,
-    output: diag.output ?? diag.diagnostics ?? "",
-  };
-}
+import {
+  type DiagnosticResult,
+  normalizeDiagnostics,
+} from "./tool-diagnostics";
 
 interface OperationResult {
   filePath: string;

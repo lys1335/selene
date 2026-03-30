@@ -6,27 +6,11 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { useToolExpansion } from "./tool-expansion-context";
 import { DiffStyledPre } from "./diff-styled-pre";
-
-interface DiagnosticResult {
-  tool: string;
-  errors?: number;
-  warnings?: number;
-  output?: string;
-  errorCount?: number;
-  warningCount?: number;
-  diagnostics?: string;
-}
-
-function getDiagnosticCounts(diagnostic: DiagnosticResult): { errors: number; warnings: number } {
-  return {
-    errors: diagnostic.errors ?? diagnostic.errorCount ?? 0,
-    warnings: diagnostic.warnings ?? diagnostic.warningCount ?? 0,
-  };
-}
-
-function getDiagnosticOutput(diagnostic: DiagnosticResult): string {
-  return diagnostic.output ?? diagnostic.diagnostics ?? "";
-}
+import {
+  type DiagnosticResult,
+  getDiagnosticCounts,
+  getDiagnosticOutput,
+} from "./tool-diagnostics";
 
 interface EditFileResult {
   status: "success" | "error" | "warning";

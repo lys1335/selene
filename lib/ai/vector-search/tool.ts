@@ -132,10 +132,31 @@ function toRawSearchResult(hit: VectorSearchHit): RawSearchResult {
 }
 
 async function getEmptySearchDiagnostics(characterId: string) {
-  const [folders, tableStats] = await Promise.all([
+  const [foldersResult, tableStatsResult] = await Promise.allSettled([
     getSyncFolders(characterId),
     getAgentTableStats(characterId),
   ]);
+
+  const folders = foldersResult.status === "fulfilled"
+    ? foldersResult.value
+    : [];
+  const tableStats = tableStatsResult.status === "fulfilled"
+    ? tableStatsResult.value
+    : null;
+
+  if (foldersResult.status === "rejected") {
+    console.error("[VectorSearchV2] Failed to load sync folders for empty-search diagnostics", {
+      characterId,
+      error: foldersResult.reason instanceof Error ? foldersResult.reason.message : String(foldersResult.reason),
+    });
+  }
+
+  if (tableStatsResult.status === "rejected") {
+    console.error("[VectorSearchV2] Failed to load table stats for empty-search diagnostics", {
+      characterId,
+      error: tableStatsResult.reason instanceof Error ? tableStatsResult.reason.message : String(tableStatsResult.reason),
+    });
+  }
 
   const hasFilesOnlyFolders = folders.some(folder => folder.indexingMode === "files-only");
   const hasAutoFoldersWithoutEmbeddings = folders.some(
