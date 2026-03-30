@@ -12,7 +12,7 @@
  */
 
 import { tool, jsonSchema } from "ai";
-import { searchWithRouter, type VectorSearchHit, getSyncFolders } from "@/lib/vectordb";
+import { searchWithRouter, type VectorSearchHit, getSyncFolders, getAgentTableStats } from "@/lib/vectordb";
 import { isVectorDBEnabled } from "@/lib/vectordb/client";
 import { getVectorSearchSession, addSearchHistory, getSearchHistory } from "./session-store";
 import { synthesizeSearchResults } from "./synthesizer";
@@ -128,6 +128,33 @@ function toRawSearchResult(hit: VectorSearchHit): RawSearchResult {
     score: hit.score ?? 0,
     startLine: hit.startLine,
     endLine: hit.endLine,
+  };
+}
+
+async function getEmptySearchDiagnostics(characterId: string) {
+  const [folders, tableStats] = await Promise.all([
+    getSyncFolders(characterId),
+    getAgentTableStats(characterId),
+  ]);
+
+  const hasFilesOnlyFolders = folders.some(folder => folder.indexingMode === "files-only");
+  const hasAutoFoldersWithoutEmbeddings = folders.some(
+    folder => folder.indexingMode === "auto" && !folder.embeddingModel
+  );
+  const hasIndexedFolderMetadata = folders.some(
+    folder => (folder.chunkCount ?? 0) > 0 && !!folder.embeddingModel
+  );
+
+  return {
+    folderCount: folders.length,
+    hasFilesOnlyFolders,
+    hasAutoFoldersWithoutEmbeddings,
+    hasIndexedFolderMetadata,
+    tableExists: tableStats?.exists ?? false,
+    tableRowCount: tableStats?.rowCount ?? 0,
+    hasSearchableEmbeddings: tableStats
+      ? tableStats.exists && tableStats.rowCount > 0
+      : hasIndexedFolderMetadata,
   };
 }
 
@@ -260,22 +287,28 @@ async function executeVectorSearch(
       characterId
     );
 
-    // Check if user has folders but they might be in files-only mode
-    const folders = await getSyncFolders(characterId);
-    const hasFilesOnlyFolders = folders.some(f => f.indexingMode === "files-only");
-    const hasAutoFoldersWithoutEmbeddings = folders.some(
-      f => f.indexingMode === "auto" && !f.embeddingModel
-    );
+    const diagnostics = await getEmptySearchDiagnostics(characterId);
 
     let message = "No matching documents found. Try rephrasing or using different keywords.";
 
-    if (hasFilesOnlyFolders || hasAutoFoldersWithoutEmbeddings) {
-      message =
-        "No embeddings found in synced folders. Some folders are in files-only mode.\n\n" +
-        "You can still access these folders using:\n" +
-        "• localGrep - Fast pattern matching\n" +
-        "• readFile - Direct file access\n\n" +
-        "To enable semantic search, switch folders to 'full' mode in the folder manager.";
+    if (diagnostics.folderCount > 0 && !diagnostics.hasSearchableEmbeddings) {
+      if (diagnostics.hasFilesOnlyFolders || diagnostics.hasAutoFoldersWithoutEmbeddings) {
+        message =
+          "No searchable embeddings are available for the current agent's synced folders. Some folders are still in files-only mode or have not built embeddings yet.\n\n" +
+          "This search only uses the current agent's folder index.\n\n" +
+          "You can still access these folders using:\n" +
+          "• localGrep - Fast pattern matching\n" +
+          "• readFile - Direct file access\n\n" +
+          "To enable semantic search, switch folders to 'full' mode in the folder manager and re-sync this agent's folders.";
+      } else {
+        message =
+          "No searchable embeddings are available for the current agent's synced folders yet.\n\n" +
+          "This search only uses the current agent's folder index, even if another agent shows the same path as indexed.\n\n" +
+          "You can still access these folders using:\n" +
+          "• localGrep - Fast pattern matching\n" +
+          "• readFile - Direct file access\n\n" +
+          "Re-sync this agent's folders or run the search from the agent that owns the indexed folder.";
+      }
     }
 
     return {
