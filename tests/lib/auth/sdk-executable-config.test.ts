@@ -32,6 +32,8 @@ describe("getSdkExecutableConfig", () => {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalNextRuntime = process.env.NEXT_RUNTIME;
   const originalNextProcessed = process.env.__NEXT_PROCESSED_ENV;
+  const originalElectronResourcesPath = process.env.ELECTRON_RESOURCES_PATH;
+  const originalProcessResourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -40,6 +42,8 @@ describe("getSdkExecutableConfig", () => {
     process.env.NODE_ENV = originalNodeEnv;
     process.env.NEXT_RUNTIME = originalNextRuntime;
     process.env.__NEXT_PROCESSED_ENV = originalNextProcessed;
+    process.env.ELECTRON_RESOURCES_PATH = originalElectronResourcesPath;
+    Object.defineProperty(process, "resourcesPath", { value: originalProcessResourcesPath, configurable: true });
     process.env.ANTHROPIC_API_KEY = "test-key";
     process.env.CLAUDECODE = "1";
   });
@@ -50,6 +54,8 @@ describe("getSdkExecutableConfig", () => {
     process.env.NODE_ENV = originalNodeEnv;
     process.env.NEXT_RUNTIME = originalNextRuntime;
     process.env.__NEXT_PROCESSED_ENV = originalNextProcessed;
+    process.env.ELECTRON_RESOURCES_PATH = originalElectronResourcesPath;
+    Object.defineProperty(process, "resourcesPath", { value: originalProcessResourcesPath, configurable: true });
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.CLAUDECODE;
   });
@@ -86,7 +92,7 @@ describe("getSdkExecutableConfig", () => {
         const { env } = getSdkExecutableConfig();
 
         expect(env.PATH).toBe(shellPath);
-        expect(process.env.PATH).toBe(shellPath);
+        expect(process.env.PATH).toBe("/usr/bin:/bin");
         // Should NOT call getNodeBinary when shell env succeeds
         expect(loginMocks.getNodeBinary).not.toHaveBeenCalled();
       } finally {
@@ -99,6 +105,8 @@ describe("getSdkExecutableConfig", () => {
       try {
         Object.defineProperty(process, "platform", { value: "darwin" });
         process.env.PATH = "/usr/bin:/bin";
+        delete process.env.ELECTRON_RESOURCES_PATH;
+        Object.defineProperty(process, "resourcesPath", { value: undefined, configurable: true });
         shellEnvMocks.getResolvedShellEnvironment.mockReturnValue({});
         loginMocks.getNodeBinary.mockReturnValue("/opt/homebrew/bin/node");
 
@@ -117,6 +125,8 @@ describe("getSdkExecutableConfig", () => {
       try {
         Object.defineProperty(process, "platform", { value: "darwin" });
         process.env.PATH = "/usr/bin:/bin";
+        delete process.env.ELECTRON_RESOURCES_PATH;
+        Object.defineProperty(process, "resourcesPath", { value: undefined, configurable: true });
         shellEnvMocks.getResolvedShellEnvironment.mockReturnValue({});
         loginMocks.getNodeBinary.mockReturnValue(process.execPath);
 

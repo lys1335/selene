@@ -182,10 +182,12 @@ describe("Audio Transcription", () => {
         sttProvider: "local",
         sttLocalModel: "ggml-tiny.en",
       };
-      // Binary found at /opt/homebrew/bin/whisper-cli, model found via userData fallback
+      // Binary found at /opt/homebrew/bin/whisper-cli, bundled/system ffmpeg available,
+      // and model found via userData fallback.
       fsMock.existsSync.mockImplementation((p: string) => {
         const normalized = typeof p === "string" ? p.replace(/\\/g, "/") : "";
         if (normalized.includes("whisper-cli")) return true;
+        if (normalized.includes("ffmpeg")) return true;
         if (normalized.includes("models/whisper") && normalized.endsWith("ggml-tiny.en.bin")) return true;
         return false;
       });

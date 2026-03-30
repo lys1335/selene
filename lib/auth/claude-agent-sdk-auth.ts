@@ -1,5 +1,7 @@
 import path from "path";
 import { execFile } from "child_process";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
 import { query as claudeAgentQuery } from "@anthropic-ai/claude-agent-sdk";
 import { isElectronProduction } from "@/lib/utils/environment";
 import { getNodeBinary, getCliPath } from "@/lib/auth/claude-login-process";
@@ -10,17 +12,68 @@ const DEFAULT_CLAUDE_AGENT_MODEL = "claude-sonnet-4-5-20250929";
 const MAX_EBADF_RETRIES = 3;
 const EBADF_RETRY_DELAY_MS = 2000;
 
+function getBundledNodeBinDir(): string | null {
+  const resourcesPath =
+    process.env.ELECTRON_RESOURCES_PATH ||
+    (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+
+  if (!resourcesPath) {
+    return null;
+  }
+
+  const nodeBinaryName = process.platform === "win32" ? "node.exe" : "node";
+  const bundledNodePath = path.join(resourcesPath, "standalone", "node_modules", ".bin", nodeBinaryName);
+  if (!existsSync(bundledNodePath)) {
+    return null;
+  }
+
+  return path.dirname(bundledNodePath);
+}
+
+function ensureSdkNodeShimDir(): string | null {
+  const baseDir = process.env.ELECTRON_USER_DATA_PATH || tmpdir();
+  const shimDir = path.join(baseDir, ".selene-node", "bin");
+  const shimPath = path.join(shimDir, process.platform === "win32" ? "node.cmd" : "node");
+
+  try {
+    if (!existsSync(shimPath)) {
+      mkdirSync(shimDir, { recursive: true });
+      if (process.platform === "win32") {
+        const contents = [
+          "@echo off",
+          "set ELECTRON_RUN_AS_NODE=1",
+          "set ELECTRON_NO_ATTACH_CONSOLE=1",
+          "set ELECTRON_ENABLE_LOGGING=0",
+          `\"${process.execPath}\" %*`,
+          "",
+        ].join("\r\n");
+        writeFileSync(shimPath, contents, "utf-8");
+      } else {
+        const escapedExecPath = process.execPath.replace(/"/g, '\\"');
+        const contents = [
+          "#!/bin/sh",
+          "export ELECTRON_RUN_AS_NODE=1",
+          `exec \"${escapedExecPath}\" \"$@\"`,
+          "",
+        ].join("\n");
+        writeFileSync(shimPath, contents, "utf-8");
+        chmodSync(shimPath, 0o755);
+      }
+    }
+    return shimDir;
+  } catch (error) {
+    console.warn("[Agent SDK] Failed to create node shim dir:", error);
+    return null;
+  }
+}
+
 /**
  * Returns sanitized env for Agent SDK subprocesses.
  *
  * The SDK's `executable` option only accepts the literals "node" | "bun" | "deno",
- * so we must ensure that "node" resolves correctly via PATH. In Electron production
- * builds launched from Finder, macOS provides a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin)
- * that excludes homebrew, nvm, volta, etc.
- *
- * We use the shell-env resolver to get the user's full login-shell PATH (the same
- * PATH they see in Terminal.app), then fall back to `getNodeBinary()` directory
- * augmentation if the shell env resolver fails.
+ * so we must ensure that "node" resolves correctly via PATH. In packaged Electron
+ * builds we prefer the bundled standalone Node binary, then fall back to an
+ * Electron-as-Node shim if no real node binary is available.
  */
 export function getSdkExecutableConfig(): {
   executable: "node";
@@ -36,12 +89,29 @@ export function getSdkExecutableConfig(): {
     env.PATH = env.PATH || process.env.PATH;
     console.log("[Agent SDK] Production mode - using shell-resolved PATH");
   } else if (isProduction) {
-    const nodeBin = getNodeBinary();
-    const nodeDir = path.dirname(nodeBin);
-    if (!env.PATH?.includes(nodeDir)) {
-      env.PATH = `${nodeDir}${path.delimiter}${env.PATH || ""}`;
+    const bundledNodeDir = getBundledNodeBinDir();
+    if (bundledNodeDir && !env.PATH?.includes(bundledNodeDir)) {
+      env.PATH = `${bundledNodeDir}${path.delimiter}${env.PATH || ""}`;
+      console.log("[Agent SDK] Production mode - using bundled node bin dir:", bundledNodeDir);
+    } else {
+      const nodeBin = getNodeBinary();
+      const nodeBase = path.basename(nodeBin).toLowerCase();
+      const isRealNodeBinary = nodeBase === "node" || nodeBase === "node.exe";
+
+      if (isRealNodeBinary) {
+        const nodeDir = path.dirname(nodeBin);
+        if (!env.PATH?.includes(nodeDir)) {
+          env.PATH = `${nodeDir}${path.delimiter}${env.PATH || ""}`;
+        }
+        console.log("[Agent SDK] Production mode - fallback node binary:", nodeBin);
+      } else {
+        const shimDir = ensureSdkNodeShimDir();
+        if (shimDir && !env.PATH?.includes(shimDir)) {
+          env.PATH = `${shimDir}${path.delimiter}${env.PATH || ""}`;
+          console.log("[Agent SDK] Production mode - using Electron-as-Node shim dir:", shimDir);
+        }
+      }
     }
-    console.log("[Agent SDK] Production mode - fallback node binary:", nodeBin);
   }
 
   return { executable: "node", env };
