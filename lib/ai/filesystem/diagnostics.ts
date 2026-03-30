@@ -211,10 +211,11 @@ async function runLintHook(
   syncedFolders: string[],
   timeoutMs: number
 ): Promise<HookExecutionResult | null> {
-  const output = await runCommand(cwd, syncedFolders, timeoutMs, "npx", [
-    "eslint",
-    "--format",
-    "compact",
+  const output = await runCommand(cwd, syncedFolders, timeoutMs, "npm", [
+    "run",
+    "-s",
+    "lint",
+    "--",
     filePath,
   ]).catch(() => "");
 
@@ -226,7 +227,7 @@ async function runLintHook(
   if (counts.errors === 0 && counts.warnings === 0 && !sanitized) return null;
 
   return {
-    tool: "npx eslint",
+    tool: "npm run lint",
     output: `[eslint]\n${sanitized}`,
     errors: counts.errors,
     warnings: counts.warnings,

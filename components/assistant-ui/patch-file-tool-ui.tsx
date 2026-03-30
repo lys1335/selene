@@ -9,9 +9,21 @@ import { DiffStyledPre } from "./diff-styled-pre";
 
 interface DiagnosticResult {
   tool: string;
-  errors: number;
-  warnings: number;
-  output: string;
+  errors?: number;
+  warnings?: number;
+  output?: string;
+  errorCount?: number;
+  warningCount?: number;
+  diagnostics?: string;
+}
+
+function normalizeDiagnostics(diag: DiagnosticResult) {
+  return {
+    tool: diag.tool,
+    errors: diag.errors ?? diag.errorCount ?? 0,
+    warnings: diag.warnings ?? diag.warningCount ?? 0,
+    output: diag.output ?? diag.diagnostics ?? "",
+  };
 }
 
 interface OperationResult {
@@ -187,9 +199,8 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
 
           {/* Diagnostics */}
           {result?.diagnostics?.map((diag, i) => {
-            if (!diag.output) return null;
-            
-            const { errors, warnings, output, tool } = diag;
+            const { errors, warnings, output, tool } = normalizeDiagnostics(diag);
+            if (!output) return null;
             const totalIssues = errors + warnings;
             const outputLines = output.split('\n');
             const hasMultipleIssues = totalIssues > 1;
