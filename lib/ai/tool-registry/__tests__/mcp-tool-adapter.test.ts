@@ -33,7 +33,7 @@ describe("mcpToolToMetadata", () => {
             const tool = createMockMCPTool("my-tool");
             const metadata = mcpToolToMetadata(tool);
 
-            expect(metadata.displayName).toBe("my-tool (test-server)");
+            expect(metadata.displayName).toBe("My Tool");
             expect(metadata.shortDescription).toBe("Test tool: my-tool");
         });
 

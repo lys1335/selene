@@ -30,7 +30,7 @@ describe("MCP Tool Loading Integration", () => {
 
             expect(metadata.loading.alwaysLoad).toBe(true);
             expect(metadata.loading.deferLoading).toBe(false);
-            expect(metadata.displayName).toContain("critical-tool");
+            expect(metadata.displayName).toBe("Critical Tool");
             expect(metadata.category).toBe("mcp");
         });
 
@@ -212,7 +212,7 @@ describe("MCP Tool Loading Integration", () => {
 
             expect(metadata.loading.deferLoading).toBe(true);
             expect(metadata.loading.alwaysLoad).toBe(false);
-            expect(metadata.displayName).toContain("orphan-tool");
+            expect(metadata.displayName).toBe("Orphan Tool");
             expect(metadata.category).toBe("mcp");
             expect(metadata.shortDescription).toBeTruthy();
         });
@@ -339,7 +339,7 @@ describe("MCP Tool Loading Integration", () => {
 
             expect(metadata.shortDescription).toBe("MCP tool from test-server");
             expect(metadata.fullInstructions).toBeUndefined();
-            expect(metadata.displayName).toBe("bare-tool (test-server)");
+            expect(metadata.displayName).toBe("Bare Tool");
             expect(metadata.keywords).toContain("bare-tool");
             expect(metadata.keywords).toContain("test-server");
             // Should not contain empty strings from splitting undefined description

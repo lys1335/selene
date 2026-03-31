@@ -140,12 +140,14 @@ function countEslintIssues(output: string): { errors: number; warnings: number }
   let warnings = 0;
 
   for (const line of issueLines) {
-    const issueMatch = line.match(/\b(error|warning)\b/gi);
-    if (!issueMatch) continue;
+    const severity =
+      line.match(/^\d+:\d+\s+(error|warning)\b/i)?.[1] ??
+      line.match(/:\s*line\s+\d+,\s*col\s+\d+,\s*(error|warning)\b/i)?.[1];
+    const normalizedSeverity = severity?.toLowerCase();
+    if (!normalizedSeverity) continue;
 
-    const lastSeverity = issueMatch[issueMatch.length - 1]?.toLowerCase();
-    if (lastSeverity === "error") errors += 1;
-    if (lastSeverity === "warning") warnings += 1;
+    if (normalizedSeverity === "error") errors += 1;
+    if (normalizedSeverity === "warning") warnings += 1;
   }
 
   return { errors, warnings };

@@ -34,6 +34,9 @@ function toolResult(id: string, name = "tool", result: unknown = { status: "ok" 
   };
 }
 
+const leakedPlanningText =
+  "I need continue with actual tools available names. Only commentary tools under functions.* not tool. Need sequential edits. Must read current files before edit. Need use editFile and run tests. Let's implement carefully. Need add setting to app/settings/settings-types FormState.";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // mergeCanonicalAssistantContent
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,6 +87,20 @@ describe("mergeCanonicalAssistantContent", () => {
     // Adjacent text parts are consolidated with paragraph break
     expect(textParts).toHaveLength(1);
     expect((textParts[0] as { text: string }).text).toBe("alpha\n\nbeta");
+  });
+
+  it("drops leaked streamed planning prose when tool parts are present", () => {
+    const streamed: DBContentPart[] = [
+      textPart(leakedPlanningText),
+      toolCall("tc1", "Read", { filePath: "/a" }),
+      toolResult("tc1", "Read", { content: "data" }),
+    ];
+
+    const merged = mergeCanonicalAssistantContent(streamed, []);
+
+    expect(merged.filter((part) => part.type === "text")).toHaveLength(0);
+    expect(merged.filter((part) => part.type === "tool-call")).toHaveLength(1);
+    expect(merged.filter((part) => part.type === "tool-result")).toHaveLength(1);
   });
 
   // ── blob-drop heuristic (multi-part subsumption) ─────────────────────
@@ -318,6 +335,9 @@ describe("reconcileDbToolCallResultPairs", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe("buildCanonicalAssistantContentFromSteps", () => {
+  const leakedPlanningText =
+    "I need continue with actual tools available names. Only commentary tools under functions.* not tool. Need sequential edits. Must read current files before edit. Need use editFile and run tests. Let's implement carefully. Need add setting to app/settings/settings-types FormState.";
+
   it("returns fallback text when no steps", () => {
     const parts = buildCanonicalAssistantContentFromSteps(undefined, "fallback text");
     expect(parts).toHaveLength(1);
@@ -333,6 +353,29 @@ describe("buildCanonicalAssistantContentFromSteps", () => {
     const parts = buildCanonicalAssistantContentFromSteps([{ text: "hello" }]);
     expect(parts).toHaveLength(1);
     expect(parts[0].type).toBe("text");
+  });
+
+  it("drops leaked internal planning prose when the step includes tool-call context", () => {
+    const parts = buildCanonicalAssistantContentFromSteps([
+      {
+        text: leakedPlanningText,
+        toolCalls: [{ toolCallId: "tc1", toolName: "Read", input: { filePath: "/a" } }],
+      },
+    ]);
+
+    expect(parts).toEqual([
+      {
+        type: "tool-call",
+        toolCallId: "tc1",
+        toolName: "Read",
+        args: { filePath: "/a" },
+      },
+    ]);
+  });
+
+  it("preserves the same text when there is no tool-call context", () => {
+    const parts = buildCanonicalAssistantContentFromSteps([{ text: leakedPlanningText }]);
+    expect(parts).toEqual([{ type: "text", text: leakedPlanningText }]);
   });
 
   it("preserves fake tool-call JSON when STRIP_FAKE_TOOL_JSON is off (default)", () => {

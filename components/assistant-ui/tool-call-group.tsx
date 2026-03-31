@@ -20,7 +20,7 @@ import {
   useLiveToolStatuses,
   type LiveToolPhase,
 } from "./tool-live-status";
-import { getCanonicalToolName } from "./tool-name-utils";
+import { getCanonicalToolName, humanizeToolName, loadToolNameCache } from "./tool-name-utils";
 import { getToolBadgeStatus } from "./tool-status";
 
 type ToolCallPart = Extract<MessagePartState, { type: "tool-call" }>;
@@ -176,6 +176,12 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
   const [isCompactRevealPinned, setIsCompactRevealPinned] = useState(false);
   const [isCompactRevealHovered, setIsCompactRevealHovered] = useState(false);
 
+  // Load registry display names so grouped labels match expanded fallback labels
+  const [registryNames, setRegistryNames] = useState<Record<string, string>>({});
+  useEffect(() => {
+    loadToolNameCache().then(setRegistryNames);
+  }, []);
+
   const toolParts = useMemo(() => {
     return messageParts
       .slice(startIndex, endIndex + 1)
@@ -234,7 +240,7 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
         ? t(canonicalToolName)
         : t.has(part.toolName)
           ? t(part.toolName)
-          : canonicalToolName;
+          : registryNames[canonicalToolName] || registryNames[part.toolName] || humanizeToolName(canonicalToolName);
       const canonicalStatus = getToolBadgeStatus(partLike);
       // Always read liveStatus — even for completed tools — so elapsedMs and steps survive past completion.
       const liveStatus = partLike.toolCallId ? liveStatuses[partLike.toolCallId] : undefined;
@@ -273,7 +279,7 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
         steps: isAgent ? liveStatus?.steps : undefined,
       };
     });
-  }, [liveStatuses, t, toolParts]);
+  }, [liveStatuses, registryNames, t, toolParts]);
 
   // Live elapsed ticker: tick every second while any Agent tool is still running with a startedAt.
   const [, setTickMs] = useState(0);

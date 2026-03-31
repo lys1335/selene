@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BASE64_IMAGE_PLACEHOLDER,
   MAX_TEXT_CONTENT_LENGTH,
+  sanitizeAssistantOutputText,
   sanitizeTextContent,
   normalizeReadFileInputArgs,
 } from "@/app/api/chat/content-sanitizer";
@@ -11,9 +12,25 @@ vi.mock("@/lib/ai/truncated-content-store", () => ({
   storeFullContent: vi.fn(() => "trunc_test_123"),
 }));
 
-vi.mock("@/lib/messages/internal-tool-history", () => ({
-  isInternalToolHistoryLeakText: vi.fn(() => false),
-}));
+const leakedPlanningText =
+  "I need continue with actual tools available names. Only commentary tools under functions.* not tool. Need sequential edits. Must read current files before edit. Need use editFile and run tests. Let's implement carefully. Need add setting to app/settings/settings-types FormState.";
+
+describe("sanitizeAssistantOutputText", () => {
+  it("strips leaked internal planning prose when tool-call context is present", () => {
+    expect(
+      sanitizeAssistantOutputText(leakedPlanningText, { hasToolCallLikeParts: true })
+    ).toBe("");
+  });
+
+  it("preserves the same text when there is no tool-call context", () => {
+    expect(sanitizeAssistantOutputText(leakedPlanningText)).toBe(leakedPlanningText);
+  });
+
+  it("preserves normal assistant text even when tool-call context is present", () => {
+    const text = "I checked the files and updated the response formatting.";
+    expect(sanitizeAssistantOutputText(text, { hasToolCallLikeParts: true })).toBe(text);
+  });
+});
 
 describe("content-sanitizer text length limits", () => {
   beforeEach(() => {

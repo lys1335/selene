@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getCanonicalToolName } from "@/components/assistant-ui/tool-name-utils";
+import { getCanonicalToolName, humanizeToolName } from "@/components/assistant-ui/tool-name-utils";
 
 describe("getCanonicalToolName", () => {
   it("strips MCP server prefix from tool names", () => {
@@ -10,6 +10,41 @@ describe("getCanonicalToolName", () => {
   it("returns non-MCP tool names unchanged", () => {
     expect(getCanonicalToolName("calculator")).toBe("calculator");
     expect(getCanonicalToolName("executeCommand")).toBe("executeCommand");
+  });
+});
+
+describe("humanizeToolName", () => {
+  it("converts snake_case to Title Case", () => {
+    expect(humanizeToolName("ghost_press")).toBe("Ghost Press");
+    expect(humanizeToolName("read_file")).toBe("Read File");
+    expect(humanizeToolName("execute_command")).toBe("Execute Command");
+  });
+
+  it("converts camelCase to Title Case", () => {
+    expect(humanizeToolName("vectorSearch")).toBe("Vector Search");
+    expect(humanizeToolName("executeCommand")).toBe("Execute Command");
+    expect(humanizeToolName("readFile")).toBe("Read File");
+  });
+
+  it("converts kebab-case to Title Case", () => {
+    expect(humanizeToolName("my-tool")).toBe("My Tool");
+    expect(humanizeToolName("critical-tool")).toBe("Critical Tool");
+  });
+
+  it("handles MCP proxy-prefixed names", () => {
+    expect(humanizeToolName("mcp_ghostos_ghost_press")).toBe("Mcp Ghostos Ghost Press");
+    expect(humanizeToolName("mcp_filesystem_read_file")).toBe("Mcp Filesystem Read File");
+  });
+
+  it("handles single-word names", () => {
+    expect(humanizeToolName("calculator")).toBe("Calculator");
+    expect(humanizeToolName("grep")).toBe("Grep");
+  });
+
+  it("handles acronym runs correctly", () => {
+    expect(humanizeToolName("getHTTPStatus")).toBe("Get HTTP Status");
+    expect(humanizeToolName("parseURLToHTML")).toBe("Parse URL To HTML");
+    expect(humanizeToolName("OAuthLogin")).toBe("O Auth Login");
   });
 });
 
