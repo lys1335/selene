@@ -1,5 +1,5 @@
 import { storeFullContent } from "@/lib/ai/truncated-content-store";
-import { isInternalToolHistoryLeakText } from "@/lib/messages/internal-tool-history";
+import { isInternalAssistantLeakText } from "@/lib/messages/internal-tool-history";
 
 // Maximum length for any single text content to prevent base64 data from leaking into context
 // Maximum text content length before smart truncation kicks in
@@ -134,11 +134,21 @@ export function looksLikeBase64ImageData(text: string): boolean {
  */
 const STRIP_FAKE_TOOL_JSON_ENABLED = process.env.STRIP_FAKE_TOOL_JSON === "true";
 
-export function stripFakeToolCallJson(text: string): string {
+function stripInternalAssistantLeakText(
+  text: string,
+  options: { hasToolCallLikeParts?: boolean } = {}
+): string {
+  const trimmed = text.trim();
+  return isInternalAssistantLeakText(trimmed, options) ? "" : trimmed;
+}
+
+export function stripFakeToolCallJson(
+  text: string,
+  options: { hasToolCallLikeParts?: boolean } = {}
+): string {
   if (!STRIP_FAKE_TOOL_JSON_ENABLED) {
-    // Only run the cheap internal-tool-history leak check
-    const trimmed = text.trim();
-    return isInternalToolHistoryLeakText(trimmed) ? "" : trimmed;
+    // Keep the default path cheap while still stripping leaked internal assistant prose.
+    return stripInternalAssistantLeakText(text, options);
   }
 
   // Pattern 1: Multi-line JSON objects with type:tool-call or type:tool-result
@@ -157,8 +167,15 @@ export function stripFakeToolCallJson(text: string): string {
   const inlinePattern = /\{"type"\s*:\s*"tool-(call|result)"\s*,\s*"toolCallId"\s*:\s*"[^"]*"[^}]*\}/g;
   cleaned = cleaned.replace(inlinePattern, '');
 
-  const trimmed = cleaned.trim();
-  return isInternalToolHistoryLeakText(trimmed) ? "" : trimmed;
+  return stripInternalAssistantLeakText(cleaned, options);
+}
+
+export function sanitizeAssistantOutputText(
+  text: string,
+  options: { hasToolCallLikeParts?: boolean } = {}
+): string {
+  const systemMarkerPattern = /\[SYSTEM:\s*Tool\s+[^\]]+\]/gi;
+  return stripFakeToolCallJson(text.replace(systemMarkerPattern, ""), options);
 }
 
 /**

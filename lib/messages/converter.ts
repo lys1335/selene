@@ -1,5 +1,8 @@
 import type { UIMessage } from "ai";
-import { isInternalToolHistoryLeakText } from "@/lib/messages/internal-tool-history";
+import {
+  isInternalAssistantLeakText,
+  isInternalToolHistoryLeakText,
+} from "@/lib/messages/internal-tool-history";
 import type { ContextProvenance } from "@/lib/context-window/scoped-counting-contract";
 
 type ToolInvocationState = "input-streaming" | "input-available" | "output-available" | "output-error" | "output-denied";
@@ -197,6 +200,9 @@ function buildUIPartsFromDBContent(
     preserveFallbackOrphans = true,
     stripInternalToolLeakText = true,
   } = options;
+  const hasToolCallLikeParts = content.some(
+    (part) => part.type === "tool-call" || part.type === "tool-result"
+  );
 
   const toolResults = new Map<string, ToolResultInfo>();
   if (fallbackResults) {
@@ -230,7 +236,13 @@ function buildUIPartsFromDBContent(
   for (const part of content) {
     if (part.type === "text" && part.text?.trim()) {
       const displayText = expandPasteContentForDisplay(part.text);
-      if (stripInternalToolLeakText && isInternalToolHistoryLeakText(displayText)) {
+      if (
+        stripInternalToolLeakText &&
+        (isInternalToolHistoryLeakText(displayText) ||
+          isInternalAssistantLeakText(displayText, {
+            hasToolCallLikeParts,
+          }))
+      ) {
         continue;
       }
       parts.push({ type: "text", text: displayText });

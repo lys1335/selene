@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { convertDBMessagesToUIMessages } from "@/lib/messages/converter";
-import { isInternalToolHistoryLeakText } from "@/lib/messages/internal-tool-history";
+import {
+  isInternalAssistantLeakText,
+  isInternalToolHistoryLeakText,
+} from "@/lib/messages/internal-tool-history";
 
 describe("converter internal tool history guard", () => {
   it("hides leaked internal tool fallback assistant text while preserving real tool parts", () => {
@@ -99,4 +102,64 @@ describe("converter internal tool history guard", () => {
     expect(textParts[0]?.text).toBe("");
   });
 
+  it("hides leaked assistant planning prose while preserving tool parts", () => {
+    const leakedPlanningText =
+      "I need continue with actual tools available names. Only commentary tools under functions.* not tool. Need sequential edits. Must read current files before edit. Need use editFile and run tests. Let's implement carefully. Need add setting to app/settings/settings-types FormState.";
+    const now = new Date().toISOString();
+
+    const uiMessages = convertDBMessagesToUIMessages([
+      {
+        id: "u-planning",
+        role: "user",
+        content: [{ type: "text", text: leakedPlanningText }],
+        createdAt: now,
+        orderingIndex: 1,
+      },
+      {
+        id: "a-planning",
+        role: "assistant",
+        content: [
+          { type: "text", text: leakedPlanningText },
+          {
+            type: "tool-call",
+            toolCallId: "call_planning",
+            toolName: "editFile",
+            args: { filePath: "route.ts" },
+            state: "input-available",
+          },
+          {
+            type: "tool-result",
+            toolCallId: "call_planning",
+            toolName: "editFile",
+            result: { status: "success" },
+            status: "success",
+            state: "output-available",
+          },
+        ],
+        createdAt: now,
+        orderingIndex: 2,
+      },
+    ] as any);
+
+    const user = uiMessages.find((msg) => msg.role === "user");
+    const assistant = uiMessages.find((msg) => msg.role === "assistant");
+
+    const userTextParts = (user?.parts ?? []).filter(
+      (part): part is { type: "text"; text: string } =>
+        part.type === "text" && typeof (part as { text?: unknown }).text === "string"
+    );
+    expect(userTextParts[0]?.text).toBe(leakedPlanningText);
+
+    const assistantTextParts = (assistant?.parts ?? []).filter(
+      (part): part is { type: "text"; text: string } =>
+        part.type === "text" && typeof (part as { text?: unknown }).text === "string"
+    );
+    expect(assistantTextParts.some((part) => isInternalAssistantLeakText(part.text))).toBe(false);
+    expect(assistantTextParts).toHaveLength(0);
+
+    const assistantToolParts = (assistant?.parts ?? []).filter(
+      (part) => typeof part.type === "string" && part.type.startsWith("tool-")
+    );
+    expect(assistantToolParts.length).toBeGreaterThan(0);
+  });
 });

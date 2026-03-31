@@ -2,7 +2,7 @@ import type { DBContentPart, DBToolCallPart, DBToolResultPart } from "@/lib/mess
 import { normalizeToolResultOutput } from "@/lib/ai/tool-result-utils";
 import { normalizeToolCallInput } from "./tool-call-utils";
 import { cloneContentParts } from "./streaming-state";
-import { stripFakeToolCallJson } from "./content-sanitizer";
+import { sanitizeAssistantOutputText } from "./content-sanitizer";
 
 export interface StepToolCallLike {
   toolCallId: string;
@@ -22,6 +22,38 @@ export interface StepLike {
   text?: string;
 }
 
+function hasToolCallLikeParts(parts: DBContentPart[]): boolean {
+  return parts.some((part) => part.type === "tool-call" || part.type === "tool-result");
+}
+
+function sanitizeAssistantTextParts(
+  parts: DBContentPart[],
+  hasToolContext: boolean
+): DBContentPart[] {
+  if (!hasToolContext) {
+    return parts;
+  }
+
+  const sanitized: DBContentPart[] = [];
+  for (const part of parts) {
+    if (part.type !== "text") {
+      sanitized.push(part);
+      continue;
+    }
+
+    const cleanedText = sanitizeAssistantOutputText(part.text, {
+      hasToolCallLikeParts: hasToolContext,
+    });
+    if (!cleanedText.trim()) {
+      continue;
+    }
+
+    sanitized.push({ ...part, text: cleanedText });
+  }
+
+  return sanitized;
+}
+
 export function buildCanonicalAssistantContentFromSteps(
   steps: StepLike[] | undefined,
   fallbackText?: string
@@ -30,6 +62,9 @@ export function buildCanonicalAssistantContentFromSteps(
   const toolCallMetadata = new Map<string, { toolName: string; input?: unknown }>();
   const seenToolCalls = new Set<string>();
   const seenToolResults = new Set<string>();
+  const hasAnyToolContext = Boolean(
+    steps?.some((step) => (step.toolCalls?.length ?? 0) > 0 || (step.toolResults?.length ?? 0) > 0)
+  );
 
   if (steps && steps.length > 0) {
     for (const step of steps) {
@@ -85,7 +120,10 @@ export function buildCanonicalAssistantContentFromSteps(
       }
 
       if (step.text?.trim()) {
-        const cleanedStepText = stripFakeToolCallJson(step.text);
+        const cleanedStepText = sanitizeAssistantOutputText(step.text, {
+          hasToolCallLikeParts:
+            (step.toolCalls?.length ?? 0) > 0 || (step.toolResults?.length ?? 0) > 0,
+        });
         if (cleanedStepText.trim()) {
           content.push({ type: "text", text: cleanedStepText });
         }
@@ -94,7 +132,9 @@ export function buildCanonicalAssistantContentFromSteps(
   }
 
   if (content.length === 0 && fallbackText?.trim()) {
-    const cleanedFallbackText = stripFakeToolCallJson(fallbackText);
+    const cleanedFallbackText = sanitizeAssistantOutputText(fallbackText, {
+      hasToolCallLikeParts: hasAnyToolContext,
+    });
     if (cleanedFallbackText.trim()) {
       content.push({ type: "text", text: cleanedFallbackText });
     }
@@ -170,14 +210,17 @@ export function mergeCanonicalAssistantContent(
   streamedParts: DBContentPart[] | undefined,
   stepParts: DBContentPart[]
 ): DBContentPart[] {
-  const base = Array.isArray(streamedParts)
+  const rawBase = Array.isArray(streamedParts)
     ? cloneContentParts(streamedParts)
     : [];
+  const hasToolContext = hasToolCallLikeParts(rawBase) || hasToolCallLikeParts(stepParts);
+  const base = sanitizeAssistantTextParts(rawBase, hasToolContext);
+  const sanitizedStepParts = sanitizeAssistantTextParts(stepParts, hasToolContext);
 
   if (base.length === 0) {
-    return reconcileDbToolCallResultPairs(stepParts);
+    return reconcileDbToolCallResultPairs(sanitizedStepParts);
   }
-  if (stepParts.length === 0) {
+  if (sanitizedStepParts.length === 0) {
     return reconcileDbToolCallResultPairs(base);
   }
 
@@ -193,7 +236,7 @@ export function mergeCanonicalAssistantContent(
     }
   }
 
-  for (const incoming of stepParts) {
+  for (const incoming of sanitizedStepParts) {
     if (incoming.type === "tool-call") {
       const existingIdx = callIndexById.get(incoming.toolCallId);
       if (existingIdx === undefined) {
@@ -248,7 +291,9 @@ export function mergeCanonicalAssistantContent(
         // Sanitize existing text the same way step text is sanitized so the
         // comparison isn't thrown off by fake tool-call JSON that only exists
         // in the streaming copy (Fix #2: stripFakeToolCallJson divergence).
-        const existingTrimmed = stripFakeToolCallJson(part.text).trim();
+        const existingTrimmed = sanitizeAssistantOutputText(part.text, {
+          hasToolCallLikeParts: hasToolContext,
+        }).trim();
 
         // Skip empty text parts — `"hello".includes("")` is always true in JS,
         // which would cause every non-empty incoming text to count empty parts
