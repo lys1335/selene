@@ -1,8 +1,8 @@
 "use client";
-import { useRef, useEffect, useState } from "react";
-import { X, Mic, Brain, Volume2, Check, AlertCircle, Loader2, ArrowUp } from "lucide-react";
+import { useRef, useEffect, useState, useCallback } from "react";
+import { X, Mic, Brain, Volume2, Square, Check, AlertCircle, Loader2, ArrowUp, Copy } from "lucide-react";
+import type { CSSProperties, ReactNode } from "react";
 import type { MiniOverlayPhase } from "@/lib/electron/types";
-import type { ReactNode } from "react";
 
 interface RecordingPillProps {
   phase: MiniOverlayPhase;
@@ -24,6 +24,8 @@ interface RecordingPillProps {
   onConfirmCompose?: () => void;
   /** Called when the user clicks "Close" in done phase. */
   onDismiss?: () => void;
+  /** Called when the user clicks the stop-audio button during speaking phase. */
+  onStopSpeaking?: () => void;
 }
 
 export function RecordingPill({
@@ -40,19 +42,46 @@ export function RecordingPill({
   screenshotUrls,
   onConfirmCompose,
   onDismiss,
+  onStopSpeaking,
 }: RecordingPillProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [resolvedPrimaryColor, setResolvedPrimaryColor] = useState("#6366f1");
+  const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [resolvedWaveformColor, setResolvedWaveformColor] = useState("#C2714F");
   const [showFullScreenshot, setShowFullScreenshot] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  // Resolve CSS variable to a concrete color for canvas rendering.
-  // Canvas 2D context doesn't support CSS custom properties like "hsl(var(--primary))".
+  const handleCopy = useCallback(async (text: string) => {
+    if (!text || typeof navigator === "undefined" || !navigator.clipboard?.writeText) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      if (copyResetTimerRef.current) {
+        clearTimeout(copyResetTimerRef.current);
+      }
+      copyResetTimerRef.current = setTimeout(() => {
+        setCopied(false);
+        copyResetTimerRef.current = null;
+      }, 1500);
+    } catch {
+      // Ignore clipboard failures in constrained renderer contexts.
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetTimerRef.current) {
+        clearTimeout(copyResetTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Keep the recording waveform on a stable accent so it stays visible in both light and dark themes.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const style = getComputedStyle(document.documentElement);
-    const raw = style.getPropertyValue("--primary").trim();
+    const raw = style.getPropertyValue("--accent").trim();
     if (raw) {
-      setResolvedPrimaryColor(`hsl(${raw})`);
+      setResolvedWaveformColor(`hsl(${raw})`);
     }
   }, []);
 
@@ -65,7 +94,7 @@ export function RecordingPill({
     const bufferLength = analyserNode.frequencyBinCount;
     const dataArray = new Uint8Array(bufferLength);
     let animId: number;
-    const fillColor = resolvedPrimaryColor;
+    const fillColor = resolvedWaveformColor;
     const draw = () => {
       animId = requestAnimationFrame(draw);
       analyserNode.getByteFrequencyData(dataArray);
@@ -87,7 +116,26 @@ export function RecordingPill({
     };
     draw();
     return () => cancelAnimationFrame(animId);
-  }, [phase, analyserNode, resolvedPrimaryColor]);
+  }, [phase, analyserNode, resolvedWaveformColor]);
+
+  const responsePanel = response ? (
+    <div className="flex w-full max-w-[360px] flex-col items-center gap-2">
+      <div className="max-h-[88px] w-full overflow-y-auto rounded-lg border border-border/40 bg-background/40 px-3 py-2 text-xs text-muted-foreground">
+        <p className="whitespace-pre-wrap break-words text-center">{response}</p>
+      </div>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          void handleCopy(response);
+        }}
+        className="flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-muted-foreground/70 transition-colors hover:bg-muted/40 hover:text-muted-foreground"
+        style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
+      >
+        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  ) : null;
 
   const renderContent = () => {
     switch (phase) {
@@ -104,13 +152,12 @@ export function RecordingPill({
               height={40}
               className="block"
             />
-            {/* Send button — stops recording and proceeds to AI pipeline */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onStopRecording?.();
               }}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+              className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
               style={{
                 // @ts-ignore
                 WebkitAppRegion: "no-drag",
@@ -149,16 +196,24 @@ export function RecordingPill({
 
       case "speaking":
         return (
-          <div className="flex flex-col items-center gap-2 py-2 px-2 w-full">
+          <div className="flex w-full flex-col items-center gap-2 px-2 py-2">
             <div className="flex items-center gap-2">
-              <Volume2 className="h-4 w-4 text-muted-foreground shrink-0" />
+              <Volume2 className="h-4 w-4 shrink-0 animate-pulse text-muted-foreground" />
               <span className="text-sm font-medium text-foreground">Speaking</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStopSpeaking?.();
+                }}
+                className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                title="Stop audio"
+                aria-label="Stop audio"
+                style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
+              >
+                <Square className="h-3.5 w-3.5 fill-current" />
+              </button>
             </div>
-            {response && (
-              <p className="text-xs text-muted-foreground text-center line-clamp-2 max-w-[380px]">
-                {response}
-              </p>
-            )}
+            {responsePanel}
           </div>
         );
 
@@ -172,9 +227,9 @@ export function RecordingPill({
 
       case "compose-review":
         return (
-          <div className="flex flex-col items-center gap-3 py-2 px-2 w-full">
+          <div className="flex w-full flex-col items-center gap-3 px-2 py-2">
             {transcript && (
-              <p className="text-xs text-muted-foreground text-center line-clamp-3 max-w-[380px]">
+              <p className="max-w-[380px] text-center text-xs text-muted-foreground line-clamp-3">
                 {transcript}
               </p>
             )}
@@ -184,7 +239,7 @@ export function RecordingPill({
                   e.stopPropagation();
                   onConfirmCompose?.();
                 }}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+                className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
                 style={{
                   // @ts-ignore
                   WebkitAppRegion: "no-drag",
@@ -197,7 +252,7 @@ export function RecordingPill({
                   e.stopPropagation();
                   onCancel();
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-muted-foreground text-xs hover:text-foreground hover:bg-muted/50 transition-colors"
+                className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                 style={{
                   // @ts-ignore
                   WebkitAppRegion: "no-drag",
@@ -211,17 +266,18 @@ export function RecordingPill({
 
       case "done":
         return (
-          <div className="flex flex-col items-center gap-2 py-2">
+          <div className="flex w-full flex-col items-center gap-2 px-2 py-2">
             <div className="flex items-center gap-2">
               <Check className="h-4 w-4 text-green-500" />
               <span className="text-sm font-medium text-foreground">Done</span>
             </div>
+            {responsePanel}
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onDismiss?.();
               }}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1 rounded-full hover:bg-muted/50"
+              className="rounded-full px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
               style={{
                 // @ts-ignore
                 WebkitAppRegion: "no-drag",
@@ -234,8 +290,8 @@ export function RecordingPill({
 
       case "error":
         return (
-          <div className="flex items-center gap-2 py-2 px-2">
-            <AlertCircle className="h-4 w-4 text-red-500 shrink-0" />
+          <div className="flex items-center gap-2 px-2 py-2">
+            <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
             <span className="text-sm text-red-500 line-clamp-2">{error ?? "An error occurred"}</span>
           </div>
         );
@@ -253,22 +309,21 @@ export function RecordingPill({
 
   return (
     <div
-      className="relative flex flex-col items-center overflow-hidden w-full h-full"
+      className="relative flex h-full w-full flex-col items-center overflow-hidden"
       style={{
         // @ts-ignore
         WebkitAppRegion: "drag",
       }}
     >
-      {/* Screenshot thumbnail + close button (top-right cluster) */}
       <div
-        className="absolute top-2 right-2 flex items-center gap-1.5 z-10"
+        className="absolute right-2 top-2 z-10 flex items-center gap-1.5"
         style={{
           // @ts-ignore
           WebkitAppRegion: "no-drag",
         }}
       >
         {screenshotUrls && screenshotUrls.length > 0 && (
-          <div className="flex items-center gap-1.5 max-w-[200px] overflow-x-auto">
+          <div className="flex max-w-[200px] items-center gap-1.5 overflow-x-auto">
             {screenshotUrls.map((url, i) => (
               <button
                 key={`${url}-${i}`}
@@ -280,39 +335,35 @@ export function RecordingPill({
                 <img
                   src={url}
                   alt={`Screenshot ${i + 1}`}
-                  className="w-24 h-16 rounded-md object-cover border border-border/40 group-hover:border-primary/60 transition-colors"
+                  className="h-10 w-14 rounded object-cover border border-border/40 transition-colors group-hover:border-primary/60"
                 />
-                <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 rounded-md">
-                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
+                <span className="absolute inset-0 flex items-center justify-center rounded bg-black/30 opacity-0 transition-opacity group-hover:opacity-100">
+                  <svg className="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" /></svg>
                 </span>
               </button>
             ))}
           </div>
         )}
-        {/* Shortcut hint */}
-        <span className="text-[10px] text-muted-foreground/60 whitespace-nowrap">{"\u2318\u21E7S"} add screenshot</span>
+        <span className="whitespace-nowrap text-[10px] text-muted-foreground/60">{"\u2318\u21E7S"} add screenshot</span>
         <button
           onClick={onClose}
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
           aria-label="Close"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
-      {/* Agent picker slot — shown above phase content when provided */}
       {agentPicker && (
-        <div className="w-full flex items-center px-3 pt-2">
+        <div className="flex w-full items-center px-3 pt-2">
           {agentPicker}
         </div>
       )}
 
-      {/* Main content */}
-      <div className="flex-1 flex items-center justify-center w-full px-10 pt-4 pb-2">
+      <div className="flex flex-1 items-center justify-center w-full px-10 pt-4 pb-2">
         {renderContent()}
       </div>
 
-      {/* Cancel button */}
       {phase !== "done" && phase !== "error" && phase !== "compose-review" && (
         <div
           className="pb-2"
@@ -323,17 +374,16 @@ export function RecordingPill({
         >
           <button
             onClick={onCancel}
-            className="text-xs text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded"
+            className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             Cancel
           </button>
         </div>
       )}
 
-      {/* Mode toggle slot */}
       {modeToggle && (
         <div
-          className="w-full flex items-center justify-center px-3 pb-3"
+          className="flex w-full items-center justify-center px-3 pb-3"
           style={{
             // @ts-ignore
             WebkitAppRegion: "no-drag",
@@ -343,7 +393,6 @@ export function RecordingPill({
         </div>
       )}
 
-      {/* Screenshot lightbox */}
       {showFullScreenshot && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
@@ -357,12 +406,12 @@ export function RecordingPill({
           <img
             src={showFullScreenshot}
             alt="Full screenshot"
-            className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl object-contain"
+            className="max-h-[90vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           />
           <button
             onClick={() => setShowFullScreenshot(null)}
-            className="absolute top-3 right-3 p-1.5 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors"
+            className="absolute right-3 top-3 rounded-full bg-black/50 p-1.5 text-white transition-colors hover:bg-black/70"
           >
             <X className="h-4 w-4" />
           </button>

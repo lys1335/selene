@@ -12,6 +12,7 @@ export {
   ensureAgentTable,
   deleteAgentTable,
   getAgentTableName,
+  getAgentTableStats,
   listAgentTables
 } from "./collections";
 export {

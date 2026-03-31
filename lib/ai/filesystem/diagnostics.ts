@@ -128,10 +128,27 @@ function countTypeScriptIssues(output: string): { errors: number; warnings: numb
 }
 
 function countEslintIssues(output: string): { errors: number; warnings: number } {
-  return {
-    errors: (output.match(/\berror\b/gi) ?? []).length,
-    warnings: (output.match(/\bwarning\b/gi) ?? []).length,
-  };
+  const issueLines = output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^\d+\s+problems?\s*\(/i.test(line))
+    .filter((line) => !/^✖\s+\d+\s+problems?/i.test(line))
+    .filter((line) => /^\d+:\d+\s+/i.test(line) || /:\s*line\s+\d+,\s*col\s+\d+,/i.test(line));
+
+  let errors = 0;
+  let warnings = 0;
+
+  for (const line of issueLines) {
+    const issueMatch = line.match(/\b(error|warning)\b/gi);
+    if (!issueMatch) continue;
+
+    const lastSeverity = issueMatch[issueMatch.length - 1]?.toLowerCase();
+    if (lastSeverity === "error") errors += 1;
+    if (lastSeverity === "warning") warnings += 1;
+  }
+
+  return { errors, warnings };
 }
 
 function sanitizeDiagnosticOutput(output: string, maxLength: number = 3000): string {
@@ -226,7 +243,7 @@ async function runLintHook(
   if (counts.errors === 0 && counts.warnings === 0 && !sanitized) return null;
 
   return {
-    tool: "npx eslint",
+    tool: "eslint",
     output: `[eslint]\n${sanitized}`,
     errors: counts.errors,
     warnings: counts.warnings,

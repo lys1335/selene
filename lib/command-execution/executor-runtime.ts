@@ -41,6 +41,7 @@ export type BundledRuntimeInfo = {
     bundledNodePath: string | null;
     bundledNpmCliPath: string | null;
     bundledNpxCliPath: string | null;
+    hostPathPreserved: boolean;
     /** Directory containing the real ffmpeg/ffprobe binaries and their dylibs */
     ffmpegDir: string | null;
 };
@@ -89,6 +90,7 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
         bundledNodePath: bundledNodePath && existsSync(bundledNodePath) ? bundledNodePath : null,
         bundledNpmCliPath: bundledNpmCliPath && existsSync(bundledNpmCliPath) ? bundledNpmCliPath : null,
         bundledNpxCliPath: bundledNpxCliPath && existsSync(bundledNpxCliPath) ? bundledNpxCliPath : null,
+        hostPathPreserved: false,
         ffmpegDir,
     };
 }
@@ -125,9 +127,12 @@ export function prependBundledPaths(pathValue: string, runtime: BundledRuntimeIn
  *   1. When shell env is available (non-empty) — use it as the PRIMARY source.
  *      The resolver captures it from a clean login shell (no Electron/Next.js
  *      contamination), so it's exactly what the user would get in a new
- *      terminal window. process.env is NOT mixed in.
+ *      terminal window.
  *
- *   2. When shell env is unavailable (Windows, EBADF, resolution failure) —
+ *   2. In packaged builds, append vetted host PATH fallback segments after the
+ *      shell PATH so bundled/runtime-installed tools remain reachable.
+ *
+ *   3. When shell env is unavailable (Windows, EBADF, resolution failure) —
  *      fall back to process.env with aggressive sanitization to strip
  *      runtime-specific vars that would break user commands.
  *
@@ -135,16 +140,20 @@ export function prependBundledPaths(pathValue: string, runtime: BundledRuntimeIn
  * of platform-essential vars (ELECTRON_RESOURCES_PATH, TERM) are set.
  */
 export function buildSafeEnvironment(runtime: BundledRuntimeInfo): Record<string, string | undefined> {
-    const { env } = buildEnvironmentForTarget({
+    const result = buildEnvironmentForTarget({
         target: "execute-command",
-        runtime,
+        runtime: {
+            ...runtime,
+            shouldMergeHostPathFallback: runtime.isProductionBuild,
+        },
     });
+    runtime.hostPathPreserved = result.hostPathPreserved;
 
     if (runtime.bundledBinDirs.length > 0) {
         console.log(`[Command Executor] Prepending bundled binaries to PATH: ${runtime.bundledBinDirs.join(", ")}`);
     }
 
-    return env;
+    return result.env;
 }
 
 // ── Unix-to-Windows path normalization ────────────────────────────────────────
@@ -281,7 +290,8 @@ export function buildNotFoundDiagnostic(
     resolution: string | null,
 ): string {
     const pathSeparator = process.platform === "win32" ? ";" : ":";
-    const effectivePathHead = (env.PATH || "").split(pathSeparator).slice(0, 5).join("\n  ");
+    const pathSegments = (env.PATH || "").split(pathSeparator).filter(Boolean);
+    const effectivePathHead = pathSegments.slice(0, 5).join("\n  ");
     const lines = [
         `Mode: ${runtime.isProductionBuild ? "packaged" : "development"}`,
         `resourcesPath: ${runtime.resourcesPath ?? "<none>"}`,
@@ -291,6 +301,7 @@ export function buildNotFoundDiagnostic(
         `bundled node binary: ${runtime.bundledNodePath ?? "<missing>"}`,
         `bundled npm cli: ${runtime.bundledNpmCliPath ?? "<missing>"}`,
         `bundled npx cli: ${runtime.bundledNpxCliPath ?? "<missing>"}`,
+        `host PATH fallback preserved: ${runtime.hostPathPreserved ? "yes" : "no"}`,
         `effective PATH prefix:\n  ${effectivePathHead || "<empty>"}`,
     ];
 

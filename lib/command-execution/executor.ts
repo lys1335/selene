@@ -635,7 +635,10 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                     const attemptedCommand = wrapped.usingRTK
                         ? `${finalCommand} (RTK wrapper for ${command})`
                         : finalCommand;
-                    errorMessage = `Command execution failed: requested='${command}', attempted='${attemptedCommand}'. ${error.message}\n\n${diagnostic}\n\nTip: For Node.js commands (npm, npx, node), Selene expects bundled binaries under resources/standalone.`;
+                    const commandHint = resolved.resolution
+                        ? "Tip: bundled Node tools keep priority, but other commands still rely on your system PATH."
+                        : "Tip: verify the executable is installed and available in the PATH Selene inherited from your OS.";
+                    errorMessage = `Command execution failed: requested='${command}', attempted='${attemptedCommand}'. ${error.message}\n\n${diagnostic}\n\n${commandHint}`;
                 }
 
                 commandLogger.logExecutionError(command, errorMessage, context);

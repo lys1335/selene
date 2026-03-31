@@ -6,13 +6,10 @@ import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "./tool-expansion-context";
 import { DiffStyledPre } from "./diff-styled-pre";
-
-interface DiagnosticResult {
-  tool: string;
-  errors: number;
-  warnings: number;
-  output: string;
-}
+import {
+  type DiagnosticResult,
+  normalizeDiagnostics,
+} from "./tool-diagnostics";
 
 interface OperationResult {
   filePath: string;
@@ -187,9 +184,8 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
 
           {/* Diagnostics */}
           {result?.diagnostics?.map((diag, i) => {
-            if (!diag.output) return null;
-            
-            const { errors, warnings, output, tool } = diag;
+            const { errors, warnings, output, tool } = normalizeDiagnostics(diag);
+            if (!output) return null;
             const totalIssues = errors + warnings;
             const outputLines = output.split('\n');
             const hasMultipleIssues = totalIssues > 1;

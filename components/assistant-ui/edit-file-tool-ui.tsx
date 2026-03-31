@@ -6,13 +6,11 @@ import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { useToolExpansion } from "./tool-expansion-context";
 import { DiffStyledPre } from "./diff-styled-pre";
-
-interface DiagnosticResult {
-  tool: string;
-  errors: number;
-  warnings: number;
-  output: string;
-}
+import {
+  type DiagnosticResult,
+  getDiagnosticCounts,
+  getDiagnosticOutput,
+} from "./tool-diagnostics";
 
 interface EditFileResult {
   status: "success" | "error" | "warning";
@@ -185,16 +183,21 @@ export const EditFileToolUI: ToolCallContentPartComponent = ({
           </span>
         )}
 
-        {result?.diagnostics && (result.diagnostics.errors > 0 || result.diagnostics.warnings > 0) && (
-          <span className={cn(
-            "ml-1 shrink-0",
-            result.diagnostics.errors > 0 ? "text-destructive" : "text-terminal-amber"
-          )}>
-            {result.diagnostics.errors > 0 && `${result.diagnostics.errors}E`}
-            {result.diagnostics.errors > 0 && result.diagnostics.warnings > 0 && " "}
-            {result.diagnostics.warnings > 0 && `${result.diagnostics.warnings}W`}
-          </span>
-        )}
+        {result?.diagnostics && (() => {
+          const { errors, warnings } = getDiagnosticCounts(result.diagnostics);
+          if (errors === 0 && warnings === 0) return null;
+
+          return (
+            <span className={cn(
+              "ml-1 shrink-0",
+              errors > 0 ? "text-destructive" : "text-terminal-amber"
+            )}>
+              {errors > 0 && `${errors}E`}
+              {errors > 0 && warnings > 0 && " "}
+              {warnings > 0 && `${warnings}W`}
+            </span>
+          );
+        })()}
 
         {expanded ? (
           <ChevronDownIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
@@ -235,8 +238,12 @@ export const EditFileToolUI: ToolCallContentPartComponent = ({
           )}
 
           {/* Diagnostics */}
-          {result?.diagnostics && result.diagnostics.output && (() => {
-            const { errors, warnings, output, tool } = result.diagnostics;
+          {result?.diagnostics && (() => {
+            const { errors, warnings } = getDiagnosticCounts(result.diagnostics);
+            const output = getDiagnosticOutput(result.diagnostics);
+            if (!output) return null;
+
+            const { tool } = result.diagnostics;
             const totalIssues = errors + warnings;
             const outputLines = output.split('\n');
             const hasMultipleIssues = totalIssues > 1;

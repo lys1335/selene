@@ -53,17 +53,18 @@ function run(command, args, options = {}) {
 }
 
 function removeDirWithRetry(targetPath, maxAttempts = 10) {
+  const retryable = new Set(['EBUSY', 'ENOTEMPTY']);
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       fs.rmSync(targetPath, { recursive: true, force: true });
       return;
     } catch (error) {
-      if (error && error.code === 'EBUSY' && attempt < maxAttempts) {
+      if (error && retryable.has(error.code) && attempt < maxAttempts) {
         sleep(200);
         continue;
       }
-      if (error && error.code === 'EBUSY') {
-        console.warn(`Skipping cleanup for busy temporary directory: ${targetPath}`);
+      if (error && retryable.has(error.code)) {
+        console.warn(`Skipping cleanup for temporary directory (${error.code}): ${targetPath}`);
         return;
       }
       throw error;
@@ -209,6 +210,9 @@ function dmgContainsApp(targetDmgPath) {
     return exists(path.join(mountPath, appName));
   } finally {
     detachIfMounted(mountPath);
+    if (isMountedPath(mountPath)) {
+      detachImageIfMounted(targetDmgPath);
+    }
     removeDirWithRetry(tempDir);
   }
 }

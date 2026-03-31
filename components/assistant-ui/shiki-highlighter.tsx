@@ -20,7 +20,33 @@ export type HighlighterProps = Omit<
 
 // Base styles for code blocks
 const baseCodeStyles =
-  "overflow-x-auto rounded-lg p-4 text-sm font-mono whitespace-pre";
+  "overflow-x-auto rounded-none text-sm font-mono whitespace-pre [font-variant-ligatures:none] [tab-size:2]";
+
+const COMPACT_CODE_BLOCK_MAX_LINE_LENGTH = 48;
+const COMPACT_CODE_BLOCK_MIN_LINE_COUNT = 2;
+
+function normalizeCode(code: string): string {
+  return code.replace(/\r\n/g, "\n");
+}
+
+function getCodeBlockLayout(code: string): {
+  shouldShrinkToFit: boolean;
+  isWhitespaceSensitive: boolean;
+} {
+  const visibleCode = code.endsWith("\n") ? code.slice(0, -1) : code;
+  const lines = visibleCode.split("\n");
+  const nonEmptyLines = lines.filter((line) => line.trim().length > 0);
+  const longestLineLength = lines.reduce((longest, line) => Math.max(longest, line.length), 0);
+  const indentedVisibleLines = lines.filter((line) => /^[ \t]+[^\s]/.test(line)).length;
+  const punctuationLedLines = lines.filter((line) => /^[ \t]+[./\\*_|-]/.test(line)).length;
+
+  return {
+    shouldShrinkToFit:
+      nonEmptyLines.length >= COMPACT_CODE_BLOCK_MIN_LINE_COUNT
+      && longestLineLength <= COMPACT_CODE_BLOCK_MAX_LINE_LENGTH,
+    isWhitespaceSensitive: indentedVisibleLines >= 2 || punctuationLedLines >= 1,
+  };
+}
 
 function CopyCodeButton({ code }: { code: string }) {
   const [copied, setCopied] = useState(false);
@@ -53,9 +79,10 @@ function CopyCodeButton({ code }: { code: string }) {
 // Minimum code length for syntax highlighting (skip tiny snippets)
 const MIN_HIGHLIGHT_LENGTH = 100;
 
+type HighlighterVariant = "assistant" | "user";
+
 interface StreamingHighlighterProps extends HighlighterProps {
-  bgClass: string;
-  textClass: string;
+  variant: HighlighterVariant;
 }
 
 /**
@@ -75,8 +102,7 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
     className,
     addDefaultStyles = false,
     showLanguage = false,
-    bgClass,
-    textClass,
+    variant,
     node: _node,
     components: _components,
     ...props
@@ -89,8 +115,52 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
     const idleCallbackRef = useRef<number | null>(null);
     const lastCodeRef = useRef(code);
 
-    const trimmedCode = useMemo(() => code.trim(), [code]);
-    const skipHighlighting = trimmedCode.length < MIN_HIGHLIGHT_LENGTH;
+    const normalizedCode = useMemo(() => normalizeCode(code), [code]);
+    const { shouldShrinkToFit, isWhitespaceSensitive } = useMemo(
+      () => getCodeBlockLayout(normalizedCode),
+      [normalizedCode]
+    );
+    const syntaxSample = useMemo(() => normalizedCode.trim(), [normalizedCode]);
+    const skipHighlighting = syntaxSample.length < MIN_HIGHLIGHT_LENGTH;
+
+    const frameClassName = cn(
+      "group relative max-w-full overflow-hidden rounded-lg border shadow-sm",
+      variant === "assistant"
+        ? "border-terminal-cream/[0.08]"
+        : "border-terminal-cream/15",
+      shouldShrinkToFit ? "inline-block self-start" : "w-full self-stretch"
+    );
+
+    const preSpacingClassName = shouldShrinkToFit
+      ? "pb-4 pl-4 pr-20 pt-12"
+      : "p-4";
+
+    const preToneClassName = variant === "assistant"
+      ? "bg-terminal-dark text-terminal-cream"
+      : "bg-terminal-cream/10 text-terminal-cream";
+
+    const plainPreClassName = cn(
+      baseCodeStyles,
+      preToneClassName,
+      preSpacingClassName,
+      shouldShrinkToFit ? "w-fit max-w-full" : "w-full",
+      isWhitespaceSensitive ? "leading-[1.15]" : "leading-6",
+      className
+    );
+
+    const shikiPreClassName = cn(
+      "aui-shiki-base",
+      "[&_pre]:overflow-x-auto [&_pre]:rounded-none [&_pre]:text-sm [&_pre]:font-mono [&_pre]:whitespace-pre [&_pre]:[font-variant-ligatures:none] [&_pre]:[tab-size:2]",
+      variant === "assistant"
+        ? "[&_pre]:!bg-terminal-dark [&_pre]:!text-terminal-cream"
+        : "[&_pre]:!bg-terminal-cream/10 [&_pre]:!text-terminal-cream",
+      shouldShrinkToFit ? "[&_pre]:w-fit [&_pre]:max-w-full" : "[&_pre]:w-full",
+      shouldShrinkToFit
+        ? "[&_pre]:pb-4 [&_pre]:pl-4 [&_pre]:pr-20 [&_pre]:pt-12"
+        : "[&_pre]:p-4",
+      isWhitespaceSensitive ? "[&_pre]:leading-[1.15]" : "[&_pre]:leading-6",
+      className
+    );
 
     // Check if Shiki has rendered content - stable callback
     const checkRendered = useCallback((): boolean => {
@@ -105,7 +175,7 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
 
     // Aggressive debounce: 800ms stable before mounting Shiki
     useEffect(() => {
-      lastCodeRef.current = trimmedCode;
+      lastCodeRef.current = normalizedCode;
 
       // Clear pending timers
       if (debounceRef.current) {
@@ -129,7 +199,7 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
         if (typeof requestIdleCallback !== "undefined") {
           idleCallbackRef.current = requestIdleCallback(
             () => {
-              if (lastCodeRef.current === trimmedCode) {
+              if (lastCodeRef.current === normalizedCode) {
                 setShouldRenderShiki(true);
               }
             },
@@ -138,7 +208,7 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
         } else {
           // Fallback for browsers without requestIdleCallback
           debounceRef.current = setTimeout(() => {
-            if (lastCodeRef.current === trimmedCode) {
+            if (lastCodeRef.current === normalizedCode) {
               setShouldRenderShiki(true);
             }
           }, 800);
@@ -156,7 +226,7 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
           cancelIdleCallback(idleCallbackRef.current);
         }
       };
-    }, [trimmedCode, skipHighlighting]);
+    }, [normalizedCode, skipHighlighting]);
 
     // MutationObserver: Detect Shiki content ready
     useEffect(() => {
@@ -200,16 +270,8 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
     if (shikiReady && shouldRenderShiki && !skipHighlighting) {
       // Shiki is ready - show highlighted code
       return (
-        <div className="group relative overflow-hidden rounded-lg border border-terminal-cream/[0.08] shadow-sm">
-          <div
-            ref={shikiContainerRef}
-            className={cn(
-              "aui-shiki-base",
-              "[&_pre]:overflow-x-auto [&_pre]:rounded-none [&_pre]:p-4 [&_pre]:text-sm",
-              `[&_pre]:${bgClass}`,
-              className
-            )}
-          >
+        <div className={frameClassName}>
+          <div ref={shikiContainerRef} className={shikiPreClassName}>
             <ShikiHighlighter
               {...props}
               language={language ?? "plaintext"}
@@ -218,10 +280,10 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
               showLanguage={showLanguage}
               delay={400}
             >
-              {trimmedCode}
+              {normalizedCode}
             </ShikiHighlighter>
           </div>
-          <CopyCodeButton code={trimmedCode} />
+          <CopyCodeButton code={normalizedCode} />
         </div>
       );
     }
@@ -229,13 +291,11 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
     // Plain code fallback (during streaming or while Shiki loads)
     return (
       <>
-        <div className="group relative overflow-hidden rounded-lg border border-terminal-cream/[0.08] shadow-sm">
-          <pre
-            className={cn(baseCodeStyles, bgClass, textClass, "rounded-none", className)}
-          >
-            <code>{trimmedCode}</code>
+        <div className={frameClassName}>
+          <pre className={plainPreClassName}>
+            <code>{normalizedCode}</code>
           </pre>
-          <CopyCodeButton code={trimmedCode} />
+          <CopyCodeButton code={normalizedCode} />
         </div>
 
         {/* Hidden Shiki container for pre-rendering */}
@@ -253,7 +313,7 @@ const StreamingCodeHighlighter: FC<StreamingHighlighterProps> = memo(
               showLanguage={showLanguage}
               delay={400}
             >
-              {trimmedCode}
+              {normalizedCode}
             </ShikiHighlighter>
           </div>
         )}
@@ -280,9 +340,8 @@ const SyntaxHighlighterInner: FC<HighlighterProps> = (props) => {
   return (
     <StreamingCodeHighlighter
       {...props}
+      variant="assistant"
       theme={props.theme ?? shikiTheme}
-      bgClass="bg-terminal-dark"
-      textClass="text-terminal-cream"
     />
   );
 };
@@ -304,9 +363,8 @@ const UserSyntaxHighlighterInner: FC<HighlighterProps> = (props) => {
   return (
     <StreamingCodeHighlighter
       {...props}
+      variant="user"
       theme={props.theme ?? shikiTheme}
-      bgClass="bg-terminal-cream/10"
-      textClass="text-terminal-cream"
     />
   );
 };

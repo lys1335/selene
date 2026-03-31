@@ -324,9 +324,9 @@ const UserFileContent: FC<{ type: "file"; data: string; mimeType: string; filena
       ? data
       : `data:${mimeType};base64,${data}`;
     return (
-      <div className="mt-1 max-w-xs overflow-hidden rounded-lg border border-border/30">
+      <div className="mt-1 max-w-56 overflow-hidden rounded-lg border border-border/30">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={src} alt={filename || "Uploaded image"} className="max-h-64 w-auto object-contain" />
+        <img src={src} alt={filename || "Uploaded image"} className="max-h-44 w-auto object-contain" />
       </div>
     );
   }
