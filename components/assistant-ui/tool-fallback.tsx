@@ -4,9 +4,8 @@ import { memo, useEffect, useMemo, useRef, useState, type FC } from "react";
 import { CircleNotch, CheckCircle, XCircle } from "@phosphor-icons/react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
-import { resilientFetch } from "@/lib/utils/resilient-fetch";
 import { getToolIcon } from "@/components/ui/tool-icon-map";
-import { getCanonicalToolName } from "./tool-name-utils";
+import { getCanonicalToolName, humanizeToolName, loadToolNameCache } from "./tool-name-utils";
 import { useToolExpansion } from "./tool-expansion-context";
 import { stripXmlStatusTags } from "./claude-code-tools/parse-text-result";
 import { DiffStyledPre } from "./diff-styled-pre";
@@ -817,33 +816,7 @@ return (
 });
 ToolResultDisplay.displayName = "ToolResultDisplay";
 
-let toolNameCache: Record<string, string> | null = null;
-let toolNameCachePromise: Promise<Record<string, string>> | null = null;
-
-async function loadToolNameCache(): Promise<Record<string, string>> {
-  if (toolNameCache) return toolNameCache;
-  if (toolNameCachePromise) return toolNameCachePromise;
-
-  toolNameCachePromise = resilientFetch<{
-    tools?: Array<{ id: string; displayName: string }>;
-  }>("/api/tools?includeDisabled=true&includeAlwaysLoad=true")
-    .then(({ data }) => {
-      const map: Record<string, string> = {};
-      (data?.tools || []).forEach((tool) => {
-        if (tool.id && tool.displayName) {
-          map[tool.id] = tool.displayName;
-        }
-      });
-      toolNameCache = map;
-      return map;
-    })
-    .catch(() => {
-      toolNameCache = {};
-      return toolNameCache;
-    });
-
-  return toolNameCachePromise;
-}
+// Tool name cache is now shared via tool-name-utils.ts loadToolNameCache()
 
 // Main component with memo
 export const ToolFallback: ToolCallContentPartComponent = memo(({
@@ -876,7 +849,7 @@ export const ToolFallback: ToolCallContentPartComponent = memo(({
   const displayName = useMemo(() => {
     if (t.has(canonicalToolName)) return t(canonicalToolName);
     if (t.has(toolName)) return t(toolName);
-    return resolvedName || canonicalToolName;
+    return resolvedName || humanizeToolName(canonicalToolName);
   }, [t, canonicalToolName, toolName, resolvedName]);
 
   useEffect(() => {

@@ -449,6 +449,23 @@ export interface MCPToolLoadingPreference {
 }
 
 /**
+ * Generate a human-readable display name for an MCP tool.
+ * Uses the original tool name (before ID sanitization) and title-cases it.
+ * "ghost_press" → "Ghost Press", "read_file" → "Read File"
+ */
+function humanizeMcpToolName(toolName: string, _serverName: string): string {
+    let result = toolName
+        // camelCase boundary: lowercase/digit followed by uppercase
+        .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+        // acronym boundary: uppercase run followed by uppercase+lowercase (e.g. "HTTPStatus" → "HTTP Status")
+        .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+    // snake_case / kebab-case → space-separated
+    result = result.replace(/[_-]/g, " ");
+    // Title Case each word
+    return result.replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+}
+
+/**
  * Convert an MCP tool to Selene's ToolMetadata format
  * @param mcpTool - The MCP tool from the server
  * @param preference - Optional per-tool loading preference from agent settings
@@ -468,7 +485,7 @@ export function mcpToolToMetadata(
     const description = mcpTool.description || "";
 
     return {
-        displayName: `${toolName} (${serverName})`,
+        displayName: humanizeMcpToolName(toolName, serverName),
         category: MCP_TOOL_CATEGORY,
         keywords: [
             toolName,
