@@ -12,6 +12,7 @@ import { limitProgressContent } from "@/lib/background-tasks/progress-content-li
 import { nextOrderingIndex } from "@/lib/session/message-ordering";
 import { nowISO } from "@/lib/utils/timestamp";
 import type { DBContentPart, DBToolCallPart } from "@/lib/messages/converter";
+import { sanitizeAssistantOutputText } from "./content-sanitizer";
 import {
   type StreamingMessageState,
   cloneContentParts,
@@ -199,6 +200,35 @@ export function buildProgressContentSnapshot(
   });
 }
 
+function hasToolCallLikeParts(parts: DBContentPart[]): boolean {
+  return parts.some((part) => part.type === "tool-call" || part.type === "tool-result");
+}
+
+function sanitizeAssistantProgressParts(parts: DBContentPart[]): DBContentPart[] {
+  if (!hasToolCallLikeParts(parts)) {
+    return parts;
+  }
+
+  const sanitized: DBContentPart[] = [];
+  for (const part of parts) {
+    if (part.type !== "text") {
+      sanitized.push(part);
+      continue;
+    }
+
+    const cleanedText = sanitizeAssistantOutputText(part.text, {
+      hasToolCallLikeParts: true,
+    });
+    if (!cleanedText.trim()) {
+      continue;
+    }
+
+    sanitized.push({ ...part, text: cleanedText });
+  }
+
+  return sanitized;
+}
+
 // Progress content limiter is now ON by default. Set env to "true" to disable.
 const DISABLE_PROGRESS_CONTENT_LIMITER =
   process.env.DISABLE_PROGRESS_CONTENT_LIMITER === "true";
@@ -245,6 +275,8 @@ export function createSyncStreamingMessage(
     if (streamingState.parts.length === 0) return;
 
     let filteredParts = filterStreamingPartsForPersistence(streamingState);
+
+    filteredParts = sanitizeAssistantProgressParts(filteredParts);
 
     if (filteredParts.length === 0 && streamingState.parts.length > 0) {
       filteredParts = [{ type: "text", text: "Working..." }];
