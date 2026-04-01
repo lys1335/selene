@@ -41,10 +41,12 @@ export async function PUT(
         : body.workflow || existing.workflow;
     let objectInfo: Record<string, unknown> | undefined;
     if (body.validateWithComfyUI) {
+      // Use explicit property presence: if the field is in the body (even as empty/undefined),
+      // respect it as "cleared override" instead of falling back to the existing value.
       const resolved = await resolveCustomComfyUIBaseUrl({
-        comfyuiBaseUrl: body.comfyuiBaseUrl || existing.comfyuiBaseUrl,
-        comfyuiHost: body.comfyuiHost || existing.comfyuiHost,
-        comfyuiPort: body.comfyuiPort || existing.comfyuiPort,
+        comfyuiBaseUrl: "comfyuiBaseUrl" in body ? body.comfyuiBaseUrl : existing.comfyuiBaseUrl,
+        comfyuiHost: "comfyuiHost" in body ? body.comfyuiHost : existing.comfyuiHost,
+        comfyuiPort: "comfyuiPort" in body ? body.comfyuiPort : existing.comfyuiPort,
       });
       objectInfo = await fetchObjectInfo(resolved.baseUrl);
     }

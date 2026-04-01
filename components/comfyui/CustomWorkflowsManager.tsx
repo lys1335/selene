@@ -132,6 +132,25 @@ export function CustomWorkflowsManager({
     return JSON.parse(workflowText) as Record<string, unknown>;
   };
 
+  // Resolve effective connection values for ephemeral operations (analyze/validate).
+  // Per-workflow overrides take priority, then unsaved connection settings from props,
+  // so the user's live form state is always used even before global settings are saved.
+  const resolveEphemeralConnection = () => ({
+    comfyuiBaseUrl: comfyuiBaseUrl || connectionBaseUrl || undefined,
+    comfyuiHost: comfyuiHost || connectionHost || undefined,
+    comfyuiPort: comfyuiPort ? Number(comfyuiPort) : connectionPort || undefined,
+    comfyuiUseHttps: connectionUseHttps || undefined,
+  });
+
+  // For save/persist: only include actual per-workflow overrides.
+  // Empty values mean "inherit from global settings" — don't collapse
+  // global settings into workflow-level overrides.
+  const getWorkflowOverrides = () => ({
+    comfyuiBaseUrl: comfyuiBaseUrl || undefined,
+    comfyuiHost: comfyuiHost || undefined,
+    comfyuiPort: comfyuiPort ? Number(comfyuiPort) : undefined,
+  });
+
   const handleAnalyze = async () => {
     try {
       const workflowJson = parseWorkflowJson();
@@ -145,9 +164,7 @@ export function CustomWorkflowsManager({
         workflow: workflowJson,
         format,
         validateWithComfyUI,
-        comfyuiBaseUrl: comfyuiBaseUrl || undefined,
-        comfyuiHost: comfyuiHost || undefined,
-        comfyuiPort: comfyuiPort ? Number(comfyuiPort) : undefined,
+        ...resolveEphemeralConnection(),
       });
       if (postError || !data) {
         throw new Error(data?.error || postError || "Failed to analyze workflow");
@@ -213,9 +230,7 @@ export function CustomWorkflowsManager({
         outputs: normalizeOutputs(outputs),
         enabled,
         loadingMode,
-        comfyuiBaseUrl: comfyuiBaseUrl || undefined,
-        comfyuiHost: comfyuiHost || undefined,
-        comfyuiPort: comfyuiPort ? Number(comfyuiPort) : undefined,
+        ...getWorkflowOverrides(),
         timeoutSeconds: timeoutSeconds ? Number(timeoutSeconds) : undefined,
       };
 

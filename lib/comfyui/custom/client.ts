@@ -132,8 +132,8 @@ export async function resolveCustomComfyUIBaseUrl(workflowOverride?: {
   comfyuiBaseUrl?: string;
   comfyuiHost?: string;
   comfyuiPort?: number;
+  comfyuiUseHttps?: boolean;
 }): Promise<{ baseUrl: string; source: string }> {
-  loadSettings();
   const settings = loadSettings();
 
   const explicitBaseUrl = workflowOverride?.comfyuiBaseUrl || settings.comfyuiCustomBaseUrl;
@@ -143,7 +143,7 @@ export async function resolveCustomComfyUIBaseUrl(workflowOverride?: {
 
   const host = workflowOverride?.comfyuiHost || settings.comfyuiCustomHost || "127.0.0.1";
   const port = workflowOverride?.comfyuiPort || settings.comfyuiCustomPort;
-  const useHttps = settings.comfyuiCustomUseHttps === true;
+  const useHttps = workflowOverride?.comfyuiUseHttps ?? settings.comfyuiCustomUseHttps === true;
 
   if (port) {
     return { baseUrl: buildBaseUrl(host, port, useHttps), source: "configured" };
