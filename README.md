@@ -143,10 +143,10 @@ npm run electron:dev
 ### Build
 ```bash
 # Windows
-npm run electron:dist:win
+npm run electron:dist:win:nosign
 
 # macOS
-npm run electron:dist:mac
+npm run electron:dist:mac:nosign
 ```
 
 ### Runtime Secrets
