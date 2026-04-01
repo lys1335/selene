@@ -1,4 +1,5 @@
 import { loadSettings } from "@/lib/settings/settings-manager";
+import { findFfmpegBinary } from "@/lib/audio/transcription";
 import { execFileSync } from "node:child_process";
 import { writeFileSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
@@ -176,13 +177,18 @@ export function getAudioForChannel(
  * Throws if ffmpeg is not installed or conversion fails.
  */
 function convertToOpus(inputAudio: Buffer): Buffer {
+  const ffmpegPath = findFfmpegBinary();
+  if (!ffmpegPath) {
+    throw new Error("ffmpeg not found — install ffmpeg or ensure ffmpeg-static is bundled");
+  }
+
   const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const tmpIn = join(tmpdir(), `selene-tts-in-${id}.mp3`);
   const tmpOut = join(tmpdir(), `selene-tts-out-${id}.ogg`);
 
   try {
     writeFileSync(tmpIn, inputAudio);
-    execFileSync("ffmpeg", [
+    execFileSync(ffmpegPath, [
       "-y", "-i", tmpIn,
       "-c:a", "libopus",
       "-b:a", "48k",
