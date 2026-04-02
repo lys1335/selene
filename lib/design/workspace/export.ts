@@ -157,7 +157,7 @@ async function renderPngExport(
   try {
     const page = await browser.newPage();
     await page.setViewport({ width, height, deviceScaleFactor: scale });
-    await page.setContent(renderedHtml, { waitUntil: "networkidle0" });
+    await page.setContent(renderedHtml, { waitUntil: "networkidle2", timeout: 30_000 });
     await waitForPageReady(page);
 
     const screenshot = await page.screenshot({ type: "png", captureBeyondViewport: false });
@@ -206,7 +206,7 @@ async function renderVideoExport(
   try {
     const page = await browser.newPage();
     await page.setViewport({ width, height, deviceScaleFactor: scale });
-    await page.setContent(renderedHtml, { waitUntil: "networkidle0" });
+    await page.setContent(renderedHtml, { waitUntil: "networkidle2", timeout: 30_000 });
     await waitForPageReady(page);
 
     for (let index = 0; index < frameCount; index += 1) {

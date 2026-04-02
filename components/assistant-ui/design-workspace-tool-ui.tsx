@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect } from "react";
+import { memo, useEffect, useRef } from "react";
 import type { FC } from "react";
 import { Sparkles, PenSquare, Save, RotateCcw, Download, PanelRightOpen, PanelRightClose, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -86,9 +86,14 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args,
   const success = result?.success === true;
   const error = result?.success === false ? result.error : null;
   const Icon = getActionIcon(action);
+  const dispatchedRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!result || !action) return;
+    // Deduplicate: only dispatch once per unique componentId/action pair
+    const key = `${action}:${result.data?.componentId || ""}:${result.data?.snapshotId || ""}`;
+    if (dispatchedRef.current === key) return;
+    dispatchedRef.current = key;
     dispatchDesignToolResult({
       action,
       success: Boolean(result.success),
@@ -101,8 +106,8 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args,
     <div
       className={cn(
         "my-3 rounded-lg border p-4 font-mono shadow-sm",
-        isRunning && "border-terminal-dark/10 bg-terminal-cream",
-        success && "border-emerald-200 bg-emerald-50/60",
+        isRunning && "border-border bg-muted/50",
+        success && "border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30",
         error && "border-destructive/20 bg-destructive/5",
       )}
     >
@@ -110,8 +115,8 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args,
         <div
           className={cn(
             "flex h-9 w-9 items-center justify-center rounded-lg",
-            isRunning && "bg-terminal-dark/5",
-            success && "bg-emerald-100 text-emerald-700",
+            isRunning && "bg-muted",
+            success && "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400",
             error && "bg-destructive/10 text-destructive",
           )}
         >
@@ -125,8 +130,8 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args,
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-terminal-dark">{getActionLabel(action)}</div>
-          <div className="mt-0.5 text-xs text-terminal-muted break-words [overflow-wrap:anywhere]">
+          <div className="text-sm font-medium text-foreground">{getActionLabel(action)}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground break-words [overflow-wrap:anywhere]">
             {isRunning
               ? "Running..."
               : result?.data?.message || error || "Completed"}
@@ -135,14 +140,14 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args,
       </div>
 
       {args?.prompt && (
-        <div className="mt-3 rounded-md bg-black/5 px-3 py-2 text-xs text-terminal-muted">
-          Prompt: <span className="text-terminal-dark">{args.prompt}</span>
+        <div className="mt-3 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+          Prompt: <span className="text-foreground">{args.prompt}</span>
         </div>
       )}
 
       {result?.data?.name && result?.data?.componentId && (
-        <div className="mt-3 text-xs text-terminal-muted">
-          Component: <span className="text-terminal-dark">{result.data.name}</span>
+        <div className="mt-3 text-xs text-muted-foreground">
+          Component: <span className="text-foreground">{result.data.name}</span>
         </div>
       )}
     </div>

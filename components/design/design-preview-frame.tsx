@@ -55,7 +55,7 @@ export function DesignPreviewFrame() {
         >
           <iframe
             srcDoc={previewHtml}
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-same-origin"
             className="h-full w-full border-0"
             title="Design preview"
           />

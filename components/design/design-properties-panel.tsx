@@ -22,16 +22,23 @@ import {
 type ExportFormat = "html" | "react" | "png" | "video";
 
 async function requestExport(code: string, format: ExportFormat, componentName: string) {
-  const response = await fetch("/api/design/export", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code, format, componentName }),
-  });
-  return response.json() as Promise<{
-    success: boolean;
-    data?: { url?: string; code?: string; fileName?: string; renderedHtml?: string };
-    error?: string;
-  }>;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const response = await fetch("/api/design/export", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, format, componentName }),
+      signal: controller.signal,
+    });
+    return response.json() as Promise<{
+      success: boolean;
+      data?: { url?: string; code?: string; fileName?: string; renderedHtml?: string };
+      error?: string;
+    }>;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 async function requestSaveToGallery(component: {
@@ -66,7 +73,7 @@ export function DesignPropertiesPanel() {
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
-  const [exportResult, setExportResult] = useState<{ format: ExportFormat; url?: string; code?: string; fileName?: string } | null>(null);
+  const [exportResult, setExportResult] = useState<{ format: ExportFormat; url?: string; code?: string; fileName?: string; error?: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -86,7 +93,19 @@ export function DesignPropertiesPanel() {
           code: result.data.code,
           fileName: result.data.fileName,
         });
+      } else {
+        setExportResult({
+          format,
+          error: result.error || "Export failed",
+        });
       }
+    } catch (err) {
+      setExportResult({
+        format,
+        error: err instanceof Error && err.name === "AbortError"
+          ? "Export timed out. Try a simpler component or use HTML format."
+          : "Export failed. Check if Puppeteer is available.",
+      });
     } finally {
       setExportingFormat(null);
     }
@@ -251,22 +270,46 @@ export function DesignPropertiesPanel() {
           </div>
 
           {/* Export result */}
-          {exportResult && (
-            <div className="rounded-md bg-emerald-50 p-2 text-xs">
-              <div className="flex items-center gap-1 text-emerald-700">
+          {exportResult && !exportResult.error && (
+            <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/30 p-2 text-xs">
+              <div className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
                 <Check className="h-3 w-3" />
                 Exported as {exportResult.fileName || exportResult.format}
               </div>
-              {exportResult.url && (
+              {exportResult.code && (
+                <button
+                  onClick={() => {
+                    const blob = new Blob([exportResult.code!], { type: "text/plain" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = exportResult.fileName || `design.${exportResult.format}`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="mt-1 block truncate text-emerald-600 dark:text-emerald-400 underline hover:text-emerald-700 dark:hover:text-emerald-300"
+                >
+                  Download {exportResult.fileName}
+                </button>
+              )}
+              {exportResult.url && !exportResult.code && (
                 <a
                   href={exportResult.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 block truncate text-emerald-600 underline"
+                  className="mt-1 block truncate text-emerald-600 dark:text-emerald-400 underline"
                 >
-                  {exportResult.url}
+                  Open exported file
                 </a>
               )}
+            </div>
+          )}
+          {exportResult?.error && (
+            <div className="rounded-md bg-destructive/10 p-2 text-xs">
+              <div className="flex items-center gap-1 text-destructive">
+                <X className="h-3 w-3" />
+                {exportResult.error}
+              </div>
             </div>
           )}
         </div>

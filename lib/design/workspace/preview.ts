@@ -283,7 +283,7 @@ function buildHead(title: string, csp: string, animated?: boolean, exportProgres
     `  <title>${escapeHtml(title)}</title>`,
     "  <style>",
     `    :root { --export-progress: ${clampProgress(exportProgress).toFixed(4)}; }`,
-    "    html, body { margin: 0; min-height: 100%; width: 100%; overflow: hidden; background: transparent; }",
+    "    html, body { margin: 0; min-height: 100%; width: 100%; overflow: hidden; background: #ffffff; }",
     "    body { position: relative; font-family: ui-sans-serif, system-ui, sans-serif; }",
     ...buildAnimatedRootStyles(animated),
     "  </style>",
