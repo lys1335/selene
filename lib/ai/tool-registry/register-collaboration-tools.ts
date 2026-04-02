@@ -12,6 +12,7 @@ import { createCalculatorTool } from "../tools/calculator-tool";
 import { createUpdatePlanTool } from "../tools/update-plan-tool";
 import { createWorkspaceTool } from "../tools/workspace-tool";
 import { createChromiumWorkspaceTool } from "../tools/chromium-workspace-tool";
+import { createDesignWorkspaceTool } from "../tools/design-workspace-tool";
 import { createAskUserQuestionTool } from "../tools/ask-user-question-tool";
 import { createPromptLibraryTool } from "../tools/prompt-library-tool";
 import { getPromptLibraryRulesSummary, getSceneGuideSummary } from "@/data/prompt-library/optimization-rules";
@@ -584,5 +585,33 @@ Isolated, embedded browser for web automation. One tool, multiple actions.
         sessionId: sessionId || "UNSCOPED",
         agentId: characterId,
       })
+  );
+
+  // Design Workspace Tool - Generate, edit, and export UI components
+  registry.register(
+    "designWorkspace",
+    {
+      displayName: "Design Workspace",
+      category: "utility",
+      keywords: [
+        "design",
+        "component",
+        "ui",
+        "generate",
+        "preview",
+        "html",
+        "tailwind",
+        "mockup",
+        "card",
+        "export",
+        "snapshot",
+        "glass",
+      ],
+      shortDescription:
+        "Generate, edit, snapshot, and export UI components in the design workspace",
+      loading: { deferLoading: true },
+      requiresSession: false,
+    } satisfies ToolMetadata,
+    () => createDesignWorkspaceTool()
   );
 }

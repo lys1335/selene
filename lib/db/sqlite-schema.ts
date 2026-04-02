@@ -237,6 +237,9 @@ export * from "./sqlite-workflows-schema";
 // Re-export voice schema
 export * from "./sqlite-voice-schema";
 
+// Re-export design gallery schema
+export * from "./schema/design-gallery";
+
 // ============================================================================
 // TYPES
 // ============================================================================

@@ -49,6 +49,7 @@ import { SpeakAloudToolUI, TranscribeToolUI } from "./voice-tool-ui";
 import { ChromiumWorkspaceToolUI } from "./chromium-workspace-tool-ui";
 import { AskFollowupQuestionToolUI } from "./ask-question-tool-ui";
 import { PromptLibraryToolUI } from "./prompt-library-tool-ui";
+import { DesignWorkspaceToolUI } from "./design-workspace-tool-ui";
 import {
   ClaudeEditToolUI,
   ClaudeBashToolUI,
@@ -604,6 +605,7 @@ export const AssistantMessage: FC<{ ttsEnabled?: boolean }> = ({ ttsEnabled = fa
                   speakAloud: SpeakAloudToolUI,
                   transcribe: TranscribeToolUI,
                   chromiumWorkspace: ChromiumWorkspaceToolUI,
+                  designWorkspace: DesignWorkspaceToolUI,
                   askUserQuestion: AskFollowupQuestionToolUI,
                   askFollowupQuestion: AskFollowupQuestionToolUI,
                   AskFollowupQuestion: AskFollowupQuestionToolUI,
