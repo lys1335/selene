@@ -102,6 +102,25 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
+/**
+ * Parse a `data:` URI into its base64 payload and MIME type.
+ * Returns null for non-data URIs or malformed values.
+ */
+function parseDataUri(uri: string): { base64Data: string; mediaType: string } | null {
+  const match = uri.match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
+  if (!match) return null;
+  return { mediaType: match[1], base64Data: match[2] };
+}
+
+/**
+ * Resolve input assets into `AssetContext[]` with multimodal data.
+ *
+ * The outer chat agent may pass either `/api/media/...` paths or full
+ * `data:` URIs. In both cases we:
+ *  - Extract base64 for multimodal (inner LLM can *see* the image)
+ *  - Keep a short `/api/media/...` URL for the text prompt (so the
+ *    generated code references a clean URL, not a massive data blob)
+ */
 async function resolveAssets(
   inputAssets: Array<{ url: string; description?: string }>,
 ): Promise<AssetContext[]> {
@@ -114,6 +133,16 @@ async function resolveAssets(
         metadata: asset.description ? { description: asset.description } : undefined,
       };
 
+      // Data URIs — extract base64 for multimodal, but keep the data URI
+      // as the URL (the generated code will use it directly)
+      const parsed = parseDataUri(asset.url);
+      if (parsed) {
+        ctx.base64Data = parsed.base64Data;
+        ctx.mediaType = parsed.mediaType;
+        return ctx;
+      }
+
+      // /api/media/ paths — read from disk for multimodal, keep path as URL
       if (asset.url.startsWith("/api/media/")) {
         const fullPath = getFullPathFromMediaRef(asset.url);
         if (fullPath) {
@@ -126,7 +155,7 @@ async function resolveAssets(
               ctx.mediaType = mediaType;
             }
           } catch {
-            // File not accessible — proceed without base64
+            // File not accessible — proceed without multimodal
           }
         }
       }

@@ -16,20 +16,36 @@ import { buildInlineEditPrompt, buildFullEditPrompt } from './prompts';
 import { applyInlineEdits } from './utils/parse';
 
 // ---------------------------------------------------------------------------
-// Asset formatting
+// Asset formatting — placeholder pattern
 // ---------------------------------------------------------------------------
 
-function toPromptAssets(
-  assets: AssetContext[] | undefined,
-): Array<{ url: string; description?: string }> | undefined {
-  if (!assets || assets.length === 0) return undefined;
+function buildAssetPlaceholders(assets: AssetContext[] | undefined): {
+  promptAssets: Array<{ url: string; description?: string }> | undefined;
+  assetMap: Map<string, string>;
+} {
+  const assetMap = new Map<string, string>();
+  if (!assets || assets.length === 0) return { promptAssets: undefined, assetMap };
 
-  return assets.map(a => ({
-    url: a.url,
-    description: a.metadata?.description
-      ? String(a.metadata.description)
-      : a.alt ?? undefined,
-  }));
+  const promptAssets = assets.map((a, i) => {
+    const placeholder = `__ASSET_${i + 1}__`;
+    assetMap.set(placeholder, a.url);
+    return {
+      url: placeholder,
+      description: a.metadata?.description
+        ? String(a.metadata.description)
+        : a.alt ?? undefined,
+    };
+  });
+
+  return { promptAssets, assetMap };
+}
+
+function substituteAssetPlaceholders(code: string, assetMap: Map<string, string>): string {
+  let result = code;
+  for (const [placeholder, url] of assetMap) {
+    result = result.replaceAll(placeholder, url);
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -94,7 +110,7 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
     code.includes('backdrop-filter');
 
   // 1. Build prompts based on edit mode using the canonical prompt builders
-  const promptAssets = toPromptAssets(assets);
+  const { promptAssets, assetMap } = buildAssetPlaceholders(assets);
   const { system: systemPrompt, user: userPrompt } = inlineMode
     ? buildInlineEditPrompt({ code, editPrompt, selectedComponent, assets: promptAssets })
     : buildFullEditPrompt({ code, editPrompt, selectedComponent, includeGlass, assets: promptAssets });
@@ -159,7 +175,8 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
 
     let finalCode: string;
     try {
-      finalCode = applyInlineEdits(code, fullResponse);
+      const patched = applyInlineEdits(code, fullResponse);
+      finalCode = assetMap.size > 0 ? substituteAssetPlaceholders(patched, assetMap) : patched;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error applying inline edits';
       const error = {
@@ -233,7 +250,8 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
       return;
     }
 
-    const finalCode = stripMarkdownFences(fullResponse);
+    const rawCode = stripMarkdownFences(fullResponse);
+    const finalCode = assetMap.size > 0 ? substituteAssetPlaceholders(rawCode, assetMap) : rawCode;
 
     onFinish?.({ success: true, content: finalCode, metadata: { editMode: 'full' }, durationMs: Date.now() - startTime });
     yield {

@@ -45,7 +45,7 @@ export function buildHtmlModePrompt(opts?: HtmlModePromptOptions): string {
     assetsBlock = assets
       .map((a, i) => `Asset ${i + 1}: ${a.url}${a.description ? ` — ${a.description}` : ''}`)
       .join('\n');
-    assetsBlock = `USER-PROVIDED ASSETS (use these in the design):\n${assetsBlock}\nIMPORTANT: Use the asset URLs directly in your generated code (e.g., background-image: url('...') or <img src="...">). These URLs are served by the app and will work in the preview.\n\n`;
+    assetsBlock = `USER-PROVIDED ASSETS (reference images are attached for visual context):\n${assetsBlock}\nIMPORTANT: Use the __ASSET_N__ tokens EXACTLY as written in your generated code (e.g., background-image: url('__ASSET_1__') or <img src="__ASSET_1__">). Do NOT attempt to expand, modify, or replace these tokens — they will be resolved automatically.\n\n`;
   }
 
   const glassBlock = includeGlass ? buildAppleGlassPrompt() + '\n\n' : '';

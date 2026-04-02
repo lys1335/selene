@@ -10,24 +10,44 @@ import { streamDesignGeneration } from './providers';
 import { buildHtmlModePrompt, buildTailwindModePrompt } from './prompts';
 
 // ---------------------------------------------------------------------------
-// Asset formatting
+// Asset formatting — placeholder pattern
 // ---------------------------------------------------------------------------
 
 /**
- * Convert lightweight `AssetContext` entries into the shape expected by the
- * canonical prompt builders: `Array<{ url: string; description?: string }>`.
+ * Build prompt-safe asset references using `__ASSET_N__` placeholders instead
+ * of raw URLs.  The inner design LLM sees (and copies) only the short token;
+ * we substitute it with the real URL after generation.  This prevents the LLM
+ * from trying to reproduce data-URI base64 strings in its output.
  */
-function toPromptAssets(
-  assets: AssetContext[] | undefined,
-): Array<{ url: string; description?: string }> | undefined {
-  if (!assets || assets.length === 0) return undefined;
+function buildAssetPlaceholders(assets: AssetContext[] | undefined): {
+  promptAssets: Array<{ url: string; description?: string }> | undefined;
+  /** placeholder → real URL */
+  assetMap: Map<string, string>;
+} {
+  const assetMap = new Map<string, string>();
+  if (!assets || assets.length === 0) return { promptAssets: undefined, assetMap };
 
-  return assets.map(a => ({
-    url: a.url,
-    description: a.metadata?.description
-      ? String(a.metadata.description)
-      : a.alt ?? undefined,
-  }));
+  const promptAssets = assets.map((a, i) => {
+    const placeholder = `__ASSET_${i + 1}__`;
+    assetMap.set(placeholder, a.url);
+    return {
+      url: placeholder,
+      description: a.metadata?.description
+        ? String(a.metadata.description)
+        : a.alt ?? undefined,
+    };
+  });
+
+  return { promptAssets, assetMap };
+}
+
+/** Replace `__ASSET_N__` tokens in generated code with real URLs. */
+function substituteAssetPlaceholders(code: string, assetMap: Map<string, string>): string {
+  let result = code;
+  for (const [placeholder, url] of assetMap) {
+    result = result.replaceAll(placeholder, url);
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,8 +89,8 @@ export async function* generateCard(opts: GenerateOpts): AsyncGenerator<StreamEv
 
   const startTime = Date.now();
 
-  // 1. Convert assets to the format expected by canonical prompt builders
-  const promptAssets = toPromptAssets(assets);
+  // 1. Convert assets to placeholder-based references for the prompt
+  const { promptAssets, assetMap } = buildAssetPlaceholders(assets);
 
   const includeGlass = style === 'apple-glass';
 
@@ -144,9 +164,14 @@ export async function* generateCard(opts: GenerateOpts): AsyncGenerator<StreamEv
   // parsing (like JSON.parse), not heuristic post-processing. The prompt
   // explicitly requires the LLM to wrap code in fences.
   const fenceMatch = fullContent.match(/```(?:jsx|tsx|html|typescript)?\n?([\s\S]*?)```/);
-  const finalCode = fenceMatch
+  const rawCode = fenceMatch
     ? fenceMatch[1].trim()
     : fullContent.trim();
+
+  // Substitute __ASSET_N__ placeholders with real URLs
+  const finalCode = assetMap.size > 0
+    ? substituteAssetPlaceholders(rawCode, assetMap)
+    : rawCode;
 
   onFinish?.({
     success: true,
