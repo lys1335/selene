@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
           category: body.category || "general",
           tags: Array.isArray(body.tags) ? body.tags : [],
           styleTags: Array.isArray(body.styleTags) ? body.styleTags : [],
-          sessionId: `design-gallery-${userId}`,
+          sessionId: undefined,
         });
         return NextResponse.json({
           success: true,
