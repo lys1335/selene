@@ -43,6 +43,72 @@ export interface DesignToolEvent {
   error?: string;
 }
 
+export function applyDesignToolResultToStore(detail: DesignToolEvent): void {
+  const store = useDesignWorkspaceStore.getState();
+  const { action, success, data, error } = detail;
+
+  if (!success) {
+    if (error) store.setError(error);
+    return;
+  }
+
+  switch (action) {
+    case "open":
+      store.open();
+      break;
+
+    case "close":
+      store.close();
+      break;
+
+    case "generate":
+      if (data?.componentId && data.code) {
+        const now = new Date().toISOString();
+        store.addComponent({
+          id: data.componentId,
+          name: data.name ?? "Untitled",
+          code: data.code,
+          mode: (data.mode as "html" | "tailwind") ?? "html",
+          style: (data.style as "apple-glass" | "default") ?? "default",
+          prompt: data.prompt ?? "",
+          createdAt: now,
+          updatedAt: now,
+        });
+        if (data.previewHtml) {
+          store.setPreviewHtml(data.previewHtml);
+        }
+        if (!store.isOpen) store.open();
+      }
+      break;
+
+    case "edit":
+      if (data?.code) {
+        const targetId = data.componentId ?? store.activeComponentId;
+        if (targetId) {
+          store.updateComponent(targetId, { code: data.code });
+          if (data.previewHtml) {
+            store.setPreviewHtml(data.previewHtml);
+          }
+        } else {
+          store.setError("Edit could not be applied: no active component.");
+        }
+      }
+      break;
+
+    case "snapshot":
+      store.takeSnapshot(data?.name);
+      break;
+
+    case "restore":
+      if (data?.snapshotId) {
+        store.restoreSnapshot(data.snapshotId);
+      }
+      break;
+
+    // export actions don't need store updates — the result goes to the agent
+  }
+}
+
 const EVENT_NAME = "design-workspace-tool-result";
 
 /**
@@ -109,74 +175,7 @@ export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps)
         return;
       }
 
-      // Always read fresh state to avoid stale closure issues
-      const store = useDesignWorkspaceStore.getState();
-      const { action, success, data, error } = detail;
-
-      if (!success) {
-        if (error) store.setError(error);
-        return;
-      }
-
-      switch (action) {
-        case "open":
-          store.open();
-          break;
-
-        case "close":
-          store.close();
-          break;
-
-        case "generate":
-          if (data?.componentId && data.code) {
-            const now = new Date().toISOString();
-            store.addComponent({
-              id: data.componentId,
-              name: data.name ?? "Untitled",
-              code: data.code,
-              mode: (data.mode as "html" | "tailwind") ?? "html",
-              style: (data.style as "apple-glass" | "default") ?? "default",
-              prompt: data.prompt ?? "",
-              createdAt: now,
-              updatedAt: now,
-            });
-            // If server provided compiled preview HTML (Tailwind), use it
-            // instead of the placeholder that addComponent sets.
-            if (data.previewHtml) {
-              store.setPreviewHtml(data.previewHtml);
-            }
-            // Auto-open workspace when a component is generated
-            if (!store.isOpen) store.open();
-          }
-          break;
-
-        case "edit":
-          if (data?.code) {
-            // Use componentId from result if available, fall back to active
-            const targetId = data.componentId ?? store.activeComponentId;
-            if (targetId) {
-              store.updateComponent(targetId, { code: data.code });
-              if (data.previewHtml) {
-                store.setPreviewHtml(data.previewHtml);
-              }
-            } else {
-              store.setError("Edit could not be applied: no active component.");
-            }
-          }
-          break;
-
-        case "snapshot":
-          store.takeSnapshot(data?.name);
-          break;
-
-        case "restore":
-          if (data?.snapshotId) {
-            store.restoreSnapshot(data.snapshotId);
-          }
-          break;
-
-        // export actions don't need store updates — the result goes to the agent
-      }
+      applyDesignToolResultToStore(detail);
     }
 
     // Track which events have been processed to deduplicate queue drain vs live dispatch.

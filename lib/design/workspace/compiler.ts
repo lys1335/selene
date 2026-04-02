@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * Server-side React/TSX component compiler.
  *
@@ -17,8 +19,15 @@
  */
 
 import * as esbuild from "esbuild";
+import postcss from "postcss";
+import tailwindcss from "tailwindcss";
+import type { Config } from "tailwindcss";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+// Turbopack needs a static import it can trace in server bundles.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore -- CJS config is loaded as the module default at runtime
+import previewTailwindConfig from "../../../tailwind.preview.config.cjs";
 
 // ---------------------------------------------------------------------------
 // Project root resolution
@@ -45,6 +54,26 @@ function getProjectRoot(): string {
 }
 
 const PROJECT_ROOT = getProjectRoot();
+const TAILWIND_INPUT_PATH = resolve(PROJECT_ROOT, "lib/design/workspace/preview.tailwind.css");
+const PREVIEW_TAILWIND_SOURCE = [
+  "@tailwind base;",
+  "@tailwind components;",
+  "@tailwind utilities;",
+  "",
+  "@layer base {",
+  "  html, body {",
+  "    margin: 0;",
+  "    width: 100%;",
+  "    min-height: 100%;",
+  "    background: transparent;",
+  "  }",
+  "",
+  "  body {",
+  "    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;",
+  "  }",
+  "}",
+  "",
+].join("\n");
 
 // ---------------------------------------------------------------------------
 // Entry code builder
@@ -183,6 +212,9 @@ export async function compileReactComponent(
     logLevel: "silent",
     treeShaking: true,
     sourcemap: false,
+    define: {
+      "process.env.NODE_ENV": '"production"',
+    },
   });
 
   const warnings = result.warnings.map((w) => w.text);
@@ -225,6 +257,27 @@ function escapeInlineScript(js: string): string {
   return js.replace(/<\/script>/gi, "<\\/script>");
 }
 
+async function buildPreviewTailwindCss(componentCode: string): Promise<string> {
+  const baseConfig = previewTailwindConfig as unknown as Omit<Config, "content">;
+  const config = {
+    ...baseConfig,
+    content: [
+      {
+        raw: componentCode,
+        extension: "tsx",
+      },
+    ],
+  } satisfies Config;
+
+  const result = await postcss([
+    tailwindcss(config),
+  ]).process(PREVIEW_TAILWIND_SOURCE, {
+    from: TAILWIND_INPUT_PATH,
+  });
+
+  return result.css;
+}
+
 /**
  * Build a complete HTML document for a compiled React component preview.
  *
@@ -238,9 +291,11 @@ function escapeInlineScript(js: string): string {
  */
 export function buildCompiledPreviewHtml(
   compiledJs: string,
+  tailwindCss: string,
   title: string
 ): string {
   const safeJs = escapeInlineScript(compiledJs);
+  const safeCss = escapeHtml(tailwindCss);
 
   return [
     "<!DOCTYPE html>",
@@ -249,10 +304,13 @@ export function buildCompiledPreviewHtml(
     '  <meta charset="utf-8" />',
     '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
     `  <title>${escapeHtml(title)}</title>`,
-    '  <script src="https://cdn.tailwindcss.com"><\/script>',
+    "  <style>",
+    safeCss,
+    "  </style>",
     "  <style>",
     "    html, body, #selene-design-preview-root { margin: 0; height: 100%; width: 100%; }",
-    "    body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }",
+    "    body { overflow: auto; background: transparent; }",
+    "    #selene-design-preview-root > * { max-width: 100%; }",
     "  </style>",
     "</head>",
     "<body>",
@@ -274,5 +332,6 @@ export async function buildTailwindPreviewAsync(
   title: string
 ): Promise<string> {
   const { code: compiledJs } = await compileReactComponent(componentCode);
-  return buildCompiledPreviewHtml(compiledJs, title);
+  const tailwindCss = await buildPreviewTailwindCss(componentCode);
+  return buildCompiledPreviewHtml(compiledJs, tailwindCss, title);
 }

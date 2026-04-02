@@ -1,11 +1,34 @@
 "use client";
 
-import { memo, useEffect, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import type { FC } from "react";
 import { Sparkles, PenSquare, Save, RotateCcw, Download, PanelRightOpen, PanelRightClose, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { dispatchDesignToolResult } from "@/components/design";
+import { applyDesignToolResultToStore, dispatchDesignToolResult } from "@/components/design";
 import { useChatSessionId } from "@/components/chat-provider";
+import { parseNestedJsonString } from "@/lib/utils/parse-nested-json";
+
+type DesignWorkspaceResult = {
+  success?: boolean;
+  action?: string;
+  data?: {
+    componentId?: string;
+    code?: string;
+    name?: string;
+    snapshotId?: string;
+    format?: string;
+    message?: string;
+    prompt?: string;
+    mode?: string;
+    style?: string;
+    previewHtml?: string;
+  };
+  error?: string;
+  status?: string;
+  content?: string | Array<{ type?: string; text?: string }>;
+  output?: unknown;
+  result?: unknown;
+};
 
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -22,23 +45,10 @@ type ToolCallContentPartComponent = FC<{
     snapshotId?: string;
     format?: string;
   };
-  result?: {
-    success?: boolean;
-    action?: string;
-    data?: {
-      componentId?: string;
-      code?: string;
-      name?: string;
-      snapshotId?: string;
-      format?: string;
-      message?: string;
-      prompt?: string;
-      mode?: string;
-      style?: string;
-      previewHtml?: string;
-    };
-    error?: string;
-  };
+  result?: DesignWorkspaceResult | Record<string, unknown>;
+  output?: DesignWorkspaceResult | Record<string, unknown> | string;
+  state?: "input-streaming" | "input-available" | "output-available" | "output-error" | "output-denied";
+  errorText?: string;
 }>;
 
 function getActionIcon(action?: string) {
@@ -83,33 +93,161 @@ function getActionLabel(action?: string): string {
   }
 }
 
-export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args, result, toolCallId }) => {
-  const action = args?.action || result?.action;
-  const isRunning = result === undefined;
-  const success = result?.success === true;
-  const error = result?.success === false ? result.error : null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function extractContentText(content: unknown): string | undefined {
+  if (typeof content === "string") {
+    const trimmed = content.trim();
+    return trimmed || undefined;
+  }
+
+  if (!Array.isArray(content)) {
+    return undefined;
+  }
+
+  const textParts = content
+    .filter((item): item is { type?: string; text?: string } => isRecord(item))
+    .filter((item) => item.type === "text" && typeof item.text === "string")
+    .map((item) => item.text!.trim())
+    .filter(Boolean);
+
+  if (textParts.length === 0) {
+    return undefined;
+  }
+
+  return textParts.join("\n");
+}
+
+function normalizeDesignWorkspaceResult(
+  raw: unknown,
+  depth: number = 0,
+  visited: WeakSet<object> = new WeakSet<object>(),
+): DesignWorkspaceResult | undefined {
+  if (depth > 6 || raw == null) {
+    return undefined;
+  }
+
+  if (typeof raw === "string") {
+    const parsed = parseNestedJsonString(raw);
+    if (parsed !== undefined && parsed !== raw) {
+      return normalizeDesignWorkspaceResult(parsed, depth + 1, visited);
+    }
+    return {
+      success: true,
+      status: "success",
+      data: { message: raw },
+      content: raw,
+    };
+  }
+
+  if (Array.isArray(raw)) {
+    const contentText = extractContentText(raw);
+    if (!contentText) {
+      return undefined;
+    }
+    return normalizeDesignWorkspaceResult({ content: raw, status: "success", data: { message: contentText } }, depth + 1, visited);
+  }
+
+  if (!isRecord(raw)) {
+    return undefined;
+  }
+
+  if (visited.has(raw)) {
+    return undefined;
+  }
+  visited.add(raw);
+
+  const direct = raw as DesignWorkspaceResult;
+
+  if (isRecord(direct.result)) {
+    const nested = normalizeDesignWorkspaceResult(direct.result, depth + 1, visited);
+    if (nested) return nested;
+  }
+  if (isRecord(direct.output)) {
+    const nested = normalizeDesignWorkspaceResult(direct.output, depth + 1, visited);
+    if (nested) return nested;
+  }
+
+  const contentText = extractContentText(direct.content);
+  if (contentText) {
+    const parsed = parseNestedJsonString(contentText);
+    if (parsed !== undefined && parsed !== contentText) {
+      const nested = normalizeDesignWorkspaceResult(parsed, depth + 1, visited);
+      if (nested) return nested;
+    }
+
+    if (!direct.action && !direct.data && !direct.error && direct.success === undefined) {
+      return {
+        success: direct.status !== "error",
+        status: typeof direct.status === "string" ? direct.status : "success",
+        data: { message: contentText },
+        content: direct.content,
+      };
+    }
+  }
+
+  if (typeof direct.action === "string" || direct.success !== undefined || isRecord(direct.data) || typeof direct.error === "string") {
+    const status = typeof direct.status === "string"
+      ? direct.status
+      : direct.success === false || typeof direct.error === "string"
+        ? "error"
+        : "success";
+
+    return {
+      ...direct,
+      status,
+      success: typeof direct.success === "boolean" ? direct.success : status !== "error",
+    };
+  }
+
+  return undefined;
+}
+
+export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
+
+  args,
+  result,
+  output,
+  state,
+  errorText,
+  toolCallId,
+}) => {
+  const resolvedResult = useMemo(
+    () => normalizeDesignWorkspaceResult(result ?? output),
+    [output, result],
+  );
+  const action = args?.action || resolvedResult?.action;
+  const isRunning = !resolvedResult && !errorText && !state?.startsWith("output");
+  const success = resolvedResult?.success === true;
+  const error = errorText || (resolvedResult?.success === false ? resolvedResult.error : null);
   const Icon = getActionIcon(action);
   const dispatchedRef = useRef<string | null>(null);
   const sessionId = useChatSessionId();
 
   useEffect(() => {
-    if (!result || !action) return;
+    if (!resolvedResult || !action) return;
     // Deduplicate: include sessionId to prevent stale dedup across session switches.
     // Use toolCallId for uniqueness (handles edit actions where componentId may
     // not be returned), fall back to action+id composite key.
     const baseKey = toolCallId
-      ?? `${action}:${result.data?.componentId || ""}:${result.data?.snapshotId || ""}`;
+      ?? `${action}:${resolvedResult.data?.componentId || ""}:${resolvedResult.data?.snapshotId || ""}`;
     const key = sessionId ? `${sessionId}:${baseKey}` : baseKey;
     if (dispatchedRef.current === key) return;
     dispatchedRef.current = key;
-    dispatchDesignToolResult({
+    const detail = {
       action,
-      success: Boolean(result.success),
+      success: Boolean(resolvedResult.success),
       sessionId: sessionId ?? undefined,
-      data: result.data,
-      error: result.error,
-    });
-  }, [action, result, sessionId, toolCallId]);
+      data: resolvedResult.data,
+      error: resolvedResult.error,
+    };
+    // Apply immediately so the workspace updates even if the bridge listener
+    // is not the component path that rendered this tool result instance.
+    applyDesignToolResultToStore(detail);
+    dispatchDesignToolResult(detail);
+  }, [action, resolvedResult, sessionId, toolCallId]);
 
   return (
     <div
@@ -143,7 +281,7 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args,
           <div className="mt-0.5 text-xs text-muted-foreground break-words [overflow-wrap:anywhere]">
             {isRunning
               ? "Running..."
-              : result?.data?.message || error || "Completed"}
+              : resolvedResult?.data?.message || error || "Completed"}
           </div>
         </div>
       </div>
@@ -154,9 +292,9 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args,
         </div>
       )}
 
-      {result?.data?.name && result?.data?.componentId && (
+      {resolvedResult?.data?.name && resolvedResult?.data?.componentId && (
         <div className="mt-3 text-xs text-muted-foreground">
-          Component: <span className="text-foreground">{result.data.name}</span>
+          Component: <span className="text-foreground">{resolvedResult.data.name}</span>
         </div>
       )}
     </div>

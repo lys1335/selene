@@ -121,7 +121,12 @@ function buildAnimatedRootStyles(animated?: boolean): string[] {
   return [
     "    #selene-design-preview-root {",
     "      width: 100%;",
-    "      min-height: 100vh;",
+    "      min-height: 100%;",
+    "      box-sizing: border-box;",
+    "      display: flex;",
+    "      align-items: center;",
+    "      justify-content: center;",
+    "      padding: 16px;",
     "      will-change: transform, filter;",
     animated
       ? "      transform: translate3d(0, calc((0.5 - var(--export-progress)) * 12px), 0) scale(calc(1 + var(--export-progress) * 0.035));"
@@ -143,8 +148,9 @@ function buildHead(title: string, csp: string, animated?: boolean, exportProgres
     `  <title>${escapeHtml(title)}</title>`,
     "  <style>",
     `    :root { --export-progress: ${clampProgress(exportProgress).toFixed(4)}; }`,
-    "    html, body { margin: 0; height: 100%; width: 100%; overflow: hidden; background: #ffffff; }",
+    "    html, body { margin: 0; height: 100%; width: 100%; overflow: auto; background: #ffffff; }",
     "    body { position: relative; font-family: ui-sans-serif, system-ui, sans-serif; }",
+    "    #selene-design-preview-root > * { max-width: min(100%, 40rem); width: 100%; }",
     ...buildAnimatedRootStyles(animated),
     "  </style>",
   ];

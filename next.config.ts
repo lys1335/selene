@@ -150,6 +150,13 @@ const nextConfig: NextConfig = {
     // MCP SDK - uses Node.js child_process and should never run in browser
     "@modelcontextprotocol/sdk",
     "cross-spawn",
+    // Design workspace Tailwind preview compiler - keep CSS toolchain unbundled
+    // so runtime asset paths resolve from real node_modules instead of Turbopack's
+    // synthetic /ROOT paths inside server bundles.
+    "tailwindcss",
+    "postcss",
+    "autoprefixer",
+    "tailwindcss-animate",
   ],
   images: {
     remotePatterns: [
@@ -206,6 +213,10 @@ const nextConfig: NextConfig = {
         /^@lancedb(\/|$)/,   // LanceDB embedded vector database with native bindings
         /^@modelcontextprotocol(\/|$)/, // MCP SDK - uses Node.js child_process
         /^cross-spawn(\/|$)/, // Spawning child processes - Node.js only
+        /^tailwindcss(\/|$)/,
+        /^postcss(\/|$)/,
+        /^autoprefixer(\/|$)/,
+        /^tailwindcss-animate(\/|$)/,
       ];
 
       // Function-based external that matches patterns
@@ -237,6 +248,10 @@ const nextConfig: NextConfig = {
           /node_modules\/@lancedb\//,
           /node_modules\/@modelcontextprotocol\//,
           /node_modules\/cross-spawn\//,
+          /node_modules\/tailwindcss\//,
+          /node_modules\/postcss\//,
+          /node_modules\/autoprefixer\//,
+          /node_modules\/tailwindcss-animate\//,
         ];
 
         for (const pattern of pathPatterns) {

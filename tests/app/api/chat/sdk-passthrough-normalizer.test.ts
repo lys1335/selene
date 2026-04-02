@@ -69,5 +69,43 @@ describe("normalizeSdkPassthroughOutput", () => {
     expect((output.results as Array<{ name?: string }>)[0]?.name).toBe("calculator");
     expect(output.message).toContain("Found 1 result");
   });
+  it("unwraps MCP text-wrapped designWorkspace results into canonical component payloads", () => {
+    const wrapped = {
+      content: [
+        {
+          type: "text",
+          text: JSON.stringify({
+            success: true,
+            action: "generate",
+            data: {
+              componentId: "cmp_123",
+              code: "<div>Hello</div>",
+              name: "Hello Card",
+              message: "Component created successfully.",
+              previewHtml: "<div>Hello</div>",
+            },
+          }),
+        },
+      ],
+    };
+
+    const output = normalizeSdkPassthroughOutput(
+      "mcp__selene-platform__designWorkspace",
+      wrapped,
+      { action: "generate", prompt: "hello card" }
+    );
+
+    expect(output.status).toBe("success");
+    expect(output.success).toBe(true);
+    expect(output.action).toBe("generate");
+    expect(output.data).toEqual({
+      componentId: "cmp_123",
+      code: "<div>Hello</div>",
+      name: "Hello Card",
+      message: "Component created successfully.",
+      previewHtml: "<div>Hello</div>",
+    });
+  });
+
 });
 

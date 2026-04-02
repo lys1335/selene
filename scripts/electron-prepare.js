@@ -220,6 +220,16 @@ const libSrc = path.join(rootDir, 'lib');
 const libDest = path.join(standaloneDir, 'lib');
 copyRecursive(libSrc, libDest);
 
+// 4b. Copy Tailwind runtime config used by the design workspace preview compiler.
+const tailwindConfigSrc = path.join(rootDir, 'tailwind.preview.config.cjs');
+const tailwindConfigDest = path.join(standaloneDir, 'tailwind.preview.config.cjs');
+if (fs.existsSync(tailwindConfigSrc)) {
+    console.log('Copying tailwind.preview.config.cjs...');
+    fs.copyFileSync(tailwindConfigSrc, tailwindConfigDest);
+} else {
+    console.log('Skipping tailwind.preview.config.cjs (not found)');
+}
+
 // 5. Copy pdf-parse and its dependencies for PDF parsing support
 // pdf-parse requires: pdfjs-dist (PDF.js library) and @napi-rs/canvas (native canvas bindings)
 const pdfDependencies = [
@@ -290,6 +300,34 @@ const embeddingDependencies = [
 ];
 
 for (const dep of embeddingDependencies) {
+    console.log(`Copying ${dep.name} folder...`);
+    const depSrc = path.join(rootDir, 'node_modules', dep.src);
+    const depDest = path.join(standaloneDir, 'node_modules', dep.dest);
+    if (fs.existsSync(depSrc)) {
+        ensureDir(path.dirname(depDest));
+        if (fs.existsSync(depDest)) {
+            fs.rmSync(depDest, { recursive: true, force: true });
+        }
+        copyRecursive(depSrc, depDest);
+    } else {
+        console.log(`Skipping ${dep.name} folder (not found)`);
+    }
+}
+
+// 9b. Copy design preview compiler dependencies that Next standalone may trim.
+// These packages are resolved dynamically by esbuild when users generate React/Tailwind
+// components in the design workspace, so they must exist in the packaged app even if
+// Turbopack didn't trace them into standalone output.
+const designPreviewDependencies = [
+    { name: 'react', src: 'react', dest: 'react' },
+    { name: 'react-dom', src: 'react-dom', dest: 'react-dom' },
+    { name: 'scheduler', src: 'scheduler', dest: 'scheduler' },
+    { name: 'tailwindcss-animate', src: 'tailwindcss-animate', dest: 'tailwindcss-animate' },
+    { name: 'lucide-react', src: 'lucide-react', dest: 'lucide-react' },
+    { name: 'framer-motion', src: 'framer-motion', dest: 'framer-motion' },
+];
+
+for (const dep of designPreviewDependencies) {
     console.log(`Copying ${dep.name} folder...`);
     const depSrc = path.join(rootDir, 'node_modules', dep.src);
     const depDest = path.join(standaloneDir, 'node_modules', dep.dest);
