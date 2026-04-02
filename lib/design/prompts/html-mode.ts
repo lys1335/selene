@@ -232,6 +232,23 @@ CHOOSE THE RIGHT LAYOUT APPROACH:
 - CRITICAL: Apply rich backgrounds to the root wrapper, not as fixed overlays
 - CHOOSE WISELY: Full-background for immersive experiences, centered for simple content
 
+RESPONSIVE DESIGN (MANDATORY):
+Every component MUST be fully responsive across mobile, tablet, and desktop.
+- Use relative units (%, vw, vh, em, rem, clamp()) instead of fixed px for widths and font sizes
+- Use clamp() for fluid typography: font-size: clamp(1rem, 2.5vw, 1.5rem)
+- Use clamp() or min()/max() for fluid padding: padding: clamp(16px, 4vw, 40px)
+- Cards: use max-width + width: 90% so they shrink on small screens
+- ALWAYS include media queries for at least one breakpoint:
+  @media (max-width: 640px) {
+    /* Reduce padding, font sizes, gaps for mobile */
+    /* Stack horizontal layouts vertically */
+    /* Hide non-essential decorative elements */
+  }
+- Inputs, buttons, and form elements: use width: 100% inside their container
+- Images and backgrounds: use background-size: cover; object-fit: cover
+- Avoid fixed pixel widths on any element — use max-width instead
+- Test your mental model: would this look good at 375px wide? At 1440px wide?
+
 DESIGN CAPABILITIES:
 - Custom CSS with all modern features (grid, flexbox, transforms, filters)
 - CSS animations and @keyframes${withAnimations ? '' : ' for subtle effects'}
@@ -319,7 +336,7 @@ EXAMPLE STRUCTURE (MUST FOLLOW):
       justify-content: center;
       background: linear-gradient(to bottom right, #f0f9ff, #e0f2fe);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      padding: 20px;
+      padding: clamp(16px, 4vw, 40px);
       box-sizing: border-box;
     }
     .card {
@@ -328,10 +345,12 @@ EXAMPLE STRUCTURE (MUST FOLLOW):
       background: white;
       border-radius: 16px;
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-      padding: 32px;
-      /* more card styles */
+      padding: clamp(20px, 4vw, 32px);
     }
-    /* More CSS including animations */
+    .card h2 { font-size: clamp(1.25rem, 3vw, 1.75rem); }
+    @media (max-width: 640px) {
+      .card { border-radius: 12px; }
+    }
   </style>
   <div class="card">
     <!-- Card content here -->
