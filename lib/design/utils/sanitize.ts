@@ -87,11 +87,15 @@ function regexSanitize(
     result = result.replace(reSelf, '');
   }
 
+  // Normalize solidus between tag name and attributes (e.g. <div/onclick=...> → <div onclick=...>)
+  // This prevents bypassing the event handler regex which requires \s+ before on* attributes.
+  result = result.replace(/<([a-zA-Z][a-zA-Z0-9]*)\//g, '<$1 ');
+
   // Remove tags not in the allowlist (keep their content)
   result = result.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (match, tagName: string) => {
     if (allowedTags.has(tagName.toLowerCase()) || allowedTags.has(tagName)) {
-      // Tag is allowed -- strip event handler attributes
-      let cleaned = match.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+      // Tag is allowed -- strip event handler attributes (also handles newline-split attrs)
+      let cleaned = match.replace(/[\s/]+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
       // Strip style attribute if requested
       if (stripStyles) {
         cleaned = cleaned.replace(/\s+style\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
