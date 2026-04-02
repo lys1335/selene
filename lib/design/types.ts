@@ -63,6 +63,10 @@ export interface AssetContext {
   id: string;
   url: string;
   alt?: string;
+  /** Base64-encoded image data for multimodal LLM input. Not persisted. */
+  base64Data?: string;
+  /** IANA media type (e.g. "image/jpeg") when base64Data is present. */
+  mediaType?: string;
   metadata?: Record<string, unknown>;
 }
 

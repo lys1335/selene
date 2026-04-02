@@ -17,9 +17,17 @@ import type { StreamEvent } from "./types";
 
 // -- Public streaming entry point ------------------------------------------
 
+export interface ImageContentPart {
+  base64Data: string;
+  mediaType: string;
+  label?: string;
+}
+
 export interface StreamDesignOpts {
   systemPrompt: string;
   userPrompt: string;
+  /** Optional multimodal image parts to include in the user message. */
+  imageContentParts?: ImageContentPart[];
   /** Override the model resolved from settings. Passed through to getLanguageModel(). */
   model?: string;
   temperature?: number;
@@ -43,7 +51,7 @@ export interface StreamDesignOpts {
 export async function* streamDesignGeneration(
   opts: StreamDesignOpts,
 ): AsyncGenerator<StreamEvent> {
-  const { systemPrompt, userPrompt, model, temperature = 0.4, maxTokens, abortSignal } = opts;
+  const { systemPrompt, userPrompt, imageContentParts, model, temperature = 0.4, maxTokens, abortSignal } = opts;
 
   const provider = getConfiguredProvider();
   const resolvedTemperature = getProviderTemperature(temperature);
@@ -71,10 +79,23 @@ export async function* streamDesignGeneration(
   };
 
   try {
+    // Build user message: multimodal when image parts are present, plain text otherwise
+    const userContent: string | Array<{ type: "text"; text: string } | { type: "image"; image: string; mimeType: string }> =
+      imageContentParts?.length
+        ? [
+            { type: "text" as const, text: userPrompt },
+            ...imageContentParts.map(img => ({
+              type: "image" as const,
+              image: img.base64Data,
+              mimeType: img.mediaType,
+            })),
+          ]
+        : userPrompt;
+
     const result = streamText({
       model: languageModel,
       system: systemPrompt,
-      messages: [{ role: "user", content: userPrompt }],
+      messages: [{ role: "user", content: userContent }],
       temperature: resolvedTemperature,
       ...(maxTokens ? { maxTokens } : {}),
       ...(abortSignal ? { abortSignal } : {}),

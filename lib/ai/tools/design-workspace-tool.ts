@@ -13,11 +13,15 @@
 import { tool, jsonSchema } from "ai";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
 import { generateCard, editCard } from "../../design";
+import type { AssetContext } from "../../design/types";
 import {
   exportDesignAsset,
   type DesignExportFormat,
 } from "../../design/workspace/export";
 import { inferDesignMode, type DesignExportMode } from "../../design/workspace/preview";
+import { getFullPathFromMediaRef } from "../../storage/local-storage";
+import fs from "fs/promises";
+import path from "path";
 
 interface DesignWorkspaceToolOptions {
   sessionId?: string;
@@ -40,6 +44,9 @@ interface DesignWorkspaceInput {
 
   label?: string;
   snapshotId?: string;
+
+  /** Image/asset URLs to incorporate into the design. For "generate" and "edit". */
+  assets?: Array<{ url: string; description?: string }>;
 
   format?: "html" | "react" | "png" | "video";
   componentName?: string;
@@ -86,6 +93,48 @@ const MAX_EXPORT_DIMENSION = 4096;
 const MAX_EXPORT_SCALE = 4;
 const MAX_EXPORT_DURATION_MS = 8000;
 const MAX_EXPORT_FPS = 60;
+
+const IMAGE_MEDIA_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
+
+async function resolveAssets(
+  inputAssets: Array<{ url: string; description?: string }>,
+): Promise<AssetContext[]> {
+  return Promise.all(
+    inputAssets.map(async (asset, index) => {
+      const ctx: AssetContext = {
+        id: `asset-${index}`,
+        url: asset.url,
+        alt: asset.description,
+        metadata: asset.description ? { description: asset.description } : undefined,
+      };
+
+      if (asset.url.startsWith("/api/media/")) {
+        const fullPath = getFullPathFromMediaRef(asset.url);
+        if (fullPath) {
+          try {
+            const buffer = await fs.readFile(fullPath);
+            const ext = path.extname(fullPath).toLowerCase();
+            const mediaType = IMAGE_MEDIA_TYPES[ext];
+            if (mediaType) {
+              ctx.base64Data = buffer.toString("base64");
+              ctx.mediaType = mediaType;
+            }
+          } catch {
+            // File not accessible — proceed without base64
+          }
+        }
+      }
+
+      return ctx;
+    }),
+  );
+}
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -181,8 +230,8 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
 
 **Actions:**
 - "open": Open the design workspace panel.
-- "generate": Generate a new UI component from a text prompt. Requires \`prompt\`. Optional: \`mode\` ("html" | "tailwind"), \`style\` ("apple-glass" | "default").
-- "edit": Edit the active component with a text instruction. Requires \`editPrompt\` and \`activeComponentCode\`.
+- "generate": Generate a new UI component from a text prompt. Requires \`prompt\`. Optional: \`mode\`, \`style\`, \`assets\` (array of {url, description} for user-uploaded images to incorporate).
+- "edit": Edit the active component with a text instruction. Requires \`editPrompt\` and \`activeComponentCode\`. Optional: \`assets\`.
 - "snapshot": Take a snapshot of the current workspace state.
 - "restore": Restore a previous snapshot. Requires \`snapshotId\`.
 - "export": Export the active component as HTML, React, PNG, or MP4. Requires \`activeComponentCode\`.
@@ -210,6 +259,19 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
           type: "string",
           enum: ["apple-glass", "default"],
           description: 'Visual style (default "default"). For "generate".',
+        },
+        assets: {
+          type: "array",
+          description: 'Image or asset URLs to use in the design (e.g. /api/media/... paths from user uploads). For "generate" and "edit".',
+          items: {
+            type: "object",
+            properties: {
+              url: { type: "string", description: "URL of the asset." },
+              description: { type: "string", description: "Brief description of the asset content." },
+            },
+            required: ["url"],
+            additionalProperties: false,
+          },
         },
         editPrompt: {
           type: "string",
@@ -291,16 +353,18 @@ function handleOpen(): DesignWorkspaceResult {
 }
 
 async function handleGenerate(input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
-  const { prompt, mode = "html", style = "default" } = input;
+  const { prompt, mode = "html", style = "default", assets: inputAssets } = input;
 
   if (!prompt?.trim()) {
     return { success: false, action: "generate", error: 'Missing or empty "prompt" for generate action.' };
   }
 
+  const assets = inputAssets?.length ? await resolveAssets(inputAssets) : undefined;
+
   let finalCode = "";
   let generationError: string | undefined;
 
-  for await (const event of generateCard({ prompt, mode, style })) {
+  for await (const event of generateCard({ prompt, mode, style, assets })) {
     if (event.type === "complete") {
       finalCode = event.content ?? "";
     }
@@ -340,7 +404,7 @@ async function handleGenerate(input: DesignWorkspaceInput): Promise<DesignWorksp
 }
 
 async function handleEdit(input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
-  const { editPrompt, inlineMode = false, activeComponentCode } = input;
+  const { editPrompt, inlineMode = false, activeComponentCode, assets: inputAssets } = input;
 
   if (!editPrompt?.trim()) {
     return { success: false, action: "edit", error: 'Missing required field "editPrompt" for edit action.' };
@@ -353,10 +417,12 @@ async function handleEdit(input: DesignWorkspaceInput): Promise<DesignWorkspaceR
     };
   }
 
+  const assets = inputAssets?.length ? await resolveAssets(inputAssets) : undefined;
+
   let finalCode = "";
   let editError: string | undefined;
 
-  for await (const event of editCard({ code: activeComponentCode, editPrompt, inlineMode })) {
+  for await (const event of editCard({ code: activeComponentCode, editPrompt, inlineMode, assets })) {
     if (event.type === "complete") {
       finalCode = event.content ?? "";
     }

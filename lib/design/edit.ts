@@ -10,10 +10,27 @@
  *    directly with real-time JSX repair.
  */
 
-import type { EditOpts, StreamEvent, FinishResult } from './types';
+import type { EditOpts, StreamEvent, FinishResult, AssetContext } from './types';
 import { streamDesignGeneration } from './providers';
 import { buildInlineEditPrompt, buildFullEditPrompt } from './prompts';
 import { applyInlineEdits } from './utils/parse';
+
+// ---------------------------------------------------------------------------
+// Asset formatting
+// ---------------------------------------------------------------------------
+
+function toPromptAssets(
+  assets: AssetContext[] | undefined,
+): Array<{ url: string; description?: string }> | undefined {
+  if (!assets || assets.length === 0) return undefined;
+
+  return assets.map(a => ({
+    url: a.url,
+    description: a.metadata?.description
+      ? String(a.metadata.description)
+      : a.alt ?? undefined,
+  }));
+}
 
 // ---------------------------------------------------------------------------
 // Main editor
@@ -77,9 +94,19 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
     code.includes('backdrop-filter');
 
   // 1. Build prompts based on edit mode using the canonical prompt builders
+  const promptAssets = toPromptAssets(assets);
   const { system: systemPrompt, user: userPrompt } = inlineMode
-    ? buildInlineEditPrompt({ code, editPrompt, selectedComponent, assets })
-    : buildFullEditPrompt({ code, editPrompt, selectedComponent, includeGlass, assets });
+    ? buildInlineEditPrompt({ code, editPrompt, selectedComponent, assets: promptAssets })
+    : buildFullEditPrompt({ code, editPrompt, selectedComponent, includeGlass, assets: promptAssets });
+
+  // Extract multimodal image parts from resolved assets
+  const imageContentParts = assets
+    ?.filter(a => a.base64Data && a.mediaType)
+    .map(a => ({
+      base64Data: a.base64Data!,
+      mediaType: a.mediaType!,
+      label: a.alt ?? `Asset ${a.id}`,
+    }));
 
   // 2. Stream through the provider
   let fullResponse = '';
@@ -87,7 +114,7 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
 
   if (inlineMode) {
     // -- Inline mode: accumulate the full response, then apply patches ------
-    for await (const event of streamDesignGeneration({ systemPrompt, userPrompt, model, temperature, maxTokens, abortSignal })) {
+    for await (const event of streamDesignGeneration({ systemPrompt, userPrompt, imageContentParts: imageContentParts?.length ? imageContentParts : undefined, model, temperature, maxTokens, abortSignal })) {
       if (event.type === 'start') {
         startEventForwarded = true;
         yield event;
@@ -164,7 +191,7 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
   } else {
     // -- Full rewrite mode: stream LLM output directly ---------------
 
-    for await (const event of streamDesignGeneration({ systemPrompt, userPrompt, model, temperature, maxTokens, abortSignal })) {
+    for await (const event of streamDesignGeneration({ systemPrompt, userPrompt, imageContentParts: imageContentParts?.length ? imageContentParts : undefined, model, temperature, maxTokens, abortSignal })) {
       if (event.type === 'start') {
         startEventForwarded = true;
         yield event;

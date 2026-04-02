@@ -81,11 +81,20 @@ export async function* generateCard(opts: GenerateOpts): AsyncGenerator<StreamEv
 
   const userPrompt = `Design a card for: "${prompt}"`;
 
-  // 3. Stream through the provider
+  // 3. Extract multimodal image parts from resolved assets
+  const imageContentParts = assets
+    ?.filter(a => a.base64Data && a.mediaType)
+    .map(a => ({
+      base64Data: a.base64Data!,
+      mediaType: a.mediaType!,
+      label: a.alt ?? `Asset ${a.id}`,
+    }));
+
+  // 4. Stream through the provider
   let fullContent = '';
   let startEventForwarded = false;
 
-  for await (const event of streamDesignGeneration({ systemPrompt, userPrompt, model, temperature, maxTokens, abortSignal })) {
+  for await (const event of streamDesignGeneration({ systemPrompt, userPrompt, imageContentParts: imageContentParts?.length ? imageContentParts : undefined, model, temperature, maxTokens, abortSignal })) {
     // Forward start events directly
     if (event.type === 'start') {
       startEventForwarded = true;

@@ -48,7 +48,7 @@ export function buildInlineEditPrompt(opts: InlineEditPromptOptions): {
     assetsBlock = assets
       .map((a, i) => `Asset ${i + 1}: ${a.url}${a.description ? ` — ${a.description}` : ''}`)
       .join('\n');
-    assetsBlock = `USER-PROVIDED ASSETS (use these in the design):\n${assetsBlock}\n\n`;
+    assetsBlock = `USER-PROVIDED ASSETS (use these in the design):\n${assetsBlock}\nIMPORTANT: Use the asset URLs directly in your generated code (e.g., style={{backgroundImage: "url('...')"}} or <img src="..." />). These URLs are served by the app and will work in the preview.\n\n`;
   }
 
   const system = `${assetsBlock}You are an expert React/Tailwind developer. You will receive the COMPLETE code file with line numbers and an edit request.
