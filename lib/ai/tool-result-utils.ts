@@ -106,18 +106,6 @@ function truncateField(value: unknown, maxLength: number): string | undefined {
   return `${value.slice(0, maxLength)}\n... [TRUNCATED ${value.length - maxLength} CHARS] ...`;
 }
 
-function stripDesignWorkspacePreviewHtml(output: unknown): unknown {
-  const result = getRecord(output);
-  if (!result) return output;
-
-  const data = getRecord(result.data);
-  if (!data || !("previewHtml" in data)) return output;
-
-  // Shallow-clone to avoid mutating the original tool result (which the UI may still reference)
-  const { previewHtml: _stripped, ...cleanData } = data;
-  return { ...result, data: cleanData };
-}
-
 function compactExecuteCommandOutput(output: unknown): unknown {
   const result = getRecord(output);
   if (!result) return output;
@@ -360,16 +348,6 @@ export function normalizeToolResultOutput(
   let normalizedOutput = unwrapMcpTextWrappedToolResult(output);
   if (mode === "projection" && toolName === "executeCommand") {
     normalizedOutput = compactExecuteCommandOutput(normalizedOutput);
-  }
-
-  // Strip previewHtml from designWorkspace results in the projection (AI context) path only.
-  // previewHtml contains the full bundled JS payload for Tailwind/TSX components (React runtime,
-  // lucide-react, etc.) and can be 100K+. The preview frame recompiles on demand via the
-  // compile-preview API, so it doesn't need to be in AI context.
-  // IMPORTANT: canonical mode must keep previewHtml — the streaming-state stores canonical results
-  // and the tool UI bridge dispatches previewHtml to the workspace store for live previews.
-  if (mode === "projection" && toolName === "designWorkspace") {
-    normalizedOutput = stripDesignWorkspacePreviewHtml(normalizedOutput);
   }
 
   // Get session ID from run context for content storage

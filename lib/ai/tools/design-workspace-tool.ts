@@ -18,7 +18,6 @@ import {
   type DesignExportFormat,
 } from "../../design/workspace/export";
 import { inferDesignMode, type DesignExportMode } from "../../design/workspace/preview";
-import { buildTailwindPreviewAsync } from "../../design/workspace/compiler";
 
 interface DesignWorkspaceToolOptions {
   sessionId?: string;
@@ -65,8 +64,6 @@ interface DesignWorkspaceResult {
     mode?: string;
     style?: string;
     renderedHtml?: string;
-    /** Server-compiled preview HTML for Tailwind components. */
-    previewHtml?: string;
     url?: string;
     localPath?: string;
     filePath?: string;
@@ -323,18 +320,10 @@ async function handleGenerate(input: DesignWorkspaceInput): Promise<DesignWorksp
   const componentId = generateId();
   const name = nameFromPrompt(prompt);
 
-  // For Tailwind components, compile server-side so the client gets
-  // a ready-to-render preview HTML instead of a loading placeholder.
-  let previewHtml: string | undefined;
-  if (mode === "tailwind") {
-    try {
-      previewHtml = await buildTailwindPreviewAsync(finalCode, name);
-    } catch (compileError) {
-      // Non-fatal: client will fall back to the compile-preview API
-      console.warn("[design-workspace] server-side compilation failed:", compileError);
-    }
-  }
-
+  // previewHtml is NOT included in the tool result to keep the response slim.
+  // For Tailwind components, the compiled preview can be 100K+ (bundled React
+  // runtime, lucide-react, etc.). The client-side preview frame falls back to
+  // the compile-preview API automatically via useCompileTailwindPreview().
   return {
     success: true,
     action: "generate",
@@ -345,7 +334,6 @@ async function handleGenerate(input: DesignWorkspaceInput): Promise<DesignWorksp
       prompt: prompt.trim(),
       mode,
       style,
-      previewHtml,
       message: `Component "${name}" generated successfully.`,
     },
   };
@@ -385,23 +373,13 @@ async function handleEdit(input: DesignWorkspaceInput): Promise<DesignWorkspaceR
     };
   }
 
-  // Compile if the result looks like Tailwind/React code
-  let previewHtml: string | undefined;
-  if (inferDesignMode(finalCode) === "tailwind") {
-    try {
-      previewHtml = await buildTailwindPreviewAsync(finalCode, "Edited Component");
-    } catch {
-      // Non-fatal: client will fall back to the compile-preview API
-    }
-  }
-
+  // previewHtml excluded — same rationale as handleGenerate.
   return {
     success: true,
     action: "edit",
     data: {
       componentId: input.activeComponentId,
       code: finalCode,
-      previewHtml,
       message: "Component edited successfully.",
     },
   };

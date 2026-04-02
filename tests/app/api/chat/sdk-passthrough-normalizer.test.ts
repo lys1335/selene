@@ -82,7 +82,6 @@ describe("normalizeSdkPassthroughOutput", () => {
               code: "<div>Hello</div>",
               name: "Hello Card",
               message: "Component created successfully.",
-              previewHtml: "<div>Hello</div>",
             },
           }),
         },
@@ -98,14 +97,13 @@ describe("normalizeSdkPassthroughOutput", () => {
     expect(output.status).toBe("success");
     expect(output.success).toBe(true);
     expect(output.action).toBe("generate");
-    // previewHtml is preserved in canonical mode (needed for live preview bridge);
-    // it's only stripped in projection mode (AI context) to prevent bundled JS bloat
+    // previewHtml is no longer included in tool results — stripped at source
+    // to prevent 100K+ bundled JS from bloating responses. Client compiles on demand.
     expect(output.data).toEqual({
       componentId: "cmp_123",
       code: "<div>Hello</div>",
       name: "Hello Card",
       message: "Component created successfully.",
-      previewHtml: "<div>Hello</div>",
     });
   });
 
