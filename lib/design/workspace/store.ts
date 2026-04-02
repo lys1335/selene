@@ -53,9 +53,14 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
 
   addComponent: (component: DesignComponent) => {
     const current = get();
-    // Deduplicate: if a component with the same ID already exists, just select it
-    if (current.components.some((c) => c.id === component.id)) {
+    // Deduplicate: if a component with the same ID already exists, select it
+    // and update its data to keep store and preview in sync
+    const existingIndex = current.components.findIndex((c) => c.id === component.id);
+    if (existingIndex !== -1) {
+      const nextComponents = [...current.components];
+      nextComponents[existingIndex] = { ...nextComponents[existingIndex], ...component };
       set({
+        components: nextComponents,
         activeComponentId: component.id,
         previewHtml: buildPreviewMarkup(component),
       });

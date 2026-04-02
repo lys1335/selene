@@ -211,7 +211,7 @@ export function DesignPropertiesPanel() {
               {showCode ? "Hide Code" : "Show Code"}
             </Button>
             <Button variant="outline" size="sm" onClick={handleCopyCode} className="gap-1.5">
-              {copySuccess ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+              {copySuccess ? <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
             </Button>
           </div>
           {showCode && (
@@ -285,9 +285,9 @@ export function DesignPropertiesPanel() {
                     a.href = url;
                     a.download = exportResult.fileName || `design.${exportResult.format}`;
                     a.click();
-                    URL.revokeObjectURL(url);
+                    setTimeout(() => URL.revokeObjectURL(url), 100);
                   }}
-                  className="mt-1 block truncate text-emerald-600 dark:text-emerald-400 underline hover:text-emerald-700 dark:hover:text-emerald-300"
+                  className="mt-1 block truncate text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 underline hover:text-emerald-700 dark:hover:text-emerald-300"
                 >
                   Download {exportResult.fileName}
                 </button>
@@ -297,7 +297,7 @@ export function DesignPropertiesPanel() {
                   href={exportResult.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 block truncate text-emerald-600 dark:text-emerald-400 underline"
+                  className="mt-1 block truncate text-emerald-600 dark:text-emerald-400 dark:text-emerald-400 underline"
                 >
                   Open exported file
                 </a>
@@ -325,7 +325,7 @@ export function DesignPropertiesPanel() {
           {saving ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : saved ? (
-            <Check className="h-4 w-4 text-emerald-600" />
+            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           ) : (
             <Save className="h-4 w-4" />
           )}

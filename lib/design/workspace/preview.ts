@@ -325,6 +325,9 @@ function buildTailwindPreviewHtml(code: string, title: string, animated?: boolea
   const loaderScript = escapeInlineScript(
     [
       "window.__SELENE_PREVIEW_READY__ = false;",
+      "// Isolate preview from parent frame access",
+      "try { Object.defineProperty(window, 'parent', { value: window, writable: false, configurable: false }); } catch {}",
+      "try { Object.defineProperty(window, 'top', { value: window, writable: false, configurable: false }); } catch {}",
       "(async () => {",
       "  try {",
       '    const [reactModule, reactDomClient, LucideReact, FramerMotion] = await Promise.all([',
