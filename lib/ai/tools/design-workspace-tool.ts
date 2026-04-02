@@ -83,6 +83,33 @@ interface DesignWorkspaceResult {
   error?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Server-side component cache (survives hot reloads via globalThis)
+// ---------------------------------------------------------------------------
+
+const componentCache = (
+  (globalThis as Record<string, unknown>).__designComponentCache ??= new Map<string, string>()
+) as Map<string, string>;
+
+function cacheKey(sessionId: string, componentId: string): string {
+  return `${sessionId}:${componentId}`;
+}
+
+function cacheComponent(sessionId: string, componentId: string, code: string): void {
+  componentCache.set(cacheKey(sessionId, componentId), code);
+  // FIFO eviction at 200 entries
+  if (componentCache.size > 200) {
+    const firstKey = componentCache.keys().next().value;
+    if (firstKey) componentCache.delete(firstKey);
+  }
+}
+
+function getCachedComponent(sessionId: string, componentId: string): string | undefined {
+  return componentCache.get(cacheKey(sessionId, componentId));
+}
+
+// ---------------------------------------------------------------------------
+
 const DEFAULT_EXPORT_SESSION_ID = "design-workspace";
 const DEFAULT_EXPORT_WIDTH = 1440;
 const DEFAULT_EXPORT_HEIGHT = 900;
@@ -231,9 +258,9 @@ async function executeDesignWorkspace(
     case "open":
       return handleOpen();
     case "generate":
-      return handleGenerate(input);
+      return handleGenerate(options, input);
     case "edit":
-      return handleEdit(input);
+      return handleEdit(options, input);
     case "snapshot":
       return handleSnapshot(input);
     case "restore":
@@ -260,10 +287,10 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
 **Actions:**
 - "open": Open the design workspace panel.
 - "generate": Generate a new UI component from a text prompt. Requires \`prompt\`. Optional: \`mode\`, \`style\`, \`assets\` (array of {url, description} for user-uploaded images to incorporate).
-- "edit": Edit the active component with a text instruction. Requires \`editPrompt\` and \`activeComponentCode\`. Optional: \`assets\`.
+- "edit": Edit the active component with a text instruction. Requires \`editPrompt\`. Pass \`activeComponentId\` to reference a previously generated component (code is cached server-side). Optional: \`activeComponentCode\` (override), \`assets\`.
 - "snapshot": Take a snapshot of the current workspace state.
 - "restore": Restore a previous snapshot. Requires \`snapshotId\`.
-- "export": Export the active component as HTML, React, PNG, or MP4. Requires \`activeComponentCode\`.
+- "export": Export the active component as HTML, React, PNG, or MP4. Pass \`activeComponentId\` or \`activeComponentCode\`.
 - "close": Close the design workspace panel.`,
     inputSchema: jsonSchema<DesignWorkspaceInput>({
       type: "object",
@@ -308,15 +335,15 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
         },
         inlineMode: {
           type: "boolean",
-          description: 'Whether to apply edits inline (default false). For "edit".',
+          description: 'Whether to apply edits inline (default true). For "edit".',
         },
         activeComponentCode: {
           type: "string",
-          description: 'The current code of the active component. Required for "edit" and "export".',
+          description: 'Component code override. Optional — if omitted, the server uses the cached code from the last generate/edit for this component.',
         },
         activeComponentId: {
           type: "string",
-          description: 'ID of the active component being edited. For "edit".',
+          description: 'ID of the component to edit or export. Used to look up cached code server-side.',
         },
         label: {
           type: "string",
@@ -381,7 +408,7 @@ function handleOpen(): DesignWorkspaceResult {
   };
 }
 
-async function handleGenerate(input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
+async function handleGenerate(options: DesignWorkspaceToolOptions, input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
   const { prompt, mode = "html", style = "default", assets: inputAssets } = input;
 
   if (!prompt?.trim()) {
@@ -413,6 +440,10 @@ async function handleGenerate(input: DesignWorkspaceInput): Promise<DesignWorksp
   const componentId = generateId();
   const name = nameFromPrompt(prompt);
 
+  // Cache the generated code so subsequent edits don't need to re-pass it
+  const sessionId = options.sessionId ?? "UNSCOPED";
+  cacheComponent(sessionId, componentId, finalCode);
+
   // previewHtml is NOT included in the tool result to keep the response slim.
   // For Tailwind components, the compiled preview can be 100K+ (bundled React
   // runtime, lucide-react, etc.). The client-side preview frame falls back to
@@ -432,17 +463,24 @@ async function handleGenerate(input: DesignWorkspaceInput): Promise<DesignWorksp
   };
 }
 
-async function handleEdit(input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
-  const { editPrompt, inlineMode = false, activeComponentCode, assets: inputAssets } = input;
+async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
+  const { editPrompt, inlineMode = true, activeComponentCode, activeComponentId, assets: inputAssets } = input;
 
   if (!editPrompt?.trim()) {
     return { success: false, action: "edit", error: 'Missing required field "editPrompt" for edit action.' };
   }
-  if (!activeComponentCode?.trim()) {
+
+  // Resolve component code: explicit param > server-side cache
+  const sessionId = options.sessionId ?? "UNSCOPED";
+  let code = activeComponentCode?.trim() || undefined;
+  if (!code && activeComponentId) {
+    code = getCachedComponent(sessionId, activeComponentId);
+  }
+  if (!code) {
     return {
       success: false,
       action: "edit",
-      error: 'Missing required field "activeComponentCode". Provide the current component code to edit.',
+      error: 'No component code available. Either pass "activeComponentCode" or ensure the component was generated in this session.',
     };
   }
 
@@ -451,7 +489,7 @@ async function handleEdit(input: DesignWorkspaceInput): Promise<DesignWorkspaceR
   let finalCode = "";
   let editError: string | undefined;
 
-  for await (const event of editCard({ code: activeComponentCode, editPrompt, inlineMode, assets })) {
+  for await (const event of editCard({ code, editPrompt, inlineMode, assets })) {
     if (event.type === "complete") {
       finalCode = event.content ?? "";
     }
@@ -468,12 +506,17 @@ async function handleEdit(input: DesignWorkspaceInput): Promise<DesignWorkspaceR
     };
   }
 
+  // Update cache with edited code for subsequent edits
+  if (activeComponentId) {
+    cacheComponent(sessionId, activeComponentId, finalCode);
+  }
+
   // previewHtml excluded — same rationale as handleGenerate.
   return {
     success: true,
     action: "edit",
     data: {
-      componentId: input.activeComponentId,
+      componentId: activeComponentId,
       code: finalCode,
       message: "Component edited successfully.",
     },
@@ -510,12 +553,16 @@ async function handleExport(
   options: DesignWorkspaceToolOptions,
   input: DesignWorkspaceInput
 ): Promise<DesignWorkspaceResult> {
-  const activeComponentCode = input.activeComponentCode?.trim();
+  const sessionId = options.sessionId ?? "UNSCOPED";
+  let activeComponentCode = input.activeComponentCode?.trim() || undefined;
+  if (!activeComponentCode && input.activeComponentId) {
+    activeComponentCode = getCachedComponent(sessionId, input.activeComponentId);
+  }
   if (!activeComponentCode) {
     return {
       success: false,
       action: "export",
-      error: 'Missing "activeComponentCode" for export. Provide the component code to export.',
+      error: 'No component code available. Either pass "activeComponentCode" or ensure the component was generated in this session.',
     };
   }
 
