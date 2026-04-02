@@ -62,13 +62,21 @@ const pendingEvents: DesignToolEvent[] = [];
  * Call this from the tool UI component when a tool result arrives.
  *
  * If no bridge is mounted yet, the event is queued for replay on mount.
+ * Events are ALWAYS queued (in addition to dispatching) because the bridge
+ * may be in the brief gap between effect cleanup and re-setup during a
+ * session switch — the DOM listener is detached but bridgeReady hasn't
+ * been set to false yet. The bridge deduplicates on drain.
  */
 export function dispatchDesignToolResult(detail: DesignToolEvent): void {
-  if (!bridgeReady && pendingEvents.length < MAX_PENDING) {
+  // Always queue so the bridge can drain on mount/re-bind, regardless of
+  // whether a listener is currently attached. The bridge deduplicates.
+  if (pendingEvents.length < MAX_PENDING) {
     pendingEvents.push(detail);
   }
-  // Always dispatch — the bridge may be mounted and listening already
-  window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail }));
+  // Also dispatch live in case a listener is already attached
+  if (bridgeReady) {
+    window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail }));
+  }
 }
 
 interface DesignWorkspaceBridgeProps {
@@ -77,12 +85,16 @@ interface DesignWorkspaceBridgeProps {
 }
 
 export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps) {
-  const prevSessionIdRef = useRef<string | undefined>(sessionId);
+  // Start as null (not sessionId!) so the first mount ALWAYS triggers a reset.
+  // This prevents stale isOpen:true from leaking when the component remounts
+  // (e.g., parent key change, route navigation) — the ref would otherwise
+  // re-initialize to the current sessionId, making prev === current, skipping reset.
+  const prevSessionIdRef = useRef<string | undefined | null>(null);
 
   // Single merged effect: reset store on session change, drain queue, bind listener.
   // Merged to guarantee ordering — reset MUST happen before queue drain.
   useEffect(() => {
-    // Reset store when session changes so components don't leak across chats
+    // Reset store when session changes (or on first mount) so components don't leak
     if (prevSessionIdRef.current !== sessionId) {
       prevSessionIdRef.current = sessionId;
       useDesignWorkspaceStore.getState().reset();
@@ -167,14 +179,23 @@ export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps)
       }
     }
 
+    // Track which events have been processed to deduplicate queue drain vs live dispatch.
+    // Uses a WeakSet on the event detail object reference — cheap and automatic GC.
+    const processed = new WeakSet<DesignToolEvent>();
+
     function handleToolResult(e: Event) {
-      processEvent((e as CustomEvent<DesignToolEvent>).detail);
+      const detail = (e as CustomEvent<DesignToolEvent>).detail;
+      if (processed.has(detail)) return;
+      processed.add(detail);
+      processEvent(detail);
     }
 
-    // Drain queued events that arrived before this bridge mounted
+    // Drain queued events that arrived before this bridge mounted (or during re-bind gap)
     bridgeReady = true;
-    while (pendingEvents.length > 0) {
-      const queued = pendingEvents.shift()!;
+    const toDrain = pendingEvents.splice(0);
+    for (const queued of toDrain) {
+      if (processed.has(queued)) continue;
+      processed.add(queued);
       processEvent(queued);
     }
 
