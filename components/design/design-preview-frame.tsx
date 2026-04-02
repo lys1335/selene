@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useDesignWorkspaceStore, DESIGN_BREAKPOINTS } from "@/lib/design/workspace";
 import { Button } from "@/components/ui/button";
 import { Monitor, Tablet, Smartphone } from "lucide-react";
@@ -111,6 +111,35 @@ function useCompileTailwindPreview() {
   }, [activeComponentId, components, previewHtml, setPreviewHtml]);
 }
 
+/**
+ * Measures available space in a container and returns dimensions.
+ * Uses ResizeObserver for live updates when the pane resizes.
+ */
+function useContainerSize(ref: React.RefObject<HTMLDivElement | null>) {
+  const [size, setSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      setSize((prev) =>
+        prev.width === Math.floor(width) && prev.height === Math.floor(height)
+          ? prev
+          : { width: Math.floor(width), height: Math.floor(height) }
+      );
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+
+  return size;
+}
+
 export function DesignPreviewFrame() {
   const activeComponentId = useDesignWorkspaceStore((s) => s.activeComponentId);
   const previewHtml = useDesignWorkspaceStore((s) => s.previewHtml);
@@ -119,6 +148,25 @@ export function DesignPreviewFrame() {
 
   // Auto-compile Tailwind components when switching or on first load
   useCompileTailwindPreview();
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const available = useContainerSize(containerRef);
+
+  // Padding around the scaled preview inside the container
+  const PADDING = 24;
+  const viewportW = selectedBreakpoint.width;
+  const viewportH = selectedBreakpoint.height;
+
+  // Compute scale so the true-size iframe fits in the available space.
+  // Never upscale (cap at 1).
+  const computeScale = useCallback(() => {
+    if (available.width === 0 || available.height === 0) return 1;
+    const usableW = available.width - PADDING * 2;
+    const usableH = available.height - PADDING * 2;
+    return Math.min(usableW / viewportW, usableH / viewportH, 1);
+  }, [available.width, available.height, viewportW, viewportH]);
+
+  const scale = computeScale();
 
   if (!activeComponentId) {
     return (
@@ -147,21 +195,36 @@ export function DesignPreviewFrame() {
         ))}
       </div>
 
-      {/* Preview area */}
-      <div className="flex flex-1 items-center justify-center overflow-auto bg-muted/30 p-6">
+      {/* Preview area — measured container */}
+      <div
+        ref={containerRef}
+        className="flex flex-1 items-center justify-center overflow-auto bg-muted/30"
+      >
+        {/* Outer shell: reflects the scaled dimensions so scrolling works correctly */}
         <div
-          className="bg-background shadow-lg transition-all duration-200 overflow-hidden rounded-lg"
           style={{
-            width: selectedBreakpoint.width,
-            height: selectedBreakpoint.height,
+            width: viewportW * scale,
+            height: viewportH * scale,
+            flexShrink: 0,
           }}
         >
-          <iframe
-            srcDoc={previewHtml}
-            sandbox="allow-scripts allow-same-origin"
-            className="h-full w-full border-0"
-            title="Design preview"
-          />
+          {/* Scaled stage: renders the iframe at true viewport size, then scales down */}
+          <div
+            className="bg-background shadow-lg rounded-lg overflow-hidden"
+            style={{
+              width: viewportW,
+              height: viewportH,
+              transform: `scale(${scale})`,
+              transformOrigin: "top left",
+            }}
+          >
+            <iframe
+              srcDoc={previewHtml}
+              sandbox="allow-scripts allow-same-origin"
+              className="h-full w-full border-0"
+              title="Design preview"
+            />
+          </div>
         </div>
       </div>
     </div>

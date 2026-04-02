@@ -95,13 +95,19 @@ async function waitForPageReady(page: import("puppeteer").Page): Promise<void> {
   });
   // Both HTML and Tailwind (esbuild-compiled) modes use
   // data-preview-ready="true" on #selene-design-preview-root.
+  // Also verify the root has rendered child content.
   await page.waitForFunction(
     () => {
       const root = document.getElementById("selene-design-preview-root");
-      return root?.getAttribute("data-preview-ready") === "true";
+      return (
+        root?.getAttribute("data-preview-ready") === "true" &&
+        (root.childElementCount > 0 || root.innerHTML.trim().length > 0)
+      );
     },
     { timeout: PREVIEW_READY_TIMEOUT_MS }
   );
+  // Allow one animation frame for final paint stabilization
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
 }
 
 async function createBrowser() {
@@ -175,7 +181,7 @@ async function renderPngExport(
   try {
     const page = await browser.newPage();
     await page.setViewport({ width, height, deviceScaleFactor: scale });
-    await page.setContent(renderedHtml, { waitUntil: "networkidle2", timeout: 30_000 });
+    await page.setContent(renderedHtml, { waitUntil: "domcontentloaded", timeout: 30_000 });
     await waitForPageReady(page);
 
     const screenshot = await page.screenshot({ type: "png", captureBeyondViewport: false });
@@ -224,7 +230,7 @@ async function renderVideoExport(
   try {
     const page = await browser.newPage();
     await page.setViewport({ width, height, deviceScaleFactor: scale });
-    await page.setContent(renderedHtml, { waitUntil: "networkidle2", timeout: 30_000 });
+    await page.setContent(renderedHtml, { waitUntil: "domcontentloaded", timeout: 30_000 });
     await waitForPageReady(page);
 
     for (let index = 0; index < frameCount; index += 1) {
