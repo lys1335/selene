@@ -49,7 +49,11 @@ const EVENT_NAME = "design-workspace-tool-result";
  * Global queue for events dispatched before any bridge mounts.
  * Once a bridge mounts, it drains this queue and sets `bridgeReady` to true
  * so subsequent events go directly through the DOM listener.
+ *
+ * Capped at MAX_PENDING to prevent unbounded growth if the bridge never mounts
+ * (e.g. workspace feature disabled, render error).
  */
+const MAX_PENDING = 50;
 let bridgeReady = false;
 const pendingEvents: DesignToolEvent[] = [];
 
@@ -60,7 +64,7 @@ const pendingEvents: DesignToolEvent[] = [];
  * If no bridge is mounted yet, the event is queued for replay on mount.
  */
 export function dispatchDesignToolResult(detail: DesignToolEvent): void {
-  if (!bridgeReady) {
+  if (!bridgeReady && pendingEvents.length < MAX_PENDING) {
     pendingEvents.push(detail);
   }
   // Always dispatch — the bridge may be mounted and listening already
@@ -75,18 +79,21 @@ interface DesignWorkspaceBridgeProps {
 export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps) {
   const prevSessionIdRef = useRef<string | undefined>(sessionId);
 
-  // Reset store when session changes so components don't leak across chats
+  // Single merged effect: reset store on session change, drain queue, bind listener.
+  // Merged to guarantee ordering — reset MUST happen before queue drain.
   useEffect(() => {
+    // Reset store when session changes so components don't leak across chats
     if (prevSessionIdRef.current !== sessionId) {
       prevSessionIdRef.current = sessionId;
       useDesignWorkspaceStore.getState().reset();
     }
-  }, [sessionId]);
 
-  useEffect(() => {
     function processEvent(detail: DesignToolEvent) {
-      // Session isolation: ignore events from other chat sessions
-      if (sessionId && detail.sessionId && detail.sessionId !== sessionId) {
+      // Session isolation: if bridge has a session, require event to match.
+      // Events without sessionId (legacy tool results) are dropped when the
+      // bridge is session-aware — this prevents cross-session pollution from
+      // old chat history re-renders.
+      if (sessionId && detail.sessionId !== sessionId) {
         return;
       }
 
@@ -140,6 +147,8 @@ export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps)
               if (data.previewHtml) {
                 store.setPreviewHtml(data.previewHtml);
               }
+            } else {
+              store.setError("Edit could not be applied: no active component.");
             }
           }
           break;

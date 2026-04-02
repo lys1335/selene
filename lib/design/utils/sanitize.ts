@@ -57,6 +57,15 @@ export interface SanitizeOptions {
   /** Explicitly allow or forbid inline style attributes */
   allowStyles?: boolean;
   /**
+   * Allow `data:` and `blob:` URL protocols in non-navigation attributes
+   * (src, poster, background). These are blocked in navigation attributes
+   * (href, action, formaction) regardless of this setting.
+   *
+   * Use for design workspace content where user-uploaded images and
+   * locally-generated previews need to render inline.
+   */
+  allowDataUrls?: boolean;
+  /**
    * Optional external sanitizer function.  When provided, it replaces the
    * built-in regex sanitizer entirely.  Useful for plugging in DOMPurify.
    */
@@ -71,10 +80,14 @@ export interface SanitizeOptions {
  * untrusted user input, pass a real sanitizer (e.g. DOMPurify) via the
  * `sanitizer` option.
  */
+/** Navigation attributes where data:/blob: are never allowed (XSS risk) */
+const NAVIGATION_ATTRS = new Set(['href', 'action', 'formaction', 'xlink:href']);
+
 function regexSanitize(
   dirty: string,
   allowedTags: Set<string>,
   stripStyles: boolean,
+  allowDataUrls = false,
 ): string {
   let result = dirty;
 
@@ -106,7 +119,9 @@ function regexSanitize(
         (attrMatch, attrName: string, doubleVal?: string, singleVal?: string) => {
           if (URL_ATTRIBUTES.has(attrName.toLowerCase())) {
             const rawValue = doubleVal ?? singleVal ?? '';
-            const safe = sanitizeURL(rawValue);
+            // Never allow data:/blob: in navigation attributes (href, action, etc.)
+            const attrAllowData = allowDataUrls && !NAVIGATION_ATTRS.has(attrName.toLowerCase());
+            const safe = sanitizeURL(rawValue, { allowDataUrls: attrAllowData });
             if (!safe) return ''; // dangerous protocol -- remove entire attribute
             return ` ${attrName}="${safe}"`;
           }
@@ -156,7 +171,7 @@ export function sanitizeHTML(dirty: string, options?: SanitizeOptions): string {
     stripStyles = false;
   }
 
-  return regexSanitize(dirty, allowedTags, stripStyles);
+  return regexSanitize(dirty, allowedTags, stripStyles, options?.allowDataUrls);
 }
 
 /**
@@ -214,18 +229,23 @@ export function isContentSuspicious(content: string): boolean {
 /**
  * Validate and sanitize a URL.
  *
- * Allowed protocols: `http:`, `https:`, `mailto:`, `data:`, and `blob:`.
- * `data:` and `blob:` are permitted for design workspace content where
- * user-uploaded images and locally-generated previews need to render.
+ * By default only `http:`, `https:`, and `mailto:` protocols are permitted.
+ * Pass `allowDataUrls: true` to also permit `data:` and `blob:` protocols
+ * (for non-navigation attributes like img src in design workspace content).
+ *
  * Invalid URLs have protocol-like prefixes stripped and are returned as
  * relative paths.
  */
-export function sanitizeURL(url: string): string {
+export function sanitizeURL(url: string, opts?: { allowDataUrls?: boolean }): string {
   if (!url) return '';
 
   try {
     const parsed = new URL(url);
-    if (!['http:', 'https:', 'mailto:', 'data:', 'blob:'].includes(parsed.protocol)) {
+    const allowed = ['http:', 'https:', 'mailto:'];
+    if (opts?.allowDataUrls) {
+      allowed.push('data:', 'blob:');
+    }
+    if (!allowed.includes(parsed.protocol)) {
       return '';
     }
     return parsed.toString();

@@ -35,6 +35,7 @@ type ToolCallContentPartComponent = FC<{
       prompt?: string;
       mode?: string;
       style?: string;
+      previewHtml?: string;
     };
     error?: string;
   };
@@ -93,10 +94,12 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args,
 
   useEffect(() => {
     if (!result || !action) return;
-    // Deduplicate: use toolCallId for uniqueness (handles edit actions where
-    // componentId may not be returned), fall back to action+id composite key
-    const key = toolCallId
+    // Deduplicate: include sessionId to prevent stale dedup across session switches.
+    // Use toolCallId for uniqueness (handles edit actions where componentId may
+    // not be returned), fall back to action+id composite key.
+    const baseKey = toolCallId
       ?? `${action}:${result.data?.componentId || ""}:${result.data?.snapshotId || ""}`;
+    const key = sessionId ? `${sessionId}:${baseKey}` : baseKey;
     if (dispatchedRef.current === key) return;
     dispatchedRef.current = key;
     dispatchDesignToolResult({
