@@ -10,11 +10,11 @@ import { DesignWorkspaceBridge } from "./design-workspace-bridge";
 export function DesignWorkspace() {
   const isOpen = useDesignWorkspaceStore((s) => s.isOpen);
 
-  if (!isOpen) return null;
-
   return (
     <>
+      {/* Bridge must always be mounted to listen for "open" events */}
       <DesignWorkspaceBridge />
+      {!isOpen ? null : (
       <div className="flex h-full w-full overflow-hidden bg-background">
         {/* Left panel */}
         <div className="flex w-60 flex-col border-r border-border">
@@ -37,6 +37,7 @@ export function DesignWorkspace() {
           <DesignPropertiesPanel />
         </div>
       </div>
+      )}
     </>
   );
 }
