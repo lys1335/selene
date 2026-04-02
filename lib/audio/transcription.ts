@@ -697,7 +697,7 @@ function findWhisperBinary(): string | null {
   return null;
 }
 
-function findFfmpegBinary(): string | null {
+export function findFfmpegBinary(): string | null {
   if (cachedFfmpegBinary !== undefined) {
     if (cachedFfmpegBinary && existsSync(cachedFfmpegBinary)) {
       return cachedFfmpegBinary;
@@ -714,7 +714,7 @@ function findFfmpegBinary(): string | null {
   for (const relativePath of getFfmpegBundledRelativePaths()) {
     const bundledPaths = getBundledBinaryPaths("ffmpeg", relativePath);
     for (const p of bundledPaths) {
-      if (existsSync(p)) {
+      if (existsSync(p) && !isJavaScriptShim(p)) {
         cachedFfmpegBinary = p;
         return p;
       }
@@ -723,6 +723,26 @@ function findFfmpegBinary(): string | null {
 
   cachedFfmpegBinary = null;
   return null;
+}
+
+/**
+ * Detect whether a file is a JavaScript shim (e.g. npm .bin wrapper) rather
+ * than a real native binary.  On Windows the ffmpeg-static package installs a
+ * tiny JS wrapper at node_modules/.bin/ffmpeg.exe that `require()`s the real
+ * binary path — executing it directly with `spawn` causes an UNKNOWN error.
+ */
+function isJavaScriptShim(filePath: string): boolean {
+  try {
+    const size = statSync(filePath).size;
+    // Real ffmpeg binaries are tens of MB; JS shims are a few KB
+    if (size < 50_000) {
+      const head = readFileSync(filePath, { encoding: "utf-8", flag: "r" }).slice(0, 256);
+      return head.includes("require(") || head.includes("'use strict'") || head.startsWith("#!/usr/bin/env node");
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 function getWhisperBundledRelativePaths(): string[] {
@@ -928,8 +948,8 @@ function readWavAsFloat32(wavPath: string): Float32Array {
 
 function getFfmpegBundledRelativePaths(): string[] {
   return [
-    join("node_modules", ".bin", "ffmpeg"),
-    join("node_modules", ".bin", "ffmpeg.exe"),
+    // Bundled by electron-prepare.js from ffmpeg-static (validated by isJavaScriptShim)
+    join("node_modules", ".bin", platform() === "win32" ? "ffmpeg.exe" : "ffmpeg"),
   ];
 }
 

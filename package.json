@@ -81,8 +81,11 @@
     "electron:dist:mac-intel": "npm run typecheck && rimraf dist-electron && npm run electron:build && electron-builder --mac --x64 && npm run electron:recover-mac-dmg && npm run electron:verify-package",
     "electron:dist:mac-intel:nosign": "npm run typecheck && rimraf dist-electron && npm run electron:build && CSC_IDENTITY_AUTO_DISCOVERY=false APPLE_NOTARIZE_SKIP=1 electron-builder --mac --x64 -c.mac.identity=null && npm run electron:recover-mac-dmg && npm run electron:verify-package",
     "electron:dist:win": "npm run typecheck && rimraf dist-electron && npm run electron:build && electron-builder --win --x64 && npm run electron:verify-package",
+    "electron:dist:win:nosign": "npm run typecheck && rimraf dist-electron && npm run electron:build && cross-env WIN_CSC_LINK= WIN_CSC_KEY_PASSWORD= electron-builder --win --x64 -c.win.signAndEditExecutable=false -c.forceCodeSigning=false && npm run electron:verify-package",
     "electron:dist:win64": "npm run typecheck && rimraf dist-electron && npm run electron:build && electron-builder --win --x64 && npm run electron:verify-package",
+    "electron:dist:win64:nosign": "npm run typecheck && rimraf dist-electron && npm run electron:build && cross-env WIN_CSC_LINK= WIN_CSC_KEY_PASSWORD= electron-builder --win --x64 -c.win.signAndEditExecutable=false -c.forceCodeSigning=false && npm run electron:verify-package",
     "electron:dist:win32": "npm run typecheck && rimraf dist-electron && npm run electron:build && electron-builder --win --ia32 && npm run electron:verify-package",
+    "electron:dist:win32:nosign": "npm run typecheck && rimraf dist-electron && npm run electron:build && cross-env WIN_CSC_LINK= WIN_CSC_KEY_PASSWORD= electron-builder --win --ia32 -c.win.signAndEditExecutable=false -c.forceCodeSigning=false && npm run electron:verify-package",
     "embedding:test": "node scripts/embedding-test.mjs",
     "embedding:pipeline-test": "tsx scripts/embedding-pipeline-test.ts",
     "postinstall": "electron-builder install-app-deps"

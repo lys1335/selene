@@ -417,21 +417,27 @@ if (fs.existsSync(ripgrepBinary)) {
 // 13. Bundle ffmpeg static binary for audio conversion (whisper.cpp preprocessing)
 console.log('Bundling ffmpeg static binary...');
 try {
-    const ffmpegStaticPath = require.resolve('ffmpeg-static');
-    if (fs.existsSync(ffmpegStaticPath)) {
-        const ffmpegDestDir = path.join(standaloneDir, 'node_modules', '.bin');
-        ensureDir(ffmpegDestDir);
+    // require('ffmpeg-static') executes the module and returns the path to the
+    // real platform-specific binary.  require.resolve() would return the JS
+    // module path instead, which is a tiny JS wrapper — not the actual binary.
+    const ffmpegBinaryPath = require('ffmpeg-static');
+    if (ffmpegBinaryPath && fs.existsSync(ffmpegBinaryPath)) {
         const ffmpegBinaryName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
-        const ffmpegDest = path.join(ffmpegDestDir, ffmpegBinaryName);
-        fs.copyFileSync(ffmpegStaticPath, ffmpegDest);
-        ensureExecutable(ffmpegDest);
-        const stats = fs.statSync(ffmpegDest);
-        console.log(`  Bundled ffmpeg: ${(stats.size / 1024 / 1024).toFixed(1)} MB`);
+
+        // Copy into node_modules/.bin for backward compat
+        const ffmpegBinDir = path.join(standaloneDir, 'node_modules', '.bin');
+        ensureDir(ffmpegBinDir);
+        const ffmpegBinDest = path.join(ffmpegBinDir, ffmpegBinaryName);
+        fs.copyFileSync(ffmpegBinaryPath, ffmpegBinDest);
+        ensureExecutable(ffmpegBinDest);
+
+        const stats = fs.statSync(ffmpegBinDest);
+        console.log(`  Bundled ffmpeg: ${(stats.size / 1024 / 1024).toFixed(1)} MB → .bin/`);
     } else {
-        console.warn('  Warning: ffmpeg-static binary not found');
+        console.warn('  Warning: ffmpeg-static binary not found at resolved path:', ffmpegBinaryPath);
     }
 } catch (e) {
-    console.warn('  Warning: ffmpeg-static package not installed, skipping ffmpeg bundling');
+    console.warn('  Warning: ffmpeg-static package not installed, skipping ffmpeg bundling:', e.message);
 }
 
 // 13. Bundle whisper-cli and its dylibs for local speech-to-text

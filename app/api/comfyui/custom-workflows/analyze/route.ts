@@ -13,6 +13,7 @@ export async function POST(request: NextRequest) {
       comfyuiBaseUrl?: string;
       comfyuiHost?: string;
       comfyuiPort?: number;
+      comfyuiUseHttps?: boolean;
       fileName?: string;
     };
     if (!body.workflow) {
@@ -29,6 +30,7 @@ export async function POST(request: NextRequest) {
         comfyuiBaseUrl: body.comfyuiBaseUrl,
         comfyuiHost: body.comfyuiHost,
         comfyuiPort: body.comfyuiPort,
+        comfyuiUseHttps: body.comfyuiUseHttps,
       });
       objectInfo = await fetchObjectInfo(resolved.baseUrl);
     }

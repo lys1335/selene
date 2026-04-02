@@ -85,15 +85,25 @@ export function getSdkExecutableConfig(): {
     isProduction,
   });
 
-  if (isProduction && source === "shell") {
-    env.PATH = env.PATH || process.env.PATH;
-    console.log("[Agent SDK] Production mode - using shell-resolved PATH");
-  } else if (isProduction) {
+  if (isProduction) {
+    // Ensure PATH has a base value regardless of shell env source
+    if (source === "shell") {
+      env.PATH = env.PATH || process.env.PATH;
+      console.log("[Agent SDK] Production mode - using shell-resolved PATH");
+    }
+
+    // Always prepend bundled node to PATH in production, regardless of env source.
+    // Without this, systems without a system-wide Node.js installation fail because
+    // the shell-resolved PATH doesn't contain "node" — even though a real node.exe
+    // is bundled at resources/standalone/node_modules/.bin/.
     const bundledNodeDir = getBundledNodeBinDir();
     if (bundledNodeDir && !env.PATH?.includes(bundledNodeDir)) {
       env.PATH = `${bundledNodeDir}${path.delimiter}${env.PATH || ""}`;
-      console.log("[Agent SDK] Production mode - using bundled node bin dir:", bundledNodeDir);
-    } else {
+      console.log("[Agent SDK] Prepended bundled node dir:", bundledNodeDir);
+    }
+
+    // If no bundled node found, try system node or Electron-as-Node shim
+    if (!bundledNodeDir) {
       const nodeBin = getNodeBinary();
       const nodeBase = path.basename(nodeBin).toLowerCase();
       const isRealNodeBinary = nodeBase === "node" || nodeBase === "node.exe";
