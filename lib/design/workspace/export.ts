@@ -15,6 +15,7 @@ import {
   inferDesignMode,
   type DesignExportMode,
 } from "./preview";
+import { buildTailwindPreviewAsync } from "./compiler";
 
 export type DesignExportFormat = "html" | "react" | "png" | "video";
 export type { DesignExportMode } from "./preview";
@@ -56,6 +57,25 @@ const MAX_VIDEO_FRAMES = 96;
 const DEFAULT_COMPONENT_NAME = "Design Component";
 const PREVIEW_READY_TIMEOUT_MS = 30_000;
 
+/**
+ * Build export-ready preview HTML for any mode.
+ * For HTML mode: synchronous (buildDesignPreviewHtml handles it).
+ * For Tailwind mode: async esbuild compilation.
+ */
+async function buildExportPreviewHtml(opts: {
+  code: string;
+  mode?: DesignExportMode;
+  componentName?: string;
+  animated?: boolean;
+  exportProgress?: number;
+}): Promise<string> {
+  const mode = inferDesignMode(opts.code, opts.mode);
+  if (mode === "tailwind") {
+    return buildTailwindPreviewAsync(opts.code, opts.componentName || DEFAULT_COMPONENT_NAME);
+  }
+  return buildDesignPreviewHtml(opts);
+}
+
 function sanitizeComponentName(name?: string): string {
   const normalized = (name || "design-component")
     .trim()
@@ -73,12 +93,10 @@ async function waitForPageReady(page: import("puppeteer").Page): Promise<void> {
       await document.fonts.ready;
     }
   });
-  // HTML mode sets data-preview-ready on the root div (no scripts allowed by CSP).
-  // Tailwind mode sets window.__SELENE_PREVIEW_READY__ after React mounts.
+  // Both HTML and Tailwind (esbuild-compiled) modes use
+  // data-preview-ready="true" on #selene-design-preview-root.
   await page.waitForFunction(
     () => {
-      const win = window as Window & { __SELENE_PREVIEW_READY__?: boolean };
-      if (win.__SELENE_PREVIEW_READY__ === true) return true;
       const root = document.getElementById("selene-design-preview-root");
       return root?.getAttribute("data-preview-ready") === "true";
     },
@@ -145,7 +163,7 @@ async function renderPngExport(
   const height = opts.height ?? DEFAULT_HEIGHT;
   const scale = opts.scale ?? DEFAULT_SCALE;
   const fileName = `${sanitizeComponentName(opts.componentName)}.png`;
-  const renderedHtml = buildDesignPreviewHtml({
+  const renderedHtml = await buildExportPreviewHtml({
     code: opts.code,
     mode: opts.mode,
     componentName: opts.componentName,
@@ -190,7 +208,7 @@ async function renderVideoExport(
   const durationMs = opts.durationMs ?? DEFAULT_DURATION_MS;
   const frameCount = Math.max(12, Math.min(MAX_VIDEO_FRAMES, Math.round((durationMs / 1000) * fps)));
   const fileName = `${sanitizeComponentName(opts.componentName)}.mp4`;
-  const renderedHtml = buildDesignPreviewHtml({
+  const renderedHtml = await buildExportPreviewHtml({
     code: opts.code,
     mode: opts.mode,
     componentName: opts.componentName,
@@ -280,7 +298,7 @@ export async function exportDesignAsset(opts: DesignExportOptions): Promise<Desi
     return {
       format: "html",
       code,
-      renderedHtml: buildDesignPreviewHtml({ code, mode, componentName }),
+      renderedHtml: await buildExportPreviewHtml({ code, mode, componentName }),
       fileName: `${sanitizeComponentName(componentName)}.html`,
       width: opts.width ?? DEFAULT_WIDTH,
       height: opts.height ?? DEFAULT_HEIGHT,
@@ -291,7 +309,7 @@ export async function exportDesignAsset(opts: DesignExportOptions): Promise<Desi
     return {
       format: "react",
       code: mode === "tailwind" ? code : htmlToReactExport(code),
-      renderedHtml: buildDesignPreviewHtml({ code, mode, componentName }),
+      renderedHtml: await buildExportPreviewHtml({ code, mode, componentName }),
       fileName: `${sanitizeComponentName(componentName)}.tsx`,
       width: opts.width ?? DEFAULT_WIDTH,
       height: opts.height ?? DEFAULT_HEIGHT,

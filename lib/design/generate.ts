@@ -8,8 +8,6 @@
 import type { GenerateOpts, StreamEvent, AssetContext, FinishResult } from './types';
 import { streamDesignGeneration } from './providers';
 import { buildHtmlModePrompt, buildTailwindModePrompt } from './prompts';
-import { parseAIResponse } from './utils/parse';
-import { htmlToJsx, validateJsx, repairInlineEditJSX } from './utils/jsx';
 
 // ---------------------------------------------------------------------------
 // Asset formatting
@@ -119,7 +117,10 @@ export async function* generateCard(opts: GenerateOpts): AsyncGenerator<StreamEv
     }
   }
 
-  // 4. Post-process the completed response
+  // 4. Yield the LLM output directly — no heuristic post-processing.
+  // The LLM is instructed via the system prompt to produce clean code.
+  // If it doesn't, the correct fix is to improve the prompt or ask the LLM
+  // to retry — not to paper over issues with brittle regex transforms.
   if (!fullContent.trim()) {
     const error = {
       code: 'EMPTY_RESPONSE',
@@ -130,54 +131,22 @@ export async function* generateCard(opts: GenerateOpts): AsyncGenerator<StreamEv
     return;
   }
 
-  // Strip markdown code fences the model sometimes wraps output in
-  let cleanedContent = fullContent
-    .replace(/```(?:jsx|tsx|html|typescript)?\n?/g, '')
-    .replace(/```\n?/g, '')
-    .trim();
+  // Extract code from markdown fences if present. This is structured output
+  // parsing (like JSON.parse), not heuristic post-processing. The prompt
+  // explicitly requires the LLM to wrap code in fences.
+  const fenceMatch = fullContent.match(/```(?:jsx|tsx|html|typescript)?\n?([\s\S]*?)```/);
+  const finalCode = fenceMatch
+    ? fenceMatch[1].trim()
+    : fullContent.trim();
 
-  // Parse out any prose the model may have emitted alongside the code
-  const parsed = parseAIResponse(cleanedContent);
-  let finalCode = parsed.code;
-
-  // 5. Mode-specific validation and repair
-  if (mode === 'tailwind') {
-    finalCode = htmlToJsx(finalCode);
-    const validation = validateJsx(finalCode);
-    if (!validation.valid) {
-      // Attempt repair rather than failing outright
-      finalCode = repairInlineEditJSX(finalCode);
-
-      const revalidation = validateJsx(finalCode);
-      if (!revalidation.valid) {
-        const error = {
-          code: 'JSX_VALIDATION_FAILED',
-          message: `JSX validation errors after repair: ${revalidation.errors.join('; ')}`,
-        };
-        onFinish?.({ success: false, error, durationMs: Date.now() - startTime });
-        yield { type: 'error', error };
-        return;
-      }
-    }
-  } else {
-    // HTML mode -- still run repair for structural issues (unclosed tags, etc.)
-    finalCode = repairInlineEditJSX(finalCode);
-  }
-
-  // 6. Yield the final complete event with cleaned-up code
   onFinish?.({
     success: true,
     content: finalCode,
-    metadata: { language: parsed.language, description: parsed.description },
     durationMs: Date.now() - startTime,
   });
 
   yield {
     type: 'complete',
     content: finalCode,
-    metadata: {
-      language: parsed.language,
-      description: parsed.description,
-    },
   };
 }

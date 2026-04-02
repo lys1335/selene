@@ -14,7 +14,6 @@ import type { EditOpts, StreamEvent, FinishResult } from './types';
 import { streamDesignGeneration } from './providers';
 import { buildInlineEditPrompt, buildFullEditPrompt } from './prompts';
 import { applyInlineEdits } from './utils/parse';
-import { repairInlineEditJSX, getLastCompleteJSX } from './utils/jsx';
 
 // ---------------------------------------------------------------------------
 // Main editor
@@ -162,8 +161,7 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
       metadata: { editMode: 'inline', rawEdits: fullResponse },
     };
   } else {
-    // -- Full rewrite mode: stream with progressive JSX repair ---------------
-    let lastValidJSX = '';
+    // -- Full rewrite mode: stream LLM output directly ---------------
 
     for await (const event of streamDesignGeneration({ systemPrompt, userPrompt, model, temperature, maxTokens, abortSignal })) {
       if (event.type === 'start') {
@@ -183,20 +181,11 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
 
       if (event.type === 'delta') {
         fullResponse += event.content ?? '';
-
-        // Clean markdown wrappers and find the last renderable JSX prefix
-        const cleaned = stripMarkdownFences(fullResponse);
-        const completeJSX = getLastCompleteJSX(cleaned);
-
-        if (completeJSX.length > lastValidJSX.length) {
-          const repaired = repairInlineEditJSX(completeJSX);
-          yield {
-            type: 'delta',
-            content: repaired,
-            metadata: { isFullContent: true },
-          };
-          lastValidJSX = completeJSX;
-        }
+        yield {
+          type: 'delta',
+          content: event.content,
+          metadata: { isFullContent: true },
+        };
         continue;
       }
 
@@ -216,8 +205,7 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
       return;
     }
 
-    const cleaned = stripMarkdownFences(fullResponse);
-    const finalCode = repairInlineEditJSX(cleaned);
+    const finalCode = stripMarkdownFences(fullResponse);
 
     onFinish?.({ success: true, content: finalCode, metadata: { editMode: 'full' }, durationMs: Date.now() - startTime });
     yield {
@@ -232,10 +220,8 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-/** Strip common markdown code-fence wrappers that models emit. */
+/** Extract code from markdown fences. Structured output parsing, not heuristic cleanup. */
 function stripMarkdownFences(text: string): string {
-  return text
-    .replace(/```(?:jsx|tsx|html|typescript)?\n?/g, '')
-    .replace(/```\n?/g, '')
-    .trim();
+  const fenceMatch = text.match(/```(?:jsx|tsx|html|typescript)?\n?([\s\S]*?)```/);
+  return fenceMatch ? fenceMatch[1].trim() : text.trim();
 }

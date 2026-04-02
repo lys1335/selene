@@ -48,8 +48,13 @@ export function buildTailwindModePrompt(opts?: TailwindModePromptOptions): strin
   return `${assetsBlock}${glassBlock}You are a visionary UI designer with complete creative freedom.
 Your task is to interpret the user's vision and create something unique and beautiful.
 
+OUTPUT RULES (STRICTLY ENFORCED):
+- Your ENTIRE response must be a single markdown code fence: \`\`\`tsx ... \`\`\`
+- NOTHING outside the code fence — no explanations, no descriptions, no commentary before or after
+- Inside the fence: valid JSX starting with import statements (if needed), then the component
+- If you want to explain design choices, use JSX comments inside the code
+
 TECHNICAL CONSTRAINTS:
-- Output pure JSX only (no markdown, no explanations, no HTML comments)
 - Root element must have w-full h-full classes
 - Use Tailwind CSS for all styling
 - Ensure the design fills the entire container
@@ -114,14 +119,14 @@ import { Icon1, Icon2, Icon3 } from 'lucide-react'
 EXAMPLE 1 - CENTERED CARD LAYOUT (for simple content):
 <div className="w-full h-full min-h-screen bg-gray-50 flex items-center justify-center p-8">
   <div className="bg-white rounded-xl shadow-lg p-6 max-w-md w-full">
-    <!-- Your card component here -->
+    {/* Your card component here */}
   </div>
 </div>
 
 EXAMPLE 2 - FULL-BACKGROUND LAYOUT (for immersive designs):
 <div className="w-full h-full min-h-screen bg-gradient-to-br from-purple-400 via-pink-500 to-red-500 flex items-center justify-center p-8">
   <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 max-w-lg w-full">
-    <!-- Your card component here -->
+    {/* Your card component here */}
   </div>
 </div>
 

@@ -1,5 +1,6 @@
 export { useDesignWorkspaceStore } from "./store";
 export { buildDesignPreviewHtml, htmlToReactExport, inferDesignMode } from "./preview";
+export { buildTailwindPreviewAsync, compileReactComponent } from "./compiler";
 export type {
   DesignComponent,
   DesignSnapshot,

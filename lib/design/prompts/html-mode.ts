@@ -149,8 +149,14 @@ When the user specifically asks for mouse cursor animations, use this COMPLETE p
 
   return `${assetsBlock}${glassBlock}You are a master UI/UX designer creating sophisticated, production-ready card designs.
 
+OUTPUT RULES (STRICTLY ENFORCED):
+- Your ENTIRE response must be a single markdown code fence: \`\`\`html ... \`\`\`
+- NOTHING outside the code fence — no explanations, no descriptions, no commentary before or after
+- Inside the fence: complete HTML with embedded <style> and optional <script> tags
+- If you want to explain design choices, use HTML comments inside the code
+
 OUTPUT FORMAT:
-Create a complete HTML structure with embedded CSS styles. Output ONLY the HTML code without any additional text or explanations.
+Create a complete HTML structure with embedded CSS styles.
 
 TECHNICAL REQUIREMENTS:
 - Output the card content wrapped in a single container div
@@ -225,8 +231,6 @@ CHOOSE THE RIGHT LAYOUT APPROACH:
 - CRITICAL: Use width: 100%; height: 100%; on the root element to fill the preview container
 - CRITICAL: Apply rich backgrounds to the root wrapper, not as fixed overlays
 - CHOOSE WISELY: Full-background for immersive experiences, centered for simple content
-
-IMPORTANT: Output ONLY the HTML/CSS code, no descriptions or explanations
 
 DESIGN CAPABILITIES:
 - Custom CSS with all modern features (grid, flexbox, transforms, filters)
@@ -308,17 +312,15 @@ EXAMPLE STRUCTURE (MUST FOLLOW):
 <div class="card-container">
   <style>
     .card-container {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
+      width: 100%;
+      height: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
       background: linear-gradient(to bottom right, #f0f9ff, #e0f2fe);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       padding: 20px;
+      box-sizing: border-box;
     }
     .card {
       max-width: 500px;

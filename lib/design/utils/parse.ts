@@ -5,7 +5,6 @@
  * All functions are pure -- no side effects, no external dependencies.
  */
 
-import { repairInlineEditJSX } from './jsx';
 
 /** Result of parsing an AI response that may contain code + description */
 export interface ParsedAIResponse {
@@ -163,7 +162,5 @@ export function applyInlineEdits(originalCode: string, editResponse: string): st
     lines.splice(edit.start, edit.end - edit.start + 1, ...newLines);
   }
 
-  // Run JSX repair on the merged result to fix any structural breakage
-  const result = repairInlineEditJSX(lines.join('\n'));
-  return result;
+  return lines.join('\n');
 }

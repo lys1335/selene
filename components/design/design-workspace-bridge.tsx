@@ -28,6 +28,8 @@ interface DesignToolEvent {
     prompt?: string;
     mode?: string;
     style?: string;
+    /** Server-compiled preview HTML for Tailwind components. */
+    previewHtml?: string;
   };
   error?: string;
 }
@@ -76,6 +78,11 @@ export function DesignWorkspaceBridge() {
               createdAt: now,
               updatedAt: now,
             });
+            // If server provided compiled preview HTML (Tailwind), use it
+            // instead of the placeholder that addComponent sets.
+            if (data.previewHtml) {
+              store.setPreviewHtml(data.previewHtml);
+            }
             // Auto-open workspace when a component is generated
             if (!store.isOpen) store.open();
           }
@@ -84,6 +91,10 @@ export function DesignWorkspaceBridge() {
         case "edit":
           if (data?.code && store.activeComponentId) {
             store.updateComponent(store.activeComponentId, { code: data.code });
+            // If server provided compiled preview HTML (Tailwind), use it
+            if (data.previewHtml) {
+              store.setPreviewHtml(data.previewHtml);
+            }
           }
           break;
 
