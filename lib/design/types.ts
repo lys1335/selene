@@ -46,6 +46,8 @@ export interface EditOpts {
   selectedComponent?: string;
   /** When true, edits should be applied inline rather than rewriting the full block */
   inlineMode?: boolean;
+  /** Image/asset context for the edit (e.g. user-uploaded reference images) */
+  assets?: AssetContext[];
   model?: string;
   temperature?: number;
   maxTokens?: number;

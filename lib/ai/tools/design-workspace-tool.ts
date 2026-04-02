@@ -36,6 +36,8 @@ interface DesignWorkspaceInput {
   editPrompt?: string;
   inlineMode?: boolean;
   activeComponentCode?: string;
+  /** ID of the component being edited — returned in the result for store targeting */
+  activeComponentId?: string;
 
   label?: string;
   snapshotId?: string;
@@ -224,6 +226,10 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
           type: "string",
           description: 'The current code of the active component. Required for "edit" and "export".',
         },
+        activeComponentId: {
+          type: "string",
+          description: 'ID of the active component being edited. For "edit".',
+        },
         label: {
           type: "string",
           description: 'Human-readable label for the snapshot. For "snapshot".',
@@ -393,6 +399,7 @@ async function handleEdit(input: DesignWorkspaceInput): Promise<DesignWorkspaceR
     success: true,
     action: "edit",
     data: {
+      componentId: input.activeComponentId,
       code: finalCode,
       previewHtml,
       message: "Component edited successfully.",

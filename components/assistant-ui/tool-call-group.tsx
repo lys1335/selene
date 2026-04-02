@@ -80,6 +80,8 @@ const TOOLS_AUTO_EXPAND = new Set([
   "calculator",
   "chromiumWorkspace",
   "promptLibrary",
+  "designWorkspace",
+  "designGallery",
 ]);
 
 function getResultCount(result: unknown): number | null {

@@ -14,7 +14,12 @@ import { cn } from "@/lib/utils";
 
 type LeftBottomTab = "history" | "gallery";
 
-export function DesignWorkspace() {
+interface DesignWorkspaceProps {
+  /** Current chat session ID — isolates workspace state per conversation */
+  sessionId?: string;
+}
+
+export function DesignWorkspace({ sessionId }: DesignWorkspaceProps) {
   const isOpen = useDesignWorkspaceStore((s) => s.isOpen);
   const addComponent = useDesignWorkspaceStore((s) => s.addComponent);
   const [leftBottomTab, setLeftBottomTab] = useState<LeftBottomTab>("history");
@@ -42,7 +47,7 @@ export function DesignWorkspace() {
   return (
     <>
       {/* Bridge must always be mounted to listen for "open" events */}
-      <DesignWorkspaceBridge />
+      <DesignWorkspaceBridge sessionId={sessionId} />
       {!isOpen ? null : (
       <div className="flex h-full w-full overflow-hidden bg-background">
         {/* Left panel */}

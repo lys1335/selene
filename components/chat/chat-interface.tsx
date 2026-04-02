@@ -1765,7 +1765,7 @@ export default function ChatInterface({
                         onClose={() => setIsDiffPanelOpen(false)}
                     />
                 )}
-                <DesignWorkspace />
+                <DesignWorkspace sessionId={sessionId} />
                 <ThemeChooserModal open={showThemeChooser} onClose={handleThemeChooserClose} />
             </div>
         );
@@ -1930,7 +1930,7 @@ export default function ChatInterface({
                     onClose={() => setIsDiffPanelOpen(false)}
                 />
             )}
-            <DesignWorkspace />
+            <DesignWorkspace sessionId={sessionId} />
             <ThemeChooserModal open={showThemeChooser} onClose={handleThemeChooserClose} />
         </Shell>
     );

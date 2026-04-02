@@ -45,6 +45,7 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
     editPrompt,
     selectedComponent,
     inlineMode = true,
+    assets,
     model,
     temperature,
     maxTokens,
@@ -77,8 +78,8 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
 
   // 1. Build prompts based on edit mode using the canonical prompt builders
   const { system: systemPrompt, user: userPrompt } = inlineMode
-    ? buildInlineEditPrompt({ code, editPrompt, selectedComponent })
-    : buildFullEditPrompt({ code, editPrompt, selectedComponent, includeGlass });
+    ? buildInlineEditPrompt({ code, editPrompt, selectedComponent, assets })
+    : buildFullEditPrompt({ code, editPrompt, selectedComponent, includeGlass, assets });
 
   // 2. Stream through the provider
   let fullResponse = '';

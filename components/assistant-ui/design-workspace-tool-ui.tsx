@@ -5,9 +5,11 @@ import type { FC } from "react";
 import { Sparkles, PenSquare, Save, RotateCcw, Download, PanelRightOpen, PanelRightClose, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dispatchDesignToolResult } from "@/components/design";
+import { useChatSessionId } from "@/components/chat-provider";
 
 type ToolCallContentPartComponent = FC<{
   toolName: string;
+  toolCallId?: string;
   argsText?: string;
   args?: {
     action?: string;
@@ -80,27 +82,31 @@ function getActionLabel(action?: string): string {
   }
 }
 
-export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args, result }) => {
+export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({ args, result, toolCallId }) => {
   const action = args?.action || result?.action;
   const isRunning = result === undefined;
   const success = result?.success === true;
   const error = result?.success === false ? result.error : null;
   const Icon = getActionIcon(action);
   const dispatchedRef = useRef<string | null>(null);
+  const sessionId = useChatSessionId();
 
   useEffect(() => {
     if (!result || !action) return;
-    // Deduplicate: only dispatch once per unique componentId/action pair
-    const key = `${action}:${result.data?.componentId || ""}:${result.data?.snapshotId || ""}`;
+    // Deduplicate: use toolCallId for uniqueness (handles edit actions where
+    // componentId may not be returned), fall back to action+id composite key
+    const key = toolCallId
+      ?? `${action}:${result.data?.componentId || ""}:${result.data?.snapshotId || ""}`;
     if (dispatchedRef.current === key) return;
     dispatchedRef.current = key;
     dispatchDesignToolResult({
       action,
       success: Boolean(result.success),
+      sessionId: sessionId ?? undefined,
       data: result.data,
       error: result.error,
     });
-  }, [action, result]);
+  }, [action, result, sessionId, toolCallId]);
 
   return (
     <div

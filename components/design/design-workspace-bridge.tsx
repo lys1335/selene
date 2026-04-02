@@ -9,15 +9,24 @@
  * It listens for custom events dispatched by the tool UI layer and dispatches
  * the corresponding store actions. This keeps the tool (server-side) decoupled
  * from the store (client-side).
+ *
+ * Events are filtered by sessionId so design components don't leak between chats.
+ *
+ * Race condition fix: Events dispatched before the bridge mounts are queued
+ * globally and replayed on first mount. This handles the case where tool UI
+ * components in chat history fire events during render before the bridge's
+ * useEffect registers its listener.
  */
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useDesignWorkspaceStore } from "@/lib/design/workspace";
 
 /** Shape of the event detail dispatched by the tool UI */
-interface DesignToolEvent {
+export interface DesignToolEvent {
   action: string;
   success: boolean;
+  /** Session that originated this event — used for cross-chat isolation */
+  sessionId?: string;
   data?: {
     componentId?: string;
     code?: string;
@@ -37,19 +46,53 @@ interface DesignToolEvent {
 const EVENT_NAME = "design-workspace-tool-result";
 
 /**
+ * Global queue for events dispatched before any bridge mounts.
+ * Once a bridge mounts, it drains this queue and sets `bridgeReady` to true
+ * so subsequent events go directly through the DOM listener.
+ */
+let bridgeReady = false;
+const pendingEvents: DesignToolEvent[] = [];
+
+/**
  * Dispatch a design workspace tool result as a CustomEvent.
  * Call this from the tool UI component when a tool result arrives.
+ *
+ * If no bridge is mounted yet, the event is queued for replay on mount.
  */
 export function dispatchDesignToolResult(detail: DesignToolEvent): void {
+  if (!bridgeReady) {
+    pendingEvents.push(detail);
+  }
+  // Always dispatch — the bridge may be mounted and listening already
   window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail }));
 }
 
-export function DesignWorkspaceBridge() {
+interface DesignWorkspaceBridgeProps {
+  /** Current chat session ID — only events matching this session are processed */
+  sessionId?: string;
+}
+
+export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps) {
+  const prevSessionIdRef = useRef<string | undefined>(sessionId);
+
+  // Reset store when session changes so components don't leak across chats
   useEffect(() => {
-    function handleToolResult(e: Event) {
+    if (prevSessionIdRef.current !== sessionId) {
+      prevSessionIdRef.current = sessionId;
+      useDesignWorkspaceStore.getState().reset();
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    function processEvent(detail: DesignToolEvent) {
+      // Session isolation: ignore events from other chat sessions
+      if (sessionId && detail.sessionId && detail.sessionId !== sessionId) {
+        return;
+      }
+
       // Always read fresh state to avoid stale closure issues
       const store = useDesignWorkspaceStore.getState();
-      const { action, success, data, error } = (e as CustomEvent<DesignToolEvent>).detail;
+      const { action, success, data, error } = detail;
 
       if (!success) {
         if (error) store.setError(error);
@@ -89,11 +132,14 @@ export function DesignWorkspaceBridge() {
           break;
 
         case "edit":
-          if (data?.code && store.activeComponentId) {
-            store.updateComponent(store.activeComponentId, { code: data.code });
-            // If server provided compiled preview HTML (Tailwind), use it
-            if (data.previewHtml) {
-              store.setPreviewHtml(data.previewHtml);
+          if (data?.code) {
+            // Use componentId from result if available, fall back to active
+            const targetId = data.componentId ?? store.activeComponentId;
+            if (targetId) {
+              store.updateComponent(targetId, { code: data.code });
+              if (data.previewHtml) {
+                store.setPreviewHtml(data.previewHtml);
+              }
             }
           }
           break;
@@ -112,9 +158,23 @@ export function DesignWorkspaceBridge() {
       }
     }
 
+    function handleToolResult(e: Event) {
+      processEvent((e as CustomEvent<DesignToolEvent>).detail);
+    }
+
+    // Drain queued events that arrived before this bridge mounted
+    bridgeReady = true;
+    while (pendingEvents.length > 0) {
+      const queued = pendingEvents.shift()!;
+      processEvent(queued);
+    }
+
     window.addEventListener(EVENT_NAME, handleToolResult);
-    return () => window.removeEventListener(EVENT_NAME, handleToolResult);
-  }, []); // stable — getState() always reads fresh
+    return () => {
+      window.removeEventListener(EVENT_NAME, handleToolResult);
+      bridgeReady = false;
+    };
+  }, [sessionId]); // re-bind when session changes
 
   // This component renders nothing — it's a side-effect bridge
   return null;

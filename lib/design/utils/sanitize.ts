@@ -143,7 +143,9 @@ export function sanitizeHTML(dirty: string, options?: SanitizeOptions): string {
     allowedTags = SVG_ALLOWED_TAGS;
   } else if (options?.isAIContent) {
     allowedTags = AI_ALLOWED_TAGS;
-    stripStyles = true; // AI content: no inline styles by default
+    // AI content strips inline styles by default, but callers can override
+    // via allowStyles (e.g. design workspace components need inline styles).
+    stripStyles = options?.allowStyles !== true;
   } else {
     allowedTags = DEFAULT_ALLOWED_TAGS;
   }
@@ -212,7 +214,9 @@ export function isContentSuspicious(content: string): boolean {
 /**
  * Validate and sanitize a URL.
  *
- * Only `http:`, `https:`, and `mailto:` protocols are permitted.
+ * Allowed protocols: `http:`, `https:`, `mailto:`, `data:`, and `blob:`.
+ * `data:` and `blob:` are permitted for design workspace content where
+ * user-uploaded images and locally-generated previews need to render.
  * Invalid URLs have protocol-like prefixes stripped and are returned as
  * relative paths.
  */
@@ -221,7 +225,7 @@ export function sanitizeURL(url: string): string {
 
   try {
     const parsed = new URL(url);
-    if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+    if (!['http:', 'https:', 'mailto:', 'data:', 'blob:'].includes(parsed.protocol)) {
       return '';
     }
     return parsed.toString();
