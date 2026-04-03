@@ -28,7 +28,7 @@ import { AsyncLocalStorage } from "async_hooks";
 /**
  * Run context data available throughout a request/execution
  */
-export interface RunContextData {
+interface RunContextData {
   /** Unique identifier for this agent run */
   runId: string;
   /** Session this run belongs to */
@@ -54,7 +54,7 @@ export interface RunContextData {
 /**
  * Options for creating a run context
  */
-export interface CreateRunContextOptions {
+interface CreateRunContextOptions {
   runId: string;
   sessionId: string;
   pipelineName: string;

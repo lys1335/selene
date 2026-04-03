@@ -4,13 +4,13 @@ import { middleTruncateText } from "@/lib/ai/truncation-utils";
 const MIN_STREAM_TOOL_RESULT_TOKENS = 1;
 export const MAX_STREAM_TOOL_RESULT_TOKENS = 25_000;
 
-export interface GuardToolResultForStreamingResult {
+interface GuardToolResultForStreamingResult {
   blocked: boolean;
   estimatedTokens: number;
   result: unknown;
 }
 
-export interface GuardToolResultForStreamingOptions {
+interface GuardToolResultForStreamingOptions {
   maxTokens?: number;
   metadata?: Record<string, unknown>;
 }

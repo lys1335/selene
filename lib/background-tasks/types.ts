@@ -14,7 +14,7 @@ export type TaskStatus =
   | "cancelled"
   | "stale";
 
-export interface BaseTask {
+interface BaseTask {
   runId: string;
   type: TaskType;
   status: TaskStatus;
@@ -57,7 +57,7 @@ export interface ChatTask extends BaseTask {
 
 export type UnifiedTask = BackgroundTask | ChannelTask | ChatTask;
 
-export interface TaskStartedEvent {
+interface TaskStartedEvent {
   eventType: "task:started";
   task: UnifiedTask;
   timestamp: string;
@@ -86,7 +86,7 @@ export interface TaskProgressEvent {
   timestamp: string;
 }
 
-export interface TaskCompletedEvent {
+interface TaskCompletedEvent {
   eventType: "task:completed";
   task: UnifiedTask;
   timestamp: string;

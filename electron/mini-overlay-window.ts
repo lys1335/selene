@@ -5,7 +5,7 @@ import { debugLog, debugError } from "./debug-logger";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface ShowOverlayOptions {
+interface ShowOverlayOptions {
   /** Base URL of the embedded Next.js server (e.g. "http://localhost:3000"). */
   baseUrl: string;
   /** Absolute path to the preload script. */

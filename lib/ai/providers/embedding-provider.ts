@@ -14,7 +14,7 @@ import { getOpenRouterClient, getOpenRouterApiKey } from "./openrouter-client";
 
 // ---- Constants ---------------------------------------------------------------
 
-export type EmbeddingProvider = "openrouter" | "local";
+type EmbeddingProvider = "openrouter" | "local";
 
 const DEFAULT_EMBEDDING_PROVIDER: EmbeddingProvider = "openrouter";
 const DEFAULT_EMBEDDING_MODEL = "qwen/qwen3-embedding-4b";

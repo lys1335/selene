@@ -7,19 +7,19 @@ import type { ContextProvenance } from "@/lib/context-window/scoped-counting-con
 
 type ToolInvocationState = "input-streaming" | "input-available" | "output-available" | "output-error" | "output-denied";
 
-export interface DBTextContentPart extends ContextProvenance {
+interface DBTextContentPart extends ContextProvenance {
   type: "text";
   text: string;
 }
 
-export interface DBImageContentPart extends ContextProvenance {
+interface DBImageContentPart extends ContextProvenance {
   type: "image";
   image: string;
   filename?: string;
   mediaType?: string;
 }
 
-export interface DBFileContentPart extends ContextProvenance {
+interface DBFileContentPart extends ContextProvenance {
   type: "file";
   url: string;
   filename?: string;

@@ -27,7 +27,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-export interface WriteFileToolOptions {
+interface WriteFileToolOptions {
   sessionId: string;
   characterId?: string | null;
 }

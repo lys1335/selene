@@ -552,7 +552,7 @@ export const BLACKBOX_ALL_MODEL_IDS = [
 
 ] as const;
 
-export type BlackBoxModelId = (typeof BLACKBOX_ALL_MODEL_IDS)[number] | (string & {});
+type BlackBoxModelId = (typeof BLACKBOX_ALL_MODEL_IDS)[number] | (string & {});
 
 /**
  * Curated models shown in the UI model picker.

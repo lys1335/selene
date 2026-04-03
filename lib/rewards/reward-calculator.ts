@@ -1,4 +1,4 @@
-export type RewardComplexityBand = "small" | "medium" | "large" | "epic";
+type RewardComplexityBand = "small" | "medium" | "large" | "epic";
 
 export interface RewardSuggestion {
   amountUsd: number;
@@ -9,7 +9,7 @@ export interface RewardSuggestion {
   approxInputTokens: number;
 }
 
-export interface TaskRewardRecord {
+interface TaskRewardRecord {
   id: string;
   taskId: string;
   runId?: string;
@@ -31,7 +31,7 @@ export interface TaskRewardRecord {
   stepCount: number;
 }
 
-export interface CompletedRewardInput {
+interface CompletedRewardInput {
   sessionId: string;
   runId?: string;
   userMessageId?: string;

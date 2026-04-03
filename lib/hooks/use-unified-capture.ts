@@ -16,7 +16,7 @@ import { showPermissionToast } from "@/lib/electron/permission-toast";
  * Voice recording never depends on screenshot success — if capture fails,
  * voice still starts. If mic fails, screenshot still attaches.
  */
-export type CaptureEventMetadata = {
+type CaptureEventMetadata = {
   activeWindowTitle?: string;
   activeAppName?: string;
   browserUrl?: string;

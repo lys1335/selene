@@ -27,7 +27,7 @@ const MAX_TOOL_OUTPUT_CHARS = MAX_TOOL_OUTPUT_TOKENS * CHARS_PER_TOKEN; // 12,00
 // Types
 // ============================================================================
 
-export interface LimitResult {
+interface LimitResult {
   /** Whether the output was limited/truncated */
   limited: boolean;
   /** The output (truncated if limited, original if not) */

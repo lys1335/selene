@@ -16,7 +16,7 @@ import { useTranslations } from "next-intl";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface VoiceState {
+interface VoiceState {
   isPlaying: boolean;
   isSynthesizing: boolean;
   currentAudioUrl?: string;
@@ -32,8 +32,8 @@ export interface VoiceState {
  * Returns a Promise that resolves when playback finishes (or rejects on error).
  * If the handler throws, VoiceProvider falls back to HTML5 Audio.
  */
-export type ExternalAudioPlayer = (url: string) => Promise<void>;
-export type ExternalAudioStopper = () => void;
+type ExternalAudioPlayer = (url: string) => Promise<void>;
+type ExternalAudioStopper = () => void;
 
 interface VoiceContextValue {
   voice: VoiceState;

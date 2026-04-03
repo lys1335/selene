@@ -59,7 +59,7 @@ import {
   Cube,
 } from "@phosphor-icons/react";
 
-export type ToolIconWeight = "thin" | "light" | "regular" | "bold" | "fill" | "duotone";
+type ToolIconWeight = "thin" | "light" | "regular" | "bold" | "fill" | "duotone";
 
 export type ToolIconConfig = {
   icon: PhosphorIcon;

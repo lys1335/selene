@@ -62,7 +62,7 @@ function hasDelegatedAnnotations(messages: Message[]): boolean {
 // Types
 // ---------------------------------------------------------------------------
 
-export type ContextStatus = "safe" | "warning" | "critical" | "exceeded";
+type ContextStatus = "safe" | "warning" | "critical" | "exceeded";
 
 export interface ContextWindowStatus {
   /** Current total tokens in context */
@@ -93,7 +93,7 @@ export interface ContextWindowStatus {
   };
 }
 
-export interface ContextCheckResult {
+interface ContextCheckResult {
   /** Whether the request can proceed */
   canProceed: boolean;
   /** Context window status */

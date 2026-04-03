@@ -95,13 +95,13 @@ function createDocumentRelativePath(
   return `docs/${safeUserId}/${safeCharacterId}/${nanoid()}.${safeExtension}`;
 }
 
-export interface UploadResult {
+interface UploadResult {
   localPath: string;
   url: string;
   filePath: string;
 }
 
-export interface DocumentUploadResult extends UploadResult {
+interface DocumentUploadResult extends UploadResult {
   extension: string;
 }
 

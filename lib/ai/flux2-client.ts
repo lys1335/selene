@@ -13,7 +13,7 @@ function getFlux2Config(): { endpoint?: string; apiKey?: string } {
   };
 }
 
-export interface Flux2GenerateInput {
+interface Flux2GenerateInput {
   prompt: string;
   width?: number;
   height?: number;
@@ -23,7 +23,7 @@ export interface Flux2GenerateInput {
   referenceImages?: string[]; // Base64-encoded images
 }
 
-export interface Flux2GenerateResult {
+interface Flux2GenerateResult {
   images: Array<{
     url: string;
     localPath?: string;

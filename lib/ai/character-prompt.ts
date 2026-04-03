@@ -352,7 +352,7 @@ export function buildCacheableCharacterPrompt(
 /**
  * Combines character prompt with tool-specific instructions
  */
-export interface CharacterPromptOptions {
+interface CharacterPromptOptions {
   character: CharacterFull;
   geminiEnabled?: boolean;
   flux2Enabled?: boolean;

@@ -44,7 +44,7 @@ export interface FirecrawlScrapeResult {
   ogImage?: string;
 }
 
-export interface FirecrawlCrawlResult {
+interface FirecrawlCrawlResult {
   status: "success" | "error" | "no_api_key" | "pending";
   url: string;
   pages?: Array<{ url: string; title?: string; markdown?: string }>;
@@ -89,7 +89,7 @@ const scrapeSchema = jsonSchema<{
   additionalProperties: false,
 });
 
-export interface FirecrawlToolOptions {
+interface FirecrawlToolOptions {
   userId?: string;
   characterId?: string | null;
   sessionId?: string;

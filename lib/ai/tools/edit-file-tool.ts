@@ -34,7 +34,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-export interface EditFileToolOptions {
+interface EditFileToolOptions {
   sessionId: string;
   characterId?: string | null;
 }

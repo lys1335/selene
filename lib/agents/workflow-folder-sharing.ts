@@ -242,7 +242,7 @@ export async function propagateWorkflowFolderChange(characterId: string, event: 
   if (event.type === "primary_changed") return propagateOwnFolderPrimaryChanged(characterId);
 }
 
-export interface SyncSharedFoldersInput {
+interface SyncSharedFoldersInput {
   userId: string;
   initiatorId: string;
   subAgentIds: string[];

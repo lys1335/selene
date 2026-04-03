@@ -30,7 +30,7 @@ export interface ContextStatusInfo {
   };
 }
 
-export interface UseContextStatusOptions {
+interface UseContextStatusOptions {
   /** Session ID to track. Null/undefined disables polling. */
   sessionId: string | null | undefined;
   /** Poll interval in ms. Default: 0 (no polling, only manual refresh). */
@@ -41,7 +41,7 @@ export interface UseContextStatusOptions {
   pauseWhenHidden?: boolean;
 }
 
-export interface UseContextStatusReturn {
+interface UseContextStatusReturn {
   status: ContextStatusInfo | null;
   isLoading: boolean;
   error: string | null;

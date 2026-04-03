@@ -25,7 +25,7 @@ type FeatureExtractionPipeline = (
   options?: { pooling?: string; normalize?: boolean }
 ) => Promise<unknown>;
 
-export interface LocalEmbeddingOptions {
+interface LocalEmbeddingOptions {
   modelId?: string;
   modelDir?: string;
   cacheDir?: string;

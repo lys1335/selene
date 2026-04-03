@@ -9,7 +9,7 @@ import { createHash } from "crypto";
 
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 
-export interface MemoryInjectionDecision {
+interface MemoryInjectionDecision {
   normalizedMarkdown: string;
   signature: string | null;
   shouldInject: boolean;

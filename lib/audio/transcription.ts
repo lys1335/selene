@@ -31,7 +31,7 @@ import { Readable } from "node:stream";
 import { join, basename, dirname } from "node:path";
 import { tmpdir, homedir, platform } from "node:os";
 
-export interface TranscriptionResult {
+interface TranscriptionResult {
   text: string;
   provider: string;
   durationSeconds?: number;

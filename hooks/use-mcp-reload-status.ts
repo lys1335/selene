@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 
-export interface MCPReloadStatus {
+interface MCPReloadStatus {
     isReloading: boolean;
     progress: number; // 0-100
     estimatedTimeRemaining: number; // milliseconds

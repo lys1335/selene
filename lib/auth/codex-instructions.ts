@@ -13,7 +13,7 @@ type CacheMetadata = {
   url: string;
 };
 
-export type CodexModelFamily = "gpt-5.4" | "gpt-5.2-codex" | "codex-max" | "codex" | "gpt-5.2" | "gpt-5.1";
+type CodexModelFamily = "gpt-5.4" | "gpt-5.2-codex" | "codex-max" | "codex" | "gpt-5.2" | "gpt-5.1";
 
 const PROMPT_FILES: Record<CodexModelFamily, string> = {
   // GPT-5.4 doesn't have its own prompt file yet; fall back to gpt-5.2-codex prompt

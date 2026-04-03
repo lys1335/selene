@@ -10,7 +10,7 @@ export type CapturePhase =
   | "reviewing"     // Text ready, optional auto-send countdown
   | "sending";      // Brief state while message sends
 
-export type CaptureSessionMetadata = {
+type CaptureSessionMetadata = {
   activeWindowTitle?: string;
   activeAppName?: string;
   browserUrl?: string;

@@ -42,7 +42,7 @@ export const CATEGORY_ORDER: string[] = [
   "game-development",
 ];
 
-export interface GroupedCatalogSkills {
+interface GroupedCatalogSkills {
   category: string;
   label: string;
   skills: CatalogSkillWithStatus[];

@@ -7,7 +7,7 @@ import {
 
 const AUTH_STATUS_TIMEOUT_MS = 20_000;
 
-export interface ClaudeCodeAuthState {
+interface ClaudeCodeAuthState {
   isAuthenticated: boolean;
   email?: string;
   expiresAt?: number;

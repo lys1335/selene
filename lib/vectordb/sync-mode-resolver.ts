@@ -5,7 +5,7 @@ export type ReindexPolicy = "smart" | "always" | "never";
 export type ChunkPreset = "balanced" | "small" | "large" | "custom";
 export type SyncExecutionTrigger = "manual" | "scheduled" | "triggered" | "auto";
 
-export interface FolderSyncRuntimeSettings {
+interface FolderSyncRuntimeSettings {
   indexingMode?: "files-only" | "full" | "auto" | null;
   syncMode?: SyncMode | null;
   syncCadenceMinutes?: number | null;
@@ -16,7 +16,7 @@ export interface FolderSyncRuntimeSettings {
   reindexPolicy?: ReindexPolicy | null;
 }
 
-export interface ResolvedFolderSyncBehavior {
+interface ResolvedFolderSyncBehavior {
   syncMode: SyncMode;
   syncCadenceMinutes: number;
   shouldCreateEmbeddings: boolean;

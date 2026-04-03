@@ -13,7 +13,7 @@ import { nanoid } from "nanoid";
 // Types
 // =============================================================================
 
-export interface EnhancementSession {
+interface EnhancementSession {
   id: string;
   sessionKey: string;
   messages: ModelMessage[];
@@ -22,7 +22,7 @@ export interface EnhancementSession {
   lastMemorySignature: string | null;
 }
 
-export interface EnhancementRequestContext {
+interface EnhancementRequestContext {
   originalQuery: string;
   searchResults: string;
   fileTree: string;

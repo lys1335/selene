@@ -3,7 +3,7 @@
  * HTTP client for communicating with the local ComfyUI API
  */
 
-export interface GenerateRequest {
+interface GenerateRequest {
     positive_prompt: string;
     seed?: number;
     width?: number;
@@ -15,7 +15,7 @@ export interface GenerateRequest {
     return_base64?: boolean;
 }
 
-export interface GenerateResponse {
+interface GenerateResponse {
     prompt_id: string;
     status: "queued" | "processing" | "completed" | "failed";
     images?: string[];

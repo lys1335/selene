@@ -5,7 +5,7 @@
 
 import { decode, encode } from "gpt-tokenizer";
 
-export interface MicroChunk {
+interface MicroChunk {
   index: number;
   text: string;
   startLine: number;
@@ -14,7 +14,7 @@ export interface MicroChunk {
   tokenCount: number;
 }
 
-export interface TokenChunkingOptions {
+interface TokenChunkingOptions {
   windowTokens?: number;
   strideTokens?: number;
 }

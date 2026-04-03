@@ -1,4 +1,4 @@
-export type WorkflowSectionState = "list" | "empty" | "emptySearch";
+type WorkflowSectionState = "list" | "empty" | "emptySearch";
 
 export function shouldRenderWorkflowSection(
   characterCount: number,

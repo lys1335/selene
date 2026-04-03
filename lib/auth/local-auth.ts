@@ -9,7 +9,7 @@ import { users } from "@/lib/db/sqlite-schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
-export interface LocalUser {
+interface LocalUser {
   id: string;
   email: string;
 }

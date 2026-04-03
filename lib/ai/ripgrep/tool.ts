@@ -15,7 +15,7 @@ import { loadSettings } from "@/lib/settings/settings-manager";
 import { logToolEvent } from "@/lib/ai/tool-registry/logging";
 import { isOtherWorktreePath } from "@/lib/ai/filesystem/path-utils";
 
-export interface LocalGrepToolOptions {
+interface LocalGrepToolOptions {
     sessionId: string;
     characterId?: string | null;
 }

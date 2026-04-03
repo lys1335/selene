@@ -5,7 +5,7 @@ import type { ScreenCaptureResult } from "../lib/electron/types";
 
 export const DEFAULT_SCREEN_CAPTURE_HOTKEY = "CommandOrControl+Shift+S";
 
-export type ScreenCapturePermissionStatus = ScreenCaptureResult["permissionStatus"];
+type ScreenCapturePermissionStatus = ScreenCaptureResult["permissionStatus"];
 
 function getTimestamp(): string {
   return new Date().toISOString().replace(/[:.]/g, "-");

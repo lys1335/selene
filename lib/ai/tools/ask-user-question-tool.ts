@@ -2,23 +2,23 @@ import { tool, jsonSchema, type ToolExecutionOptions } from "ai";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
 import { registerInteractiveWait } from "@/lib/interactive-tool-bridge";
 
-export interface AskUserQuestionToolOptions {
+interface AskUserQuestionToolOptions {
   sessionId: string;
 }
 
-export interface AskUserQuestionOption {
+interface AskUserQuestionOption {
   label: string;
   description: string;
 }
 
-export interface AskUserQuestionItem {
+interface AskUserQuestionItem {
   question: string;
   header: string;
   options: AskUserQuestionOption[];
   multiSelect: boolean;
 }
 
-export interface AskUserQuestionArgs {
+interface AskUserQuestionArgs {
   questions: AskUserQuestionItem[];
 }
 

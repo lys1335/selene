@@ -1,22 +1,22 @@
-export interface YouTubeTimestamp {
+interface YouTubeTimestamp {
   label: string;
   seconds: number;
   sourceText: string;
 }
 
-export interface YouTubeUrlReference {
+interface YouTubeUrlReference {
   source: "url";
   videoId: string;
   url: string;
   startSeconds?: number;
 }
 
-export interface YouTubeQueryReference {
+interface YouTubeQueryReference {
   source: "query";
   query: string;
 }
 
-export interface YouTubeReferenceExtraction {
+interface YouTubeReferenceExtraction {
   urls: YouTubeUrlReference[];
   queries: YouTubeQueryReference[];
   timestamps: YouTubeTimestamp[];

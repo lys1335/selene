@@ -23,7 +23,7 @@ import {
   getDocumentTypeLabel,
 } from "@/lib/documents/file-types";
 
-export interface AgentDocumentItem {
+interface AgentDocumentItem {
   id: string;
   originalFilename: string;
   title?: string | null;

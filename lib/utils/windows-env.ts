@@ -45,7 +45,7 @@ const MSYS_FORWARD_SLASH_PREFIX = /^\/(?:usr|bin|mingw|msys|etc|tmp|dev|proc)/;
  */
 const MSYS_DRIVE_PATH = /^\/([a-z])\/(.*)/i;
 
-export interface NormalizeWindowsEnvironmentOptions {
+interface NormalizeWindowsEnvironmentOptions {
   filterGitBashPath?: boolean;
   ensureComSpec?: boolean;
   ensureSystemPaths?: boolean;

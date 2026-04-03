@@ -11,7 +11,7 @@ import {
   normalizeTranscriptText,
 } from "@/components/assistant-ui/voice-transcript-utils";
 
-export interface RefineTranscriptOptions {
+interface RefineTranscriptOptions {
   /** Raw transcript from STT. */
   rawTranscript: string;
   /** Whether voice post-processing (grammar cleanup) is enabled. */
@@ -22,7 +22,7 @@ export interface RefineTranscriptOptions {
   onFailure?: () => void;
 }
 
-export interface RefineTranscriptResult {
+interface RefineTranscriptResult {
   /** The original raw transcript, trimmed. */
   rawText: string;
   /** The final text to use — enhanced if post-processing succeeded, raw otherwise. */

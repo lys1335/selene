@@ -194,7 +194,7 @@ export const agentMetadataSchema = z.object({
 // TYPE EXPORTS
 // ============================================================================
 
-export type CreateCharacterInput = z.infer<typeof createCharacterSchema>;
-export type UpdateCharacterInput = z.infer<typeof updateCharacterSchema>;
-export type CharacterImageInput = z.infer<typeof characterImageSchema>;
+type CreateCharacterInput = z.infer<typeof createCharacterSchema>;
+type UpdateCharacterInput = z.infer<typeof updateCharacterSchema>;
+type CharacterImageInput = z.infer<typeof characterImageSchema>;
 export type AgentMetadata = z.infer<typeof agentMetadataSchema>;

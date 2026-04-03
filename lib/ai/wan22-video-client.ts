@@ -52,7 +52,7 @@ export interface Wan22VideoAsyncResult {
   createdAt?: string;
 }
 
-export type Wan22VideoResult = Wan22VideoSyncResult | Wan22VideoAsyncResult;
+type Wan22VideoResult = Wan22VideoSyncResult | Wan22VideoAsyncResult;
 
 export function isVideoAsyncResult(
   result: Wan22VideoResult

@@ -17,13 +17,13 @@ interface QuestionOption {
   description: string;
 }
 
-export interface ParsedQuestion {
+interface ParsedQuestion {
   question: string;
   options: QuestionOption[];
   multiSelect: boolean;
 }
 
-export interface PlanApprovalPrompt {
+interface PlanApprovalPrompt {
   type: "plan_approval";
   toolName: "ExitPlanMode";
   plan: string;
@@ -31,9 +31,9 @@ export interface PlanApprovalPrompt {
   options: QuestionOption[];
 }
 
-export type InteractivePromptPayload = ParsedQuestion[] | PlanApprovalPrompt;
+type InteractivePromptPayload = ParsedQuestion[] | PlanApprovalPrompt;
 
-export interface PendingChannelQuestion {
+interface PendingChannelQuestion {
   sessionId: string;
   toolUseId: string;
   prompt: InteractivePromptPayload;

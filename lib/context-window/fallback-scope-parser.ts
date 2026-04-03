@@ -3,7 +3,7 @@ import type { Message } from "@/lib/db/schema";
 import { isDelegatedToolName } from "./claudecode-scope-classifier";
 import type { ContextScope } from "./scoped-counting-contract";
 
-export interface LegacyScopeInference {
+interface LegacyScopeInference {
   scope: ContextScope;
   confidence: number;
   reason: string;

@@ -2,7 +2,7 @@ import type { CreateUIMessage, UIMessage } from "ai";
 
 import { classifyRecoverability } from "@/lib/ai/retry/stream-recovery";
 
-export type RetryMessage = CreateUIMessage<UIMessage> & { messageId: string };
+type RetryMessage = CreateUIMessage<UIMessage> & { messageId: string };
 
 function clonePart<T>(part: T): T {
   if (!part || typeof part !== "object") return part;

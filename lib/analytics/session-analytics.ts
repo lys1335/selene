@@ -46,19 +46,19 @@ interface ToolUsageSummary {
   tools: ToolUsageEntry[];
 }
 
-export interface MediaServiceBreakdown {
+interface MediaServiceBreakdown {
   service: string;
   imageCount: number;
   videoCount: number;
 }
 
-export interface MediaGenerationSummary {
+interface MediaGenerationSummary {
   totalImages: number;
   totalVideos: number;
   byService: MediaServiceBreakdown[];
 }
 
-export interface SessionStats {
+interface SessionStats {
   messageCount: number;
   assistantMessageCount: number;
   userMessageCount: number;

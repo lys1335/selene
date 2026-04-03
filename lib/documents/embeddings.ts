@@ -16,7 +16,7 @@ import { getVectorSearchConfig } from "@/lib/config/vector-search";
 import { validateLocalModelExists } from "@/lib/ai/local-embeddings";
 import { DocumentProcessingError, DocumentErrorCode } from "@/lib/documents/errors";
 
-export interface AgentDocumentEmbeddingIndexResult {
+interface AgentDocumentEmbeddingIndexResult {
   documentId: string;
   chunkCount: number;
   embeddedChunkCount: number;
@@ -24,7 +24,7 @@ export interface AgentDocumentEmbeddingIndexResult {
   embeddingDimensions: number | null;
 }
 
-export interface AgentDocumentSearchOptions {
+interface AgentDocumentSearchOptions {
   topK?: number;
   /**
    * Minimum cosine similarity (0-1). Results below this threshold are dropped.
@@ -36,7 +36,7 @@ export interface AgentDocumentSearchOptions {
   maxChunks?: number;
 }
 
-export interface AgentDocumentSearchHit {
+interface AgentDocumentSearchHit {
   documentId: string;
   chunkId: string;
   chunkIndex: number;

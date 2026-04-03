@@ -2,7 +2,7 @@ export type ChannelType = "whatsapp" | "telegram" | "slack" | "discord";
 
 export type ChannelStatus = "disconnected" | "connecting" | "connected" | "error";
 
-export type ChannelDirection = "inbound" | "outbound";
+type ChannelDirection = "inbound" | "outbound";
 
 export interface WhatsAppConnectionConfig {
   type: "whatsapp";

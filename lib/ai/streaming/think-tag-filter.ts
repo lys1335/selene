@@ -19,14 +19,14 @@ import type { LLMProvider } from "@/lib/ai/providers";
 // ---------------------------------------------------------------------------
 
 /** Possible states of the tag-stripping state machine. */
-export type ThinkTagFilterState =
+type ThinkTagFilterState =
   | "NORMAL"
   | "POTENTIAL_TAG_OPEN"
   | "INSIDE_THINK"
   | "POTENTIAL_TAG_CLOSE";
 
 /** Configuration for the think-tag filter. */
-export interface ThinkTagFilterConfig {
+interface ThinkTagFilterConfig {
   /** Tag names to strip (without angle brackets). Defaults to `["think", "thinking"]`. */
   tagNames?: string[];
   /** When true, captured thinking content is stored in `capturedThinking`. */
@@ -34,7 +34,7 @@ export interface ThinkTagFilterConfig {
 }
 
 /** Internal mutable state for a single filter instance. */
-export interface ThinkTagFilterInstance {
+interface ThinkTagFilterInstance {
   state: ThinkTagFilterState;
   /** Accumulated characters that *might* be a partial opening or closing tag. */
   buffer: string;

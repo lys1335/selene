@@ -2,7 +2,7 @@ import type { UIMessage } from "ai";
 import type { SessionChannelType, SessionInfo } from "@/components/chat/chat-sidebar/types";
 import type { CharacterDisplayData } from "@/components/assistant-ui/character-context";
 
-export interface CharacterFullData {
+interface CharacterFullData {
     id: string;
     name: string;
     displayName?: string | null;
@@ -41,7 +41,7 @@ export interface ActiveRunState {
     startedAt: string;
 }
 
-export interface DeepResearchStateSnapshot {
+interface DeepResearchStateSnapshot {
     runId: string;
     query: string;
     phase: string;

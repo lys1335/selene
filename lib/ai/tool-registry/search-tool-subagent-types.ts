@@ -5,7 +5,7 @@
 /**
  * Parsed subagent information from workflow directory
  */
-export interface SubagentInfo {
+interface SubagentInfo {
   agentId: string;
   agentName: string;
   purpose: string;
@@ -25,7 +25,7 @@ export interface SubagentSearchResult {
 /**
  * Unified search result that can be either a tool or a subagent
  */
-export type UnifiedSearchResult = 
+type UnifiedSearchResult =
   | { type: "tool"; result: import("./types").ToolSearchResult }
   | { type: "subagent"; result: SubagentSearchResult };
 

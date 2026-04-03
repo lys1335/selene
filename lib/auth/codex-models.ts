@@ -58,7 +58,7 @@ export const CODEX_MODEL_IDS = [
   "gpt-5-nano",
 ] as const;
 
-export type CodexModelId = (typeof CODEX_MODEL_IDS)[number];
+type CodexModelId = (typeof CODEX_MODEL_IDS)[number];
 
 const MODEL_MAP: Record<string, string> = {
   // GPT-5.4

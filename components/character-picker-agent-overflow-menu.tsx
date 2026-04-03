@@ -26,7 +26,7 @@ const Plug = PhosphorPlug;
 const BarChart2 = ChartBar;
 const Trash2 = Trash;
 
-export type AgentOverflowMenuProps = {
+type AgentOverflowMenuProps = {
   character: CharacterSummary;
   onEditIdentity: (c: CharacterSummary) => void;
   onEditModelDefaults: (c: CharacterSummary) => void;

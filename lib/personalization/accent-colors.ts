@@ -8,7 +8,7 @@
  * Manual override is supported via `character.metadata.accentColor`.
  */
 
-export interface AccentColor {
+interface AccentColor {
   /** Unique identifier (e.g. "terracotta") */
   id: string;
   /** Display label */

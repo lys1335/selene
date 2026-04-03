@@ -22,7 +22,7 @@ import { LegacyScopeHeuristic } from "./fallback-scope-parser";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface TokenUsage {
+interface TokenUsage {
   /** Tokens used by system prompt */
   systemPromptTokens: number;
   /** Tokens used by user messages */
@@ -39,7 +39,7 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
-export interface TokenBreakdown extends TokenUsage {
+interface TokenBreakdown extends TokenUsage {
   /** Percentage breakdown by category */
   percentages: {
     systemPrompt: number;
@@ -60,7 +60,7 @@ export interface TokenBreakdown extends TokenUsage {
   };
 }
 
-export interface TokenEstimate {
+interface TokenEstimate {
   /** Estimated tokens for the content */
   tokens: number;
   /** Confidence level of the estimate */

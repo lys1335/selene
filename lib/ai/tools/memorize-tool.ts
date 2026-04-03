@@ -29,7 +29,7 @@ interface MemorizeInput {
 /**
  * Options for creating the memorize tool
  */
-export interface MemorizeToolOptions {
+interface MemorizeToolOptions {
   characterId: string;
   sessionId: string;
 }

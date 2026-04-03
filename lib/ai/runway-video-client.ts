@@ -14,7 +14,7 @@ const getApiSecret = () => {
   return settings.runwayApiSecret || process.env.RUNWAYML_API_SECRET;
 };
 
-export interface RunwayVideoInput {
+interface RunwayVideoInput {
   prompt: string;
   image_url?: string;
   model?: "gen4.5" | "gen4_turbo" | "gen3a_turbo";
@@ -33,7 +33,7 @@ interface RunwayTaskResponse {
   createdAt?: string;
 }
 
-export interface RunwayVideoSyncResult {
+interface RunwayVideoSyncResult {
   videos: Array<{
     url: string;
     localPath?: string;

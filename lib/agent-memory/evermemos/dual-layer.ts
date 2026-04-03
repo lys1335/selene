@@ -42,7 +42,7 @@ export interface UnifiedMemoryEntry {
 /**
  * Result of a dual-layer memory search.
  */
-export interface DualLayerSearchResult {
+interface DualLayerSearchResult {
   /** Deduplicated, merged results from both layers */
   entries: UnifiedMemoryEntry[];
   /** Number of local results before dedup */

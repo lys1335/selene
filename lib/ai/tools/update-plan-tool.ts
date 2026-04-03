@@ -13,13 +13,13 @@ import { getSession, updateSession } from "@/lib/db/queries";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface PlanStep {
+interface PlanStep {
   id: string;
   text: string;
   status: "pending" | "in_progress" | "completed" | "canceled";
 }
 
-export interface PlanState {
+interface PlanState {
   version: number;
   steps: PlanStep[];
   explanation?: string;

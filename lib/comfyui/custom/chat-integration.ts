@@ -5,7 +5,7 @@ import { buildCustomComfyUITool } from "./tool";
 import { listCustomComfyUIWorkflows } from "./store";
 import type { CustomComfyUIWorkflow } from "./types";
 
-export interface CustomComfyUIToolLoadResult {
+interface CustomComfyUIToolLoadResult {
   allTools: Record<string, Tool>;
   alwaysLoadToolIds: string[];
   deferredToolIds: string[];

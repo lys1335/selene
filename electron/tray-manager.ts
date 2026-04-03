@@ -95,7 +95,7 @@ function resolveTrayIconImage(isMac: boolean): TrayIconResult | null {
 // Public API
 // ---------------------------------------------------------------------------
 
-export interface InitTrayOptions {
+interface InitTrayOptions {
   onShowMainWindow: () => void;
   onQuit: () => void;
   onVoiceSession: () => void;

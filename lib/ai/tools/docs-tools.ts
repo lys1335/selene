@@ -7,7 +7,7 @@ import { retrieveFullContent as getFullContent, listStoredContent } from "@/lib/
 // Agent Docs Search Tool
 // ==========================================================================
 
-export interface DocsSearchToolOptions {
+interface DocsSearchToolOptions {
   /** Current authenticated user ID (owner of the agent and documents) */
   userId: string;
   /** Optional agent/character ID to scope the search. If missing, tool is disabled. */
@@ -162,7 +162,7 @@ const retrieveFullContentSchema = jsonSchema<{
   additionalProperties: false,
 });
 
-export interface RetrieveFullContentToolOptions {
+interface RetrieveFullContentToolOptions {
   /** Current session ID for retrieving content */
   sessionId: string;
 }

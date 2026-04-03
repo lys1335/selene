@@ -118,7 +118,7 @@ async function convertImageToBase64(imageSource: string): Promise<string> {
   }
 }
 
-export interface ImageEditInput {
+interface ImageEditInput {
   prompt: string;
   imageUrl: string;
   secondImageUrl?: string;
@@ -126,7 +126,7 @@ export interface ImageEditInput {
   async?: boolean;
 }
 
-export interface ImageEditSyncResult {
+interface ImageEditSyncResult {
   images: Array<{
     url: string;
     localPath?: string;
@@ -139,13 +139,13 @@ export interface ImageEditSyncResult {
   timeTaken?: number;
 }
 
-export interface ImageEditAsyncResult {
+interface ImageEditAsyncResult {
   jobId: string;
   status: string;
   statusUrl: string;
 }
 
-export type ImageEditResult = ImageEditSyncResult | ImageEditAsyncResult;
+type ImageEditResult = ImageEditSyncResult | ImageEditAsyncResult;
 
 export function isImageEditAsyncResult(
   result: ImageEditResult

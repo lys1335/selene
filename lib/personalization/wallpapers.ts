@@ -6,7 +6,7 @@
  * All URLs use Unsplash's image CDN with optimized dimensions.
  */
 
-export interface Wallpaper {
+interface Wallpaper {
   id: string;
   url: string;
   thumbnailUrl: string;
@@ -17,7 +17,7 @@ export interface Wallpaper {
   dominantColor: string;
 }
 
-export type WallpaperCategory =
+type WallpaperCategory =
   | "abstract"
   | "gradient"
   | "nature"

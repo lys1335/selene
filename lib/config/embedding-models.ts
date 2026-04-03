@@ -230,7 +230,7 @@ export function isValidRerankerModel(modelId: string): boolean | null {
 
 // ─── Validation Helpers ─────────────────────────────────────────────────────
 
-export interface EmbeddingValidationResult {
+interface EmbeddingValidationResult {
   valid: boolean;
   warnings: string[];
   errors: string[];

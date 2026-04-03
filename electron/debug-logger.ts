@@ -13,7 +13,7 @@ const DEBUG_LOG_FILE = path.join(userDataPath, "debug.log");
 // Log levels
 // ---------------------------------------------------------------------------
 
-export type DebugLogLevel = "verbose" | "info" | "warn" | "error";
+type DebugLogLevel = "verbose" | "info" | "warn" | "error";
 const LOG_LEVEL_ORDER: Record<DebugLogLevel, number> = { verbose: 0, info: 1, warn: 2, error: 3 };
 let currentDebugLogLevel: DebugLogLevel = "info";
 

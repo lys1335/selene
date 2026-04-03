@@ -41,7 +41,7 @@ const MAX_SINGLE_RESULT_CHARS = 50_000; // ~12,500 tokens
 // Types
 // ============================================================================
 
-export interface ProgressLimitResult {
+interface ProgressLimitResult {
   /** The (possibly truncated) content array */
   content: unknown[];
   /** Whether any truncation was applied */

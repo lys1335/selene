@@ -6,7 +6,7 @@ export interface AgentTemplateMemory {
   reasoning: string;
 }
 
-export interface AgentTemplateSyncFolder {
+interface AgentTemplateSyncFolder {
   pathVariable: string;
   displayName: string;
   includeExtensions: string[];
@@ -14,7 +14,7 @@ export interface AgentTemplateSyncFolder {
   isPrimary: boolean;
 }
 
-export interface AgentTemplateSkill {
+interface AgentTemplateSkill {
   name: string;
   description: string;
   promptTemplate: string;

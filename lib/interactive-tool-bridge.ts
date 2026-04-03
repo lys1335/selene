@@ -17,12 +17,12 @@ import { EventEmitter } from "events";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface InteractiveWaitSubmitted {
+interface InteractiveWaitSubmitted {
   kind: "submitted";
   answers: Record<string, string>;
 }
 
-export interface InteractiveWaitInterrupted {
+interface InteractiveWaitInterrupted {
   kind: "interrupted";
   reason: "aborted" | "stale";
 }
@@ -148,7 +148,7 @@ export function resolveInteractiveWait(
   return true;
 }
 
-export interface PendingInteractivePrompt {
+interface PendingInteractivePrompt {
   sessionId: string;
   toolUseId: string;
   questions: unknown;

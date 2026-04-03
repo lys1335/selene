@@ -1,10 +1,10 @@
-export interface DocumentChunk {
+interface DocumentChunk {
   index: number;
   text: string;
   tokenCount?: number;
 }
 
-export interface ChunkingOptions {
+interface ChunkingOptions {
   maxCharacters?: number;
   overlapCharacters?: number;
   maxChunks?: number;

@@ -3,7 +3,7 @@ import { db } from "@/lib/db/sqlite-client";
 import { plugins, pluginSkillRevisions } from "@/lib/db/sqlite-plugins-schema";
 import type { PluginSkillEntry } from "./types";
 
-export interface PluginSkillRevisionRecord {
+interface PluginSkillRevisionRecord {
   id: string;
   pluginId: string;
   namespacedName: string;
@@ -13,7 +13,7 @@ export interface PluginSkillRevisionRecord {
   createdAt: string;
 }
 
-export interface CreatePluginSkillRevisionResult {
+interface CreatePluginSkillRevisionResult {
   success: boolean;
   stale?: boolean;
   staleVersion?: number;

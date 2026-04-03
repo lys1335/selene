@@ -60,7 +60,7 @@ const UPSTREAM_ABORT_PATTERNS = [
   /socket hang up/i,
 ];
 
-export type RecoveryReason =
+type RecoveryReason =
   | "recoverable_status"
   | "conflict"
   | "recoverable_payload"
@@ -70,7 +70,7 @@ export type RecoveryReason =
   | "terminal_payload"
   | "unknown";
 
-export interface NormalizedStreamError {
+interface NormalizedStreamError {
   message: string;
   statusCode?: number;
   code?: string;

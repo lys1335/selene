@@ -5,14 +5,14 @@
 
 import type { VectorSearchHit } from "@/lib/vectordb/search";
 
-export interface RankedHit {
+interface RankedHit {
   id: string;
   rank: number;
   score: number;
   source: "dense" | "lexical";
 }
 
-export interface FusionOptions {
+interface FusionOptions {
   k?: number;
   denseWeight?: number;
   lexicalWeight?: number;

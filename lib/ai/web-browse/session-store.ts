@@ -41,7 +41,7 @@ function getWebBrowseSession(sessionId: string): WebBrowseSession {
   return session;
 }
 
-export interface AddWebContentOptions {
+interface AddWebContentOptions {
   images?: string[];
   ogImage?: string;
   ttlMs?: number;

@@ -6,7 +6,7 @@ import { debugLog, debugError } from "./debug-logger";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface H2ProxyOptions {
+interface H2ProxyOptions {
   cert: string;
   key: string;
   listenPort: number;

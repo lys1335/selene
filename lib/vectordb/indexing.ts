@@ -17,7 +17,7 @@ import { generateLexicalVector } from "./v2/lexical-vectors";
 import { getVectorSearchConfig } from "@/lib/config/vector-search";
 import { loadSettings } from "@/lib/settings/settings-manager";
 
-export interface IndexFileResult {
+interface IndexFileResult {
   filePath: string;
   chunkCount: number;
   pointIds: string[];

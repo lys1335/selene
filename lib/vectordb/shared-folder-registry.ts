@@ -12,7 +12,7 @@
 import { resolve } from "path";
 import { realpath } from "fs/promises";
 
-export interface SharedFolderEntry {
+interface SharedFolderEntry {
   /** Resolved absolute path */
   resolvedPath: string;
   /** Set of folder IDs (from agent_sync_folders) that reference this path */

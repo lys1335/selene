@@ -23,7 +23,7 @@ import { createHash } from "crypto";
 // Agent Runs
 // ============================================================================
 
-export interface CreateAgentRunOptions {
+interface CreateAgentRunOptions {
   sessionId: string;
   pipelineName: string;
   userId?: string;
@@ -163,7 +163,7 @@ export async function listRunningRunsByCharacter(
 // Agent Run Events
 // ============================================================================
 
-export interface AppendRunEventOptions {
+interface AppendRunEventOptions {
   runId: string;
   eventType: AgentRunEventType;
   level?: EventLevel;

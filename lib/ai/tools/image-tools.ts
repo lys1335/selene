@@ -293,7 +293,7 @@ export function createImageEditTool(sessionId: string) {
 /**
  * Options for creating the Flux2 generate tool
  */
-export interface Flux2GenerateToolOptions {
+interface Flux2GenerateToolOptions {
   /** The character's avatar URL to use as a reference when generating images of themselves */
   characterAvatarUrl?: string;
   /** Description of the character's appearance */

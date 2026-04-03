@@ -50,7 +50,7 @@ const PROVIDER_NAMES: Record<string, string> = {
 const ROLE_FIELDS = ["chatModel", "researchModel", "visionModel", "utilityModel"] as const;
 type RoleField = (typeof ROLE_FIELDS)[number];
 
-export interface ResolvedSessionModelScope {
+interface ResolvedSessionModelScope {
   effectiveConfig: ResolvedModelConfig;
   sources: ResolvedModelSources;
   sessionConfig: SessionModelConfig | null;
@@ -58,7 +58,7 @@ export interface ResolvedSessionModelScope {
   globalConfig: ModelConfig;
 }
 
-export interface SessionResolverOptions {
+interface SessionResolverOptions {
   characterId?: string | null;
   agentModelConfig?: AgentModelConfig | null;
   settings?: AppSettings;

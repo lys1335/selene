@@ -45,7 +45,7 @@ export interface CompactionResult {
   };
 }
 
-export interface CompactionOptions {
+interface CompactionOptions {
   /** Number of recent messages to keep uncompacted (default: 6) */
   keepRecentMessages: number;
   /** Maximum tokens for the summary (default: 2000) */

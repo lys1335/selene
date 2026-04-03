@@ -13,7 +13,7 @@ export const VOICE_ACTIONS = ["fix-grammar", "professional", "summarize", "trans
 
 export type VoiceActionType = (typeof VOICE_ACTIONS)[number];
 
-export interface VoiceHistoryEntry {
+interface VoiceHistoryEntry {
   id: string;
   userId: string;
   sessionId: string | null;
@@ -27,7 +27,7 @@ export interface VoiceHistoryEntry {
   metadata: string;
 }
 
-export interface VoiceActionRequest {
+interface VoiceActionRequest {
   text: string;
   action: VoiceActionType;
   sessionId?: string;

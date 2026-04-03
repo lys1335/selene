@@ -58,7 +58,7 @@ export interface FileProcessorContext {
   onProgress: () => Promise<void>;
 }
 
-export interface FileProcessResult {
+interface FileProcessResult {
   indexed: boolean;
   skipped: boolean;
   error?: string;

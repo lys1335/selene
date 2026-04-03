@@ -11,7 +11,7 @@ import { useTheme } from "@/components/theme/theme-provider";
 /**
  * Props for the SyntaxHighlighter component
  */
-export type HighlighterProps = Omit<
+type HighlighterProps = Omit<
   ShikiHighlighterProps,
   "children" | "theme"
 > & {

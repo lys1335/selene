@@ -27,7 +27,7 @@ Card.displayName = "Card"
 // Uses <span> with display:block instead of <div> to maintain valid HTML nesting
 // ============================================================================
 
-export interface AnimatedCardSpanProps
+interface AnimatedCardSpanProps
   extends Omit<HTMLMotionProps<"span">, "ref"> {
   hoverLift?: boolean;
   hoverGlow?: boolean;

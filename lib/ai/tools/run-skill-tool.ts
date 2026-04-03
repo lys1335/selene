@@ -37,7 +37,7 @@ interface RunSkillInput {
   };
 }
 
-export interface RunSkillToolOptions {
+interface RunSkillToolOptions {
   sessionId: string;
   userId: string;
   characterId: string;

@@ -365,7 +365,7 @@ async function fetchWebContent(
 // Main Orchestration Function
 // ============================================================================
 
-export interface BrowseAndSynthesizeParams {
+interface BrowseAndSynthesizeParams {
   urls: string[];
   query: string;
   options: WebBrowseOptions;
@@ -373,7 +373,7 @@ export interface BrowseAndSynthesizeParams {
   abortSignal?: AbortSignal;
 }
 
-export interface BrowseAndSynthesizeResult {
+interface BrowseAndSynthesizeResult {
   success: boolean;
   synthesis: string;
   fetchedUrls: string[];

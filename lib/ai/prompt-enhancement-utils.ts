@@ -95,7 +95,7 @@ const DOMAIN_EXPANSIONS: Record<string, string[]> = {
 // Cross-file dependency detection
 // =============================================================================
 
-export interface FileDependency {
+interface FileDependency {
   sourceFile: string;
   referencedPath: string;
   importType: "import" | "require" | "reference" | "link";
@@ -247,7 +247,7 @@ export async function resolveDependencies(
 // Query Concept Expansion
 // =============================================================================
 
-export interface ConceptExpansionResult {
+interface ConceptExpansionResult {
   expandedQueries: string[];
   conceptMap: Record<string, string[]>;
 }
@@ -296,7 +296,7 @@ export function expandQueryConcepts(query: string): ConceptExpansionResult {
 // Snippet Selection
 // =============================================================================
 
-export interface RankedSnippet {
+interface RankedSnippet {
   filePath: string;
   text: string;
   score: number;
@@ -420,7 +420,7 @@ export function formatSnippetsAsContext(snippets: RankedSnippet[]): string {
 // File Grouping
 // =============================================================================
 
-export interface FileGroup {
+interface FileGroup {
   filePath: string;
   fileName: string;
   fileType: string;

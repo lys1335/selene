@@ -4,7 +4,7 @@ import { loadBundledSkillMarkdown, loadBundledSkillFiles } from "./bundled-loade
 import { parseSingleSkillMd } from "../import-parser";
 import { importSkillPackage, listSkillsForUser } from "../queries";
 
-export interface AutoInstallResult {
+interface AutoInstallResult {
   installed: string[];
   failed: string[];
   skipped: string[];

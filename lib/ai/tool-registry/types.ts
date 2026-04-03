@@ -30,7 +30,7 @@ export type ToolCategory =
 /**
  * Configuration for when a tool should be loaded
  */
-export interface ToolLoadingConfig {
+interface ToolLoadingConfig {
   /**
    * If true, this tool is excluded from the initial context and only
    * loaded when discovered via the tool search tool.
@@ -95,7 +95,7 @@ export interface ToolMetadata {
 /**
  * Options passed to tool factory functions
  */
-export interface ToolFactoryOptions {
+interface ToolFactoryOptions {
   /** Session ID for database tracking */
   sessionId?: string;
 

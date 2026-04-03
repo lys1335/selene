@@ -1,16 +1,16 @@
-export interface OptimizationRuleExample {
+interface OptimizationRuleExample {
   before: string;
   after: string;
 }
 
-export interface OptimizationRule {
+interface OptimizationRule {
   id: string;
   name: string;
   description: string;
   examples: OptimizationRuleExample[];
 }
 
-export interface SceneTypeGuide {
+interface SceneTypeGuide {
   type: string;
   recommendedTerms: string[];
   recommendedParams: string[];

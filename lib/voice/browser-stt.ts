@@ -18,14 +18,14 @@ function getSpeechRecordingExtension(mimeType: string): string {
         : "webm";
 }
 
-export interface BrowserVoiceTranscriptionResult {
+interface BrowserVoiceTranscriptionResult {
   transcript: string;
   finalText: string;
   fallbackText: string;
   usedPostProcessing: boolean;
 }
 
-export interface TranscribeRecordedSpeechOptions {
+interface TranscribeRecordedSpeechOptions {
   audioBlob: Blob;
   mimeType: string;
   postProcessingEnabled: boolean;

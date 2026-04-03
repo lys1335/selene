@@ -72,7 +72,7 @@ const CONTENT_BEARING_EVENTS = new Set([
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export interface WsResult {
+interface WsResult {
   response: Response;
   /** Updated sticky-routing token (may be null if server didn't send one). */
   turnState: string | null;
@@ -96,7 +96,7 @@ export class WsTransportError extends Error {
   }
 }
 
-export interface WsSendOptions {
+interface WsSendOptions {
   /** Caller-owned turn state from a previous call (isolated per session). */
   turnState?: string | null;
   /**

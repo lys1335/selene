@@ -134,7 +134,7 @@ export async function waitForServerReady(url: string, timeoutMs: number = 30000)
 // Server lifecycle
 // ---------------------------------------------------------------------------
 
-export interface StartNextServerOptions {
+interface StartNextServerOptions {
   userDataPath: string;
   /** Callback used to check if the Electron app is currently quitting. */
   isAppQuitting: () => boolean;

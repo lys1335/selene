@@ -117,7 +117,7 @@ let registryListenerInitialized = false;
 const folderTimers = new Map<string, NodeJS.Timeout>();
 const DEBOUNCE_MS = 1000;
 
-export interface WatcherConfig {
+interface WatcherConfig {
   folderId: string;
   characterId: string;
   folderPath: string;

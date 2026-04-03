@@ -251,7 +251,7 @@ function stripPasteContentForStorage(text: string): string {
   );
 }
 
-export interface PasteBlock {
+interface PasteBlock {
   placeholder: string; // e.g. "<<<PASTE_BLOCK_0>>>"
   expanded: string;    // e.g. "[Pasted text #1]:\n{content}"
 }

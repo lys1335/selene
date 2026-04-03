@@ -5,7 +5,7 @@ import { getElectronAPI } from "./types";
 // Types
 // ---------------------------------------------------------------------------
 
-export type PermissionType = "screen" | "microphone" | "accessibility";
+type PermissionType = "screen" | "microphone" | "accessibility";
 
 // ---------------------------------------------------------------------------
 // Config

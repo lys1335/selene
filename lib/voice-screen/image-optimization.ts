@@ -6,9 +6,9 @@
  * Canvas API. No Node.js / Electron main process involvement.
  */
 
-export type ImageProvider = "anthropic" | "openai" | "google" | "openrouter" | "default";
+type ImageProvider = "anthropic" | "openai" | "google" | "openrouter" | "default";
 
-export interface OptimizationOptions {
+interface OptimizationOptions {
   provider?: ImageProvider;
   /** Maximum output width in pixels. Aspect ratio is preserved. */
   maxWidthPx?: number;

@@ -42,7 +42,7 @@ import { seedPluginSkillRevisions } from "./skill-revision-queries";
 // Plugin Installation
 // =============================================================================
 
-export interface InstallPluginInput {
+interface InstallPluginInput {
   userId: string;
   characterId?: string;
   parsed: PluginParseResult;
@@ -560,7 +560,7 @@ async function updateMarketplaceCatalog(
 // Per-Agent Plugin Assignment
 // =============================================================================
 
-export interface AgentPluginAssignment {
+interface AgentPluginAssignment {
   plugin: InstalledPlugin;
   enabledForAgent: boolean;
 }

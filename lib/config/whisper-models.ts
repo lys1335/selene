@@ -9,7 +9,7 @@
  * the metadata the UI and transcription layer need.
  */
 
-export interface WhisperModelInfo {
+interface WhisperModelInfo {
   /** Model identifier used in settings and Electron IPC (e.g., "ggml-tiny.en") */
   id: string;
   /** Human-readable display name */

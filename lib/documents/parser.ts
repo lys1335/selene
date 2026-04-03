@@ -9,7 +9,7 @@ import { isAudioMimeType, transcribeAudio } from "@/lib/audio/transcription";
 
 import { DocumentErrorCode, DocumentProcessingError } from "./errors";
 
-export type SupportedDocumentFormat =
+type SupportedDocumentFormat =
   | "pdf"
   | "markdown"
   | "html"
@@ -22,7 +22,7 @@ export type SupportedDocumentFormat =
   | "xml_jats"
   | "audio";
 
-export type DocumentExtractionMethod =
+type DocumentExtractionMethod =
   | "plain-text"
   | "html"
   | "markdown"
@@ -30,9 +30,9 @@ export type DocumentExtractionMethod =
   | "docling"
   | "audio-stt";
 
-export type DocumentSourceType = "upload" | "synced-file" | "chat-attachment" | "delegated";
+type DocumentSourceType = "upload" | "synced-file" | "chat-attachment" | "delegated";
 
-export interface ParsedDocument {
+interface ParsedDocument {
   format: SupportedDocumentFormat;
   text: string;
   pageCount?: number;

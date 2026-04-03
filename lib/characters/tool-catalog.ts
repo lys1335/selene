@@ -1,4 +1,4 @@
-export type ToolDependency =
+type ToolDependency =
   | "syncedFolders"
   | "embeddings"
   | "vectorDbEnabled"
@@ -20,7 +20,7 @@ export type CharacterToolCatalogItem = {
   description?: string;
 };
 
-export type RegistryToolCatalogItem = {
+type RegistryToolCatalogItem = {
   id: string;
   category: string;
   displayName: string;

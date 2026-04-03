@@ -52,7 +52,7 @@ export interface ComfyWorkflowImportResult {
   discoveredToolCount: number;
 }
 
-export type WebkitDataTransferItem = DataTransferItem & {
+type WebkitDataTransferItem = DataTransferItem & {
   webkitGetAsEntry?: () => FileSystemEntry | null;
 };
 

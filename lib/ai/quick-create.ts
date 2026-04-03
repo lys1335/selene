@@ -23,7 +23,7 @@ const agentExpansionSchema = z.preprocess(
     })
 );
 
-export type AgentExpansion = z.infer<typeof agentExpansionSchema>;
+type AgentExpansion = z.infer<typeof agentExpansionSchema>;
 
 /**
  * Expand a minimal agent concept into a full profile

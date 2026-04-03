@@ -28,7 +28,7 @@ export interface RenderOptions {
   shadow: ShadowStyle;
 }
 
-export interface Rect {
+interface Rect {
   x: number;
   y: number;
   width: number;
@@ -36,7 +36,7 @@ export interface Rect {
   radius: number;
 }
 
-export interface FrameModel {
+interface FrameModel {
   id: PresetId;
   kind: FrameKind;
   width: number;

@@ -3,7 +3,7 @@
  * Reference: docs/vector-search-v2-analysis.md Section 3.3
  */
 
-export interface VectorSearchV2Config {
+interface VectorSearchV2Config {
   // Feature flags - all default to false for V1 compatibility
   enableHybridSearch: boolean;
   enableTokenChunking: boolean;

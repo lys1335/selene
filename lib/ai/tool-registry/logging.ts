@@ -9,7 +9,7 @@ import type { ToolExecutionOptions } from "ai";
 /**
  * Log levels
  */
-export type LogLevel = "debug" | "info" | "warn" | "error";
+type LogLevel = "debug" | "info" | "warn" | "error";
 
 /**
  * Tool execution log entry

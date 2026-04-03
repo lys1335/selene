@@ -13,7 +13,7 @@ import type { Page, CDPSession } from "playwright-core";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface ScreencastFrame {
+interface ScreencastFrame {
   /** Base64-encoded JPEG image data */
   data: string;
   /** Frame metadata from CDP */

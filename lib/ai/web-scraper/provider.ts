@@ -1,6 +1,6 @@
 import { loadSettings } from "@/lib/settings/settings-manager";
 
-export type WebScraperProvider = "firecrawl" | "local";
+type WebScraperProvider = "firecrawl" | "local";
 
 export function getWebScraperProvider(): WebScraperProvider {
   const settings = loadSettings();

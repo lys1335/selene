@@ -27,7 +27,7 @@ import type {
   FinalReport,
 } from './types';
 
-export type EventEmitter = (event: DeepResearchEvent) => void;
+type EventEmitter = (event: DeepResearchEvent) => void;
 
 interface ResearchGenerationConfig {
   model: ReturnType<typeof getResearchModel>;

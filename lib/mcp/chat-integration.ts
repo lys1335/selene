@@ -16,7 +16,7 @@ import { getGhostOsServerConfig, GHOST_OS_SERVER_NAME } from "@/lib/ghost-os/con
 /**
  * Result structure for MCP tool loading with loading mode separation
  */
-export interface MCPToolLoadResult {
+interface MCPToolLoadResult {
     /** All enabled MCP tools (both alwaysLoad and deferred) */
     allTools: Record<string, Tool>;
     /** Tool IDs that should be in initialActiveTools (alwaysLoad: true) */

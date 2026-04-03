@@ -39,7 +39,7 @@ export function sessionHasTruncatedContent(sessionId: string): boolean {
 // Types
 // ============================================================================
 
-export interface TruncatedContentEntry {
+interface TruncatedContentEntry {
   /** Unique identifier for retrieving the content */
   id: string;
   /** Session this content belongs to */

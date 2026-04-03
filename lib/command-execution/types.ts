@@ -4,7 +4,7 @@
  * TypeScript interfaces for the command execution module.
  */
 
-export type ExecuteCommandLiveStatus = "running" | "success" | "error";
+type ExecuteCommandLiveStatus = "running" | "success" | "error";
 
 export interface ExecuteCommandProgressUpdate {
   toolCallId?: string;

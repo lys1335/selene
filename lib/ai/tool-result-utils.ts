@@ -9,9 +9,9 @@ type ToolResultNormalization = {
   error?: string;
 };
 
-export type ToolResultNormalizationMode = "canonical" | "projection";
+type ToolResultNormalizationMode = "canonical" | "projection";
 
-export interface NormalizeToolResultOptions {
+interface NormalizeToolResultOptions {
   /**
    * `canonical`: for durable persistence in session history. Must be lossless.
    * `projection`: for model input / transport shaping. May apply truncation.

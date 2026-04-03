@@ -34,7 +34,7 @@ export const KIMI_MODEL_IDS = [
   "moonshot-v1-128k-vision-preview",
 ] as const;
 
-export type KimiModelId = (typeof KIMI_MODEL_IDS)[number];
+type KimiModelId = (typeof KIMI_MODEL_IDS)[number];
 
 // Models that support vision
 const KIMI_VISION_MODELS = new Set<string>([

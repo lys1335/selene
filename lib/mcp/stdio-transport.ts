@@ -10,7 +10,7 @@ import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { ReadBuffer, serializeMessage } from "@modelcontextprotocol/sdk/shared/stdio.js";
 import { isEBADFError } from "@/lib/spawn-utils";
 
-export type StdioServerParameters = {
+type StdioServerParameters = {
     command: string;
     args?: string[];
     env?: Record<string, string>;

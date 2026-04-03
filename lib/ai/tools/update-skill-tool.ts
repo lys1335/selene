@@ -49,7 +49,7 @@ interface UpdateSkillInput {
   targetName?: string;
 }
 
-export interface UpdateSkillToolOptions {
+interface UpdateSkillToolOptions {
   userId: string;
   characterId?: string;
 }

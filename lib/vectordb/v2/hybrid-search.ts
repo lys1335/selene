@@ -12,7 +12,7 @@ import { getVectorSearchConfig } from "@/lib/config/vector-search";
 import { expandQuery } from "./query-expansion";
 import { rerankResults } from "@/lib/ai/vector-search/v2/reranker";
 
-export interface HybridSearchOptions extends VectorDBSearchOptions {
+interface HybridSearchOptions extends VectorDBSearchOptions {
   enableDiversification?: boolean;
 }
 

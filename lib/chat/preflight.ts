@@ -1,13 +1,13 @@
 import type { ChatTransportErrorPayload } from "@/lib/chat/transport-errors";
 
-export interface ChatPreflightSuccess {
+interface ChatPreflightSuccess {
   ok: true;
   status?: string;
   compactionResult?: ChatTransportErrorPayload["compactionResult"];
   compactionDurationMs?: number;
 }
 
-export interface ChatPreflightBlocked {
+interface ChatPreflightBlocked {
   ok: false;
   httpStatus: number;
   error: string;
@@ -18,7 +18,7 @@ export interface ChatPreflightBlocked {
   compactionDurationMs?: number;
 }
 
-export type ChatPreflightResult = ChatPreflightSuccess | ChatPreflightBlocked;
+type ChatPreflightResult = ChatPreflightSuccess | ChatPreflightBlocked;
 
 function parseLastSseDataBlock(text: string): string | null {
   const matches = text.match(/^data:\s?(.*)$/gm);

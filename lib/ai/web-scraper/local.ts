@@ -17,14 +17,14 @@ function logWarn(message: string, ...args: unknown[]): void {
   console.warn(`[LOCAL-SCRAPER] ${message}`, ...args);
 }
 
-export interface LocalScrapeOptions {
+interface LocalScrapeOptions {
   waitFor?: number;
   onlyMainContent?: boolean;
   /** Enable verbose diagnostic logging */
   verbose?: boolean;
 }
 
-export interface LocalScrapeResult {
+interface LocalScrapeResult {
   url: string;
   title: string;
   description?: string;
@@ -34,7 +34,7 @@ export interface LocalScrapeResult {
   ogImage?: string;
 }
 
-export interface LocalCrawlOptions {
+interface LocalCrawlOptions {
   url: string;
   maxPages?: number;
   includePaths?: string[];
@@ -43,7 +43,7 @@ export interface LocalCrawlOptions {
   onlyMainContent?: boolean;
 }
 
-export interface LocalCrawlResult {
+interface LocalCrawlResult {
   pages: Array<{ url: string; title?: string; markdown?: string }>;
   totalPages: number;
 }

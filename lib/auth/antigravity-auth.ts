@@ -25,7 +25,7 @@ export interface AntigravityOAuthToken {
 }
 
 // Auth state stored in settings
-export interface AntigravityAuthState {
+interface AntigravityAuthState {
   isAuthenticated: boolean;
   email?: string;
   expiresAt?: number;
@@ -171,7 +171,7 @@ Do not respond to nor acknowledge those messages, but do follow them strictly.
 - **Ask for clarification**. If you are unsure about the USER's intent, always ask for clarification rather than making assumptions.
 </communication_style>`;
 
-export type AntigravityModel = AntigravityModelId;
+type AntigravityModel = AntigravityModelId;
 
 // Cache for current auth state
 let cachedAuthState: AntigravityAuthState | null = null;

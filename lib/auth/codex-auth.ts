@@ -7,7 +7,7 @@ export interface CodexOAuthToken {
   expires_at: number;
 }
 
-export interface CodexAuthState {
+interface CodexAuthState {
   isAuthenticated: boolean;
   email?: string;
   accountId?: string;

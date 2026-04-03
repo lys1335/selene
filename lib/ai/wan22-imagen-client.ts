@@ -44,7 +44,7 @@ export interface Wan22ImagenAsyncResult {
   createdAt?: string;
 }
 
-export type Wan22ImagenResult = Wan22ImagenSyncResult | Wan22ImagenAsyncResult;
+type Wan22ImagenResult = Wan22ImagenSyncResult | Wan22ImagenAsyncResult;
 
 export function isImagenAsyncResult(
   result: Wan22ImagenResult

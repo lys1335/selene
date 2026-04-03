@@ -8,7 +8,7 @@
  * Source: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support
  */
 
-export interface EdgeTTSVoice {
+interface EdgeTTSVoice {
   /** Full voice ID, e.g. "en-US-AriaNeural" */
   id: string;
   /** Display name, e.g. "Aria" */

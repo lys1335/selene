@@ -2,8 +2,10 @@
  * ComfyUI Local Backend - TypeScript Types
  */
 
+export {};
+
 // Status types
-export interface ComfyUIStatus {
+interface ComfyUIStatus {
     dockerInstalled: boolean;
     imageBuilt: boolean;
     containerRunning: boolean;
@@ -13,7 +15,7 @@ export interface ComfyUIStatus {
     loraExists: boolean;
 }
 
-export interface InstallProgress {
+interface InstallProgress {
     stage: "checking" | "building" | "downloading-models" | "starting" | "complete" | "error";
     progress: number; // 0-100
     message: string;
@@ -39,7 +41,7 @@ const ZIMAGE_MODELS = {
 } as const;
 
 // Generation request/response types
-export interface GenerateImageRequest {
+interface GenerateImageRequest {
     positive_prompt: string;
     seed?: number;
     width?: number;
@@ -51,7 +53,7 @@ export interface GenerateImageRequest {
     return_base64?: boolean;
 }
 
-export interface GenerateImageResponse {
+interface GenerateImageResponse {
     prompt_id: string;
     status: "queued" | "processing" | "completed" | "failed";
     images?: string[];
@@ -62,7 +64,7 @@ export interface GenerateImageResponse {
 }
 
 // Queue status types
-export interface QueueStatus {
+interface QueueStatus {
     status: "active" | "paused";
     statistics: {
         total_enqueued: number;
@@ -79,7 +81,7 @@ export interface QueueStatus {
 }
 
 // Worker status types
-export interface WorkerStatus {
+interface WorkerStatus {
     running: boolean;
     pool_status: {
         workers: Array<{
@@ -103,7 +105,7 @@ export interface WorkerStatus {
 }
 
 // Settings related to ComfyUI
-export interface ComfyUISettings {
+interface ComfyUISettings {
     comfyuiEnabled: boolean;
     comfyuiInstalled: boolean;
     comfyuiAutoStart: boolean;
@@ -114,7 +116,7 @@ export interface ComfyUISettings {
 }
 
 // Electron API extension for ComfyUI
-export interface ComfyUIElectronAPI {
+interface ComfyUIElectronAPI {
     checkStatus: (backendPath: string) => Promise<ComfyUIStatus>;
     install: (backendPath: string) => Promise<{ success: boolean; error?: string }>;
     downloadModels: (backendPath: string) => Promise<{ success: boolean; error?: string }>;

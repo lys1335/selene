@@ -86,7 +86,7 @@ export async function getUserCharacters(userId: string) {
   });
 }
 
-export interface CharacterStatsRecord {
+interface CharacterStatsRecord {
   characterId: string;
   skillCount: number;
   runCount: number;

@@ -35,7 +35,7 @@ import {
 // "checking" is a UI-only state, not part of the Electron PermissionStatus enum
 type LocalPermissionStatus = "granted" | "denied" | "not-determined" | "restricted" | "unavailable" | "checking";
 
-export interface OnboardingDialogProps {
+interface OnboardingDialogProps {
   open: boolean;
   /** Called when user completes or dismisses onboarding. Receives final shortcut values. */
   onComplete: (result: {

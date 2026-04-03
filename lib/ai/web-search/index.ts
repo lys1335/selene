@@ -25,9 +25,9 @@ import {
 // Types
 // ============================================================================
 
-export type WebSearchAction = "search" | "browse" | "synthesize";
+type WebSearchAction = "search" | "browse" | "synthesize";
 
-export interface WebSearchPage {
+interface WebSearchPage {
   url: string;
   title: string;
   markdown: string;
@@ -36,7 +36,7 @@ export interface WebSearchPage {
   ogImage?: string;
 }
 
-export interface WebSearchResult {
+interface WebSearchResult {
   status: "success" | "error" | "no_provider";
   action: WebSearchAction;
   query: string;
@@ -238,7 +238,7 @@ const webSearchSchema = jsonSchema<{
 const MIN_QUALITY_THRESHOLD = 0.3;
 const MAX_BROWSE_URLS = 5;
 
-export interface WebSearchToolOptions {
+interface WebSearchToolOptions {
   sessionId?: string;
   userId?: string;
   characterId?: string | null;

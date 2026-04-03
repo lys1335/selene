@@ -3,7 +3,7 @@ import { resolve } from "path";
 import { readdir, stat } from "fs/promises";
 import { isDangerousPath } from "./dangerous-paths";
 
-export interface PathValidationOptions {
+interface PathValidationOptions {
   requireExists?: boolean;
   requireReadable?: boolean;
 }
