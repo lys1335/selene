@@ -8,7 +8,7 @@ import { useReducedMotion } from "../hooks/use-reduced-motion";
 import { ToolBadge } from "@/components/ui/tool-badge";
 import { Wrench, FileText, CheckCircle2, Loader2, Plug } from "lucide-react";
 import type { AgentIdentity } from "./identity-page";
-import type { UploadedDocument } from "./knowledge-base-page";
+import type { UploadedDocument } from "./file-upload-area";
 import { useTranslations } from "next-intl";
 
 /** Tool translation keys for preview - maps tool ID to capabilities.tools key */

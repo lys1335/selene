@@ -11,8 +11,8 @@ import { isEBADFError, spawnWithFileCapture } from "@/lib/spawn-utils";
 
 const execFileAsync = promisify(execFile);
 
-export const GIT_TIMEOUT_MS = 30_000;
-export const GIT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
+const GIT_TIMEOUT_MS = 30_000;
+const GIT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 
 function gitExecOptions(cwd: string) {
   return {

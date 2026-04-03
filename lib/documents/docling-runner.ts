@@ -15,7 +15,7 @@ import { join } from "path";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface DoclingRunResult {
+interface DoclingRunResult {
   exitCode: number | null;
   stdout: string;
   stderr: string;
@@ -23,7 +23,7 @@ export interface DoclingRunResult {
   error?: string;
 }
 
-export interface DoclingRunOptions {
+interface DoclingRunOptions {
   /** Absolute path of the file to convert. */
   inputPath: string;
   /** Directory where docling should write its output files. */

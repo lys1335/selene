@@ -17,7 +17,7 @@ import {
 
 // ─── Action icon mapping ──────────────────────────────────────────────────────
 
-export const ACTION_ICONS: Record<string, typeof Globe> = {
+const ACTION_ICONS: Record<string, typeof Globe> = {
   open: Globe,
   navigate: ArrowRight,
   click: CursorClick,

@@ -69,7 +69,7 @@ export async function isBinaryFile(filePath: string): Promise<boolean> {
 // Line selection
 // ---------------------------------------------------------------------------
 
-export interface LineSelectionOptions {
+interface LineSelectionOptions {
   head?: number;
   tail?: number;
   startLine?: number;
@@ -77,7 +77,7 @@ export interface LineSelectionOptions {
   maxLineCount?: number;
 }
 
-export interface SelectedLines {
+interface SelectedLines {
   lines: string[];
   actualStartLine: number;
   actualEndLine: number;

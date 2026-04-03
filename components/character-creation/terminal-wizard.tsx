@@ -24,7 +24,7 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useWizardNavigation, wizardPageVariants } from "@/lib/hooks/use-wizard-navigation";
 import type { AgentIdentity } from "./terminal-pages/identity-page";
-import type { UploadedDocument } from "./terminal-pages/knowledge-base-page";
+import type { UploadedDocument } from "./terminal-pages/file-upload-area";
 import type { CatalogSkill } from "@/lib/skills/catalog/types";
 
 type WizardPage =

@@ -3,7 +3,14 @@
 import { useRef, useState, type RefObject } from "react";
 import { DOCUMENT_UPLOAD_ACCEPT, DOCUMENT_SUPPORT_LABELS } from "@/lib/documents/file-types";
 import { useTranslations } from "next-intl";
-import type { UploadedDocument } from "./knowledge-base-page";
+
+export interface UploadedDocument {
+  id: string;
+  originalFilename: string;
+  title?: string;
+  status: "pending" | "ready" | "failed";
+  sizeBytes?: number;
+}
 
 interface FileUploadAreaProps {
   fileInputRef: RefObject<HTMLInputElement | null>;

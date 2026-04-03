@@ -6,15 +6,7 @@ import { useReducedMotion } from "../hooks/use-reduced-motion";
 import { useTranslations } from "next-intl";
 import { resilientFetch, resilientDelete } from "@/lib/utils/resilient-fetch";
 import { TerminalPageHeader } from "./terminal-page-header";
-import { FileUploadArea } from "./file-upload-area";
-
-export interface UploadedDocument {
-  id: string;
-  originalFilename: string;
-  title?: string;
-  status: "pending" | "ready" | "failed";
-  sizeBytes?: number;
-}
+import { FileUploadArea, type UploadedDocument } from "./file-upload-area";
 
 interface KnowledgeBasePageProps {
   agentId: string;
