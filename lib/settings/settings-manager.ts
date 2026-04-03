@@ -154,20 +154,6 @@ export interface AppSettings {
     comfyuiCustomAutoDetect?: boolean; // Auto-detect external ComfyUI port
     comfyuiCustomBaseUrl?: string;   // Optional full base URL override
 
-    // FLUX.2 Klein 4B Local Backend Settings
-    flux2Klein4bEnabled?: boolean;        // Enable FLUX.2 Klein 4B for image generation
-    flux2Klein4bInstalled?: boolean;      // Whether Docker image is built
-    flux2Klein4bAutoStart?: boolean;      // Auto-start container on app launch
-    flux2Klein4bModelsDownloaded?: boolean; // Whether models are downloaded
-    flux2Klein4bBackendPath?: string;     // Path to flux2-klein-4b folder
-
-    // FLUX.2 Klein 9B Local Backend Settings
-    flux2Klein9bEnabled?: boolean;        // Enable FLUX.2 Klein 9B for image generation
-    flux2Klein9bInstalled?: boolean;      // Whether Docker image is built
-    flux2Klein9bAutoStart?: boolean;      // Auto-start container on app launch
-    flux2Klein9bModelsDownloaded?: boolean; // Whether models are downloaded
-    flux2Klein9bBackendPath?: string;     // Path to flux2-klein-9b folder
-
     // Vector Database (LanceDB) - Advanced Semantic Search
     vectorDBEnabled?: boolean;  // Enable/disable LanceDB integration
     vectorAutoSyncEnabled?: boolean;  // Enable/disable periodic background sync (default: true)
@@ -365,18 +351,6 @@ const DEFAULT_SETTINGS: AppSettings = {
     comfyuiCustomUseHttps: false,
     comfyuiCustomAutoDetect: true,
     comfyuiCustomBaseUrl: "",
-    // FLUX.2 Klein 4B defaults
-    flux2Klein4bEnabled: false,
-    flux2Klein4bInstalled: false,
-    flux2Klein4bAutoStart: false,
-    flux2Klein4bModelsDownloaded: false,
-    flux2Klein4bBackendPath: "",
-    // FLUX.2 Klein 9B defaults
-    flux2Klein9bEnabled: false,
-    flux2Klein9bInstalled: false,
-    flux2Klein9bAutoStart: false,
-    flux2Klein9bModelsDownloaded: false,
-    flux2Klein9bBackendPath: "",
     // TTS defaults
     ttsEnabled: true,
     ttsProvider: "edge",

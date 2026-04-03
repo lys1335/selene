@@ -7,8 +7,6 @@ import {
 import * as path from "path";
 import * as fs from "fs";
 import { debugLog, debugError, logBuffer, incrementLogSubscribers, decrementLogSubscribers } from "./debug-logger";
-import { registerComfyUIHandlers } from "./ipc-comfyui-handlers";
-import { registerFlux2Handlers } from "./ipc-flux2-handlers";
 import { registerModelHandlers } from "./ipc-model-handlers";
 import { registerFileHandlers } from "./ipc-file-handlers";
 import { registerVoiceHotkeyHandlers } from "./ipc-voice-hotkey-handlers";
@@ -160,8 +158,6 @@ export function setupIpcHandlers(ctx: IpcHandlerContext): void {
   registerPermissionHandlers(ctx);
   registerMiniOverlayHandlers(ctx);
   registerOverlaySessionHandlers();
-  registerComfyUIHandlers(ctx);
-  registerFlux2Handlers(ctx);
   registerBrowserSessionHandlers(ctx);
   registerGhostOsHandlers(ctx);
 }

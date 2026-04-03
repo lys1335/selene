@@ -174,10 +174,6 @@ export interface FormState {
   // Local image generation settings
   comfyuiEnabled: boolean;
   comfyuiBackendPath: string;
-  flux2Klein4bEnabled: boolean;
-  flux2Klein4bBackendPath: string;
-  flux2Klein9bEnabled: boolean;
-  flux2Klein9bBackendPath: string;
   comfyuiCustomHost: string;
   comfyuiCustomPort: number;
   comfyuiCustomUseHttps: boolean;
@@ -314,10 +310,6 @@ export const DEFAULT_FORM_STATE: FormState = {
   localGrepRespectGitignore: true,
   comfyuiEnabled: false,
   comfyuiBackendPath: "",
-  flux2Klein4bEnabled: false,
-  flux2Klein4bBackendPath: "",
-  flux2Klein9bEnabled: false,
-  flux2Klein9bBackendPath: "",
   comfyuiCustomHost: "127.0.0.1",
   comfyuiCustomPort: 8188,
   comfyuiCustomUseHttps: false,
@@ -450,10 +442,6 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     localGrepRespectGitignore: data.localGrepRespectGitignore ?? true,
     comfyuiEnabled: data.comfyuiEnabled ?? false,
     comfyuiBackendPath: data.comfyuiBackendPath ?? "",
-    flux2Klein4bEnabled: data.flux2Klein4bEnabled ?? false,
-    flux2Klein4bBackendPath: data.flux2Klein4bBackendPath ?? "",
-    flux2Klein9bEnabled: data.flux2Klein9bEnabled ?? false,
-    flux2Klein9bBackendPath: data.flux2Klein9bBackendPath ?? "",
     comfyuiCustomHost: data.comfyuiCustomHost ?? "127.0.0.1",
     comfyuiCustomPort: data.comfyuiCustomPort ?? 8188,
     comfyuiCustomUseHttps: data.comfyuiCustomUseHttps ?? false,

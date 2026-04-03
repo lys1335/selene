@@ -20,8 +20,6 @@ type DependencyStatus = {
   webScraper: boolean;
   openrouterKey: boolean;
   comfyuiEnabled: boolean;
-  flux2Klein4bEnabled: boolean;
-  flux2Klein9bEnabled: boolean;
   localGrepEnabled: boolean;
   devWorkspaceEnabled: boolean;
   screenCaptureEnabled: boolean;
@@ -36,8 +34,6 @@ const DEFAULT_DEPENDENCY_STATUS: DependencyStatus = {
   webScraper: false,
   openrouterKey: false,
   comfyuiEnabled: false,
-  flux2Klein4bEnabled: false,
-  flux2Klein9bEnabled: false,
   localGrepEnabled: true,
   devWorkspaceEnabled: false,
   screenCaptureEnabled: true,
@@ -157,8 +153,6 @@ export function useToolEditor(
           webScraper: webScraperReady,
           openrouterKey: typeof settingsData.openrouterApiKey === "string" && settingsData.openrouterApiKey.trim().length > 0,
           comfyuiEnabled: settingsData.comfyuiEnabled === true,
-          flux2Klein4bEnabled: settingsData.flux2Klein4bEnabled === true,
-          flux2Klein9bEnabled: settingsData.flux2Klein9bEnabled === true,
           localGrepEnabled: settingsData.localGrepEnabled !== false,
           devWorkspaceEnabled: settingsData.devWorkspaceEnabled === true,
           screenCaptureEnabled: settingsData.screenCaptureEnabled !== false,
