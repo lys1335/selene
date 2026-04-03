@@ -2,7 +2,7 @@ import { db } from "@/lib/db/sqlite-client";
 import { scheduledTaskRuns } from "@/lib/db/sqlite-schedule-schema";
 import { eq } from "drizzle-orm";
 
-export type ScheduledRunWithTask = Awaited<ReturnType<typeof getRunForUser>> & { run: NonNullable<unknown> };
+type ScheduledRunWithTask = Awaited<ReturnType<typeof getRunForUser>> & { run: NonNullable<unknown> };
 
 /**
  * Fetch a scheduled run by ID and verify it belongs to the given user.
