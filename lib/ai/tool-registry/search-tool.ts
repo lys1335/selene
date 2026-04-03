@@ -12,14 +12,9 @@
 import { tool, jsonSchema, generateObject } from "ai";
 import type { ToolResultOutput } from "@ai-sdk/provider-utils";
 import { z } from "zod";
-// Lazy import to break the cycle:
-// claudecode-provider → selene-sdk-mcp-server → search-tool → providers → claudecode-provider
-async function getUtilityModelLazy() {
-  const { getUtilityModel } = await import("@/lib/ai/providers");
-  return getUtilityModel();
-}
+import { getUtilityModel } from "@/lib/ai/providers";
 import { ToolRegistry } from "./registry";
-import type { ToolSearchResult, ToolCategory } from "./types";
+import type { ToolSearchResult, ToolCategory, ToolSearchContext } from "./types";
 import { parseSubagentDirectory, searchSubagents, type SubagentSearchResult } from "./search-tool-subagent-types";
 
 const TOOL_SEARCH_LOGGING_ENABLED =
@@ -35,55 +30,8 @@ function warnSearchTools(message: string): void {
   console.warn(message);
 }
 
-/**
- * Context for search/list tools to know which tools are actually available
- * in the current session (not just registered in the global registry).
- */
-export interface ToolSearchContext {
-  /**
-   * Set of tool names that are initially active (non-deferred tools).
-   * These tools are available for immediate use.
-   */
-  initialActiveTools?: Set<string>;
-
-  /**
-   * Mutable set of tool names that have been discovered via searchTools.
-   * When searchTools finds a deferred tool, it adds the tool name here.
-   * The prepareStep callback reads this to dynamically enable discovered tools.
-   */
-  discoveredTools?: Set<string>;
-
-  /**
-   * Enables Anthropic tool-reference output bridging for deferred tools.
-   * When enabled, searchTools emits tool_reference blocks via toModelOutput
-   * so Anthropic can load deferred schemas server-side.
-   */
-  enableAnthropicToolReferences?: boolean;
-
-  /**
-   * Set of tool names that are enabled for this specific agent/character.
-   * If provided, search results are filtered to only show tools in this set
-   * (plus tools with alwaysLoad: true like searchTools/listAllTools).
-   * If undefined, all enabled tools are shown (for agents without tool restrictions).
-   */
-  enabledTools?: Set<string>;
-
-  /**
-   * @deprecated Use initialActiveTools instead
-   * Set of tool names that are actually loaded in the current session.
-   * If provided, only these tools will be reported as available.
-   * If undefined, all enabled tools are shown (legacy behavior).
-   */
-  loadedTools?: Set<string>;
-
-  /**
-   * Workflow subagent directory for subagent discovery.
-   * When provided, searchTools will also search available subagents
-   * by matching query against subagent names and purposes.
-   * Format: ["- AgentName (id: agent-id): Purpose description", ...]
-   */
-  subagentDirectory?: string[];
-}
+// Re-export ToolSearchContext from types.ts for backward compatibility
+export type { ToolSearchContext } from "./types";
 
 type ToolSearchInput = {
   query: string;
@@ -209,7 +157,7 @@ async function callToolSearchRouter(
   prompt: string,
 ): Promise<ToolSearchRouterDecision> {
   const { object } = await generateObject({
-    model: await getUtilityModelLazy(),
+    model: getUtilityModel(),
     schema: toolSearchRouterJsonSchema,
     temperature: 0,
     prompt,
