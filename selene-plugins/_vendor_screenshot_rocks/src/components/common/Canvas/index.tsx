@@ -1,12 +1,21 @@
 import React, {useEffect} from "react";
-import {styles} from "./styles";
-import {BrowserFrame} from "../Frames/Browser";
 import {IBrowserStyles} from "../../../stores/browserStore";
-import {CanvasBackgroundTypes, ScreenshotType} from "../../../types";
-import {PhoneFrame} from "../Frames/Phone";
 import {view} from "@risingstack/react-easy-state";
-import {NoFrameFrame} from "../Frames/NoFrame";
-import {TwitterFrame} from "../Frames/Twitter";
+
+enum CanvasBackgroundTypes {
+    Image = 'Image',
+    Solid = 'Solid',
+    Gradient = 'Gradient',
+    None = 'None',
+}
+
+enum ScreenshotType {
+    Browser = 'Browser',
+    Device = 'Device',
+    None = 'None',
+    Twitter = 'Twitter',
+    Code = 'Code',
+}
 
 export interface ICanvasProps {
     showControlsOnly?: boolean;
@@ -48,11 +57,7 @@ const Canvas = view((props: ICanvasProps) => {
     });
 
     return (
-        <div className={styles(props) + ' canvas'} id="canvas">
-            {(props.frameType === ScreenshotType.Browser || !props.frameType) && <BrowserFrame {...props} />}
-            {props.frameType === ScreenshotType.Device && <PhoneFrame {...props} />}
-            {props.frameType === ScreenshotType.None && <NoFrameFrame {...props} />}
-            {props.frameType === ScreenshotType.Twitter && <TwitterFrame {...props} />}
+        <div className="canvas" id="canvas">
         </div>
     );
 });

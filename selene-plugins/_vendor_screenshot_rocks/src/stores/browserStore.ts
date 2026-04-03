@@ -1,7 +1,101 @@
 import {store} from '@risingstack/react-easy-state';
-import {BackgroundType, BrowserThemes, browserThemes} from "../components/common/Frames/Browser/styles";
-import {ImageFormats} from "../types";
 import {observe} from "@nx-js/observer-util";
+
+enum BrowserThemes {
+    Default,
+    Dark,
+    Square,
+    Darker,
+    Rounder,
+    Weird,
+    Custom,
+}
+
+enum BackgroundType {
+    Image,
+    Color,
+}
+
+const browserThemes = {
+    [BrowserThemes.Default]: {
+        browserChromeBgColor: '#e6ecefcf',
+        browserControlsBgColor: '#ffffffa8',
+        browserControlsTextColor: '#b5b5b5',
+        closeButtonColor: '#FF8585',
+        minimizeButtonColor: '#FFD071',
+        maximizeButtonColor: '#74ED94',
+        browserBorderRadius: 10,
+        controlsBorderRadius: 3,
+        controlsHeight: 30,
+        chromeHeight: 50,
+    },
+    [BrowserThemes.Darker]: {
+        browserChromeBgColor: '#000000',
+        browserControlsBgColor: '#1f1c1c',
+        browserControlsTextColor: '#b5b5b5',
+        closeButtonColor: '#201d1d',
+        minimizeButtonColor: '#201d1d',
+        maximizeButtonColor: '#201d1d',
+        browserBorderRadius: 10,
+        controlsBorderRadius: 3,
+        controlsHeight: 30,
+        chromeHeight: 50,
+    },
+    [BrowserThemes.Dark]: {
+        browserChromeBgColor: '#2d373b',
+        browserControlsBgColor: '#ffffff',
+        browserControlsTextColor: '#b5b5b5',
+        closeButtonColor: '#FF8585',
+        minimizeButtonColor: '#FFD071',
+        maximizeButtonColor: '#74ED94',
+        browserBorderRadius: 10,
+        controlsBorderRadius: 3,
+        controlsHeight: 30,
+        chromeHeight: 50,
+    },
+    [BrowserThemes.Square]: {
+        browserChromeBgColor: '#E6ECEF',
+        browserControlsBgColor: '#ffffff',
+        browserControlsTextColor: '#b5b5b5',
+        closeButtonColor: '#FF8585',
+        minimizeButtonColor: '#FFD071',
+        maximizeButtonColor: '#74ED94',
+        browserBorderRadius: 0,
+        controlsBorderRadius: 0,
+        controlsHeight: 30,
+        chromeHeight: 50,
+    },
+    [BrowserThemes.Rounder]: {
+        browserChromeBgColor: '#ffffff',
+        browserControlsBgColor: '#ffffff',
+        browserControlsTextColor: '#b5b5b5',
+        closeButtonColor: '#FF8585',
+        minimizeButtonColor: '#FFD071',
+        maximizeButtonColor: '#74ED94',
+        browserBorderRadius: 10,
+        controlsBorderRadius: 10,
+        controlsHeight: 30,
+        chromeHeight: 60,
+    },
+    [BrowserThemes.Weird]: {
+        browserChromeBgColor: '#550E40',
+        browserControlsBgColor: '#822063',
+        browserControlsTextColor: '#b5b5b5',
+        closeButtonColor: '#822163',
+        minimizeButtonColor: '#822163',
+        maximizeButtonColor: '#822163',
+        browserBorderRadius: 1,
+        controlsBorderRadius: 4,
+        controlsHeight: 30,
+        chromeHeight: 60,
+    },
+};
+
+enum ImageFormats {
+    PNG = 'png',
+    JPEG = 'jpeg',
+    SVG = 'svg',
+}
 
 export interface IBrowserStyles {
     browserChromeBgColor: string;
