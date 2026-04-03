@@ -210,7 +210,7 @@ export function DesignPreviewFrame() {
         >
           {/* Scaled stage: renders the iframe at true viewport size, then scales down */}
           <div
-            className="bg-background shadow-lg rounded-lg overflow-hidden"
+            className="overflow-hidden"
             style={{
               width: viewportW,
               height: viewportH,
