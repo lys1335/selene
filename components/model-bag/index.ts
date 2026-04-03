@@ -1,4 +1,3 @@
-export { ModelBag } from "./model-bag";
 export { useModelBag } from "./use-model-bag";
 export type {
   ModelItem,
