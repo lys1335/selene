@@ -7,7 +7,7 @@
  * @see docs/CONTEXT_WINDOW_MANAGEMENT_DESIGN.md
  */
 
-import type { LLMProvider } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/providers";
 import { normalizeCodexModel } from "@/lib/auth/codex-models";
 
 // ---------------------------------------------------------------------------

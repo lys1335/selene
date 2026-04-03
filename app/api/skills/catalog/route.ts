@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/local-auth";
 import { getOrCreateLocalUser } from "@/lib/db/queries";
 import { loadSettings } from "@/lib/settings/settings-manager";
-import { getAllCatalogSkills, getCatalogCollections, SYSTEM_SKILLS } from "@/lib/skills/catalog";
+import { getAllCatalogSkills, getCatalogCollections } from "@/lib/skills/catalog";
+import { SYSTEM_SKILLS } from "@/lib/skills/catalog/system-skills";
 import type { CatalogSkillWithStatus } from "@/lib/skills/catalog/types";
 import { listSkillsForUser } from "@/lib/skills/queries";
 

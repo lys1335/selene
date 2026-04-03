@@ -13,12 +13,12 @@ import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { resilientFetch, resilientPut } from "@/lib/utils/resilient-fetch";
 import { buildModelCatalog } from "@/lib/config/model-catalog";
+import type { LLMProvider } from "@/lib/ai/providers";
 import type {
   ModelBagState,
   ModelRole,
   ModelItem,
   ProviderStatus,
-  LLMProvider,
 } from "./model-bag.types";
 import { ROLE_TO_SETTINGS_KEY } from "./model-bag.types";
 import { PROVIDER_THEME, PROVIDER_DISPLAY_NAMES } from "./model-bag.constants";

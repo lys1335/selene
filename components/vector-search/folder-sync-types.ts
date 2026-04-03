@@ -1,7 +1,5 @@
 export type IndexingMode = "auto" | "full" | "files-only";
-export type SyncMode = "auto" | "manual" | "scheduled" | "triggered";
-export type ChunkPreset = "balanced" | "small" | "large" | "custom";
-export type ReindexPolicy = "smart" | "always" | "never";
+import type { SyncMode, ChunkPreset, ReindexPolicy } from "@/lib/vectordb/sync-mode-resolver";
 
 export interface SyncFolder {
   id: string;

@@ -146,7 +146,7 @@ export function getSubscribers(folderPath: string): string[] {
 /**
  * Check if a path has any subscribers.
  */
-export function hasSubscribers(folderPath: string): boolean {
+function hasSubscribers(folderPath: string): boolean {
   const resolvedPath = resolveRegistryPath(folderPath);
   const entry = registry.get(resolvedPath);
   return entry ? entry.subscriberFolderIds.size > 0 : false;
@@ -184,7 +184,7 @@ export function getSubscriberCount(folderPath: string): number {
 /**
  * Get the full entry for a physical path.
  */
-export function getEntry(folderPath: string): SharedFolderEntry | undefined {
+function getEntry(folderPath: string): SharedFolderEntry | undefined {
   const resolvedPath = resolveRegistryPath(folderPath);
   return registry.get(resolvedPath);
 }
@@ -200,7 +200,7 @@ export function clearRegistry(): void {
 /**
  * Get a debug snapshot of the registry.
  */
-export function getRegistrySnapshot(): Array<{
+function getRegistrySnapshot(): Array<{
   path: string;
   subscribers: string[];
   owner: string | null;

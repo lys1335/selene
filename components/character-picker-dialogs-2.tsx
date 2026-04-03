@@ -36,7 +36,8 @@ import type {
   IdentityEditorFormState,
   WorkflowGroup,
 } from "@/components/character-picker-types";
-import type { LLMProvider, ModelRole } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/providers";
+import type { ModelRole } from "@/components/model-bag/model-bag.types";
 
 const MODEL_ROLE_KEYS: Record<ModelRole, keyof AgentModelConfigDraft> = {
   chat: "chatModel",

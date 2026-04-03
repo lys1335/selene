@@ -51,4 +51,3 @@ export const SELENE_DEFAULT_TEMPLATE: AgentTemplate = {
   memories: getDefaultSeleneMemories(),
 };
 
-export default SELENE_DEFAULT_TEMPLATE;

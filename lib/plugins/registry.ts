@@ -677,7 +677,7 @@ export async function enablePluginForAgent(agentId: string, pluginId: string): P
 /**
  * Disable a plugin for an agent (upsert).
  */
-export async function disablePluginForAgent(agentId: string, pluginId: string): Promise<void> {
+async function disablePluginForAgent(agentId: string, pluginId: string): Promise<void> {
   const existing = await db
     .select({ id: agentPlugins.id })
     .from(agentPlugins)

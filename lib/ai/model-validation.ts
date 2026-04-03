@@ -11,7 +11,8 @@
  * - providers.ts         isModelCompatibleWithProvider() / validateModelForProvider()
  */
 
-import type { AgentModelConfig, LLMProvider } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/providers";
+import type { AgentModelConfig } from "@/components/model-bag/model-bag.types";
 
 // ---------------------------------------------------------------------------
 // Provider-specific model ID sets (imported dynamically to avoid circular deps)

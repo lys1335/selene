@@ -24,11 +24,10 @@ import {
   getOpenFileDescriptorCount,
   getWatcherFdBudget,
   getWatcherFdWarnThreshold,
-  parseJsonArray,
-  normalizeExtensions,
   isProjectRootDirectory,
   processWithConcurrency,
 } from "./file-watcher-utils";
+import { parseJsonArray, normalizeExtensions } from "./sync-helpers";
 import {
   registerFolder,
   unregisterFolder,

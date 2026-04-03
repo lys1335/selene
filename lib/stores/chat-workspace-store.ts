@@ -321,7 +321,3 @@ export const useChatWorkspaceStore = create<ChatWorkspaceState>((set, get) => ({
   },
 }));
 
-export {
-  computeNextActiveSessionId,
-  sanitizePersistedState,
-};

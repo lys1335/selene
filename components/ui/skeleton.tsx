@@ -124,14 +124,5 @@ function SkeletonTemplateCard({ className, ...props }: SkeletonProps) {
 
 export {
   Skeleton,
-  SkeletonText,
-  SkeletonTitle,
-  SkeletonCircle,
-  SkeletonButton,
-  SkeletonImage,
-  SkeletonCard,
-  SkeletonFormField,
-  SkeletonCharacterPreview,
-  SkeletonTemplateCard,
 };
 

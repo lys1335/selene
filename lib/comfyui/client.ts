@@ -3,23 +3,6 @@
  * HTTP client for communicating with the local ComfyUI API
  */
 
-export interface ComfyUIStatus {
-    dockerInstalled: boolean;
-    imageBuilt: boolean;
-    containerRunning: boolean;
-    apiHealthy: boolean;
-    modelsDownloaded: boolean;
-    checkpointExists: boolean;
-    loraExists: boolean;
-}
-
-export interface InstallProgress {
-    stage: "checking" | "building" | "downloading-models" | "starting" | "complete" | "error";
-    progress: number; // 0-100
-    message: string;
-    error?: string;
-}
-
 export interface GenerateRequest {
     positive_prompt: string;
     seed?: number;

@@ -15,7 +15,7 @@ import {
   type ContextWindowConfig,
 } from "./provider-limits";
 import { CompactionService, type CompactionResult } from "./compaction-service";
-import type { LLMProvider } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/providers";
 import {
   getScopedFallbackMinConfidence,
   isScopedFallbackEnabled,

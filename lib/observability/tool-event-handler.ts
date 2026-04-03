@@ -9,7 +9,8 @@
 import { randomUUID } from "crypto";
 import { setToolLogHandler, type ToolLogEntry } from "@/lib/ai/tool-registry/logging";
 import { getRunContext } from "./run-context";
-import { appendRunEvent, type AgentRunEventType, type EventLevel } from "./queries";
+import { appendRunEvent } from "./queries";
+import type { AgentRunEventType, EventLevel } from "@/lib/db/sqlite-schema";
 
 /**
  * Map to correlate tool start events with their completion events.

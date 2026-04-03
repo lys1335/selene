@@ -312,7 +312,7 @@ function findSubstitutions(originalWords: string[], editedWords: string[]): Arra
   return substitutions;
 }
 
-export function extractDictionaryCorrections(
+function extractDictionaryCorrections(
   originalText: string,
   editedText: string,
   existingDictionary: string[],

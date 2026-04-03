@@ -1,0 +1,12 @@
+{
+  "$schema": "https://unpkg.com/fallow-cli/schema.json",
+  "ignoreDependencies": [
+    // Vendor plugin deps - not managed by us
+    "@nx-js/observer-util",
+    "@risingstack/react-easy-state"
+  ],
+  "ignore": [
+    // Vendor plugin - third party code, not maintained by us
+    "selene-plugins/_vendor_screenshot_rocks/**"
+  ]
+}

@@ -3,7 +3,8 @@ import * as path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { IpcHandlerContext } from "./ipc-handlers";
 import { captureDisplay, getScreenCapturePermissionStatus, type ScreenCapturePermissionStatus } from "./screen-capture";
-import { collectMetadata, type ScreenCaptureMetadata } from "./metadata-collector";
+import { collectMetadata } from "./metadata-collector";
+import type { ScreenCaptureMetadata } from "../lib/electron/types";
 import {
   registerUnifiedCaptureHotkey,
   registerUnifiedCaptureHotkeyFromSettings,

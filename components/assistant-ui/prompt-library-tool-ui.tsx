@@ -486,4 +486,3 @@ export const PromptLibraryToolUI: ToolCallContentPartComponent = ({
   return null;
 };
 
-export default PromptLibraryToolUI;

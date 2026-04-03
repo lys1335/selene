@@ -1,22 +1,6 @@
 import { ipcMain, systemPreferences, shell } from "electron";
 import type { IpcHandlerContext } from "./ipc-handlers";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export type PermissionStatus =
-  | "granted"
-  | "denied"
-  | "not-determined"
-  | "restricted"
-  | "unavailable";
-
-export interface PermissionCheckResult {
-  screen: PermissionStatus;
-  microphone: PermissionStatus;
-  accessibility: PermissionStatus;
-}
+import type { PermissionStatus, PermissionCheckResult } from "../lib/electron/types";
 
 // ---------------------------------------------------------------------------
 // Internal helpers

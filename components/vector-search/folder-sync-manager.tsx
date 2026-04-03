@@ -21,10 +21,8 @@ import type {
   FolderAnalysis,
   FolderSyncManagerProps,
   IndexingMode,
-  SyncMode,
-  ChunkPreset,
-  ReindexPolicy,
 } from "./folder-sync-types";
+import type { SyncMode, ChunkPreset, ReindexPolicy } from "@/lib/vectordb/sync-mode-resolver";
 import {
   RECOMMENDED_EXCLUDES,
   DEFAULT_EXTENSIONS,

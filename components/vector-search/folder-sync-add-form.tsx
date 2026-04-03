@@ -15,7 +15,8 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { IndexingMode, SyncMode, ChunkPreset, ReindexPolicy, FolderAnalysis } from "./folder-sync-types";
+import type { IndexingMode, FolderAnalysis } from "./folder-sync-types";
+import type { SyncMode, ChunkPreset, ReindexPolicy } from "@/lib/vectordb/sync-mode-resolver";
 import { cn } from "@/lib/utils";
 
 interface FolderSyncAddFormProps {

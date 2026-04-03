@@ -7,8 +7,6 @@ import {
 } from "@/lib/voice/browser-stt";
 import { formatTextForTTS } from "@/lib/voice/format-tts-text";
 
-// Re-export for convenience
-export type { MiniOverlayPhase };
 export type MiniPipelinePhase = MiniOverlayPhase;
 
 interface OverlaySessionUpdatePayload {

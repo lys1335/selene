@@ -17,9 +17,6 @@ import {
 import type { AgentRunEventType, AgentRunStatus, EventLevel } from "@/lib/db/sqlite-schema";
 import { eq, desc, and, lte, gte, or, count, asc, like } from "drizzle-orm";
 import { durationMs as calculateDurationMs, isStale, nowISO, parseTimestampMs } from "@/lib/utils/timestamp";
-
-// Re-export types for convenience
-export type { AgentRunEventType, AgentRunStatus, EventLevel };
 import { createHash } from "crypto";
 
 // ============================================================================

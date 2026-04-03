@@ -229,4 +229,3 @@ export const ProductGalleryToolUI: ToolCallContentPartComponent = ({
   );
 };
 
-export default ProductGalleryToolUI;

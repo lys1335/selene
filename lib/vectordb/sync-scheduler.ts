@@ -212,7 +212,7 @@ export async function forceCleanupStuckFolders(): Promise<{ syncingCleaned: numb
 /**
  * Get all synced folders that need watchers restarted (for app startup)
  */
-export async function getSyncedFoldersNeedingWatch(): Promise<Array<{
+async function getSyncedFoldersNeedingWatch(): Promise<Array<{
   folderId: string;
   characterId: string;
   folderPath: string;
@@ -290,7 +290,7 @@ export async function getSyncedFoldersNeedingWatch(): Promise<Array<{
  * Get stale folders that haven't been synced recently
  * @param maxAgeMs Maximum age in milliseconds (default: 1 hour)
  */
-export async function getStaleFolders(maxAgeMs: number = 60 * 60 * 1000): Promise<string[]> {
+async function getStaleFolders(maxAgeMs: number = 60 * 60 * 1000): Promise<string[]> {
   const cutoffTime = new Date(Date.now() - maxAgeMs).toISOString();
 
   const staleFolders = await db

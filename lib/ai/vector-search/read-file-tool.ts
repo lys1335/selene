@@ -15,6 +15,7 @@ import { extname, basename } from "path";
 import { findAgentDocumentByName, getAgentDocumentChunksByDocumentId } from "@/lib/db/queries";
 import { isPathAllowed, findSimilarFiles, recordFileRead } from "@/lib/ai/filesystem";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
+import type { ReadFileToolOptions } from "@/lib/ai/tools/read-file-tool";
 
 // File read limits
 const MAX_FILE_SIZE_BYTES = 1024 * 1024; // 1MB
@@ -47,12 +48,6 @@ const readFileSchema = jsonSchema<{
   required: ["filePath"],
   additionalProperties: false,
 });
-
-export interface ReadFileToolOptions {
-  sessionId: string;
-  userId: string;
-  characterId?: string | null;
-}
 
 // Result type for readFile tool
 interface ReadFileResult {

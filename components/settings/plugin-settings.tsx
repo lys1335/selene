@@ -41,7 +41,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { MarketplaceBrowser } from "@/components/plugins/marketplace-browser";
 import { useTranslations } from "next-intl";
-import type { CharacterOption, InstalledPlugin } from "@/components/settings/plugin-settings-types";
+import type { CharacterOption } from "@/components/settings/plugin-settings-types";
+import type { InstalledPlugin } from "@/lib/plugins/types";
 import { PluginInstallDialog } from "@/components/settings/plugin-install-dialog";
 
 export function PluginSettings() {

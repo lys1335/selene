@@ -19,14 +19,6 @@ export interface CharacterFullData {
     }>;
 }
 
-export interface DBMessage {
-    id: string;
-    role: "user" | "assistant" | "system" | "tool";
-    content: unknown;
-    createdAt: Date | string;
-    metadata?: unknown;
-}
-
 export interface ChatInterfaceProps {
     character: CharacterFullData;
     initialSessionId: string;

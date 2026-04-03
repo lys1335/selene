@@ -13,8 +13,8 @@ import { getClaudeCodeModels } from "@/lib/auth/claudecode-models";
 import { getKimiModels } from "@/lib/auth/kimi-models";
 import { getMiniMaxModels } from "@/lib/auth/minimax-models";
 import { getBlackBoxModels } from "@/lib/auth/blackboxai-models";
+import type { LLMProvider } from "@/lib/ai/providers";
 import type {
-  LLMProvider,
   ModelItem,
   ModelCapabilities,
   ModelRole,

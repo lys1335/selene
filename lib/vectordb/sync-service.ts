@@ -30,8 +30,6 @@ import {
 } from "./sync-mode-resolver";
 import { onFolderChange, notifyFolderChange, type FolderChangeEvent } from "./folder-events";
 import { resolveRegistryPath, getSubscriberCount } from "./shared-folder-registry";
-export { onFolderChange, notifyFolderChange };
-export type { FolderChangeEvent };
 
 // Re-export types so existing imports from this path continue to work
 export type { ParallelConfig, SyncFolderConfig, SyncFolderUpdateConfig, SyncResult } from "./sync-types";

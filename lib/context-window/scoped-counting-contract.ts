@@ -1,4 +1,4 @@
-import type { LLMProvider } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/providers";
 
 export type ContextScope = "main" | "delegated";
 

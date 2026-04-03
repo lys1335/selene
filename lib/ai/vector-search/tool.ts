@@ -30,7 +30,7 @@ import type {
 import { extname } from "path";
 
 // Re-export the readFile tool for backward compatibility
-export type { ReadFileToolOptions } from "./read-file-tool";
+export type { ReadFileToolOptions } from "@/lib/ai/tools/read-file-tool";
 
 // ============================================================================
 // Input Schema

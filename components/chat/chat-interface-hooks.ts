@@ -34,7 +34,8 @@ function isCompletionActivityState(activity: SessionActivityState | undefined, r
     return activity.indicators.some((indicator: SessionActivityIndicator) => indicator.key === "completed");
 }
 import type { UIMessage } from "ai";
-import type { DBMessage, SessionState, ChannelFilter, DateRangeFilter } from "@/components/chat/chat-interface-types";
+import type { SessionState, ChannelFilter, DateRangeFilter } from "@/components/chat/chat-interface-types";
+import type { DBMessage } from "@/lib/messages/converter";
 import {
     sortSessionsByUpdatedAt,
     areSessionsEquivalent,

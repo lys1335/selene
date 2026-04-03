@@ -8,7 +8,8 @@ import { tool, jsonSchema } from "ai";
 import type { Tool } from "ai";
 import type { ToolMetadata, ToolFactory } from "@/lib/ai/tool-registry/types";
 import { ToolRegistry } from "@/lib/ai/tool-registry/registry";
-import { MCPClientManager, type MCPDiscoveredTool } from "@/lib/mcp/client-manager";
+import { MCPClientManager } from "@/lib/mcp/client-manager";
+import type { MCPDiscoveredTool } from "@/lib/mcp/types";
 import { formatMCPToolResult } from "@/lib/mcp/result-formatter";
 
 const MCP_SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema";

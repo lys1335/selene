@@ -1,15 +1,6 @@
 import { exec } from "node:child_process";
 import { debugError } from "./debug-logger";
-
-export interface ScreenCaptureMetadata {
-  capturedAt: string;
-  activeWindowTitle?: string;
-  activeAppName?: string;
-  activeUrl?: string;
-  displayIndex?: number;
-  originalResolution?: { width: number; height: number };
-  captureMode: "fullscreen" | "active-window" | "region" | "display";
-}
+import type { ScreenCaptureMetadata } from "../lib/electron/types";
 
 function execPromise(command: string, timeout = 3000): Promise<string> {
   return new Promise((resolve, reject) => {
