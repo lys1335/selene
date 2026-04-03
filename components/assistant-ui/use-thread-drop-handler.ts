@@ -32,7 +32,7 @@ interface UseThreadDropHandlerOptions {
   router: { push: (path: string) => void };
 }
 
-export interface ThreadDropHandlerResult {
+interface ThreadDropHandlerResult {
   // Drag state
   isDragging: boolean;
   // Skill import overlay state

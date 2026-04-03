@@ -12,7 +12,7 @@ export interface Check {
   requiredSnippets: string[];
 }
 
-export function readUtf8(relativePath: string): string {
+function readUtf8(relativePath: string): string {
   return readFileSync(resolve(process.cwd(), relativePath), "utf8");
 }
 

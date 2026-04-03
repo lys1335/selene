@@ -2,7 +2,7 @@
  * Shared utilities for the WAN 2.2 API clients (imagen + video).
  */
 
-export interface Wan22AsyncResult {
+interface Wan22AsyncResult {
   jobId: string;
   status: string;
   statusUrl: string;

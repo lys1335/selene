@@ -26,7 +26,7 @@ export function getDiagnosticOutput(diagnostic: ToolDiagnosticResult) {
   return normalizeDiagnostics(diagnostic).output;
 }
 
-export interface ParsedLintOutput {
+interface ParsedLintOutput {
   sortedOutput: string;
   errorLines: string[];
   warningLines: string[];

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  resolveAuthUser,
+  resolveImportAuthUser,
   validateMultiImportFiles,
   importErrorResponse,
 } from "@/lib/import/shared-import-utils";
@@ -271,7 +271,7 @@ export async function POST(request: NextRequest) {
   const requestId = Math.random().toString(36).slice(2, 8);
 
   try {
-    const authResult = await resolveAuthUser(request);
+    const authResult = await resolveImportAuthUser(request);
     if (authResult instanceof NextResponse) return authResult;
     const { dbUser } = authResult;
 

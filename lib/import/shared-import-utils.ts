@@ -17,7 +17,7 @@ interface AuthenticatedUser {
  * Returns a NextResponse on failure so the caller can return early,
  * or the resolved user data on success.
  */
-export async function resolveAuthUser(
+export async function resolveImportAuthUser(
   request: NextRequest,
 ): Promise<AuthenticatedUser | NextResponse> {
   try {

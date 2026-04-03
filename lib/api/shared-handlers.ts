@@ -44,7 +44,7 @@ export async function resolveAuthUser(req: Request) {
 /**
  * Standard auth error response for routes that catch Unauthorized/Invalid session errors.
  */
-export function authErrorResponse(error: unknown): NextResponse | null {
+function authErrorResponse(error: unknown): NextResponse | null {
   if (
     error instanceof Error &&
     (error.message === "Unauthorized" || error.message === "Invalid session")
@@ -77,7 +77,7 @@ export function validationErrorResponse(
 // Session auth + ownership helper
 // ---------------------------------------------------------------------------
 
-export type SessionAuthResult =
+type SessionAuthResult =
   | { session: Session; dbUserId: string }
   | { errorResponse: NextResponse };
 
@@ -110,7 +110,7 @@ export async function resolveSessionAuth(
 // Schedule ownership helper
 // ---------------------------------------------------------------------------
 
-export type ScheduleOwnershipResult =
+type ScheduleOwnershipResult =
   | { task: typeof scheduledTasks.$inferSelect }
   | { errorResponse: NextResponse };
 
@@ -145,7 +145,7 @@ export async function resolveScheduleOwnership(
 // Channel connection ownership helper
 // ---------------------------------------------------------------------------
 
-export type ChannelOwnershipResult =
+type ChannelOwnershipResult =
   | { connection: ChannelConnection }
   | { errorResponse: NextResponse };
 

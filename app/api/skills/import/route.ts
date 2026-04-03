@@ -4,7 +4,7 @@ import { importSkillPackage } from "@/lib/skills/queries";
 import { parsePluginPackage } from "@/lib/plugins/import-parser";
 import { enablePluginForAgent, installPlugin } from "@/lib/plugins/registry";
 import {
-  resolveAuthUser,
+  resolveImportAuthUser,
   validateSingleImportFile,
   importErrorResponse,
 } from "@/lib/import/shared-import-utils";
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   console.log(`[SkillImport:${requestId}] Request started at ${new Date().toISOString()}`);
 
   try {
-    const authResult = await resolveAuthUser(request);
+    const authResult = await resolveImportAuthUser(request);
     if (authResult instanceof NextResponse) return authResult;
     const { dbUser } = authResult;
 

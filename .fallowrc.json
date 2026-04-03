@@ -3,7 +3,8 @@
   "ignoreDependencies": [
     "@nx-js/observer-util",
     "@risingstack/react-easy-state",
-    "tailwindcss-animate"
+    "tailwindcss-animate",
+    "dotenv"
   ],
   "ignorePatterns": [
     "selene-plugins/_vendor_screenshot_rocks/**"
@@ -496,6 +497,12 @@
       "file": "lib/ai/json-schema-sanitizer.ts",
       "exports": [
         "sanitizeSchema"
+      ]
+    },
+    {
+      "file": "lib/comfyui/custom/client.ts",
+      "exports": [
+        "HistoryStatusInfo"
       ]
     }
   ]

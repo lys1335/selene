@@ -2,20 +2,20 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react";
 
-export interface ModelDownloadState {
+interface ModelDownloadState {
   downloading: string | null;
   downloadProgress: number;
   downloadError: string | null;
 }
 
-export interface ModelDownloadActions {
+interface ModelDownloadActions {
   setDownloading: (id: string | null) => void;
   setDownloadProgress: (progress: number) => void;
   setDownloadError: (error: string | null) => void;
   setModelDownloaded: (modelId: string) => void;
 }
 
-export interface UseModelDownloadReturn extends ModelDownloadState, ModelDownloadActions {
+interface UseModelDownloadReturn extends ModelDownloadState, ModelDownloadActions {
   modelStatus: Record<string, boolean>;
   setModelStatus: Dispatch<SetStateAction<Record<string, boolean>>>;
   /**
