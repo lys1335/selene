@@ -1,7 +1,7 @@
 import { tool, jsonSchema } from "ai";
 import {
   callWan22Video,
-  isAsyncResult as isWan22VideoAsyncResult,
+  isVideoAsyncResult,
 } from "@/lib/ai/wan22-video-client";
 import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
@@ -115,7 +115,7 @@ async function executeWan22Video(sessionId: string, args: Wan22VideoArgs) {
       sessionId
     );
 
-    if (isWan22VideoAsyncResult(result)) {
+    if (isVideoAsyncResult(result)) {
       await updateToolRun(toolRun.id, {
         status: "pending",
         metadata: { jobId: result.jobId, statusUrl: result.statusUrl },
@@ -328,7 +328,7 @@ async function executeWan22PixelVideo(sessionId: string, args: Wan22PixelVideoAr
       sessionId
     );
 
-    if (isWan22VideoAsyncResult(result)) {
+    if (isVideoAsyncResult(result)) {
       await updateToolRun(toolRun.id, {
         status: "pending",
         metadata: { jobId: result.jobId, statusUrl: result.statusUrl },

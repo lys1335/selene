@@ -11,7 +11,12 @@ import {
   agentWorkflowMembers,
 } from "@/lib/db/sqlite-workflows-schema";
 import { characters } from "@/lib/db/sqlite-character-schema";
-import { getActiveDelegationsForCharacter } from "@/lib/ai/tools/delegate-to-subagent-tool";
+// Lazy import to break the cycle:
+// workflow-resource-context → delegate-to-subagent-tool → workflows → workflow-resource-context
+async function loadGetActiveDelegations() {
+  const { getActiveDelegationsForCharacter } = await import("@/lib/ai/tools/delegate-to-subagent-tool");
+  return getActiveDelegationsForCharacter;
+}
 import {
   toObject,
   mapWorkflowRow,
@@ -113,8 +118,9 @@ export async function getWorkflowResources(
       return `- ${agentName} (id: ${workflowMember.agentId}): ${purpose}`;
     });
 
-  const activeDelegations =
-    member.role === "initiator" ? getActiveDelegationsForCharacter(agentId, initiatorSessionId) : [];
+  const activeDelegations = member.role === "initiator"
+    ? await loadGetActiveDelegations().then((fn) => fn(agentId, initiatorSessionId))
+    : [];
 
   const promptContextInput: WorkflowPromptContextInput = {
     workflowName: workflow.name,

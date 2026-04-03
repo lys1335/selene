@@ -29,7 +29,6 @@ import { GhostOsSection } from "./ghost-os-section";
 import { LocalEmbeddingModelSelector } from "./embedding-model-selector";
 import { ShortcutRecorder } from "@/components/settings/shortcut-recorder";
 import { getElectronAPI, type PermissionCheckResult } from "@/lib/electron/types";
-export { ClaudeCodeAuthFlow } from "./claude-code-auth-flow";
 
 export interface SettingsPanelProps {
   section: SettingsSection;

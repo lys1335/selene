@@ -466,6 +466,7 @@ export class ContextWindowManager {
    * @param provider - Optional provider
    * @returns Whether compaction was performed
    */
+  // fallow-ignore-next-line unused-class-member
   static async compactIfNeeded(
     sessionId: string,
     modelId: string,
@@ -638,6 +639,7 @@ export class ContextWindowManager {
    * @param status - Context status
    * @returns CSS color class or hex color
    */
+  // fallow-ignore-next-line unused-class-member
   static getStatusColor(status: ContextStatus): string {
     switch (status) {
       case "safe":

@@ -6,7 +6,7 @@
  * agent defaults, and per-session overrides.
  */
 
-import type { LLMProvider } from "@/lib/ai/providers";
+import type { LLMProvider } from "@/lib/ai/provider-types";
 
 /** The 4 model roles that map to settings-manager.ts fields */
 export type ModelRole = "chat" | "research" | "vision" | "utility";

@@ -4,7 +4,8 @@ import { getOrCreateLocalUser } from "@/lib/db/queries";
 import { loadSettings } from "@/lib/settings/settings-manager";
 import { getCharacter, getCharacterStats } from "@/lib/characters/queries";
 import { getAvailablePluginsForAgent } from "@/lib/plugins/registry";
-import { getWorkflowByAgentId, getWorkflowResources } from "@/lib/agents/workflows";
+import { getWorkflowByAgentId } from "@/lib/agents/workflows";
+import { getWorkflowResources } from "@/lib/agents/workflow-resource-context";
 
 type RouteParams = { params: Promise<{ id: string }> };
 

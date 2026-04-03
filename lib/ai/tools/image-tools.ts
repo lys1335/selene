@@ -1,9 +1,9 @@
 import { tool, jsonSchema } from "ai";
-import { callImagenEdit, isAsyncResult } from "@/lib/image-edit/client";
+import { callImagenEdit, isImageEditAsyncResult } from "@/lib/image-edit/client";
 import { callFlux2Generate } from "@/lib/ai/flux2-client";
 import {
   callWan22Imagen,
-  isAsyncResult as isWan22ImagenAsyncResult,
+  isImagenAsyncResult,
 } from "@/lib/ai/wan22-imagen-client";
 import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
@@ -216,7 +216,7 @@ async function executeImageEdit(
       sessionId
     );
 
-    if (isAsyncResult(result)) {
+    if (isImageEditAsyncResult(result)) {
       await updateToolRun(toolRun.id, {
         status: "pending",
         metadata: { jobId: result.jobId, statusUrl: result.statusUrl },
@@ -476,7 +476,7 @@ async function executeWan22Imagen(sessionId: string, args: Wan22ImagenArgs) {
       sessionId
     );
 
-    if (isWan22ImagenAsyncResult(result)) {
+    if (isImagenAsyncResult(result)) {
       await updateToolRun(toolRun.id, {
         status: "pending",
         metadata: { jobId: result.jobId, statusUrl: result.statusUrl },

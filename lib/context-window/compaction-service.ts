@@ -650,6 +650,7 @@ export class CompactionService {
    * @param warningThreshold - Token threshold for warning
    * @returns Whether compaction is recommended
    */
+  // fallow-ignore-next-line unused-class-member
   static shouldCompact(
     currentTokens: number,
     warningThreshold: number

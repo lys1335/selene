@@ -10,10 +10,8 @@ import {
 import { createCharacter, getCharacter, getUserCharacters } from "@/lib/characters/queries";
 import { enablePluginForAgent, installPlugin } from "@/lib/plugins/registry";
 import { buildAgentMetadataSeed } from "@/lib/plugins/import-parser";
-import {
-  createWorkflowFromPluginImport,
-  syncSharedFoldersToSubAgents,
-} from "@/lib/agents/workflows";
+import { createWorkflowFromPluginImport } from "@/lib/agents/workflows";
+import { syncSharedFoldersToSubAgents } from "@/lib/agents/workflow-folder-sharing";
 import type { InstalledPlugin, PluginAgentEntry, PluginParseResult, PluginScope } from "@/lib/plugins/types";
 import { mkdir, copyFile } from "fs/promises";
 import { existsSync } from "fs";

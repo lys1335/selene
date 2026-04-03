@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { clearSession } from "@/lib/ai/truncated-content-store";
+import { clearTruncatedContentSession } from "@/lib/ai/truncated-content-store";
 
 const mocks = vi.hoisted(() => ({
   saveBase64Image: vi.fn().mockResolvedValue({
@@ -23,8 +23,8 @@ import { formatMCPToolResult } from "@/lib/mcp/result-formatter";
 
 describe("formatMCPToolResult", () => {
   afterEach(() => {
-    clearSession("session-2");
-    clearSession("session-3");
+    clearTruncatedContentSession("session-2");
+    clearTruncatedContentSession("session-3");
   });
   it("converts MCP image data URLs to stored URLs", async () => {
     const result = {

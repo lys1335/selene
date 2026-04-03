@@ -27,7 +27,7 @@ import {
   buildDelegationsSummary,
   startBackgroundExecution,
   extractTextFromContent,
-  sleep,
+  sleepMs,
   validateObserveWaitSeconds,
   truncateObservePreview,
   buildSubagentCandidates,
@@ -130,7 +130,7 @@ async function waitForDelegationPausePoint(
       return pendingInteractivePrompts;
     }
 
-    await sleep(Math.min(200, remainingMs));
+    await sleepMs(Math.min(200, remainingMs));
   }
 }
 

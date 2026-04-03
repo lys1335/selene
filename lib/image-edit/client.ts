@@ -147,7 +147,7 @@ export interface ImageEditAsyncResult {
 
 export type ImageEditResult = ImageEditSyncResult | ImageEditAsyncResult;
 
-export function isAsyncResult(
+export function isImageEditAsyncResult(
   result: ImageEditResult
 ): result is ImageEditAsyncResult {
   return "jobId" in result;

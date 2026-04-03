@@ -54,7 +54,7 @@ export interface Wan22VideoAsyncResult {
 
 export type Wan22VideoResult = Wan22VideoSyncResult | Wan22VideoAsyncResult;
 
-export function isAsyncResult(
+export function isVideoAsyncResult(
   result: Wan22VideoResult
 ): result is Wan22VideoAsyncResult {
   return "jobId" in result;

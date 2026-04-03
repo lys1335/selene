@@ -3,7 +3,7 @@
  * Extracted to keep the main CRUD file focused on business logic.
  */
 
-import { and, eq, inArray, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { db } from "@/lib/db/sqlite-client";
 import {
   agentWorkflows,
@@ -11,8 +11,17 @@ import {
 } from "@/lib/db/sqlite-workflows-schema";
 import { agentSyncFolders, characters } from "@/lib/db/sqlite-character-schema";
 import { agentPlugins, plugins } from "@/lib/db/sqlite-plugins-schema";
-import { toObject } from "./workflow-types";
-import type { WorkflowSharedResources, AgentWorkflow } from "./workflow-types";
+import {
+  toObject,
+  mapWorkflowRow,
+  mapWorkflowMemberRow,
+} from "./workflow-types";
+import type {
+  WorkflowSharedResources,
+  AgentWorkflow,
+  AgentWorkflowMember,
+  WorkflowMembershipContext,
+} from "./workflow-types";
 
 /**
  * Build a WorkflowSharedResources snapshot from the database.

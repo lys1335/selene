@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import {
   callWan22Imagen,
-  isAsyncResult,
+  isImagenAsyncResult,
   type Wan22ImagenInput,
 } from "@/lib/ai/wan22-imagen-client";
 
@@ -36,8 +36,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Imagen Client - Integration Tests
 
       const result = await callWan22Imagen(input, "integration-test-session");
 
-      expect(isAsyncResult(result)).toBe(false);
-      if (!isAsyncResult(result)) {
+      expect(isImagenAsyncResult(result)).toBe(false);
+      if (!isImagenAsyncResult(result)) {
         expect(result.images).toHaveLength(1);
         expect(result.images[0].url).toMatch(/^https?:\/\//);
         expect(result.images[0].width).toBe(512);
@@ -57,8 +57,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Imagen Client - Integration Tests
 
       const result = await callWan22Imagen(input, "integration-test-session");
 
-      expect(isAsyncResult(result)).toBe(false);
-      if (!isAsyncResult(result)) {
+      expect(isImagenAsyncResult(result)).toBe(false);
+      if (!isImagenAsyncResult(result)) {
         expect(result.images).toHaveLength(1);
         expect(result.images[0].url).toBeDefined();
         expect(result.images[0].width).toBe(512);
@@ -81,8 +81,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Imagen Client - Integration Tests
       const result2 = await callWan22Imagen(input, "integration-test-session");
 
       // Both should be successful (actual reproducibility depends on API implementation)
-      expect(isAsyncResult(result1)).toBe(false);
-      expect(isAsyncResult(result2)).toBe(false);
+      expect(isImagenAsyncResult(result1)).toBe(false);
+      expect(isImagenAsyncResult(result2)).toBe(false);
       console.log("Seed test - both requests completed successfully");
     }, 120000);
 
@@ -101,8 +101,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Imagen Client - Integration Tests
 
         const result = await callWan22Imagen(input, "integration-test-session");
 
-        expect(isAsyncResult(result)).toBe(false);
-        if (!isAsyncResult(result)) {
+        expect(isImagenAsyncResult(result)).toBe(false);
+        if (!isImagenAsyncResult(result)) {
           expect(result.images[0].width).toBe(width);
           expect(result.images[0].height).toBe(height);
           console.log(`Generated ${width}x${height} image:`, result.images[0].url);
@@ -122,8 +122,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Imagen Client - Integration Tests
 
       const result = await callWan22Imagen(input, "integration-test-session");
 
-      expect(isAsyncResult(result)).toBe(true);
-      if (isAsyncResult(result)) {
+      expect(isImagenAsyncResult(result)).toBe(true);
+      if (isImagenAsyncResult(result)) {
         expect(result.jobId).toBeDefined();
         expect(result.status).toBeDefined();
         expect(result.statusUrl).toBeDefined();

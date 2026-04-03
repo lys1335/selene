@@ -212,7 +212,7 @@ export function normalizeCompatibilityInput(input: DelegateToSubagentInput): Del
   return input;
 }
 
-export function sleep(ms: number): Promise<void> {
+export function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 

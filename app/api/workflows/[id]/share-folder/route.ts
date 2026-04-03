@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/local-auth";
 import { getOrCreateLocalUser } from "@/lib/db/queries";
 import { loadSettings } from "@/lib/settings/settings-manager";
-import { shareFolderToWorkflowSubagents } from "@/lib/agents/workflows";
+import { shareFolderToWorkflowSubagents } from "@/lib/agents/workflow-folder-sharing";
 
 type RouteParams = { params: Promise<{ id: string }> };
 

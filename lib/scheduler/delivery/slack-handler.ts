@@ -15,8 +15,10 @@ interface SlackBlock {
 }
 
 export class SlackDeliveryHandler implements DeliveryHandler {
+  // fallow-ignore-next-line unused-class-member
   type = "slack";
 
+  // fallow-ignore-next-line unused-class-member
   async deliver(
     payload: DeliveryPayload,
     rawConfig: Record<string, unknown>

@@ -14,7 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/browser/session-manager";
+import { getBrowserSession } from "@/lib/browser/session-manager";
 import { recordAction, initHistory } from "@/lib/browser/action-history";
 import {
   dispatchClick,
@@ -58,7 +58,7 @@ export async function POST(
 
   const { sessionId } = await params;
 
-  const session = getSession(sessionId);
+  const session = getBrowserSession(sessionId);
   if (!session) {
     return NextResponse.json(
       { error: "No active browser session", sessionId },

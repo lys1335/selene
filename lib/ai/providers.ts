@@ -85,17 +85,10 @@ export {
 
 // ---- Types -------------------------------------------------------------------
 
-export type LLMProvider =
-  | "anthropic"
-  | "openrouter"
-  | "antigravity"
-  | "codex"
-  | "kimi"
-  | "ollama"
-  | "claudecode"
-  | "minimax"
-  | "blackboxai"
-  | "vllm";
+// LLMProvider is defined in provider-types.ts to avoid a circular dependency
+// between providers.ts and model-validation.ts (which also needs this type).
+import type { LLMProvider } from "@/lib/ai/provider-types";
+export type { LLMProvider } from "@/lib/ai/provider-types";
 
 // ---- Model Sets & Defaults ---------------------------------------------------
 

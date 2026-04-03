@@ -5,12 +5,10 @@ import {
   agentWorkflowMembers,
 } from "@/lib/db/sqlite-workflows-schema";
 import { agentSyncFolders } from "@/lib/db/sqlite-character-schema";
-import {
-  cleanupInheritedFoldersOnRemoval,
-  shareFolderToWorkflowSubagents,
-  syncOwnFoldersToWorkflowMembers,
-  syncSharedFoldersToSubAgents,
-} from "./workflow-folder-sharing";
+// Lazy import to break the cycle: workflows → workflow-folder-sharing → workflows
+async function loadWorkflowFolderSharing() {
+  return import("./workflow-folder-sharing");
+}
 import {
   mapWorkflowRow,
   mapWorkflowMemberRow,
@@ -28,10 +26,9 @@ import {
 } from "./workflow-db-helpers";
 
 // ── Re-exports (keep all public names accessible from this path) ───────────────
-export {
-  shareFolderToWorkflowSubagents,
-  syncSharedFoldersToSubAgents,
-} from "./workflow-folder-sharing";
+// Note: shareFolderToWorkflowSubagents and syncSharedFoldersToSubAgents are exported
+// directly from ./workflow-folder-sharing to avoid a circular dependency:
+// workflow-folder-sharing → workflows (dynamic) → workflow-folder-sharing (static re-export)
 
 export type {
   WorkflowStatus,
@@ -265,6 +262,7 @@ export async function createManualWorkflow(
   });
 
   if (uniqueSubAgentIds.length > 0) {
+    const { syncSharedFoldersToSubAgents, syncOwnFoldersToWorkflowMembers } = await loadWorkflowFolderSharing();
     // Sync initiator's folders → all subagents
     await syncSharedFoldersToSubAgents({
       userId: input.userId,
@@ -337,6 +335,7 @@ export async function addSubagentToWorkflow(
   }
 
   if (input.syncFolders !== false) {
+    const { syncSharedFoldersToSubAgents, syncOwnFoldersToWorkflowMembers } = await loadWorkflowFolderSharing();
     // Sync all existing members' folders → new subagent
     await syncSharedFoldersToSubAgents({
       userId: input.userId,
@@ -492,6 +491,7 @@ export async function removeWorkflowMember(
   }
 
   // Clean up inherited folders before removing the member
+  const { cleanupInheritedFoldersOnRemoval } = await loadWorkflowFolderSharing();
   await cleanupInheritedFoldersOnRemoval({
     workflowId: input.workflowId,
     leavingAgentId: input.agentId,
@@ -624,7 +624,8 @@ export async function getWorkflowMembers(workflowId: string): Promise<AgentWorkf
   return rows.map(mapWorkflowMemberRow);
 }
 
-export { getWorkflowResources } from "./workflow-resource-context";
+// getWorkflowResources is exported directly from ./workflow-resource-context
+// to avoid a circular dependency: workflow-resource-context → delegate-to-subagent-tool → workflows → workflow-resource-context
 
 /**
  * Returns all active workflows where the given agent is the initiator.
@@ -692,6 +693,7 @@ export async function createSystemAgentWorkflow(input: {
   });
 
   if (uniqueSubAgentIds.length > 0) {
+    const { syncSharedFoldersToSubAgents } = await loadWorkflowFolderSharing();
     await syncSharedFoldersToSubAgents({
       userId: input.userId,
       initiatorId: input.initiatorId,

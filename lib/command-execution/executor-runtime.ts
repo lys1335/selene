@@ -14,8 +14,6 @@ import {
     sanitizeEnvironment,
 } from "@/lib/process-env/policy";
 
-export { sanitizeEnvironment } from "@/lib/process-env/policy";
-
 /**
  * Explicitly normalize the parent process environment before command execution.
  *

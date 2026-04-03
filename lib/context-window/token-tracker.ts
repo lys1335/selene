@@ -467,6 +467,7 @@ export class TokenTracker {
    * @param usage - Token usage from calculateUsage
    * @returns Extended breakdown with percentages and formatting
    */
+  // fallow-ignore-next-line unused-class-member
   static getBreakdown(usage: TokenUsage): TokenBreakdown {
     const total = usage.totalTokens || 1; // Avoid division by zero
 
@@ -517,6 +518,7 @@ export class TokenTracker {
    * @param sessionSummary - Optional session summary
    * @returns Total estimated tokens
    */
+  // fallow-ignore-next-line unused-class-member
   static estimateRequestTokens(
     messages: Array<{ role: string; content: unknown }>,
     systemPromptLength: number,
@@ -542,6 +544,7 @@ export class TokenTracker {
    * @param estimatedSummaryTokens - Estimated tokens for the summary
    * @returns Net tokens that would be freed
    */
+  // fallow-ignore-next-line unused-class-member
   static calculatePotentialSavings(
     messagesToCompact: Message[],
     estimatedSummaryTokens: number = 500
@@ -567,6 +570,7 @@ export class TokenTracker {
    * @param keepRecentCount - Minimum recent messages to keep
    * @returns Index of last message to compact, or -1 if not possible
    */
+  // fallow-ignore-next-line unused-class-member
   static findCompactionBoundary(
     messages: Message[],
     targetTokensToFree: number,

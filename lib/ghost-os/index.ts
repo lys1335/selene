@@ -16,10 +16,8 @@ export type {
 // Setup & detection
 export {
   resolveGhostBinary,
-  getGhostVersion,
   isVisionModelInstalled,
   getGhostOsStatus,
-  runGhostDoctor,
   runGhostSetup,
 } from "./setup";
 

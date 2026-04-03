@@ -110,6 +110,6 @@ export function useVectorSyncStatusInternal(): UseVectorSyncStatusInternalResult
 }
 
 // Export context for provider
-export { VectorSyncContext, DEFAULT_STATUS };
+export { VectorSyncContext };
 export type { VectorSyncContextType, GlobalSyncStatus, SyncStatusFolder };
 

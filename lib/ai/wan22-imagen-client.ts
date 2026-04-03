@@ -46,7 +46,7 @@ export interface Wan22ImagenAsyncResult {
 
 export type Wan22ImagenResult = Wan22ImagenSyncResult | Wan22ImagenAsyncResult;
 
-export function isAsyncResult(
+export function isImagenAsyncResult(
   result: Wan22ImagenResult
 ): result is Wan22ImagenAsyncResult {
   return "jobId" in result;

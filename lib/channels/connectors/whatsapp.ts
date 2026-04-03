@@ -23,6 +23,7 @@ type WhatsAppConnectorOptions = {
 
 export class WhatsAppConnector implements ChannelConnector {
   connectionId: string;
+  // fallow-ignore-next-line unused-class-member
   channelType: ChannelConnector["channelType"] = "whatsapp";
   status: ChannelConnector["status"] = "disconnected";
 
@@ -158,6 +159,7 @@ export class WhatsAppConnector implements ChannelConnector {
     });
   }
 
+  // fallow-ignore-next-line unused-class-member
   async disconnect(): Promise<void> {
     if (this.sock) {
       try {
@@ -171,6 +173,7 @@ export class WhatsAppConnector implements ChannelConnector {
     this.onStatus(this.status);
   }
 
+  // fallow-ignore-next-line unused-class-member
   async sendMessage(payload: ChannelSendPayload): Promise<ChannelSendResult> {
     if (!this.sock) {
       throw new Error("WhatsApp socket not connected");
@@ -205,6 +208,7 @@ export class WhatsAppConnector implements ChannelConnector {
     return { externalMessageId };
   }
 
+  // fallow-ignore-next-line unused-class-member
   async sendTyping(peerId: string): Promise<void> {
     if (!this.sock) return;
     try {
@@ -214,6 +218,7 @@ export class WhatsAppConnector implements ChannelConnector {
     }
   }
 
+  // fallow-ignore-next-line unused-class-member
   async markAsRead(peerId: string, messageId: string): Promise<void> {
     if (!this.sock) return;
     try {
@@ -229,6 +234,7 @@ export class WhatsAppConnector implements ChannelConnector {
     }
   }
 
+  // fallow-ignore-next-line unused-class-member
   getQrCode(): string | null {
     return null;
   }

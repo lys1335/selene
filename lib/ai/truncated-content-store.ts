@@ -214,7 +214,7 @@ export function listStoredContent(sessionId: string): Array<{
 /**
  * Clear a specific session
  */
-export function clearSession(sessionId: string): void {
+export function clearTruncatedContentSession(sessionId: string): void {
   sessionStore.delete(sessionId);
   console.log(`[TruncatedContentStore] Cleared session: ${sessionId}`);
 }

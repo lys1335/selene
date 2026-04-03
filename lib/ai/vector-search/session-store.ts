@@ -96,7 +96,7 @@ export function getSearchHistory(
 /**
  * Clear session for a session key
  */
-export function clearSession(sessionKey: string): void {
+export function clearVectorSearchSession(sessionKey: string): void {
   sessionStore.delete(sessionKey);
   console.log(`[VectorSearchSession] Cleared session: ${sessionKey}`);
 }

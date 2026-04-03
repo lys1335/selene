@@ -100,7 +100,7 @@ export function setSessionMemorySignature(sessionKey: string, signature: string 
 /**
  * Clear session for a session key
  */
-export function clearSession(sessionKey: string): void {
+export function clearPromptEnhancementSession(sessionKey: string): void {
   sessionStore.delete(sessionKey);
   console.log(`[EnhancementSession] Cleared session for ${sessionKey}`);
 }

@@ -84,8 +84,10 @@ function getTavilyApiKey(): string | undefined {
 }
 
 class TavilyProvider implements WebSearchProvider {
+  // fallow-ignore-next-line unused-class-member
   name = "tavily";
 
+  // fallow-ignore-next-line unused-class-member
   isAvailable(): boolean {
     return !!getTavilyApiKey();
   }
@@ -211,8 +213,10 @@ function normalizeDuckDuckGoResults(raw: DuckDuckGoRawResult[]): WebSearchSource
 }
 
 export class DuckDuckGoProvider implements WebSearchProvider {
+  // fallow-ignore-next-line unused-class-member
   name = "duckduckgo";
 
+  // fallow-ignore-next-line unused-class-member
   isAvailable(): boolean {
     // DDG is always available (no API key needed)
     return true;

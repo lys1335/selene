@@ -63,7 +63,8 @@ import {
 } from "@/lib/observability";
 import { nextOrderingIndex } from "@/lib/session/message-ordering";
 import { getEnabledPluginsForAgent, getInstalledPlugins, loadPluginHooks } from "@/lib/plugins/registry";
-import { getWorkflowByAgentId, getWorkflowResources } from "@/lib/agents/workflows";
+import { getWorkflowByAgentId } from "@/lib/agents/workflows";
+import { getWorkflowResources } from "@/lib/agents/workflow-resource-context";
 import { INTERNAL_API_SECRET } from "@/lib/config/internal-api-secret";
 
 // ── Extracted utility modules ─────────────────────────────────────────────────

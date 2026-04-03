@@ -526,7 +526,7 @@ export async function getSessionProviderTemperatureForSession(
   return provider === "kimi" ? 1 : requestedTemp;
 }
 
-export function getAgentModelConfigFromMetadata(
+function getAgentModelConfigFromMetadata(
   metadata: Record<string, unknown> | null | undefined,
 ): AgentModelConfig | null {
   return getAgentModelConfigFromUnknown(metadata?.modelConfig);

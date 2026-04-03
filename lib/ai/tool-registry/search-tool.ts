@@ -12,7 +12,12 @@
 import { tool, jsonSchema, generateObject } from "ai";
 import type { ToolResultOutput } from "@ai-sdk/provider-utils";
 import { z } from "zod";
-import { getUtilityModel } from "@/lib/ai/providers";
+// Lazy import to break the cycle:
+// claudecode-provider → selene-sdk-mcp-server → search-tool → providers → claudecode-provider
+async function getUtilityModelLazy() {
+  const { getUtilityModel } = await import("@/lib/ai/providers");
+  return getUtilityModel();
+}
 import { ToolRegistry } from "./registry";
 import type { ToolSearchResult, ToolCategory } from "./types";
 import { parseSubagentDirectory, searchSubagents, type SubagentSearchResult } from "./search-tool-subagent-types";
@@ -204,7 +209,7 @@ async function callToolSearchRouter(
   prompt: string,
 ): Promise<ToolSearchRouterDecision> {
   const { object } = await generateObject({
-    model: getUtilityModel(),
+    model: await getUtilityModelLazy(),
     schema: toolSearchRouterJsonSchema,
     temperature: 0,
     prompt,

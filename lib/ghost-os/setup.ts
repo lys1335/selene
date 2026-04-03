@@ -99,7 +99,7 @@ async function verifyGhostOsBinary(binaryPath: string): Promise<boolean> {
  * Get Ghost OS version from the binary.
  * Returns null if binary not found or version cannot be parsed.
  */
-export async function getGhostVersion(binaryPath: string): Promise<string | null> {
+async function getGhostVersion(binaryPath: string): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync(binaryPath, ["--version"], {
       timeout: 5000,
@@ -171,7 +171,7 @@ export async function getGhostOsStatus(): Promise<GhostOsStatus> {
 /**
  * Run `ghost doctor` and parse the output.
  */
-export async function runGhostDoctor(binaryPath?: string): Promise<GhostDoctorResult> {
+async function runGhostDoctor(binaryPath?: string): Promise<GhostDoctorResult> {
   const binary = binaryPath || (await resolveGhostBinary());
   if (!binary) {
     return {

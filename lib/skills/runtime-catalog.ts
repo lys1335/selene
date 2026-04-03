@@ -1,4 +1,5 @@
-import { getWorkflowByAgentId, getWorkflowResources } from "@/lib/agents/workflows";
+import { getWorkflowByAgentId } from "@/lib/agents/workflows";
+import { getWorkflowResources } from "@/lib/agents/workflow-resource-context";
 import { getEnabledPluginsForAgent, getInstalledPlugins } from "@/lib/plugins/registry";
 import { getLatestPluginSkillRevisionsForPlugins } from "@/lib/plugins/skill-revision-queries";
 import type { InstalledPlugin, PluginSkillEntry } from "@/lib/plugins/types";
