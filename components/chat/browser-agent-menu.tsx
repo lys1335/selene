@@ -31,20 +31,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  FolderManagerDialog,
-  ToolEditorDialog,
-  PluginEditorDialog,
-  McpToolEditorDialog,
-} from "@/components/character-picker-dialogs";
-import {
-  IdentityEditorDialog,
-  McpRemovalWarningDialog,
-  DeleteAgentDialog,
-} from "@/components/character-picker-dialogs-2";
-import { Avatar3DModelSelector } from "@/components/avatar-3d/avatar-model-selector";
 import { useCharacterActions } from "@/components/character-picker-character-actions-hook";
 import { useToolEditor } from "@/components/character-picker-tool-editor-hook";
+import { AgentActionDialogs } from "@/components/agent-action-dialogs";
 import type { CharacterSummary } from "@/components/character-picker-types";
 
 interface BrowserAgentMenuCharacter {
@@ -252,106 +241,11 @@ export function BrowserAgentMenu({ character }: BrowserAgentMenuProps) {
       </DropdownMenu>
 
       {/* Dialogs — rendered inline, controlled by hooks */}
-      <ToolEditorDialog
-        open={toolEditor.toolEditorOpen}
-        onOpenChange={toolEditor.setToolEditorOpen}
-        editingCharacter={toolEditor.editingCharacter}
-        availableTools={toolEditor.availableTools}
-        selectedTools={toolEditor.selectedTools}
-        isSaving={toolEditor.isSaving}
-        toolSearchQuery={toolEditor.toolSearchQuery}
-        setToolSearchQuery={toolEditor.setToolSearchQuery}
-        collapsedCategories={toolEditor.collapsedCategories}
-        toolsByCategory={toolEditor.toolsByCategory}
-        filteredToolsByCategory={toolEditor.filteredToolsByCategory}
-        areDependenciesMet={toolEditor.areDependenciesMet}
-        getDependencyWarning={toolEditor.getDependencyWarning}
-        toggleCategory={toolEditor.toggleCategory}
-        toggleAllInCategory={toolEditor.toggleAllInCategory}
-        getSelectedCountInCategory={toolEditor.getSelectedCountInCategory}
-        toggleTool={toolEditor.toggleTool}
-        onSave={toolEditor.saveTools}
-      />
-
-      <PluginEditorDialog
-        open={charActions.pluginEditorOpen}
-        onOpenChange={charActions.setPluginEditorOpen}
-        editingCharacter={charActions.pluginEditingCharacter}
-        agentPlugins={charActions.agentPlugins}
-        loadingAgentPlugins={charActions.loadingAgentPlugins}
-        savingPluginId={charActions.savingPluginId}
-        toggleAgentPlugin={charActions.toggleAgentPlugin}
-      />
-
-      <McpToolEditorDialog
-        open={charActions.mcpToolEditorOpen}
-        onOpenChange={charActions.setMcpToolEditorOpen}
-        editingCharacter={charActions.mcpEditingCharacter}
-        mcpServers={charActions.mcpServers}
-        mcpTools={charActions.mcpTools}
-        mcpToolPreferences={charActions.mcpToolPreferences}
-        onUpdate={charActions.onUpdateMcp}
-        onComplete={charActions.saveMcpTools}
-      />
-
-      <IdentityEditorDialog
-        open={charActions.identityEditorOpen}
-        onOpenChange={charActions.setIdentityEditorOpen}
-        identityForm={charActions.identityForm}
-        setIdentityForm={charActions.setIdentityForm}
-        generatedPrompt={charActions.generatedPrompt}
-        isSaving={charActions.isSavingIdentity}
-        onSave={charActions.saveIdentity}
-        defaultTab={charActions.identityEditorDefaultTab}
-      />
-
-      <McpRemovalWarningDialog
-        open={charActions.mcpRemovalWarningOpen}
-        onOpenChange={charActions.setMcpRemovalWarningOpen}
-        mcpToolsBeingRemoved={charActions.mcpToolsBeingRemoved}
-        isSaving={charActions.isSavingMcp}
-        onConfirm={(e) => {
-          e.preventDefault();
-          charActions.performMcpToolSave();
-        }}
-      />
-
-      <FolderManagerDialog
-        open={charActions.folderManagerOpen}
-        onOpenChange={charActions.setFolderManagerOpen}
-        folderManagerCharacter={charActions.folderManagerCharacter}
-      />
-
-      {charActions.avatar3dSelectorCharacter && (
-        <Avatar3DModelSelector
-          open={charActions.avatar3dSelectorOpen}
-          onOpenChange={charActions.setAvatar3dSelectorOpen}
-          characterId={charActions.avatar3dSelectorCharacter.id}
-          characterName={
-            charActions.avatar3dSelectorCharacter.displayName ||
-            charActions.avatar3dSelectorCharacter.name
-          }
-          currentAvatarConfig={
-            charActions.avatar3dSelectorCharacter.metadata
-              ?.avatarConfig as any
-          }
-          onAvatarConfigChange={() => {
-            void reloadPage();
-          }}
-        />
-      )}
-
-      <DeleteAgentDialog
-        open={charActions.deleteDialogOpen}
-        onOpenChange={charActions.setDeleteDialogOpen}
-        characterToDelete={charActions.characterToDelete}
-        isDeleting={charActions.isDeleting}
-        onConfirm={(e) => {
-          e.preventDefault();
-          void charActions.deleteCharacter().then(() => {
-            router.push("/");
-          });
-        }}
+      <AgentActionDialogs
+        charActions={charActions}
+        toolEditor={toolEditor}
+        onAvatarConfigChange={() => void reloadPage()}
+        onConfirmDelete={() => void charActions.deleteCharacter().then(() => router.push("/"))}
       />
     </>
   );

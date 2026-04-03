@@ -2,22 +2,19 @@
 
 import { memo, useEffect, useMemo, useState, type FC } from "react";
 import {
-  Globe,
-  CursorClick,
-  TextT,
-  TreeStructure,
-  Code,
-  Eye,
-  X,
   CaretDown,
   CaretRight,
   CheckCircle,
   XCircle,
   CircleNotch,
   Play,
-  ArrowRight,
   Clock,
 } from "@phosphor-icons/react";
+import {
+  getActionIcon,
+  getActionLabel,
+  truncateUrl,
+} from "@/components/browser-session/browser-action-helpers";
 import { cn } from "@/lib/utils";
 import { useChatSessionId } from "@/components/chat-provider";
 import { useBrowserActive } from "./browser-active-context";
@@ -78,37 +75,7 @@ interface ChromiumWorkspaceResult {
 }
 
 // ─── Action icon mapping ──────────────────────────────────────────────────────
-
-const ACTION_ICONS: Record<string, typeof Globe> = {
-  open: Globe,
-  navigate: ArrowRight,
-  click: CursorClick,
-  type: TextT,
-  snapshot: TreeStructure,
-  extract: Eye,
-  replay: Play,
-  evaluate: Code,
-  close: X,
-};
-
-function getActionIcon(action: string) {
-  return ACTION_ICONS[action] ?? Globe;
-}
-
-function getActionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    open: "Open",
-    navigate: "Navigate",
-    click: "Click",
-    type: "Type",
-    snapshot: "Snapshot",
-    extract: "Extract",
-    evaluate: "Evaluate",
-    close: "Close",
-    replay: "Replay",
-  };
-  return labels[action] ?? action;
-}
+// Imported from browser-action-helpers.ts
 
 // ─── Human-readable summaries ─────────────────────────────────────────────────
 
@@ -238,18 +205,6 @@ function formatUnknown(value: unknown, maxLen: number): string {
     return (JSON.stringify(value, null, 2) ?? "null").slice(0, maxLen);
   } catch {
     return String(value).slice(0, maxLen);
-  }
-}
-
-function truncateUrl(url: string, maxLen: number): string {
-  try {
-    const u = new URL(url);
-    const display = u.hostname + u.pathname;
-    return display.length > maxLen
-      ? display.slice(0, maxLen) + "..."
-      : display;
-  } catch {
-    return url.slice(0, maxLen);
   }
 }
 

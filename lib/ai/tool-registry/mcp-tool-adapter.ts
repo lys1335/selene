@@ -11,7 +11,14 @@ import { ToolRegistry } from "@/lib/ai/tool-registry/registry";
 import { MCPClientManager } from "@/lib/mcp/client-manager";
 import type { MCPDiscoveredTool } from "@/lib/mcp/types";
 import { formatMCPToolResult } from "@/lib/mcp/result-formatter";
-import { normalizeInputSchema, ensureSchemaCompleteness } from "@/lib/ai/json-schema-sanitizer";
+import {
+    normalizeInputSchema,
+    ensureSchemaCompleteness,
+    BASE_ALLOWED_SCHEMA_KEYS,
+    BASE_STRING_KEYS,
+    BASE_NUMBER_KEYS,
+    BASE_BOOLEAN_KEYS,
+} from "@/lib/ai/json-schema-sanitizer";
 
 const MCP_SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema";
 
@@ -22,97 +29,12 @@ const DEFAULT_MCP_INPUT_SCHEMA: Record<string, unknown> = {
     additionalProperties: true,
 };
 
-const MCP_ALLOWED_SCHEMA_KEYS = new Set([
-    "$schema",
-    "$id",
-    "$ref",
-    "$defs",
-    "$comment",
-    "title",
-    "description",
-    "type",
-    "enum",
-    "const",
-    "default",
-    "examples",
-    "format",
-    "properties",
-    "patternProperties",
-    "additionalProperties",
-    "required",
-    "items",
-    "prefixItems",
-    "minItems",
-    "maxItems",
-    "uniqueItems",
-    "contains",
-    "minContains",
-    "maxContains",
-    "minimum",
-    "maximum",
-    "exclusiveMinimum",
-    "exclusiveMaximum",
-    "multipleOf",
-    "minLength",
-    "maxLength",
-    "pattern",
-    "dependentRequired",
-    "dependentSchemas",
-    "if",
-    "then",
-    "else",
-    "allOf",
-    "anyOf",
-    "oneOf",
-    "not",
-    "unevaluatedProperties",
-    "unevaluatedItems",
-    "propertyNames",
-    "contentMediaType",
-    "contentEncoding",
-    "contentSchema",
-    "readOnly",
-    "writeOnly",
-    "deprecated",
-    "minProperties",
-    "maxProperties",
-]);
-
-const MCP_STRING_KEYS = new Set([
-    "$schema",
-    "$id",
-    "$ref",
-    "$comment",
-    "title",
-    "description",
-    "format",
-    "pattern",
-    "contentMediaType",
-    "contentEncoding",
-]);
-
-const MCP_NUMBER_KEYS = new Set([
-    "minItems",
-    "maxItems",
-    "minContains",
-    "maxContains",
-    "minimum",
-    "maximum",
-    "exclusiveMinimum",
-    "exclusiveMaximum",
-    "multipleOf",
-    "minLength",
-    "maxLength",
-    "minProperties",
-    "maxProperties",
-]);
-
-const MCP_BOOLEAN_KEYS = new Set([
-    "uniqueItems",
-    "readOnly",
-    "writeOnly",
-    "deprecated",
-]);
+// MCP schemas carry an explicit "$schema" declaration that Antigravity does not,
+// so we extend the base sets with that single additional key.
+const MCP_ALLOWED_SCHEMA_KEYS = new Set(["$schema", ...BASE_ALLOWED_SCHEMA_KEYS]);
+const MCP_STRING_KEYS = new Set(["$schema", ...BASE_STRING_KEYS]);
+const MCP_NUMBER_KEYS = BASE_NUMBER_KEYS;
+const MCP_BOOLEAN_KEYS = BASE_BOOLEAN_KEYS;
 
 function normalizeMcpInputSchema(
     inputSchema: unknown,

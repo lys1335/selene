@@ -12,18 +12,12 @@
 import { useEffect, useRef, useState, useCallback, type FC } from "react";
 import {
   Globe,
-  CursorClick,
-  TextT,
-  TreeStructure,
-  Code,
-  Eye,
-  X,
-  Play,
-  ArrowRight,
   CheckCircle,
   XCircle,
   CircleNotch,
   Clock,
+  Eye,
+  Play,
   Record as RecordIcon,
   Stop,
   DownloadSimple,
@@ -31,6 +25,11 @@ import {
   Hand,
   User,
 } from "@phosphor-icons/react";
+import {
+  getActionIcon,
+  getActionLabel,
+  truncateUrl,
+} from "./browser-action-helpers";
 import { cn } from "@/lib/utils";
 import { useScreencastRecorder } from "./use-screencast-recorder";
 import { useBrowserInteraction } from "./use-browser-interaction";
@@ -64,47 +63,7 @@ interface SessionHistory {
 }
 
 // ─── Action helpers ───────────────────────────────────────────────────────────
-
-const ACTION_ICONS: Record<string, typeof Globe> = {
-  open: Globe,
-  navigate: ArrowRight,
-  click: CursorClick,
-  type: TextT,
-  snapshot: TreeStructure,
-  extract: Eye,
-  replay: Play,
-  evaluate: Code,
-  close: X,
-};
-
-function getActionIcon(action: string) {
-  return ACTION_ICONS[action] ?? Globe;
-}
-
-function getActionLabel(action: string): string {
-  const labels: Record<string, string> = {
-    open: "Open",
-    navigate: "Navigate",
-    click: "Click",
-    type: "Type",
-    snapshot: "Snapshot",
-    extract: "Extract",
-    evaluate: "Evaluate",
-    close: "Close",
-    replay: "Replay",
-  };
-  return labels[action] ?? action;
-}
-
-function truncateUrl(url: string, maxLen: number): string {
-  try {
-    const u = new URL(url);
-    const display = u.hostname + u.pathname;
-    return display.length > maxLen ? display.slice(0, maxLen) + "..." : display;
-  } catch {
-    return url.slice(0, maxLen);
-  }
-}
+// Imported from browser-action-helpers.ts
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 

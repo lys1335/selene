@@ -8,7 +8,8 @@ import {
   listChannelConnections,
 } from "@/lib/db/queries";
 import { getCharacter } from "@/lib/characters/queries";
-import type { ChannelConnectionConfig, ChannelType } from "@/lib/channels/types";
+import type { ChannelConnectionConfig } from "@/lib/channels/types";
+import { buildChannelConfig } from "@/lib/channels/config-builder";
 
 const createSchema = z.object({
   characterId: z.string().min(1),
@@ -16,72 +17,6 @@ const createSchema = z.object({
   displayName: z.string().trim().min(1).max(100).optional().nullable(),
   config: z.record(z.any()).optional(),
 });
-
-function buildConfig(
-  channelType: ChannelType,
-  config: Record<string, unknown> | undefined,
-  label?: string | null
-): ChannelConnectionConfig {
-  const normalizeBool = (value: unknown): boolean | undefined => {
-    if (typeof value === "boolean") return value;
-    if (typeof value === "string") {
-      if (value.toLowerCase() === "true") return true;
-      if (value.toLowerCase() === "false") return false;
-    }
-    if (typeof value === "number") {
-      if (value === 1) return true;
-      if (value === 0) return false;
-    }
-    return undefined;
-  };
-
-  if (channelType === "whatsapp") {
-    return {
-      type: "whatsapp",
-      label: typeof label === "string" ? label : undefined,
-      authPath: typeof config?.authPath === "string" ? config.authPath : undefined,
-      selfChatMode: normalizeBool(config?.selfChatMode),
-    };
-  }
-
-  if (channelType === "telegram") {
-    const botToken = typeof config?.botToken === "string" ? config.botToken.trim() : "";
-    if (!botToken) {
-      throw new Error("Telegram bot token is required");
-    }
-    return {
-      type: "telegram",
-      botToken,
-      label: typeof label === "string" ? label : undefined,
-    };
-  }
-
-  if (channelType === "discord") {
-    const botToken = typeof config?.botToken === "string" ? config.botToken.trim() : "";
-    if (!botToken) {
-      throw new Error("Discord bot token is required");
-    }
-    return {
-      type: "discord",
-      botToken,
-      label: typeof label === "string" ? label : undefined,
-    };
-  }
-
-  const botToken = typeof config?.botToken === "string" ? config.botToken.trim() : "";
-  const appToken = typeof config?.appToken === "string" ? config.appToken.trim() : "";
-  const signingSecret = typeof config?.signingSecret === "string" ? config.signingSecret.trim() : "";
-  if (!botToken || !appToken || !signingSecret) {
-    throw new Error("Slack bot token, app token, and signing secret are required");
-  }
-  return {
-    type: "slack",
-    botToken,
-    appToken,
-    signingSecret,
-    label: typeof label === "string" ? label : undefined,
-  };
-}
 
 export async function GET(req: Request) {
   try {
@@ -133,7 +68,7 @@ export async function POST(req: Request) {
 
     let normalizedConfig: ChannelConnectionConfig;
     try {
-      normalizedConfig = buildConfig(channelType, config, displayName ?? undefined);
+      normalizedConfig = buildChannelConfig(channelType, config, displayName ?? undefined);
     } catch (error) {
       return NextResponse.json(
         { error: error instanceof Error ? error.message : "Invalid configuration" },

@@ -1,13 +1,17 @@
 import { existsSync } from "fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "fs/promises";
-import { tmpdir } from "os";
+import { readFile, writeFile } from "fs/promises";
 import { extname, join, relative } from "path";
 import { pathToFileURL } from "url";
-import { spawn } from "child_process";
 
 import { isAudioMimeType, transcribeAudio } from "@/lib/audio/transcription";
 
 import { DocumentErrorCode, DocumentProcessingError } from "./errors";
+import {
+  runDocling,
+  listFilesRecursive,
+  cleanupTempPaths,
+  createDoclingWorkDir,
+} from "./docling-runner";
 
 type SupportedDocumentFormat =
   | "pdf"
@@ -345,21 +349,6 @@ export async function extractTextFromDocument(
   }
 }
 
-async function listFilesRecursive(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files = await Promise.all(
-    entries.map(async (entry) => {
-      const fullPath = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        return listFilesRecursive(fullPath);
-      }
-      return [fullPath];
-    }),
-  );
-
-  return files.flat();
-}
-
 async function extractWithDocling(params: {
   buffer: Buffer;
   filename: string;
@@ -367,73 +356,15 @@ async function extractWithDocling(params: {
   doclingInputFormat?: "xml_jats";
   sourceType: DocumentSourceType;
 }): Promise<ParsedDocument> {
-  const cleanupPaths: string[] = [];
-  const ext = extname(params.filename) || ".bin";
+  const { workDir, outputDir } = await createDoclingWorkDir();
+  const inputPath = join(workDir, `input${extname(params.filename) || ".bin"}`);
+  await writeFile(inputPath, params.buffer);
 
   try {
-    const workDir = await mkdtemp(join(tmpdir(), "selene-docling-"));
-    cleanupPaths.push(workDir);
-
-    const inputPath = join(workDir, `input${ext}`);
-    const outputDir = join(workDir, "out");
-    await mkdir(outputDir, { recursive: true });
-    await writeFile(inputPath, params.buffer);
-
-    const args = [
-      "tool",
-      "run",
-      "--from",
-      "docling",
-      "docling",
+    const result = await runDocling({
       inputPath,
-      "--to",
-      "md",
-      "--output",
       outputDir,
-      "--device",
-      "cpu",
-      "--document-timeout",
-      "120",
-    ];
-
-    if (params.doclingInputFormat) {
-      args.splice(5, 0, "--from", params.doclingInputFormat);
-    }
-
-    const result = await new Promise<{
-      exitCode: number | null;
-      stdout: string;
-      stderr: string;
-      error?: string;
-    }>((resolve) => {
-      const child = spawn("uv", args, {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: process.env,
-      });
-
-      let stdout = "";
-      let stderr = "";
-      let settled = false;
-
-      child.stdout.on("data", (chunk) => {
-        stdout += chunk.toString();
-      });
-
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk.toString();
-      });
-
-      child.on("error", (error) => {
-        if (settled) return;
-        settled = true;
-        resolve({ exitCode: null, stdout, stderr, error: error.message });
-      });
-
-      child.on("close", (exitCode) => {
-        if (settled) return;
-        settled = true;
-        resolve({ exitCode, stdout, stderr });
-      });
+      doclingInputFormat: params.doclingInputFormat,
     });
 
     if (result.error) {
@@ -487,18 +418,7 @@ async function extractWithDocling(params: {
       },
     };
   } finally {
-    await Promise.all(
-      cleanupPaths.map(async (target) => {
-        try {
-          const info = await stat(target);
-          if (info) {
-            await rm(target, { recursive: true, force: true });
-          }
-        } catch {
-          // Ignore cleanup failures for temp Docling directories.
-        }
-      }),
-    );
+    await cleanupTempPaths([workDir]);
   }
 }
 

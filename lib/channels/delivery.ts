@@ -1,4 +1,5 @@
 import { readLocalFile } from "@/lib/storage/local-storage";
+import { parseDataUrl } from "@/lib/storage/data-url";
 import {
   createChannelMessage,
   getChannelConnection,
@@ -258,12 +259,6 @@ function extractImageUrlsFromToolResult(result: unknown): string[] {
   }
 
   return urls;
-}
-
-function parseDataUrl(value: string): { mimeType: string; data: string } | null {
-  const match = value.match(/^data:([^;]+);base64,(.+)$/);
-  if (!match) return null;
-  return { mimeType: match[1], data: match[2] };
 }
 
 /**

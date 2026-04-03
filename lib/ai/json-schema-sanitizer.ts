@@ -8,6 +8,106 @@
  * Used by both the Antigravity provider adapter and the MCP tool adapter.
  */
 
+// ---- Shared key sets ---------------------------------------------------------
+
+/**
+ * Core JSON Schema 2020-12 keywords accepted by all consumers.
+ * Individual adapters extend this set with any provider-specific additions
+ * (e.g. MCP adds "$schema"; Antigravity does not include it).
+ */
+export const BASE_ALLOWED_SCHEMA_KEYS = new Set([
+  "$id",
+  "$ref",
+  "$defs",
+  "$comment",
+  "title",
+  "description",
+  "type",
+  "enum",
+  "const",
+  "default",
+  "examples",
+  "format",
+  "properties",
+  "patternProperties",
+  "additionalProperties",
+  "required",
+  "items",
+  "prefixItems",
+  "minItems",
+  "maxItems",
+  "uniqueItems",
+  "contains",
+  "minContains",
+  "maxContains",
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "minLength",
+  "maxLength",
+  "pattern",
+  "dependentRequired",
+  "dependentSchemas",
+  "if",
+  "then",
+  "else",
+  "allOf",
+  "anyOf",
+  "oneOf",
+  "not",
+  "unevaluatedProperties",
+  "unevaluatedItems",
+  "propertyNames",
+  "contentMediaType",
+  "contentEncoding",
+  "contentSchema",
+  "readOnly",
+  "writeOnly",
+  "deprecated",
+  "minProperties",
+  "maxProperties",
+]);
+
+/** Keys whose values must be strings. */
+export const BASE_STRING_KEYS = new Set([
+  "$id",
+  "$ref",
+  "$comment",
+  "title",
+  "description",
+  "format",
+  "pattern",
+  "contentMediaType",
+  "contentEncoding",
+]);
+
+/** Keys whose values must be numbers. */
+export const BASE_NUMBER_KEYS = new Set([
+  "minItems",
+  "maxItems",
+  "minContains",
+  "maxContains",
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "minLength",
+  "maxLength",
+  "minProperties",
+  "maxProperties",
+]);
+
+/** Keys whose values must be booleans. */
+export const BASE_BOOLEAN_KEYS = new Set([
+  "uniqueItems",
+  "readOnly",
+  "writeOnly",
+  "deprecated",
+]);
+
 // ---- Helpers -----------------------------------------------------------------
 
 export function isPlainObject(value: unknown): value is Record<string, unknown> {

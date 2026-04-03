@@ -108,6 +108,85 @@ function resolveEmbeddingBatchSize(): number {
   return Math.min(Math.floor(embeddingBatchSize), maxBatch);
 }
 
+/**
+ * Embed chunks in batches and add them to the agent's vector table.
+ * Returns the list of point IDs that were added, or throws on error.
+ */
+async function embedAndStoreChunks(params: {
+  characterId: string;
+  folderId: string;
+  filePath: string;
+  relativePath: string;
+  chunks: IndexChunk[];
+  signal?: AbortSignal;
+}): Promise<string[]> {
+  const { characterId, folderId, filePath, relativePath, chunks, signal } = params;
+
+  const batchSize = resolveEmbeddingBatchSize();
+  const embeddingModelId = getEmbeddingModelId();
+  const embeddingModel = getEmbeddingModel(embeddingModelId);
+  const pointIds: string[] = [];
+  let table: Awaited<ReturnType<typeof ensureAgentTable>> | null = null;
+
+  try {
+    for (let start = 0; start < chunks.length; start += batchSize) {
+      if (signal?.aborted) {
+        throw new Error("Indexing aborted");
+      }
+
+      const batch = chunks.slice(start, start + batchSize);
+      const { embeddings } = await embedMany({
+        model: embeddingModel,
+        values: batch.map(c => c.text),
+        abortSignal: signal,
+      });
+      const normalizedEmbeddings = normalizeEmbeddings(embeddings);
+
+      if (!normalizedEmbeddings.length || normalizedEmbeddings.length !== batch.length) {
+        throw new Error("Embedding batch size mismatch");
+      }
+
+      if (!table) {
+        const dimensions = normalizedEmbeddings[0]?.length || 1536;
+        table = await ensureAgentTable(characterId, dimensions);
+        if (!table) {
+          throw new Error("Failed to create table");
+        }
+      }
+
+      const records = batch.map((chunk, index) => {
+        const record = createDocumentRecord({
+          text: chunk.text,
+          filePath,
+          relativePath,
+          chunkIndex: chunk.index,
+          folderId,
+          embedding: normalizedEmbeddings[index],
+          tokenCount: chunk.tokenCount,
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
+          tokenOffset: chunk.tokenOffset,
+        });
+        pointIds.push(record.id as string);
+        return record;
+      });
+
+      await table.add(records);
+    }
+  } catch (error) {
+    if (pointIds.length > 0) {
+      try {
+        await removeFileFromVectorDB({ characterId, pointIds });
+      } catch (cleanupError) {
+        console.error("[VectorDB] Cleanup failed after indexing error:", cleanupError);
+      }
+    }
+    throw error;
+  }
+
+  return pointIds;
+}
+
 function createDocumentRecord(params: {
   text: string;
   filePath: string;
@@ -183,68 +262,7 @@ export async function indexFileToVectorDB(params: {
       return { filePath, chunkCount: 0, pointIds: [] };
     }
 
-    const batchSize = resolveEmbeddingBatchSize();
-    const embeddingModelId = getEmbeddingModelId();
-    const embeddingModel = getEmbeddingModel(embeddingModelId);
-    const pointIds: string[] = [];
-    let table: Awaited<ReturnType<typeof ensureAgentTable>> | null = null;
-
-    try {
-      for (let start = 0; start < chunks.length; start += batchSize) {
-        // Check for abortion before starting next batch
-        if (signal?.aborted) {
-          throw new Error("Indexing aborted");
-        }
-
-        const batch = chunks.slice(start, start + batchSize);
-        const { embeddings } = await embedMany({
-          model: embeddingModel,
-          values: batch.map(c => c.text),
-          abortSignal: signal,
-        });
-        const normalizedEmbeddings = normalizeEmbeddings(embeddings);
-
-        if (!normalizedEmbeddings.length || normalizedEmbeddings.length !== batch.length) {
-          throw new Error("Embedding batch size mismatch");
-        }
-
-        if (!table) {
-          const dimensions = normalizedEmbeddings[0]?.length || 1536;
-          table = await ensureAgentTable(characterId, dimensions);
-          if (!table) {
-            return { filePath, chunkCount: 0, pointIds: [], error: "Failed to create table" };
-          }
-        }
-
-        const records = batch.map((chunk, index) => {
-          const record = createDocumentRecord({
-            text: chunk.text,
-            filePath,
-            relativePath,
-            chunkIndex: chunk.index,
-            folderId,
-            embedding: normalizedEmbeddings[index],
-            tokenCount: chunk.tokenCount,
-            startLine: chunk.startLine,
-            endLine: chunk.endLine,
-            tokenOffset: chunk.tokenOffset,
-          });
-          pointIds.push(record.id as string);
-          return record;
-        });
-
-        await table.add(records);
-      }
-    } catch (error) {
-      if (pointIds.length > 0) {
-        try {
-          await removeFileFromVectorDB({ characterId, pointIds });
-        } catch (cleanupError) {
-          console.error("[VectorDB] Cleanup failed after indexing error:", cleanupError);
-        }
-      }
-      throw error;
-    }
+    const pointIds = await embedAndStoreChunks({ characterId, folderId, filePath, relativePath, chunks, signal });
 
     console.log(`[VectorDB] Indexed ${chunks.length} chunks from: ${relativePath}`);
     return { filePath, chunkCount: chunks.length, pointIds };
@@ -277,62 +295,7 @@ export async function indexTextToVectorDB(params: {
       return { filePath: sourceName, chunkCount: 0, pointIds: [] };
     }
 
-    const batchSize = resolveEmbeddingBatchSize();
-    const embeddingModelId = getEmbeddingModelId();
-    const embeddingModel = getEmbeddingModel(embeddingModelId);
-    const pointIds: string[] = [];
-    let table: Awaited<ReturnType<typeof ensureAgentTable>> | null = null;
-
-    try {
-      for (let start = 0; start < chunks.length; start += batchSize) {
-        const batch = chunks.slice(start, start + batchSize);
-        const { embeddings } = await embedMany({
-          model: embeddingModel,
-          values: batch.map(c => c.text),
-        });
-        const normalizedEmbeddings = normalizeEmbeddings(embeddings);
-
-        if (!normalizedEmbeddings.length || normalizedEmbeddings.length !== batch.length) {
-          throw new Error("Embedding batch size mismatch");
-        }
-
-        if (!table) {
-          const dimensions = normalizedEmbeddings[0]?.length || 1536;
-          table = await ensureAgentTable(characterId, dimensions);
-          if (!table) {
-            return { filePath: sourceName, chunkCount: 0, pointIds: [], error: "Failed to create table" };
-          }
-        }
-
-        const records = batch.map((chunk, index) => {
-          const record = createDocumentRecord({
-            text: chunk.text,
-            filePath: sourceName,
-            relativePath: sourceName,
-            chunkIndex: chunk.index,
-            folderId,
-            embedding: normalizedEmbeddings[index],
-            tokenCount: chunk.tokenCount,
-            startLine: chunk.startLine,
-            endLine: chunk.endLine,
-            tokenOffset: chunk.tokenOffset,
-          });
-          pointIds.push(record.id as string);
-          return record;
-        });
-
-        await table.add(records);
-      }
-    } catch (error) {
-      if (pointIds.length > 0) {
-        try {
-          await removeFileFromVectorDB({ characterId, pointIds });
-        } catch (cleanupError) {
-          console.error("[VectorDB] Cleanup failed after indexing error:", cleanupError);
-        }
-      }
-      throw error;
-    }
+    const pointIds = await embedAndStoreChunks({ characterId, folderId, filePath: sourceName, relativePath: sourceName, chunks });
 
     return { filePath: sourceName, chunkCount: chunks.length, pointIds };
   } catch (error) {

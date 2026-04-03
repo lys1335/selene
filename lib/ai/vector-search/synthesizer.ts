@@ -13,7 +13,7 @@
  */
 
 import { generateText, tool, jsonSchema } from "ai";
-import { readFile, open } from "fs/promises";
+import { readFile } from "fs/promises";
 import type {
   SynthesisRequest,
   SynthesisResult,
@@ -25,7 +25,13 @@ import {
   getSessionProviderTemperatureForSession,
   resolveSessionUtilityModelForSession,
 } from "@/lib/ai/session-model-resolver";
-import { extname, basename, join, resolve, relative } from "path";
+import { basename, join, resolve, relative } from "path";
+import {
+  getCodeLanguage,
+  isBinaryFile,
+  selectLines,
+  formatLinesWithNumbers,
+} from "@/lib/ai/tools/file-content-utils";
 
 // ============================================================================
 // Configuration
@@ -129,30 +135,6 @@ Suggest refinements when:
 // ============================================================================
 // Helper Functions
 // ============================================================================
-
-/**
- * Get code language for syntax highlighting
- */
-function getCodeLanguage(filePath: string): string {
-  const ext = extname(filePath).toLowerCase().slice(1);
-  const langMap: Record<string, string> = {
-    ts: "typescript",
-    tsx: "tsx",
-    js: "javascript",
-    jsx: "jsx",
-    py: "python",
-    md: "markdown",
-    json: "json",
-    html: "html",
-    css: "css",
-    sql: "sql",
-    yaml: "yaml",
-    yml: "yaml",
-    sh: "bash",
-    bash: "bash",
-  };
-  return langMap[ext] || ext || "text";
-}
 
 /**
  * Format raw results for synthesis context
@@ -403,29 +385,6 @@ const readFileSchema = jsonSchema<{
 });
 
 /**
- * Detect binary files by checking for null bytes in the first 1KB
- */
-async function isBinaryFile(filePath: string): Promise<boolean> {
-  let fileHandle;
-  try {
-    fileHandle = await open(filePath, "r");
-    const buffer = Buffer.alloc(1024);
-    const { bytesRead } = await fileHandle.read(buffer, 0, 1024, 0);
-
-    for (let i = 0; i < bytesRead; i++) {
-      if (buffer[i] === 0) {
-        return true;
-      }
-    }
-    return false;
-  } catch {
-    return false;
-  } finally {
-    await fileHandle?.close();
-  }
-}
-
-/**
  * Create the readFile tool for the synthesizer
  */
 function createReadFileTool(allowedFolderPaths: string[]) {
@@ -462,7 +421,7 @@ Returns the file content with line numbers.`,
 
         // Read file
         const content = await readFile(validPath, "utf-8");
-        const lines = content.split("\n");
+        const allLines = content.split("\n");
 
         // Check file size
         if (content.length > MAX_FILE_SIZE_BYTES) {
@@ -472,43 +431,30 @@ Returns the file content with line numbers.`,
           };
         }
 
-        // Apply line range if specified
-        let selectedLines = lines;
-        let actualStartLine = 1;
-        let actualEndLine = lines.length;
+        // Cap the end line to avoid huge ranges
+        const clampedEndLine =
+          startLine !== undefined && endLine !== undefined &&
+          endLine - startLine + 1 > MAX_LINE_COUNT
+            ? startLine + MAX_LINE_COUNT - 1
+            : endLine;
 
-        if (startLine !== undefined || endLine !== undefined) {
-          actualStartLine = Math.max(1, startLine ?? 1);
-          actualEndLine = Math.min(lines.length, endLine ?? lines.length);
+        const { lines: selectedLines, actualStartLine, actualEndLine } = selectLines(allLines, {
+          startLine, endLine: clampedEndLine, maxLineCount: MAX_LINE_COUNT,
+        });
 
-          // Enforce max line count
-          if (actualEndLine - actualStartLine + 1 > MAX_LINE_COUNT) {
-            actualEndLine = actualStartLine + MAX_LINE_COUNT - 1;
-          }
-
-          selectedLines = lines.slice(actualStartLine - 1, actualEndLine);
-        } else if (lines.length > MAX_LINE_COUNT) {
-          // Full file requested but too many lines - truncate
-          selectedLines = lines.slice(0, MAX_LINE_COUNT);
-          actualEndLine = MAX_LINE_COUNT;
-        }
-
-        // Format with line numbers
         const lang = getCodeLanguage(filePath);
-        const formattedContent = selectedLines
-          .map((line, idx) => `${String(actualStartLine + idx).padStart(4, " ")} | ${line}`)
-          .join("\n");
+        const formattedContent = formatLinesWithNumbers(selectedLines, actualStartLine);
 
-        const truncated = selectedLines.length < lines.length;
+        const truncated = selectedLines.length < allLines.length;
 
         return {
           filePath,
           language: lang,
           lineRange: `${actualStartLine}-${actualEndLine}`,
-          totalLines: lines.length,
+          totalLines: allLines.length,
           content: formattedContent,
           truncated,
-          truncatedMessage: truncated ? `Showing lines ${actualStartLine}-${actualEndLine} of ${lines.length}` : undefined,
+          truncatedMessage: truncated ? `Showing lines ${actualStartLine}-${actualEndLine} of ${allLines.length}` : undefined,
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";

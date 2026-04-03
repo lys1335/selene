@@ -12,6 +12,10 @@ import {
   sanitizeSchema,
   ensureSchemaCompleteness,
   normalizeInputSchema,
+  BASE_ALLOWED_SCHEMA_KEYS,
+  BASE_STRING_KEYS,
+  BASE_NUMBER_KEYS,
+  BASE_BOOLEAN_KEYS,
 } from "@/lib/ai/json-schema-sanitizer";
 
 // ---- Constants ---------------------------------------------------------------
@@ -22,95 +26,12 @@ const DEFAULT_ANTIGRAVITY_INPUT_SCHEMA: Record<string, unknown> = {
   additionalProperties: true,
 };
 
-const ANTIGRAVITY_ALLOWED_SCHEMA_KEYS = new Set([
-  "$id",
-  "$ref",
-  "$defs",
-  "$comment",
-  "title",
-  "description",
-  "type",
-  "enum",
-  "const",
-  "default",
-  "examples",
-  "format",
-  "properties",
-  "patternProperties",
-  "additionalProperties",
-  "required",
-  "items",
-  "prefixItems",
-  "minItems",
-  "maxItems",
-  "uniqueItems",
-  "contains",
-  "minContains",
-  "maxContains",
-  "minimum",
-  "maximum",
-  "exclusiveMinimum",
-  "exclusiveMaximum",
-  "multipleOf",
-  "minLength",
-  "maxLength",
-  "pattern",
-  "dependentRequired",
-  "dependentSchemas",
-  "if",
-  "then",
-  "else",
-  "allOf",
-  "anyOf",
-  "oneOf",
-  "not",
-  "unevaluatedProperties",
-  "unevaluatedItems",
-  "propertyNames",
-  "contentMediaType",
-  "contentEncoding",
-  "contentSchema",
-  "readOnly",
-  "writeOnly",
-  "deprecated",
-  "minProperties",
-  "maxProperties",
-]);
-
-const ANTIGRAVITY_STRING_KEYS = new Set([
-  "$id",
-  "$ref",
-  "$comment",
-  "title",
-  "description",
-  "format",
-  "pattern",
-  "contentMediaType",
-  "contentEncoding",
-]);
-
-const ANTIGRAVITY_NUMBER_KEYS = new Set([
-  "minItems",
-  "maxItems",
-  "minContains",
-  "maxContains",
-  "minimum",
-  "maximum",
-  "exclusiveMinimum",
-  "exclusiveMaximum",
-  "multipleOf",
-  "minLength",
-  "maxLength",
-  "minProperties",
-  "maxProperties",
-]);
-
-const ANTIGRAVITY_BOOLEAN_KEYS = new Set([
-  "uniqueItems",
-  "readOnly",
-  "writeOnly",
-  "deprecated",
-]);
+// Antigravity does not expose "$schema" to the upstream API, so the base sets
+// are used as-is (no additions needed).
+const ANTIGRAVITY_ALLOWED_SCHEMA_KEYS = BASE_ALLOWED_SCHEMA_KEYS;
+const ANTIGRAVITY_STRING_KEYS = BASE_STRING_KEYS;
+const ANTIGRAVITY_NUMBER_KEYS = BASE_NUMBER_KEYS;
+const ANTIGRAVITY_BOOLEAN_KEYS = BASE_BOOLEAN_KEYS;
 
 // ---- Private helpers ---------------------------------------------------------
 

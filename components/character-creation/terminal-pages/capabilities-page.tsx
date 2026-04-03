@@ -3,10 +3,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useReducedMotion } from "../hooks/use-reduced-motion";
-import { ComputerGraphic } from "../computer-graphic";
-import { TypewriterText } from "@/components/ui/typewriter-text";
-import { TerminalPrompt } from "@/components/ui/terminal-prompt";
 import { useTranslations } from "next-intl";
+import { TerminalPageHeader } from "./terminal-page-header";
 import { ToolDependencyBadge } from "@/components/ui/tool-dependency-badge";
 import { AlertTriangleIcon, ChevronDownIcon, ChevronRightIcon, LockIcon } from "lucide-react";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
@@ -335,38 +333,14 @@ export function CapabilitiesPage({
     <div className="flex h-full min-h-full flex-col items-center bg-terminal-cream px-4 py-6 sm:px-8">
       <div className="flex w-full max-w-4xl flex-1 flex-col gap-6 min-h-0">
         {/* Header */}
-        <div className="flex items-start gap-8">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: prefersReducedMotion ? 0 : 0.5 }}
-          >
-            <ComputerGraphic size="sm" />
-          </motion.div>
-
-          <div className="flex-1 space-y-4">
-            <TerminalPrompt prefix="step-2" symbol="$" animate={!prefersReducedMotion}>
-              <span className="text-terminal-amber">agent.capabilities({agentName})</span>
-            </TerminalPrompt>
-
-            <div className="font-mono text-lg text-terminal-dark">
-              {!hasAnimated.current ? (
-                <TypewriterText
-                  text={t("question")}
-                  delay={prefersReducedMotion ? 0 : 200}
-                  speed={prefersReducedMotion ? 0 : 25}
-                  onComplete={() => {
-                    hasAnimated.current = true;
-                    setShowForm(true);
-                  }}
-                  showCursor={false}
-                />
-              ) : (
-                <span>{t("question")}</span>
-              )}
-            </div>
-          </div>
-        </div>
+        <TerminalPageHeader
+          step="step-2"
+          command={<span className="text-terminal-amber">agent.capabilities({agentName})</span>}
+          question={t("question")}
+          prefersReducedMotion={prefersReducedMotion}
+          hasAnimated={hasAnimated}
+          onAnimationComplete={() => setShowForm(true)}
+        />
 
         {/* Onboarding: Tool resolution warnings for Selene template */}
         {showForm && resolutionWarnings.length > 0 && (

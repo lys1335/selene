@@ -6,6 +6,7 @@
  */
 
 import { getFullPath, saveBase64Image, saveBase64Video } from "@/lib/storage/local-storage";
+import { parseDataUrl } from "@/lib/storage/data-url";
 import { MAX_STREAM_TOOL_RESULT_TOKENS } from "@/lib/ai/tool-result-stream-guard";
 import { limitToolOutput } from "@/lib/ai/output-limiter";
 import { getRunContext } from "@/lib/observability/run-context";
@@ -154,12 +155,6 @@ function buildBaseResult(
             tool: toolName,
         },
     };
-}
-
-function parseDataUrl(value: string): { mimeType: string; data: string } | null {
-    const match = value.match(/^data:([^;]+);base64,(.+)$/);
-    if (!match) return null;
-    return { mimeType: match[1], data: match[2] };
 }
 
 async function persistDataUrl(

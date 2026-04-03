@@ -278,6 +278,16 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       recorder.onstop = async () => {
         if (cancelledRef.current) return;
 
+        // Returns true when the pipeline should abort (either cancelled or error set).
+        const failPipeline = (err: unknown): boolean => {
+          if (cancelledRef.current) return true;
+          const msg = err instanceof Error ? err.message : String(err);
+          setError(msg);
+          setPhase("error");
+          onError?.(msg);
+          return true;
+        };
+
         const mimeType = recorder.mimeType || "audio/webm";
         const blob = new Blob(chunksRef.current, { type: mimeType });
         chunksRef.current = [];
@@ -311,12 +321,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           rawTranscript = result.transcript;
           finalTranscript = result.finalText;
         } catch (err: unknown) {
-          if (cancelledRef.current) return;
-          const msg = err instanceof Error ? err.message : String(err);
-          setError(msg);
-          setPhase("error");
-          onError?.(msg);
-          return;
+          if (failPipeline(err)) return;
         }
 
         if (cancelledRef.current) return;
@@ -447,12 +452,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
             reader.releaseLock();
           }
         } catch (err: unknown) {
-          if (cancelledRef.current) return;
-          const msg = err instanceof Error ? err.message : String(err);
-          setError(msg);
-          setPhase("error");
-          onError?.(msg);
-          return;
+          if (failPipeline(err)) return;
         }
 
         if (cancelledRef.current) return;

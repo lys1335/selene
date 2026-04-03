@@ -2,13 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
-import { ComputerGraphic } from "../computer-graphic";
-import { TypewriterText } from "@/components/ui/typewriter-text";
-import { TerminalPrompt } from "@/components/ui/terminal-prompt";
 import { useReducedMotion } from "../hooks/use-reduced-motion";
 import { useTranslations } from "next-intl";
 import { resilientFetch, resilientDelete } from "@/lib/utils/resilient-fetch";
-import { DOCUMENT_UPLOAD_ACCEPT, DOCUMENT_SUPPORT_LABELS } from "@/lib/documents/file-types";
+import { TerminalPageHeader } from "./terminal-page-header";
+import { FileUploadArea } from "./file-upload-area";
 
 export interface UploadedDocument {
   id: string;
@@ -39,18 +37,9 @@ export function KnowledgeBasePage({
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; filename: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
-  const confirmDeleteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefersReducedMotion = useReducedMotion();
   const hasAnimated = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Cleanup delete confirmation timer on unmount
-  useEffect(() => {
-    return () => {
-      if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current);
-    };
-  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -116,49 +105,18 @@ export function KnowledgeBasePage({
     onSubmit(documents);
   };
 
-  const formatSize = (bytes?: number) => {
-    if (!bytes) return "";
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
-
   return (
     <div className="flex h-full min-h-full flex-col items-center bg-terminal-cream px-4 py-6 sm:px-8">
       <div className="flex w-full max-w-2xl flex-1 flex-col gap-6 min-h-0">
         {/* Header */}
-        <div className="flex items-start gap-8">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: prefersReducedMotion ? 0 : 0.5 }}
-          >
-            <ComputerGraphic size="sm" />
-          </motion.div>
-
-          <div className="flex-1 space-y-4">
-            <TerminalPrompt prefix="step-3" symbol="$" animate={!prefersReducedMotion}>
-              <span className="text-terminal-amber">agent.knowledge({agentName})</span>
-            </TerminalPrompt>
-
-            <div className="font-mono text-lg text-terminal-dark">
-              {!hasAnimated.current ? (
-                <TypewriterText
-                  text={t("question")}
-                  delay={prefersReducedMotion ? 0 : 200}
-                  speed={prefersReducedMotion ? 0 : 25}
-                  onComplete={() => {
-                    hasAnimated.current = true;
-                    setShowForm(true);
-                  }}
-                  showCursor={false}
-                />
-              ) : (
-                <span>{t("question")}</span>
-              )}
-            </div>
-          </div>
-        </div>
+        <TerminalPageHeader
+          step="step-3"
+          command={<span className="text-terminal-amber">agent.knowledge({agentName})</span>}
+          question={t("question")}
+          prefersReducedMotion={prefersReducedMotion}
+          hasAnimated={hasAnimated}
+          onAnimationComplete={() => setShowForm(true)}
+        />
 
         {/* Upload Section - Scrollable Container */}
         {showForm && (
@@ -170,95 +128,15 @@ export function KnowledgeBasePage({
           >
             {/* Scrollable content area */}
             <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-6">
-              {/* Upload Area */}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => fileInputRef.current?.click()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    fileInputRef.current?.click();
-                  }
-                }}
-                className="border-2 border-dashed border-terminal-border/50 rounded-lg p-8 text-center cursor-pointer hover:border-terminal-amber focus:border-terminal-amber focus:outline-none focus:ring-1 focus:ring-terminal-amber transition-colors"
-              >
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  accept={DOCUMENT_UPLOAD_ACCEPT}
-                  onChange={(e) => handleFileSelect(e.target.files)}
-                  className="hidden"
-                />
-                <div className="font-mono text-terminal-dark/70">
-                  {uploading && uploadProgress ? (
-                    <span className="text-terminal-amber">
-                      {uploadProgress.total > 1
-                        ? `${t("uploading")} ${uploadProgress.current}/${uploadProgress.total}: ${uploadProgress.filename}`
-                        : `${t("uploading")} ${uploadProgress.filename}`}
-                    </span>
-                  ) : uploading ? (
-                    <span className="text-terminal-amber">{t("uploading")}</span>
-                  ) : (
-                    <span className="text-terminal-amber">{t("clickToUpload")}</span>
-                  )}
-                </div>
-                <div className="text-xs font-mono text-terminal-dark/50 mt-2">
-                  {t("supportedFormats", { formats: DOCUMENT_SUPPORT_LABELS.join(", ") })}
-                </div>
-              </div>
-
-              {error && (
-                <div className="text-red-500 text-sm font-mono">! {error}</div>
-              )}
-
-              {/* Document List */}
-              {documents.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="text-sm font-mono text-terminal-amber">{t("uploadedDocuments")}</h3>
-                  {documents.map((doc) => (
-                    <div
-                      key={doc.id}
-                      className="flex items-center justify-between p-3 bg-terminal-bg/20 rounded border border-terminal-border/30"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="font-mono text-sm text-terminal-dark truncate">
-                          {doc.title || doc.originalFilename}
-                        </div>
-                        <div className="font-mono text-xs text-terminal-dark/50">
-                          {formatSize(doc.sizeBytes)} • {doc.status}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (confirmingDeleteId === doc.id) {
-                            if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current);
-                            setConfirmingDeleteId(null);
-                            handleDelete(doc.id);
-                          } else {
-                            setConfirmingDeleteId(doc.id);
-                            if (confirmDeleteTimerRef.current) clearTimeout(confirmDeleteTimerRef.current);
-                            confirmDeleteTimerRef.current = setTimeout(() => setConfirmingDeleteId(null), 3000);
-                          }
-                        }}
-                        className={`ml-2 text-sm font-mono transition-colors ${
-                          confirmingDeleteId === doc.id
-                            ? "text-red-600 font-semibold"
-                            : "text-red-500/70 hover:text-red-500"
-                        }`}
-                      >
-                        {confirmingDeleteId === doc.id ? t("confirmDelete") : "✕"}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Skip hint */}
-              <div className="text-xs font-mono text-terminal-dark/50 text-center">
-                {t("skipHint")}
-              </div>
+              <FileUploadArea
+                fileInputRef={fileInputRef}
+                uploading={uploading}
+                uploadProgress={uploadProgress}
+                error={error}
+                documents={documents}
+                onFileSelect={handleFileSelect}
+                onDelete={handleDelete}
+              />
             </div>
 
             {/* Navigation - Fixed at bottom */}
