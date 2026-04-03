@@ -14,7 +14,7 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export function sanitizeSchemaValue(
+function sanitizeSchemaValue(
   value: unknown,
   allowedKeys: ReadonlySet<string>,
   stringKeys: ReadonlySet<string>,
@@ -30,7 +30,7 @@ export function sanitizeSchemaValue(
   return sanitizeSchema(value, allowedKeys, stringKeys, numberKeys, booleanKeys);
 }
 
-export function sanitizeSchemaArray(
+function sanitizeSchemaArray(
   value: unknown,
   allowedKeys: ReadonlySet<string>,
   stringKeys: ReadonlySet<string>,
@@ -46,7 +46,7 @@ export function sanitizeSchemaArray(
   return sanitized.length > 0 ? sanitized : undefined;
 }
 
-export function sanitizeSchemaRecord(
+function sanitizeSchemaRecord(
   value: unknown,
   allowedKeys: ReadonlySet<string>,
   stringKeys: ReadonlySet<string>,

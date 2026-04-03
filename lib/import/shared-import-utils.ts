@@ -7,7 +7,7 @@ import { loadSettings } from "@/lib/settings/settings-manager";
 // Auth helpers
 // ---------------------------------------------------------------------------
 
-export interface AuthenticatedUser {
+interface AuthenticatedUser {
   authUserId: string;
   dbUser: { id: string; email: string | null };
 }
@@ -40,7 +40,7 @@ export async function resolveAuthUser(
 // File validation helpers
 // ---------------------------------------------------------------------------
 
-export const SINGLE_FILE_MAX_BYTES = 50 * 1024 * 1024; // 50 MB
+const SINGLE_FILE_MAX_BYTES = 50 * 1024 * 1024; // 50 MB
 
 /**
  * Validate that a single uploaded file is within the size limit and has an

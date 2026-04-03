@@ -2,7 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
-export type SkillStatus = "draft" | "active" | "archived";
+import type { SkillStatus } from "@/lib/skills/types";
 
 export interface SkillFormValues {
   name: string;
@@ -13,7 +13,7 @@ export interface SkillFormValues {
   triggerExamples: string;
 }
 
-export interface SkillFormFieldsProps {
+interface SkillFormFieldsProps {
   values: SkillFormValues;
   onChange: (patch: Partial<SkillFormValues>) => void;
   /** When provided, renders the status selector with this value. */

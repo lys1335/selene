@@ -10,7 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Download, Loader2, Play } from "lucide-react";
 import { SkillFormFields } from "@/components/skills/skill-form-fields";
-import type { SkillFormValues, SkillStatus } from "@/components/skills/skill-form-fields";
+import type { SkillFormValues } from "@/components/skills/skill-form-fields";
+import type { SkillStatus } from "@/lib/skills/types";
 
 type SkillRecord = {
   id: string;

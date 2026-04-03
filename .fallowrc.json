@@ -491,6 +491,12 @@
       "exports": [
         "buildWhisperPromptFromDictionary"
       ]
+    },
+    {
+      "file": "lib/ai/json-schema-sanitizer.ts",
+      "exports": [
+        "sanitizeSchema"
+      ]
     }
   ]
 }
