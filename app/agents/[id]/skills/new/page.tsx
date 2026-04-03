@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { SkillFormFields } from "@/components/skills/skill-form-fields";
+import type { SkillFormValues } from "@/components/skills/skill-form-fields";
 
 function splitLines(value: string): string[] {
   return value
@@ -21,16 +23,21 @@ export default function NewSkillPage({ params }: { params: Promise<{ id: string 
   const router = useRouter();
   const t = useTranslations("skills.new");
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [promptTemplate, setPromptTemplate] = useState("");
-  const [category, setCategory] = useState("general");
-  const [toolHints, setToolHints] = useState("");
-  const [triggerExamples, setTriggerExamples] = useState("");
+  const [form, setForm] = useState<SkillFormValues>({
+    name: "",
+    description: "",
+    promptTemplate: "",
+    category: "general",
+    toolHints: "",
+    triggerExamples: "",
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSubmit = useMemo(() => name.trim().length > 0 && promptTemplate.trim().length > 0, [name, promptTemplate]);
+  const canSubmit = useMemo(
+    () => form.name.trim().length > 0 && form.promptTemplate.trim().length > 0,
+    [form.name, form.promptTemplate],
+  );
 
   const handleSubmit = async () => {
     if (!canSubmit || saving) return;
@@ -43,12 +50,12 @@ export default function NewSkillPage({ params }: { params: Promise<{ id: string 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           characterId,
-          name: name.trim(),
-          description: description.trim() || undefined,
-          promptTemplate: promptTemplate.trim(),
-          category: category.trim() || "general",
-          toolHints: splitLines(toolHints),
-          triggerExamples: splitLines(triggerExamples),
+          name: form.name.trim(),
+          description: form.description.trim() || undefined,
+          promptTemplate: form.promptTemplate.trim(),
+          category: form.category.trim() || "general",
+          toolHints: splitLines(form.toolHints),
+          triggerExamples: splitLines(form.triggerExamples),
           status: "active",
           sourceType: "manual",
         }),
@@ -87,67 +94,10 @@ export default function NewSkillPage({ params }: { params: Promise<{ id: string 
             <CardTitle className="font-mono text-terminal-dark">{t("title")}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="text-sm font-mono text-terminal-dark">
-                {t("nameLabel")}
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="mt-1 w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm"
-                  placeholder={t("namePlaceholder")}
-                />
-              </label>
-              <label className="text-sm font-mono text-terminal-dark">
-                {t("categoryLabel")}
-                <input
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  className="mt-1 w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm"
-                  placeholder={t("categoryPlaceholder")}
-                />
-              </label>
-            </div>
-
-            <label className="block text-sm font-mono text-terminal-dark">
-              {t("descriptionLabel")}
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="mt-1 min-h-[84px] w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm"
-                placeholder={t("descriptionPlaceholder")}
-              />
-            </label>
-
-            <label className="block text-sm font-mono text-terminal-dark">
-              {t("promptLabel")}
-              <textarea
-                value={promptTemplate}
-                onChange={(e) => setPromptTemplate(e.target.value)}
-                className="mt-1 min-h-[180px] w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm"
-                placeholder={t("promptPlaceholder")}
-              />
-            </label>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-mono text-terminal-dark">
-                {t("toolHintsLabel")}
-                <textarea
-                  value={toolHints}
-                  onChange={(e) => setToolHints(e.target.value)}
-                  className="mt-1 min-h-[110px] w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm"
-                  placeholder="webSearch"
-                />
-              </label>
-              <label className="block text-sm font-mono text-terminal-dark">
-                {t("triggerLabel")}
-                <textarea
-                  value={triggerExamples}
-                  onChange={(e) => setTriggerExamples(e.target.value)}
-                  className="mt-1 min-h-[110px] w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm"
-                  placeholder={t("triggerPlaceholder")}
-                />
-              </label>
-            </div>
+            <SkillFormFields
+              values={form}
+              onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+            />
 
             {error ? <p className="text-sm font-mono text-red-600">{error}</p> : null}
 

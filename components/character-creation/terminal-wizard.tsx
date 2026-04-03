@@ -22,6 +22,7 @@ import { WizardProgress, WIZARD_STEPS, type WizardStep } from "@/components/ui/w
 import { WindowsTitleBar } from "@/components/layout/windows-titlebar";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
+import { useWizardNavigation, wizardPageVariants } from "@/lib/hooks/use-wizard-navigation";
 import type { AgentIdentity } from "./terminal-pages/identity-page";
 import type { UploadedDocument } from "./terminal-pages/knowledge-base-page";
 import type { CatalogSkill } from "@/lib/skills/catalog/types";
@@ -67,26 +68,10 @@ const initialState: WizardState = {
   selectedTemplateId: null,
 };
 
-const pageVariants = {
-  enter: (direction: number) => ({
-    x: direction > 0 ? "100%" : "-100%",
-    opacity: 0,
-  }),
-  center: {
-    x: 0,
-    opacity: 1,
-  },
-  exit: (direction: number) => ({
-    x: direction < 0 ? "100%" : "-100%",
-    opacity: 0,
-  }),
-};
-
 export function TerminalWizard() {
-  const [currentPage, setCurrentPage] = useState<WizardPage>("intro");
+  const { currentPage, direction, navigateTo } = useWizardNavigation<WizardPage>("intro");
   const [state, setState] = useState<WizardState>(initialState);
   const [draftAgentId, setDraftAgentId] = useState<string | null>(null);
-  const [direction, setDirection] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [vectorDBEnabled, setVectorDBEnabled] = useState(false);
@@ -135,11 +120,6 @@ export function TerminalWizard() {
 
   // Check if current page should show progress bar
   const showProgressBar = PROGRESS_PAGES.includes(currentPage);
-
-  const navigateTo = useCallback((page: WizardPage, dir: number = 1) => {
-    setDirection(dir);
-    setCurrentPage(page);
-  }, []);
 
   // Handle step click for backward navigation
   const handleStepClick = useCallback((stepId: string) => {
@@ -389,7 +369,7 @@ export function TerminalWizard() {
           <motion.div
             key={currentPage}
             custom={direction}
-            variants={pageVariants}
+            variants={wizardPageVariants}
             initial="enter"
             animate="center"
             exit="exit"

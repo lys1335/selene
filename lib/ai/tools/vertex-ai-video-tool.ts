@@ -2,8 +2,7 @@ import { tool, jsonSchema } from "ai";
 import { callVertexAIVideo } from "@/lib/ai/vertex-ai-video-client";
 import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
-
-const now = () => new Date().toISOString();
+import { now, failToolRun } from "@/lib/ai/tools/tool-run-utils";
 
 // ==========================================================================
 // VERTEX AI VEO VIDEO TOOL (Text-to-Video and Image-to-Video)
@@ -192,18 +191,7 @@ async function executeVertexAIVideo(sessionId: string, args: VertexAIVideoArgs) 
       timeTaken: result.timeTaken,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 

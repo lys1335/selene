@@ -7,12 +7,10 @@ import {
 } from "@/lib/ai/wan22-imagen-client";
 import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
+import { now, failToolRun } from "@/lib/ai/tools/tool-run-utils";
 
 // Re-export shared utilities from image-tools-utils
 export { imageToDataUrl, createDescribeImageTool } from "@/lib/ai/tools/image-tools-utils";
-
-// Helper to get current timestamp as ISO string for SQLite
-const now = () => new Date().toISOString();
 
 // ==========================================================================
 // Shared schema definitions
@@ -257,18 +255,7 @@ async function executeImageEdit(
       timeTaken: result.timeTaken,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 
@@ -398,18 +385,7 @@ async function executeFlux2Generate(
       timeTaken: result.timeTaken,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 
@@ -515,18 +491,7 @@ async function executeWan22Imagen(sessionId: string, args: Wan22ImagenArgs) {
       timeTaken: result.timeTaken,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 

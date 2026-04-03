@@ -5,9 +5,7 @@ import {
 } from "@/lib/ai/wan22-video-client";
 import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
-
-// Helper to get current timestamp as ISO string for SQLite
-const now = () => new Date().toISOString();
+import { now, failToolRun } from "@/lib/ai/tools/tool-run-utils";
 
 // ==========================================================================
 // WAN 2.2 VIDEO TOOL (Image-to-Video with PainterI2V)
@@ -158,18 +156,7 @@ async function executeWan22Video(sessionId: string, args: Wan22VideoArgs) {
       timeTaken: result.timeTaken,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 
@@ -372,18 +359,7 @@ async function executeWan22PixelVideo(sessionId: string, args: Wan22PixelVideoAr
       timeTaken: result.timeTaken,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 

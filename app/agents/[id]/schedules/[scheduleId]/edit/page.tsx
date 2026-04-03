@@ -1,19 +1,14 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { use } from "react";
 import Link from "next/link";
 import { Shell } from "@/components/layout/shell";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertCircle } from "lucide-react";
 import { ScheduleFormFullPage } from "@/components/schedules/schedule-form-full-page";
 import { useTranslations } from "next-intl";
+import { useScheduleCharacter } from "@/hooks/use-schedule-character";
 import type { ScheduledTask } from "@/lib/db/sqlite-schedule-schema";
-
-interface CharacterBasic {
-    id: string;
-    name: string;
-    displayName?: string | null;
-}
 
 export default function EditSchedulePage({
     params,
@@ -24,49 +19,10 @@ export default function EditSchedulePage({
     const tc = useTranslations("common");
     const t = useTranslations("schedules");
 
-    const [character, setCharacter] = useState<CharacterBasic | null>(null);
-    const [schedule, setSchedule] = useState<ScheduledTask | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    // Load character and schedule info
-    useEffect(() => {
-        async function loadData() {
-            try {
-                // Load character
-                const charResponse = await fetch(`/api/characters/${characterId}`);
-                if (charResponse.ok) {
-                    const charData = await charResponse.json();
-                    setCharacter(charData.character);
-                } else if (charResponse.status === 404) {
-                    setError(t("agentNotFound"));
-                    setIsLoading(false);
-                    return;
-                } else if (charResponse.status === 403) {
-                    setError(t("accessDenied"));
-                    setIsLoading(false);
-                    return;
-                }
-
-                // Load schedule
-                const scheduleResponse = await fetch(`/api/schedules/${scheduleId}`);
-                if (scheduleResponse.ok) {
-                    const scheduleData = await scheduleResponse.json();
-                    setSchedule(scheduleData.schedule);
-                } else if (scheduleResponse.status === 404) {
-                    setError(t("scheduleNotFound"));
-                } else if (scheduleResponse.status === 403) {
-                    setError(t("accessDenied"));
-                }
-            } catch (err) {
-                console.error("Failed to load data:", err);
-                setError(t("loadScheduleFailed"));
-            } finally {
-                setIsLoading(false);
-            }
-        }
-        loadData();
-    }, [characterId, scheduleId]);
+    const { agentName, schedule, isLoading, error } = useScheduleCharacter({
+        characterId,
+        scheduleId,
+    });
 
     const handleUpdate = async (data: Partial<ScheduledTask>) => {
         const res = await fetch(`/api/schedules/${scheduleId}`, {
@@ -121,8 +77,6 @@ export default function EditSchedulePage({
             </Shell>
         );
     }
-
-    const agentName = character?.displayName || character?.name || "Agent";
 
     return (
         <Shell hideNav>

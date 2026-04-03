@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2Icon, AlertCircleIcon, CheckCircleIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -15,33 +16,11 @@ export default function SignUpPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-  const [isFirstUser, setIsFirstUser] = useState(false);
   const router = useRouter();
   const t = useTranslations("signup");
   const tc = useTranslations("common");
 
-  // Check if already authenticated
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await fetch("/api/auth/verify");
-        const data = await res.json();
-
-        if (data.authenticated) {
-          router.replace("/");
-        } else if (data.noUsers) {
-          setIsFirstUser(true);
-        }
-      } catch {
-        // Ignore errors, just show signup form
-      } finally {
-        setCheckingAuth(false);
-      }
-    };
-
-    checkAuth();
-  }, [router]);
+  const { checkingAuth, isFirstUser } = useAuthRedirect();
 
   const validatePassword = (pwd: string): string | null => {
     if (pwd.length < 6) {

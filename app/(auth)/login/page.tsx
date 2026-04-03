@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -8,39 +8,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2Icon, AlertCircleIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
+import { useAuthRedirect } from "@/hooks/use-auth-redirect";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
   const router = useRouter();
   const t = useTranslations("login");
   const tc = useTranslations("common");
 
-  // Check if already authenticated or no users exist
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await fetch("/api/auth/verify");
-        const data = await res.json();
-
-        if (data.authenticated) {
-          router.replace("/");
-        } else if (data.noUsers) {
-          // No users exist, redirect to signup
-          router.replace("/signup");
-        }
-      } catch {
-        // Ignore errors, just show login form
-      } finally {
-        setCheckingAuth(false);
-      }
-    };
-
-    checkAuth();
-  }, [router]);
+  const { checkingAuth } = useAuthRedirect({ redirectOnNoUsers: true });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

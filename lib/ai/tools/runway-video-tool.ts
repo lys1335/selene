@@ -2,8 +2,7 @@ import { tool, jsonSchema } from "ai";
 import { callRunwayVideo } from "@/lib/ai/runway-video-client";
 import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
-
-const now = () => new Date().toISOString();
+import { now, failToolRun } from "@/lib/ai/tools/tool-run-utils";
 
 // ==========================================================================
 // RUNWAY VIDEO TOOL (Text-to-Video and Image-to-Video)
@@ -123,18 +122,7 @@ async function executeRunwayVideo(sessionId: string, args: RunwayVideoArgs) {
       timeTaken: result.timeTaken,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 

@@ -1,9 +1,8 @@
 "use client";
 
-import { type FC, useEffect, useRef, useState } from "react";
-import { CheckCircleIcon, XCircleIcon, SearchIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useToolExpansion } from "../tool-expansion-context";
+import { type FC } from "react";
+import { SearchIcon } from "lucide-react";
+import { ClaudeToolCard, isToolErrorResult, ToolCardError, ToolCardPre } from "./claude-tool-card";
 import { parseTextResult } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
@@ -16,100 +15,59 @@ type ToolCallContentPartComponent = FC<{
   result?: unknown;
 }>;
 
-function isErrorResult(result: unknown): boolean {
-  if (!result) return false;
-  if (typeof result === "object") {
-    const r = result as Record<string, unknown>;
-    if (r.isError === true) return true;
-  }
-  const text = parseTextResult(result);
-  if (text && /^(error|no such file|permission denied)/im.test(text.slice(0, 200))) return true;
-  return false;
-}
-
 /**
  * Custom UI for Claude Code's `Glob` tool.
  * Shows pattern, directory scope, and matched file list.
  */
 export const ClaudeGlobToolUI: ToolCallContentPartComponent = ({ args, result }) => {
-  const [expanded, setExpanded] = useState(false);
-
-  const expansionCtx = useToolExpansion();
-  const lastSignalRef = useRef(0);
-  useEffect(() => {
-    if (!expansionCtx || expansionCtx.signal.counter === 0) return;
-    if (expansionCtx.signal.counter === lastSignalRef.current) return;
-    lastSignalRef.current = expansionCtx.signal.counter;
-    setExpanded(expansionCtx.signal.mode === "expand");
-  }, [expansionCtx?.signal]);
-
   const pattern = args?.pattern || "";
   const searchPath = args?.path;
   const isRunning = result === undefined;
-  const hasError = isErrorResult(result);
+  const hasError = isToolErrorResult(result, /^(error|no such file|permission denied)/im);
   const content = parseTextResult(result);
 
-  // Parse file list from result
   const files = content ? content.split("\n").filter(l => l.trim()) : [];
   const fileCount = files.length;
 
-  const StatusIcon = isRunning ? null : hasError ? XCircleIcon : CheckCircleIcon;
-  const statusColor = isRunning
-    ? "text-terminal-muted"
-    : hasError
-      ? "text-red-600 dark:text-red-400"
-      : "text-emerald-600 dark:text-emerald-400";
-
   return (
-    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent/30 transition-colors text-left"
-      >
-        {StatusIcon && <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", statusColor)} />}
-        {!StatusIcon && <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-terminal-muted animate-pulse" />}
-        <SearchIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
-        <span className="text-terminal-muted">{isRunning ? "Finding..." : hasError ? "Find failed" : "Find"}</span>
-        <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={pattern}>{pattern}</span>
-
-        {!isRunning && !hasError && fileCount > 0 && (
-          <span className="text-terminal-muted ml-auto shrink-0">
-            {fileCount} file{fileCount !== 1 ? "s" : ""}
+    <ClaudeToolCard
+      isRunning={isRunning}
+      hasError={hasError}
+      headerContent={
+        <>
+          <SearchIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
+          <span className="text-terminal-muted">
+            {isRunning ? "Finding..." : hasError ? "Find failed" : "Find"}
           </span>
-        )}
-
-        {expanded ? (
-          <ChevronDownIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
-        ) : (
-          <ChevronRightIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
-        )}
-      </button>
-
-      {expanded && (
-        <div className="border-t border-border px-3 py-2 space-y-2">
-          {searchPath && (
-            <div className="text-terminal-muted truncate" title={searchPath}>
-              in {searchPath}
-            </div>
+          <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={pattern}>
+            {pattern}
+          </span>
+          {!isRunning && !hasError && fileCount > 0 && (
+            <span className="text-terminal-muted ml-auto shrink-0">
+              {fileCount} file{fileCount !== 1 ? "s" : ""}
+            </span>
           )}
-
-          {files.length > 0 && (
-            <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-64 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
-              {files.slice(0, 200).join("\n")}
-              {files.length > 200 && `\n\n... and ${files.length - 200} more files`}
-            </pre>
-          )}
-
-          {hasError && content && (
-            <div className="text-[11px] text-red-600 dark:text-red-400">{content.slice(0, 500)}</div>
-          )}
-
-          {isRunning && (
-            <div className="text-terminal-muted animate-pulse">Searching files...</div>
-          )}
+        </>
+      }
+    >
+      {searchPath && (
+        <div className="text-terminal-muted truncate" title={searchPath}>
+          in {searchPath}
         </div>
       )}
-    </div>
+
+      {files.length > 0 && (
+        <ToolCardPre className="max-h-64 overflow-y-auto">
+          {files.slice(0, 200).join("\n")}
+          {files.length > 200 && `\n\n... and ${files.length - 200} more files`}
+        </ToolCardPre>
+      )}
+
+      <ToolCardError content={hasError ? content : null} />
+
+      {isRunning && (
+        <div className="text-terminal-muted animate-pulse">Searching files...</div>
+      )}
+    </ClaudeToolCard>
   );
 };

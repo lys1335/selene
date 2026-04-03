@@ -6,7 +6,7 @@
  * status rows matching the style of the other claude-code-tools.
  */
 
-import { type FC, useEffect, useRef, useState } from "react";
+import { type FC } from "react";
 import {
   CheckCircleIcon,
   XCircleIcon,
@@ -22,7 +22,7 @@ import {
   ChevronRightIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useToolExpansion } from "../tool-expansion-context";
+import { useToolCardExpansion } from "./claude-tool-card";
 import { parseTextResult, parseTextResultWithStatus } from "./parse-text-result";
 
 // Shared type
@@ -43,15 +43,7 @@ function isErrorResult(result: unknown): boolean {
 }
 
 function useGlobalExpansion() {
-  const [expanded, setExpanded] = useState(false);
-  const expansionCtx = useToolExpansion();
-  const lastSignalRef = useRef(0);
-  useEffect(() => {
-    if (!expansionCtx || expansionCtx.signal.counter === 0) return;
-    if (expansionCtx.signal.counter === lastSignalRef.current) return;
-    lastSignalRef.current = expansionCtx.signal.counter;
-    setExpanded(expansionCtx.signal.mode === "expand");
-  }, [expansionCtx?.signal]);
+  const [expanded, setExpanded] = useToolCardExpansion(false);
   return { expanded, setExpanded };
 }
 

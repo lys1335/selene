@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from "fs";
-import { saveBase64Image, readLocalFile, fileExists } from "@/lib/storage/local-storage";
+import { saveBase64Image } from "@/lib/storage/local-storage";
 import { loadSettings } from "@/lib/settings/settings-manager";
+import { urlToBase64, localPathToBase64, isLocalMediaPath, isValidBase64 } from "@/lib/ai/media-utils";
 
 function getImagenConfig(): { endpoint: string; apiKey?: string } {
   // Ensure settings are loaded so process.env is updated (Electron standalone).
@@ -9,68 +10,6 @@ function getImagenConfig(): { endpoint: string; apiKey?: string } {
     endpoint: process.env.IMAGEN_EDIT_ENDPOINT ?? "",
     apiKey: process.env.STYLY_AI_API_KEY,
   };
-}
-
-/**
- * Check if a path is a local media path
- */
-function isLocalMediaPath(path: string): boolean {
-  return path.startsWith("/api/media/") || path.startsWith("local-media://");
-}
-
-/**
- * Fetch an image from a URL and convert it to base64
- */
-async function urlToBase64(imageUrl: string): Promise<string> {
-  const response = await fetch(imageUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.status}`);
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  return buffer.toString("base64");
-}
-
-/**
- * Read a local media file and convert to base64
- * Handles /api/media/... paths by extracting the relative path
- */
-function localPathToBase64(imagePath: string): string {
-  // Extract relative path from /api/media/... format
-  let relativePath = imagePath;
-  if (imagePath.startsWith("/api/media/")) {
-    relativePath = imagePath.replace("/api/media/", "");
-  } else if (imagePath.startsWith("local-media://")) {
-    relativePath = imagePath.replace("local-media://", "").replace(/^\/+/, "");
-  }
-
-  // Check if file exists
-  if (!fileExists(relativePath)) {
-    throw new Error(`Local image file not found: ${relativePath}`);
-  }
-
-  // Read file and convert to base64
-  const buffer = readLocalFile(relativePath);
-  return buffer.toString("base64");
-}
-
-/**
- * Check if a string looks like valid base64 data
- */
-function isValidBase64(str: string): boolean {
-  // Base64 strings should only contain valid base64 characters
-  const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-
-  // Remove any data URL prefix first
-  const cleanStr = str.replace(/^data:image\/\w+;base64,/, "");
-
-  // Check if it looks like base64 (reasonable length and valid chars)
-  // A valid base64 image would be at least a few hundred characters
-  if (cleanStr.length < 100) {
-    return false;
-  }
-
-  return base64Regex.test(cleanStr);
 }
 
 /**

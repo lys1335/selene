@@ -1,4 +1,5 @@
-import { saveBase64Video, readLocalFile, fileExists } from "@/lib/storage/local-storage";
+import { saveBase64Video } from "@/lib/storage/local-storage";
+import { urlToBase64, localPathToBase64, isLocalMediaPath } from "@/lib/ai/media-utils";
 
 // WAN 2.2 Video API configuration
 // Note: These are functions to read env vars at runtime for testability
@@ -61,53 +62,10 @@ export function isVideoAsyncResult(
 }
 
 /**
- * Fetch an image from a remote URL and convert it to base64
- */
-async function urlToBase64(imageUrl: string): Promise<string> {
-  const response = await fetch(imageUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.status}`);
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  return buffer.toString("base64");
-}
-
-/**
- * Read a local media file and convert to base64
- * Handles /api/media/... paths by extracting the relative path
- */
-function localPathToBase64(imagePath: string): string {
-  // Extract relative path from /api/media/... format
-  let relativePath = imagePath;
-  if (imagePath.startsWith("/api/media/")) {
-    relativePath = imagePath.replace("/api/media/", "");
-  } else if (imagePath.startsWith("local-media://")) {
-    relativePath = imagePath.replace("local-media://", "").replace(/^\/+/, "");
-  }
-
-  // Check if file exists
-  if (!fileExists(relativePath)) {
-    throw new Error(`Local image file not found: ${relativePath}`);
-  }
-
-  // Read file and convert to base64
-  const buffer = readLocalFile(relativePath);
-  return buffer.toString("base64");
-}
-
-/**
  * Clean base64 string by removing data URL prefix if present
  */
 function cleanBase64(base64Data: string): string {
   return base64Data.replace(/^data:image\/\w+;base64,/, "");
-}
-
-/**
- * Check if a path is a local media path
- */
-function isLocalMediaPath(path: string): boolean {
-  return path.startsWith("/api/media/") || path.startsWith("local-media://");
 }
 
 /**
