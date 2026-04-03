@@ -20,6 +20,9 @@ import { validateCommand, validateExecutionDirectory } from "./validator";
 import { commandLogger } from "./logger";
 import { saveTerminalLog } from "./log-manager";
 import { isEBADFError, spawnWithFileCapture } from "@/lib/spawn-utils";
+import { getResolvedShellEnvironment } from "@/lib/shell-env/resolver";
+import { shouldUseRTK } from "@/lib/rtk";
+import path from "path";
 import type {
     ExecuteOptions,
     ExecuteResult,
@@ -59,6 +62,50 @@ function nextBgId(): string {
     return `bg-${Date.now()}-${++bgIdCounter}`;
 }
 
+function isUnixLikePlatform(): boolean {
+    return process.platform === "darwin" || process.platform === "linux";
+}
+
+function shellQuote(value: string): string {
+    if (value.length === 0) return "''";
+    return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function buildShellCommandLine(command: string, args: string[]): string {
+    return [command, ...args].map(shellQuote).join(" ");
+}
+
+function getUserShellPath(): string | null {
+    if (!isUnixLikePlatform()) return null;
+    const shellEnv = getResolvedShellEnvironment();
+    const candidate = shellEnv.SHELL || process.env.SHELL;
+    if (candidate && path.isAbsolute(candidate)) {
+        return candidate;
+    }
+    return process.platform === "darwin" ? "/bin/zsh" : "/bin/bash";
+}
+
+function isShellRetryEligibleCommand(command: string): boolean {
+    const trimmed = command.trim();
+    if (!trimmed) return false;
+    // Only retry simple executable names through the login shell. This preserves
+    // terminal-like resolution for commands such as `python` without turning the
+    // command field into an unrestricted shell script surface.
+    return !/[\s|&;<>$`(){}\n\r]/.test(trimmed);
+}
+
+function buildShellRetryOptions(options: ExecuteOptions, resolvedCommandLine?: string): ExecuteOptions {
+    const commandLine = resolvedCommandLine || options.rawCommandLine || buildShellCommandLine(options.command, options.args);
+    return {
+        ...options,
+        command: getUserShellPath() || "/bin/sh",
+        args: ["-ilc", commandLine],
+        rawCommandLine: commandLine,
+        forceShellExecution: true,
+        shellFallbackAttempted: true,
+    };
+}
+
 /**
  * Start a command in the background. Returns immediately with a process ID.
  * The process continues running; call `getBackgroundProcess` to poll for output.
@@ -74,9 +121,14 @@ export async function startBackgroundProcess(
     processId: string;
     error?: string;
 }> {
-    const { command, args, cwd, characterId, confirmRemoval } = options;
+    const { command, args, stdin, cwd, characterId, confirmRemoval } = options;
     const timeout = options.timeout ?? BACKGROUND_TIMEOUT;
     const maxOutputSize = options.maxOutputSize ?? MAX_BACKGROUND_OUTPUT;
+    const shouldRetryThroughShellOnMessage = (message: string): boolean => {
+        if (!isShellRetryEligibleCommand(command)) return false;
+        if (typeof stdin === "string" && stdin.length > 0) return true;
+        return message.includes("ENOENT") && !path.isAbsolute(command) && !shouldUseRTK(command);
+    };
 
     // Validate command
     const cmdValidation = validateCommand(command, args, { confirmRemoval });
@@ -121,7 +173,16 @@ export async function startBackgroundProcess(
             windowsHide: true,
             env: finalEnv,
         });
-        child.stdin?.end(); // Send EOF — functionally identical to "ignore"
+
+        const retryThroughShell = async (): Promise<{ processId: string }> => {
+            const retryResult = await startBackgroundProcess(buildShellRetryOptions(options), allowedPaths);
+            return { processId: retryResult.processId };
+        };
+        if (typeof stdin === "string" && stdin.length > 0) {
+            child.stdin?.end(stdin);
+        } else {
+            child.stdin?.end(); // Send EOF — functionally identical to "ignore"
+        }
 
         const info: BackgroundProcessInfo = {
             id,
@@ -185,7 +246,13 @@ export async function startBackgroundProcess(
 
                 try {
                     const fb = await spawnWithFileCapture(
-                        finalCommand, finalArgs, resolvedCwd, finalEnv, timeout, maxOutputSize,
+                        finalCommand,
+                        finalArgs,
+                        resolvedCwd,
+                        finalEnv,
+                        timeout,
+                        maxOutputSize,
+                        stdin,
                     );
                     info.running = false;
                     info.exitCode = fb.exitCode;
@@ -204,6 +271,22 @@ export async function startBackgroundProcess(
                     info.running = false;
                     info.stderr += `\n[EBADF file-capture fallback failed] ${fbErr instanceof Error ? fbErr.message : fbErr}`;
                     commandLogger.logExecutionError(command, info.stderr, { characterId });
+                }
+                return;
+            }
+
+            if (shouldRetryThroughShellOnMessage(error.message) && isShellRetryEligibleCommand(command)) {
+                const retryResult = await retryThroughShell();
+                info.running = false;
+                if (retryResult.processId) {
+                    const retriedInfo = backgroundProcesses.get(retryResult.processId);
+                    if (retriedInfo) {
+                        retriedInfo.id = id;
+                        backgroundProcesses.set(id, retriedInfo);
+                        backgroundProcesses.delete(retryResult.processId);
+                    }
+                } else {
+                    info.stderr += "\n[Shell retry failed to start]";
                 }
                 return;
             }
@@ -254,7 +337,13 @@ export async function startBackgroundProcess(
 
             // Run asynchronously; the caller gets the processId immediately.
             spawnWithFileCapture(
-                finalCommand, finalArgs, resolvedCwd, finalEnv, timeout, maxOutputSize,
+                finalCommand,
+                finalArgs,
+                resolvedCwd,
+                finalEnv,
+                timeout,
+                maxOutputSize,
+                stdin,
             ).then((fb) => {
                 info.running = false;
                 info.exitCode = fb.exitCode;
@@ -348,17 +437,40 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
     const {
         command,
         args,
+        stdin,
         cwd,
         characterId,
         confirmRemoval,
         maxOutputSize = DEFAULT_MAX_OUTPUT_SIZE,
         forceDirectExecution = false,
+        forceShellExecution = false,
+        shellFallbackAttempted = false,
+        rawCommandLine,
         fallbackReasonForDirectExecution,
         toolCallId,
         onProgress,
     } = options;
 
     const timeout = resolveTimeout(command, options.timeout);
+    const effectiveRawCommandLine = rawCommandLine || buildShellCommandLine(command, args);
+    const shouldWriteToStdin = typeof stdin === "string" && stdin.length > 0;
+    const canRetryThroughShell = isUnixLikePlatform() && !shellFallbackAttempted && !forceShellExecution;
+    const shouldRetryThroughShellOnMessage = (message: string): boolean => {
+        if (!canRetryThroughShell) return false;
+        if (!isShellRetryEligibleCommand(command)) return false;
+        if (shouldWriteToStdin) return true;
+        return message.includes("ENOENT") && !path.isAbsolute(command) && !shouldUseRTK(command);
+    };
+    const buildShellRetryOptionsFromCurrentState = (): ExecuteOptions => ({
+        ...options,
+        command: getUserShellPath() || "/bin/sh",
+        args: ["-ilc", effectiveRawCommandLine],
+        stdin: undefined,
+        rawCommandLine: effectiveRawCommandLine,
+        forceShellExecution: true,
+        shellFallbackAttempted: true,
+    });
+
     const context = { characterId };
     const startTime = Date.now();
     const startedAt = nowISO();
@@ -367,10 +479,8 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
     const completedMessage = fullCommand ? `Completed ${fullCommand}` : "Command completed";
     const failedMessage = fullCommand ? `Failed ${fullCommand}` : "Command failed";
 
-    // Log execution attempt
     commandLogger.logExecutionStart(command, args, cwd, context);
 
-    // Validate command
     const cmdValidation = validateCommand(command, args, { confirmRemoval });
     commandLogger.logValidation(cmdValidation.valid, command, cmdValidation.error, { characterId, cwd });
 
@@ -399,6 +509,10 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
         let killed = false;
         let timeoutId: NodeJS.Timeout | null = null;
         let child: ChildProcess;
+
+        const retryThroughShell = (): void => {
+            void executeCommand(buildShellRetryOptionsFromCurrentState()).then(resolve);
+        };
 
         const emitProgress = (overrides: Partial<ExecuteCommandProgressUpdate> = {}) => {
             onProgress?.({
@@ -438,31 +552,24 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
         });
 
         try {
-            // Spawn process
-            // - Unix: shell: false to pass arguments directly (avoids quote/special char issues)
-            // - Windows: shell: true for PATH resolution and .bat/.cmd support
-            // Security is provided by command validation (blocklist) and path validation.
-            //
-            // Note for AI: On Windows use 'dir' instead of 'ls', 'type' instead of 'cat'
             child = spawn(finalCommand, finalArgs, {
                 cwd,
-                timeout, // Built-in timeout
+                timeout,
                 shell: needsWindowsShell(finalCommand),
-                // Use "pipe" for stdin rather than "ignore".  On macOS inside
-                // Electron's utilityProcess "ignore" can itself trigger EBADF; we
-                // close stdin immediately below to give the child EOF instead.
                 stdio: ["pipe", "pipe", "pipe"],
-                windowsHide: true, // Hide console window on Windows
+                windowsHide: true,
                 env: finalEnv,
             });
-            child.stdin?.end(); // Send EOF — functionally identical to "ignore"
+            if (shouldWriteToStdin) {
+                child.stdin?.end(stdin);
+            } else {
+                child.stdin?.end();
+            }
 
-            // Set up manual timeout as backup
             timeoutId = setTimeout(() => {
                 if (!killed) {
                     killed = true;
                     child.kill("SIGTERM");
-                    // Force kill after 5 seconds if SIGTERM doesn't work
                     setTimeout(() => {
                         try {
                             child.kill("SIGKILL");
@@ -474,12 +581,11 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
             }, timeout);
 
             emitProgress({ message: runningMessage });
-            
-            // Capture stdout
+
             child.stdout?.on("data", (chunk: Buffer) => {
                 const data = chunk.toString();
                 outputSize += data.length;
-            
+
                 if (outputSize > maxOutputSize) {
                     if (!killed) {
                         killed = true;
@@ -502,12 +608,11 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                     });
                 }
             });
-            
-            // Capture stderr
+
             child.stderr?.on("data", (chunk: Buffer) => {
                 const data = chunk.toString();
                 outputSize += data.length;
-            
+
                 if (outputSize > maxOutputSize) {
                     if (!killed) {
                         killed = true;
@@ -530,14 +635,12 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                     });
                 }
             });
-            
-            // Handle completion
+
             child.on("close", (code, signal) => {
                 if (timeoutId) clearTimeout(timeoutId);
 
                 const executionTime = Date.now() - startTime;
 
-                // Log completion
                 commandLogger.logExecutionComplete(
                     command,
                     code,
@@ -549,7 +652,6 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                     context
                 );
 
-                // Save full log
                 const logId = saveTerminalLog(stdout, stderr);
 
                 const fallbackReason = getRtkFallbackReason({
@@ -576,7 +678,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                     stdout: stdout.trim(),
                     stderr: stderr.trim(),
                     exitCode: code,
-                    signal: signal,
+                    signal,
                     error: killed ? "Process terminated due to timeout or output limit" : undefined,
                     executionTime,
                     startedAt,
@@ -608,28 +710,36 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                 resolve(finalResult);
             });
 
-            // Handle spawn errors — including EBADF fallback
             child.on("error", async (error) => {
                 if (timeoutId) clearTimeout(timeoutId);
 
-                // macOS Electron utilityProcess: pipe creation can fail with EBADF.
-                // Fall back to file-capture (no pipes; stdout/stderr written to temp files).
                 if (isEBADFError(error) && process.platform === "darwin") {
                     console.warn("[Command Executor] spawn EBADF – retrying with file-capture fallback");
                     resolve(await runEBADFFallback({
-                        command, finalCommand, finalArgs, cwd, finalEnv,
-                        timeout, maxOutputSize, startTime,
-                        wrappedByRTK: wrapped.usingRTK, characterId, baseSearchMetadata: searchMetadata,
+                        command,
+                        finalCommand,
+                        finalArgs,
+                        cwd,
+                        finalEnv,
+                        timeout,
+                        maxOutputSize,
+                        stdinData: stdin,
+                        startTime,
+                        wrappedByRTK: wrapped.usingRTK,
+                        characterId,
+                        baseSearchMetadata: searchMetadata,
                     }));
                     return;
                 }
 
                 const executionTime = Date.now() - startTime;
-
-                // Provide more helpful error messages for common issues
                 let errorMessage = error.message;
 
-                // Check if it's a "command not found" error
+                if (shouldRetryThroughShellOnMessage(errorMessage)) {
+                    retryThroughShell();
+                    return;
+                }
+
                 if (error.message.includes("ENOENT") || error.message.includes("spawn") && error.message.includes("not found")) {
                     const diagnostic = buildNotFoundDiagnostic(command, runtime, finalEnv, resolved.resolution);
                     const attemptedCommand = wrapped.usingRTK
@@ -638,7 +748,11 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                     const commandHint = resolved.resolution
                         ? "Tip: bundled Node tools keep priority, but other commands still rely on your system PATH."
                         : "Tip: verify the executable is installed and available in the PATH Selene inherited from your OS.";
-                    errorMessage = `Command execution failed: requested='${command}', attempted='${attemptedCommand}'. ${error.message}\n\n${diagnostic}\n\n${commandHint}`;
+                    errorMessage = `Command execution failed: requested='${command}', attempted='${attemptedCommand}'. ${error.message}
+
+${diagnostic}
+
+${commandHint}`;
                 }
 
                 commandLogger.logExecutionError(command, errorMessage, context);
@@ -698,20 +812,33 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
         } catch (error) {
             if (timeoutId) clearTimeout(timeoutId);
 
-            // macOS Electron utilityProcess: spawn() itself can throw EBADF
-            // synchronously when pipe creation fails.  Retry via file-capture.
             if (isEBADFError(error) && process.platform === "darwin") {
                 console.warn("[Command Executor] spawn() threw EBADF synchronously – retrying with file-capture fallback");
                 runEBADFFallback({
-                    command, finalCommand, finalArgs, cwd, finalEnv,
-                    timeout, maxOutputSize, startTime,
-                    wrappedByRTK: wrapped.usingRTK, characterId, baseSearchMetadata: searchMetadata,
+                    command,
+                    finalCommand,
+                    finalArgs,
+                    cwd,
+                    finalEnv,
+                    timeout,
+                    maxOutputSize,
+                    stdinData: stdin,
+                    startTime,
+                    wrappedByRTK: wrapped.usingRTK,
+                    characterId,
+                    baseSearchMetadata: searchMetadata,
                 }).then(resolve);
                 return;
             }
 
             const executionTime = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+            if (shouldRetryThroughShellOnMessage(errorMessage)) {
+                retryThroughShell();
+                return;
+            }
+
             commandLogger.logExecutionError(command, errorMessage, context);
             const fallbackReason = getRtkFallbackReason({
                 command,

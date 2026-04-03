@@ -6,7 +6,7 @@
  */
 
 import { tool, jsonSchema, type ToolExecutionOptions } from "ai";
-import { logToolEvent } from "@/lib/ai/tool-registry";
+import { logToolEvent } from "@/lib/ai/tool-registry/logging";
 import fs from "fs/promises";
 import path from "path";
 import { getAccessibleSyncFolders } from "@/lib/vectordb/accessible-sync-folders";
@@ -26,7 +26,10 @@ import type {
     ExecuteCommandInput,
     ExecuteCommandToolResult,
     ExecuteCommandProgressUpdate,
+    InlineDiffPayload,
+    InlineDiffFile,
 } from "@/lib/command-execution/types";
+import { createTwoFilesPatch } from "diff";
 
 function extractToolCallId(options?: ToolExecutionOptions): string {
     if (!options || typeof options !== "object") return "";
@@ -58,6 +61,140 @@ function stripOuterQuotes(value: string): string {
         return trimmed.slice(1, -1).trim();
     }
     return trimmed;
+}
+
+function normalizeCommandName(command: string): string {
+    return path.basename(command.trim()).toLowerCase().replace(/\.(?:cmd|bat|exe)$/i, "");
+}
+
+function prepareCommandInput(
+    command: string,
+    args: string[],
+    stdin?: string,
+): { args: string[]; stdin?: string } {
+    if (typeof stdin === "string" && stdin.length > 0) {
+        return { args, stdin };
+    }
+
+    if (normalizeCommandName(command) !== "apply_patch" || args.length === 0) {
+        return { args, stdin };
+    }
+
+    const lineJoinedPatch = args.join("\n").trim();
+    const flatJoinedPatch = args.join(" ").trim();
+    const candidatePatch = lineJoinedPatch.startsWith("*** Begin Patch")
+        ? lineJoinedPatch
+        : flatJoinedPatch;
+
+    if (!candidatePatch.startsWith("*** Begin Patch")) {
+        return { args, stdin };
+    }
+
+    return {
+        args: [],
+        stdin: candidatePatch.endsWith("\n") ? candidatePatch : `${candidatePatch}\n`,
+    };
+}
+
+interface ParsedPatchFile {
+    filePath: string;
+    operation: "add" | "modify" | "delete";
+}
+
+/**
+ * Parse apply_patch text to extract file paths and operations from headers like:
+ * *** Add File: src/foo.ts
+ * *** Modify File: src/bar.tsx  (or *** Update File: ...)
+ * *** Delete File: src/baz.ts
+ */
+function parsePatchFileHeaders(patchText: string): ParsedPatchFile[] {
+    const files: ParsedPatchFile[] = [];
+    const headerRegex = /^\*\*\*\s+(Add|Modify|Update|Delete)\s+File:\s+(.+)$/gm;
+    let match;
+    while ((match = headerRegex.exec(patchText)) !== null) {
+        const rawOp = match[1].toLowerCase();
+        const op = (rawOp === "update" ? "modify" : rawOp) as "add" | "modify" | "delete";
+        files.push({ filePath: match[2].trim(), operation: op });
+    }
+    return files;
+}
+
+/**
+ * After a successful apply_patch, read the patched files from disk and compute
+ * unified diffs against the git-tracked version (before state).
+ * Falls back to raw patch text if diff computation fails.
+ */
+async function computeInlineDiffs(
+    patchText: string,
+    cwd: string,
+): Promise<InlineDiffPayload> {
+    const parsedFiles = parsePatchFileHeaders(patchText);
+    if (parsedFiles.length === 0) {
+        return { files: [], rawPatch: patchText };
+    }
+
+    const diffFiles: InlineDiffFile[] = [];
+
+    for (const file of parsedFiles) {
+        const absPath = path.resolve(cwd, file.filePath);
+        try {
+            if (file.operation === "delete") {
+                // File was deleted — show the removal diff from git
+                diffFiles.push({
+                    path: file.filePath,
+                    operation: "delete",
+                    diff: `File deleted: ${file.filePath}`,
+                });
+                continue;
+            }
+
+            // Read the current (post-patch) file content
+            const afterContent = await fs.readFile(absPath, "utf-8");
+
+            if (file.operation === "add") {
+                // New file — diff against empty
+                const diff = createTwoFilesPatch(
+                    file.filePath,
+                    file.filePath,
+                    "",
+                    afterContent,
+                    "before",
+                    "after",
+                );
+                diffFiles.push({ path: file.filePath, operation: "add", diff });
+            } else {
+                // Modified file — try to get the git-tracked version as "before"
+                let beforeContent = "";
+                try {
+                    const { execSync } = await import("child_process");
+                    beforeContent = execSync(
+                        `git show HEAD:${JSON.stringify(file.filePath)}`,
+                        { cwd, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
+                    );
+                } catch {
+                    // File might be new to git or git not available — diff against empty
+                }
+                const diff = createTwoFilesPatch(
+                    file.filePath,
+                    file.filePath,
+                    beforeContent,
+                    afterContent,
+                    "before",
+                    "after",
+                );
+                diffFiles.push({ path: file.filePath, operation: "modify", diff });
+            }
+        } catch {
+            // If we can't read the file, skip it
+            diffFiles.push({
+                path: file.filePath,
+                operation: file.operation,
+                diff: `Could not compute diff for ${file.filePath}`,
+            });
+        }
+    }
+
+    return { files: diffFiles, rawPatch: patchText };
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -187,6 +324,11 @@ const executeCommandSchema = jsonSchema<ExecuteCommandInput & { logId?: string }
             description:
                 "Timeout in milliseconds. Defaults: 30s for most commands, 120s for package managers (npm, npx, yarn, etc.). Max: 600000 (10 min).",
         },
+        stdin: {
+            type: "string",
+            description:
+                "Optional raw stdin payload written to the command before stdin is closed. Useful for tools like apply_patch.",
+        },
         background: {
             type: "boolean",
             description:
@@ -277,7 +419,7 @@ The tool returns immediately with a processId. Poll with processId to check stat
                 };
             }
 
-            const { command, args = [], cwd, timeout, background, processId, logId, confirmRemoval = false } = input;
+            const { command, args = [], stdin, cwd, timeout, background, processId, logId, confirmRemoval = false } = input;
 
             // ── Read Log ────────────────────────────────────────────────
             if (command === "readLog" && logId) {
@@ -416,14 +558,20 @@ The tool returns immediately with a processId. Poll with processId to check stat
             try {
                 const resolvedCommand = await resolveClaudePluginRootPlaceholder(command);
                 const normalizedInput = normalizeExecuteCommandInput(resolvedCommand, args);
-
+                const preparedInput = prepareCommandInput(
+                    normalizedInput.command,
+                    normalizedInput.args,
+                    stdin,
+                );
+                
                 // ── Background execution ────────────────────────────────
                 if (background) {
                     const maxBgTimeout = 600_000; // 10 min
                     const bgResult = await startBackgroundProcess(
                         {
                             command: normalizedInput.command,
-                            args: normalizedInput.args,
+                            args: preparedInput.args,
+                            stdin: preparedInput.stdin,
                             cwd: executionDir,
                             timeout: Math.min(timeout || 600_000, maxBgTimeout),
                             characterId: characterId,
@@ -431,7 +579,7 @@ The tool returns immediately with a processId. Poll with processId to check stat
                         },
                         syncedFolders
                     );
-
+                
                     if (bgResult.error) {
                         return { status: "error", error: bgResult.error };
                     }
@@ -453,7 +601,8 @@ The tool returns immediately with a processId. Poll with processId to check stat
                 const maxTimeout = 600_000; // 10 min for foreground too
                 const initialOptions = {
                     command: normalizedInput.command,
-                    args: normalizedInput.args,
+                    args: preparedInput.args,
+                    stdin: preparedInput.stdin,
                     cwd: executionDir,
                     timeout: timeout ? Math.min(timeout, maxTimeout) : undefined,
                     characterId: characterId,
@@ -509,6 +658,21 @@ The tool returns immediately with a processId. Poll with processId to check stat
                     });
                 }
 
+                const isApplyPatch = normalizedInput.command.trim().toLowerCase() == "apply_patch";
+                let inlineDiff: string | InlineDiffPayload | undefined;
+                if (isApplyPatch) {
+                    const rawPatch = (preparedInput.stdin || preparedInput.args.join("\n")).trim();
+                    if (rawPatch && result.success) {
+                        try {
+                            inlineDiff = await computeInlineDiffs(rawPatch, executionDir);
+                        } catch {
+                            inlineDiff = rawPatch || undefined;
+                        }
+                    } else {
+                        inlineDiff = rawPatch || undefined;
+                    }
+                }
+
                 const toolResult: ExecuteCommandToolResult = {
                     status: result.success
                         ? "success"
@@ -517,6 +681,7 @@ The tool returns immediately with a processId. Poll with processId to check stat
                             : "error",
                     stdout: result.stdout,
                     stderr: result.stderr,
+                    inlineDiff,
                     exitCode: result.exitCode,
                     executionTime: result.executionTime,
                     startedAt: result.startedAt,

@@ -129,7 +129,8 @@ describe("Smart timeout defaults", () => {
 describe("stdin handling", () => {
     it("should not hang when command expects stdin (stdin is ignored)", async () => {
         // `node -e "process.stdin.resume()"` would hang forever if stdin
-        // were piped. With stdio:["ignore",...] it gets EOF immediately.
+        // were left open. The executor closes stdin immediately when no input
+        // is provided, so the process receives EOF and exits promptly.
         const result = await executeCommand({
             command: "node",
             args: ["-e", "process.stdin.once('end', () => console.log('eof')); process.stdin.resume()"],
@@ -138,10 +139,22 @@ describe("stdin handling", () => {
             timeout: 5000,
         });
 
-        // stdin is ignored → the stream is not connected, so the process
-        // gets an EOF or the pipe is not available. Either way it should
-        // finish quickly rather than hanging.
         expect(result.executionTime).toBeLessThan(5000);
+        expect(result.stdout).toBe("eof");
+    });
+
+    it("writes provided stdin to the child process", async () => {
+        const result = await executeCommand({
+            command: "node",
+            args: ["-e", "let data='';process.stdin.on('data', c => data += c);process.stdin.on('end', () => process.stdout.write(data.toUpperCase()))"],
+            stdin: "apply patch\n",
+            cwd: process.cwd(),
+            characterId: "test",
+            timeout: 5000,
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.stdout).toBe("APPLY PATCH");
     });
 });
 

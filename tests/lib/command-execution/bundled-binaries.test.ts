@@ -33,7 +33,7 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
     });
 
     describe("getBundledBinariesPath", () => {
-        it("should find bundled binaries using process.resourcesPath", () => {
+        it("should find bundled binaries using process.resourcesPath", async () => {
             const mockResourcesPath = "/app/Contents/Resources";
             const expectedNodeBinPath = join(mockResourcesPath, "standalone", "node_modules", ".bin");
             const expectedToolsBinPath = join(mockResourcesPath, "standalone", "tools", "bin");
@@ -50,7 +50,7 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
 
             // Trigger buildSafeEnvironment by attempting to execute a command
             // (it will fail but that's ok, we just want to see the PATH setup)
-            executeCommand({
+            await executeCommand({
                 command: "echo",
                 args: ["test"],
                 cwd: "/tmp",
@@ -73,7 +73,7 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             consoleLogSpy.mockRestore();
         });
 
-        it("should find bundled binaries using ELECTRON_RESOURCES_PATH env var", () => {
+        it("should find bundled binaries using ELECTRON_RESOURCES_PATH env var", async () => {
             const mockResourcesPath = "C:\\\\app\\\\resources";
             const expectedNodeBinPath = join(mockResourcesPath, "standalone", "node_modules", ".bin");
             const expectedToolsBinPath = join(mockResourcesPath, "standalone", "tools", "bin");
@@ -86,7 +86,7 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
 
             const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-            executeCommand({
+            await executeCommand({
                 command: "dir",
                 args: [],
                 cwd: "C:\\\\temp",
@@ -108,13 +108,13 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             consoleLogSpy.mockRestore();
         });
 
-        it("should return null when no resources path is available", () => {
+        it("should return null when no resources path is available", async () => {
             delete (process as any).resourcesPath;
             delete process.env.ELECTRON_RESOURCES_PATH;
 
             const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-            executeCommand({
+            await executeCommand({
                 command: "ls",
                 args: [],
                 cwd: "/tmp",
@@ -131,14 +131,14 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             consoleLogSpy.mockRestore();
         });
 
-        it("should return null when bundled directories do not exist", () => {
+        it("should return null when bundled directories do not exist", async () => {
             const mockResourcesPath = "/app/Contents/Resources";
             (process as any).resourcesPath = mockResourcesPath;
             vi.mocked(existsSync).mockReturnValue(false);
 
             const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-            executeCommand({
+            await executeCommand({
                 command: "test",
                 args: [],
                 cwd: "/tmp",
@@ -156,7 +156,7 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
     });
 
     describe("PATH environment variable construction", () => {
-        it("should prepend bundled binaries to PATH on Windows", () => {
+        it("should prepend bundled binaries to PATH on Windows", async () => {
             const mockResourcesPath = "C:\\\\app\\\\resources";
             const mockSystemPath = "C:\\\\Windows\\\\System32;C:\\\\Program Files";
             const expectedNodeBinPath = join(mockResourcesPath, "standalone", "node_modules", ".bin");
@@ -171,7 +171,7 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
 
             const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-            executeCommand({
+            await executeCommand({
                 command: "npm",
                 args: ["--version"],
                 cwd: "C:\\\\temp",
@@ -191,7 +191,7 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             consoleLogSpy.mockRestore();
         });
 
-        it("should prepend bundled binaries to PATH on Unix", () => {
+        it("should prepend bundled binaries to PATH on Unix", async () => {
             const mockResourcesPath = "/Applications/Selene.app/Contents/Resources";
             const mockSystemPath = "/usr/local/bin:/usr/bin:/bin";
             const expectedNodeBinPath = join(mockResourcesPath, "standalone", "node_modules", ".bin");
@@ -206,7 +206,7 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
 
             const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-            executeCommand({
+            await executeCommand({
                 command: "node",
                 args: ["--version"],
                 cwd: "/tmp",
@@ -225,14 +225,14 @@ describe("Command Executor - Bundled Binaries PATH Resolution", () => {
             consoleLogSpy.mockRestore();
         });
 
-        it("should pass ELECTRON_RESOURCES_PATH to child processes", () => {
+        it("should pass ELECTRON_RESOURCES_PATH to child processes", async () => {
             const mockResourcesPath = "/app/resources";
             process.env.ELECTRON_RESOURCES_PATH = mockResourcesPath;
             vi.mocked(existsSync).mockReturnValue(true);
 
             // The buildSafeEnvironment function should include ELECTRON_RESOURCES_PATH
             // This is important for MCP servers and other child processes
-            executeCommand({
+            await executeCommand({
                 command: "test",
                 args: [],
                 cwd: "/tmp",

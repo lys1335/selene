@@ -33,6 +33,8 @@ export interface ExecuteOptions {
   command: string;
   /** Command arguments (e.g., ['run', 'build']) */
   args: string[];
+  /** Optional stdin payload written to the child process before closing stdin. */
+  stdin?: string;
   /** Working directory - must be within synced folders */
   cwd: string;
   /** Character/agent ID for folder validation */
@@ -45,6 +47,12 @@ export interface ExecuteOptions {
   confirmRemoval?: boolean;
   /** Internal use: skip RTK wrapping for this invocation */
   forceDirectExecution?: boolean;
+  /** Internal use: retry the command through the user's login shell on Unix. */
+  forceShellExecution?: boolean;
+  /** Internal use: preserve the original raw command line for shell retries. */
+  rawCommandLine?: string;
+  /** Internal use: avoid infinite ENOENT -> shell fallback retry loops. */
+  shellFallbackAttempted?: boolean;
   /** Internal use: preserve fallback reason when forcing direct execution */
   fallbackReasonForDirectExecution?: ExecuteSearchMetadata["fallbackReason"];
   /** Tool call identifier used for live command progress projections. */
@@ -132,6 +140,8 @@ export interface ExecuteCommandInput {
   command: string;
   /** Command arguments */
   args?: string[];
+  /** Optional raw stdin payload for commands that read from stdin */
+  stdin?: string;
   /** Working directory (must be within synced folders) */
   cwd?: string;
   /** Timeout in milliseconds */
@@ -154,6 +164,8 @@ export interface ExecuteCommandToolResult {
   stdout?: string;
   /** Standard error */
   stderr?: string;
+  /** Optional apply_patch-style diff preview rendered inline by the UI */
+  inlineDiff?: string | InlineDiffPayload;
   /** Exit code */
   exitCode?: number | null;
   /** Execution time in milliseconds */
@@ -170,6 +182,28 @@ export interface ExecuteCommandToolResult {
   logId?: string;
   /** Whether the output was truncated in context */
   isTruncated?: boolean;
+}
+
+/**
+ * A single file's diff within an apply_patch result
+ */
+export interface InlineDiffFile {
+  /** File path relative to cwd */
+  path: string;
+  /** Operation type parsed from patch header */
+  operation: "add" | "modify" | "delete";
+  /** Unified diff string (before vs after) */
+  diff: string;
+}
+
+/**
+ * Structured inline diff payload with per-file diffs
+ */
+export interface InlineDiffPayload {
+  /** Per-file computed diffs */
+  files: InlineDiffFile[];
+  /** Raw patch text as fallback */
+  rawPatch: string;
 }
 
 /**

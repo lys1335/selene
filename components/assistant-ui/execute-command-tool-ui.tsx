@@ -8,7 +8,7 @@ import type { ExecuteCommandToolResult } from "@/lib/command-execution/types";
 type ToolCallContentPartComponent = FC<{
     toolName: string;
     argsText?: string;
-    args?: { command?: string; args?: string[]; cwd?: string; timeout?: number; processId?: string; background?: boolean };
+    args?: { command?: string; args?: string[]; cwd?: string; timeout?: number; processId?: string; background?: boolean; stdin?: string };
     result?: ExecuteCommandToolResult;
     state?: "input-streaming" | "input-available" | "output-available" | "output-error" | "output-denied";
     output?: ExecuteCommandToolResult;
@@ -64,6 +64,7 @@ export const ExecuteCommandToolUI: ToolCallContentPartComponent = ({
                     command={fallbackCommand}
                     stdout={resolvedResult?.stdout}
                     stderr={resolvedResult?.stderr}
+                    inlineDiff={resolvedResult?.inlineDiff}
                     exitCode={resolvedResult?.exitCode}
                     executionTime={resolvedResult?.executionTime}
                     success={isNonErrorStatus}
@@ -106,6 +107,7 @@ export const ExecuteCommandToolUI: ToolCallContentPartComponent = ({
             cwd={args.cwd}
             stdout={resolvedResult?.stdout}
             stderr={resolvedResult?.stderr}
+            inlineDiff={resolvedResult?.inlineDiff}
             exitCode={resolvedResult?.exitCode}
             executionTime={resolvedResult?.executionTime}
             success={isNonErrorStatus}

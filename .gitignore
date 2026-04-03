@@ -113,6 +113,7 @@ logs/
 appendonlydir/
 blackboxai-docs.md
 scripts/scrape-blackbox-docs.mjs
+docs/claude-code-main/
 # Docker volumes (runtime data)
 **/volumes/redis/
 docs/
