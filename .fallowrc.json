@@ -10,89 +10,150 @@
   ],
   "ignoreExports": [
     {
-      "file": "lib/db/sqlite-character-schema.ts",
+      "file": "components/avatar-3d/avatar-pip-widget.tsx",
       "exports": [
-        "charactersRelations",
-        "characterImagesRelations",
-        "agentDocumentsRelations",
-        "agentDocumentChunksRelations",
-        "agentSyncFoldersRelations",
-        "agentSyncFilesRelations",
-        "channelConnectionsRelations",
-        "channelConversationsRelations",
-        "channelMessagesRelations"
+        "AvatarPipWidgetProps"
       ]
     },
     {
-      "file": "lib/db/sqlite-observability-schema.ts",
+      "file": "components/avatar-3d/avatar-renderer.tsx",
       "exports": [
-        "agentRunsRelations",
-        "agentRunEventsRelations",
-        "promptTemplatesRelations",
-        "promptVersionsRelations"
+        "AvatarRendererProps"
       ]
     },
     {
-      "file": "lib/db/sqlite-plugins-schema.ts",
+      "file": "components/character-creation/hooks/use-anime-scope.ts",
       "exports": [
-        "pluginsRelations",
-        "agentPluginsRelations",
-        "pluginHooksRelations",
-        "pluginMcpServersRelations",
-        "pluginLspServersRelations",
-        "pluginFilesRelations",
-        "pluginSkillRevisionsRelations",
-        "marketplacesRelations"
+        "Scope"
       ]
     },
     {
-      "file": "lib/db/sqlite-schema-base.ts",
+      "file": "components/comfyui/LocalModelsManager.tsx",
       "exports": [
-        "usersRelations",
-        "sessionsRelations",
-        "messagesRelations",
-        "toolRunsRelations",
-        "webBrowseEntriesRelations",
-        "imagesRelations"
+        "LocalModelConfig",
+        "LocalModelState",
+        "LocalModelsManagerProps"
       ]
     },
     {
-      "file": "lib/db/sqlite-skills-schema.ts",
+      "file": "components/comfyui/index.ts",
       "exports": [
-        "skillsRelations",
-        "skillVersionsRelations",
-        "skillFilesRelations"
+        "LocalModelConfig",
+        "LocalModelState",
+        "LocalModelsManagerProps"
       ]
     },
     {
-      "file": "lib/db/sqlite-voice-schema.ts",
+      "file": "components/onboarding/steps/index.ts",
       "exports": [
-        "voiceHistory",
-        "voiceDictionary",
-        "voiceHistoryRelations",
-        "voiceDictionaryRelations"
+        "PathConfigState",
+        "SelenePath"
       ]
     },
     {
-      "file": "lib/db/sqlite-workflows-schema.ts",
+      "file": "components/ui/noisy-gradient-backgrounds.tsx",
       "exports": [
-        "agentWorkflowsRelations",
-        "agentWorkflowMembersRelations"
+        "GradientBackgroundProps",
+        "GradientOrigin"
       ]
     },
     {
-      "file": "lib/db/sqlite-schedule-schema.ts",
+      "file": "components/ui/wizard-progress.tsx",
       "exports": [
-        "scheduledTasksRelations",
-        "scheduledTaskRunsRelations"
+        "WizardStep"
+      ]
+    },
+    {
+      "file": "electron/certs.ts",
+      "exports": [
+        "LocalCerts"
+      ]
+    },
+    {
+      "file": "electron/ipc-handlers.ts",
+      "exports": [
+        "IpcHandlerContext"
+      ]
+    },
+    {
+      "file": "hooks/use-vector-sync-status.ts",
+      "exports": [
+        "GlobalSyncStatus",
+        "SyncStatusFolder"
+      ]
+    },
+    {
+      "file": "lib/agent-memory/types.ts",
+      "exports": [
+        "MemorySource",
+        "MemoryStatus"
+      ]
+    },
+    {
+      "file": "lib/agents/workflow-folder-sharing.ts",
+      "exports": [
+        "cleanupInheritedFoldersOnRemoval",
+        "syncOwnFoldersToWorkflowMembers"
+      ]
+    },
+    {
+      "file": "lib/agents/workflow-types.ts",
+      "exports": [
+        "WorkflowPromptContextDelegation"
+      ]
+    },
+    {
+      "file": "lib/agents/workflows.ts",
+      "exports": [
+        "AgentWorkflow",
+        "WorkflowMembershipContext",
+        "WorkflowPromptContextInput",
+        "WorkflowResourceContext",
+        "WorkflowSharedResources"
+      ]
+    },
+    {
+      "file": "lib/ai/filesystem/edit-logic.ts",
+      "exports": [
+        "ApplyEditsResult"
+      ]
+    },
+    {
+      "file": "lib/ai/filesystem/index.ts",
+      "exports": [
+        "ApplyEditsResult"
+      ]
+    },
+    {
+      "file": "lib/ai/prompt-enhancement-v2.ts",
+      "exports": [
+        "LLMEnhancementResult"
+      ]
+    },
+    {
+      "file": "lib/ai/prompt-enhancement.ts",
+      "exports": [
+        "PromptEnhancementResult"
+      ]
+    },
+    {
+      "file": "lib/ai/prompts/base-system-prompt.ts",
+      "exports": [
+        "BaseSystemPromptOptions"
+      ]
+    },
+    {
+      "file": "lib/ai/prompts/index.ts",
+      "exports": [
+        "BaseSystemPromptOptions"
       ]
     },
     {
       "file": "lib/ai/providers/codex-session-store.ts",
       "exports": [
+        "clearAllSessions",
         "getActiveSessionIds",
-        "getSessionCount",
-        "clearAllSessions"
+        "getSessionCount"
       ]
     },
     {
@@ -104,14 +165,266 @@
       ]
     },
     {
-      "file": "lib/plugins/registry.ts",
+      "file": "lib/ai/ripgrep/index.ts",
       "exports": [
-        "getPluginById",
-        "getPluginByName",
-        "updatePluginStatus",
-        "uninstallPlugin",
-        "updateMarketplaceCatalog",
-        "loadActivePluginHooks"
+        "RipgrepMatch",
+        "RipgrepOptions",
+        "RipgrepSearchResult"
+      ]
+    },
+    {
+      "file": "lib/ai/ripgrep/ripgrep.ts",
+      "exports": [
+        "RipgrepOptions"
+      ]
+    },
+    {
+      "file": "lib/ai/tool-registry/index.ts",
+      "exports": [
+        "ToolSearchContext"
+      ]
+    },
+    {
+      "file": "lib/ai/tool-registry/search-tool.ts",
+      "exports": [
+        "ToolSearchContext"
+      ]
+    },
+    {
+      "file": "lib/ai/tools/delegate-to-subagent-tool.ts",
+      "exports": [
+        "DelegateToSubagentToolOptions"
+      ]
+    },
+    {
+      "file": "lib/ai/tools/read-file-tool.ts",
+      "exports": [
+        "ReadFileToolOptions"
+      ]
+    },
+    {
+      "file": "lib/ai/vector-search/tool.ts",
+      "exports": [
+        "ReadFileToolOptions"
+      ]
+    },
+    {
+      "file": "lib/ai/vector-search/types.ts",
+      "exports": [
+        "VectorSearchEvent"
+      ]
+    },
+    {
+      "file": "lib/avatar/index.ts",
+      "exports": [
+        "OculusViseme",
+        "VisemeCue"
+      ]
+    },
+    {
+      "file": "lib/characters/templates/index.ts",
+      "exports": [
+        "AgentTemplate",
+        "AgentTemplateMemory",
+        "ToolResolutionResult",
+        "ToolWarning"
+      ]
+    },
+    {
+      "file": "lib/comfyui/flux2-klein-client.ts",
+      "exports": [
+        "Flux2KleinAsyncResponse",
+        "Flux2KleinGenerateRequest",
+        "Flux2KleinGenerateResponse",
+        "Flux2KleinHealthResponse",
+        "Flux2KleinJobStatusResponse",
+        "Flux2KleinVariant"
+      ]
+    },
+    {
+      "file": "lib/comfyui/index.ts",
+      "exports": [
+        "Flux2KleinAsyncResponse",
+        "Flux2KleinGenerateRequest",
+        "Flux2KleinGenerateResponse",
+        "Flux2KleinHealthResponse",
+        "Flux2KleinJobStatusResponse",
+        "Flux2KleinVariant"
+      ]
+    },
+    {
+      "file": "lib/command-execution/index.ts",
+      "exports": [
+        "ExecuteCommandInput",
+        "ExecuteCommandToolOptions",
+        "ExecuteCommandToolResult"
+      ]
+    },
+    {
+      "file": "lib/context-window/manager.ts",
+      "exports": [
+        "CompactionResult"
+      ]
+    },
+    {
+      "file": "lib/context-window/provider-limits.ts",
+      "exports": [
+        "ContextWindowConfig"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-character-schema.ts",
+      "exports": [
+        "AgentSyncFile",
+        "AgentSyncFolder",
+        "Character",
+        "CharacterImageType",
+        "CharacterStatus",
+        "NewAgentSyncFile",
+        "NewAgentSyncFolder",
+        "agentDocumentChunksRelations",
+        "agentDocumentsRelations",
+        "agentSyncFilesRelations",
+        "agentSyncFoldersRelations",
+        "channelConnectionsRelations",
+        "channelConversationsRelations",
+        "channelMessagesRelations",
+        "characterImagesRelations",
+        "charactersRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-observability-schema.ts",
+      "exports": [
+        "AgentRunTriggerType",
+        "NewAgentRunEvent",
+        "NewPromptTemplate",
+        "NewPromptVersion",
+        "agentRunEventsRelations",
+        "agentRunsRelations",
+        "promptTemplatesRelations",
+        "promptVersionsRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-plugins-schema.ts",
+      "exports": [
+        "AgentPlugin",
+        "NewAgentPlugin",
+        "NewMarketplace",
+        "NewPlugin",
+        "NewPluginFile",
+        "NewPluginHook",
+        "NewPluginLspServer",
+        "NewPluginMcpServer",
+        "NewPluginSkillRevision",
+        "PluginFile",
+        "PluginHook",
+        "PluginLspServer",
+        "PluginMcpServer",
+        "PluginSkillRevision",
+        "agentPluginsRelations",
+        "marketplacesRelations",
+        "pluginFilesRelations",
+        "pluginHooksRelations",
+        "pluginLspServersRelations",
+        "pluginMcpServersRelations",
+        "pluginSkillRevisionsRelations",
+        "pluginsRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-schedule-schema.ts",
+      "exports": [
+        "NewScheduledTask",
+        "NewScheduledTaskRun",
+        "ScheduledTaskRun",
+        "TemplateVariableToken",
+        "scheduledTaskRunsRelations",
+        "scheduledTasksRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-schema-base.ts",
+      "exports": [
+        "Image",
+        "Message",
+        "NewUser",
+        "ToolRun",
+        "User",
+        "imagesRelations",
+        "messagesRelations",
+        "sessionsRelations",
+        "toolRunsRelations",
+        "usersRelations",
+        "webBrowseEntriesRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-skills-schema.ts",
+      "exports": [
+        "NewSkill",
+        "NewSkillFile",
+        "NewSkillTelemetryEvent",
+        "NewSkillVersion",
+        "Skill",
+        "SkillTelemetryEvent",
+        "SkillVersion",
+        "skillFilesRelations",
+        "skillVersionsRelations",
+        "skillsRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-voice-schema.ts",
+      "exports": [
+        "NewVoiceDictionary",
+        "NewVoiceHistory",
+        "VoiceDictionary",
+        "VoiceHistory",
+        "voiceDictionary",
+        "voiceDictionaryRelations",
+        "voiceHistory",
+        "voiceHistoryRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-workflows-schema.ts",
+      "exports": [
+        "NewAgentWorkflowMemberRow",
+        "NewAgentWorkflowRow",
+        "agentWorkflowMembersRelations",
+        "agentWorkflowsRelations"
+      ]
+    },
+    {
+      "file": "lib/electron/types.ts",
+      "exports": [
+        "ElectronAPI"
+      ]
+    },
+    {
+      "file": "lib/emotion/index.ts",
+      "exports": [
+        "EmotionContext"
+      ]
+    },
+    {
+      "file": "lib/plugins/hooks-engine.ts",
+      "exports": [
+        "HookDispatchResult"
+      ]
+    },
+    {
+      "file": "lib/plugins/import-parser-components.ts",
+      "exports": [
+        "AgentMetadataSeed"
+      ]
+    },
+    {
+      "file": "lib/plugins/import-parser.ts",
+      "exports": [
+        "AgentMetadataSeed"
       ]
     },
     {
@@ -122,20 +435,62 @@
       ]
     },
     {
-      "file": "lib/agents/workflow-folder-sharing.ts",
-      "exports": ["syncOwnFoldersToWorkflowMembers", "cleanupInheritedFoldersOnRemoval"]
+      "file": "lib/plugins/registry.ts",
+      "exports": [
+        "getPluginById",
+        "getPluginByName",
+        "loadActivePluginHooks",
+        "uninstallPlugin",
+        "updateMarketplaceCatalog",
+        "updatePluginStatus"
+      ]
+    },
+    {
+      "file": "lib/scheduler/index.ts",
+      "exports": [
+        "QueuedTask"
+      ]
+    },
+    {
+      "file": "lib/scheduler/task-queue.ts",
+      "exports": [
+        "QueuedTask"
+      ]
+    },
+    {
+      "file": "lib/tts/directives.ts",
+      "exports": [
+        "TTSDirective"
+      ]
     },
     {
       "file": "lib/vectordb/shared-folder-registry.ts",
-      "exports": ["resolveRegistryPath", "isRegistered"]
+      "exports": [
+        "isRegistered",
+        "resolveRegistryPath"
+      ]
     },
     {
       "file": "lib/vectordb/sync-scheduler.ts",
-      "exports": ["isSyncingPath", "cancelSyncByPath"]
+      "exports": [
+        "cancelSyncByPath",
+        "isSyncingPath"
+      ]
+    },
+    {
+      "file": "lib/vectordb/sync-service.ts",
+      "exports": [
+        "ParallelConfig",
+        "SyncFolderConfig",
+        "SyncFolderUpdateConfig",
+        "SyncResult"
+      ]
     },
     {
       "file": "lib/voice/voice-utils.ts",
-      "exports": ["buildWhisperPromptFromDictionary"]
+      "exports": [
+        "buildWhisperPromptFromDictionary"
+      ]
     }
   ]
 }
