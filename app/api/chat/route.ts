@@ -1200,9 +1200,14 @@ export async function POST(req: Request) {
               runId,
               errorType: error?.constructor?.name,
               stack: error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : undefined,
-              // When error is a plain object (not Error), log its contents so we
-              // can actually see what the provider returned (e.g. Codex API errors).
-              raw: !(error instanceof Error) ? JSON.stringify(error, null, 2)?.slice(0, 2000) : undefined,
+              // Always log raw error details — for OpenRouter and other providers that
+              // wrap upstream rejections (e.g. image too large) in Error instances,
+              // the cause chain / response body is the only way to diagnose.
+              raw: {
+                cause: error instanceof Error && (error as Error).cause ? JSON.stringify((error as Error).cause, null, 2).slice(0, 2000) : undefined,
+                responseBody: (error as any)?.responseBody ? String((error as any).responseBody).slice(0, 2000) : undefined,
+                message: error instanceof Error ? error.message : undefined,
+              },
             });
             // Claude Code SDK agents self-correct after tool validation failures —
             // the stream stays open and onFinish will finalize the run properly.

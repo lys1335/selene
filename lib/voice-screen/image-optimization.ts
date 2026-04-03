@@ -6,7 +6,7 @@
  * Canvas API. No Node.js / Electron main process involvement.
  */
 
-export type ImageProvider = "anthropic" | "openai" | "google" | "default";
+export type ImageProvider = "anthropic" | "openai" | "google" | "openrouter" | "default";
 
 export interface OptimizationOptions {
   provider?: ImageProvider;
@@ -25,18 +25,19 @@ export interface OptimizationOptions {
  * Limits are chosen to stay within each provider's documented image-size
  * constraints while keeping token costs reasonable.
  */
-export const PROVIDER_CONFIGS: Record<ImageProvider, Required<OptimizationOptions>> = {
-  anthropic: { provider: "anthropic", maxWidthPx: 1568, maxHeightPx: 1568, quality: 0.85, format: "jpeg" },
-  openai:    { provider: "openai",    maxWidthPx: 2048, maxHeightPx: 2048, quality: 0.90, format: "jpeg" },
-  google:    { provider: "google",    maxWidthPx: 3072, maxHeightPx: 3072, quality: 0.90, format: "jpeg" },
-  default:   { provider: "default",   maxWidthPx: 1920, maxHeightPx: 1080, quality: 0.85, format: "jpeg" },
+const PROVIDER_CONFIGS: Record<ImageProvider, Required<OptimizationOptions>> = {
+  anthropic:  { provider: "anthropic",  maxWidthPx: 1568, maxHeightPx: 1568, quality: 0.85, format: "jpeg" },
+  openai:     { provider: "openai",     maxWidthPx: 2048, maxHeightPx: 2048, quality: 0.90, format: "jpeg" },
+  google:     { provider: "google",     maxWidthPx: 3072, maxHeightPx: 3072, quality: 0.90, format: "jpeg" },
+  openrouter: { provider: "openrouter", maxWidthPx: 1568, maxHeightPx: 1568, quality: 0.85, format: "webp" },
+  default:    { provider: "default",    maxWidthPx: 1920, maxHeightPx: 1080, quality: 0.85, format: "jpeg" },
 };
 
 /**
  * Return the merged optimization config for a given provider string.
  * Falls back to "default" for unrecognised provider identifiers.
  */
-export function getProviderConfig(provider: string): Required<OptimizationOptions> {
+function getProviderConfig(provider: string): Required<OptimizationOptions> {
   const key = provider as ImageProvider;
   return PROVIDER_CONFIGS[key] ?? PROVIDER_CONFIGS.default;
 }
@@ -50,7 +51,7 @@ export function getProviderConfig(provider: string): Required<OptimizationOption
  *
  * Reference: https://docs.anthropic.com/en/docs/vision
  */
-export function estimateImageTokens(widthPx: number, heightPx: number): number {
+function estimateImageTokens(widthPx: number, heightPx: number): number {
   // Clamp to Anthropic's effective max resolution
   const TILE_SIZE = 512;
   const BASE_TOKENS = 85;
