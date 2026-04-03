@@ -362,7 +362,8 @@ export function createSyncStreamingMessage(
       });
 
       if (progressRunId && progressType) {
-        const progressSnapshot = buildProgressContentSnapshot(streamingState, partsSnapshot);
+        const rawProgressSnapshot = buildProgressContentSnapshot(streamingState, partsSnapshot);
+        const progressSnapshot = sanitizeAssistantProgressParts(rawProgressSnapshot);
 
         // Strip argsText from tool-call parts before progress emission.
         // argsText is only needed for finalization, not for display, and can
