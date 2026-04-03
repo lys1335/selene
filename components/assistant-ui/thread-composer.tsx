@@ -108,7 +108,7 @@ export const Composer: FC<{
   isZombieBackgroundRun?: boolean;
   onLivePromptInjected?: () => void | Promise<void | boolean>;
   onPostCancel?: () => void;
-  contextStatus?: import("@/lib/hooks/use-context-status").ContextWindowStatus | null;
+  contextStatus?: import("@/lib/hooks/use-context-status").ContextStatusInfo | null;
   contextLoading?: boolean;
   onCompact?: () => Promise<{ success: boolean; compacted: boolean }>;
   isCompacting?: boolean;

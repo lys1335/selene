@@ -470,15 +470,3 @@ export function startBackgroundExecution(
   delegation.streamPromise = streamPromise;
 }
 
-// ---------------------------------------------------------------------------
-// Backward-compatible re-exports of action handlers
-// ---------------------------------------------------------------------------
-
-export {
-  handleStartAction,
-  handleObserve,
-  handleContinue,
-  handleAnswer,
-  handleStop,
-  handleList,
-} from "./delegate-subagent-action-handlers";

@@ -7,7 +7,6 @@ import {
 import * as path from "path";
 import * as fs from "fs";
 import { debugLog, debugError, logBuffer, incrementLogSubscribers, decrementLogSubscribers } from "./debug-logger";
-import type { BrowserWindow } from "electron";
 import { registerComfyUIHandlers } from "./ipc-comfyui-handlers";
 import { registerFlux2Handlers } from "./ipc-flux2-handlers";
 import { registerModelHandlers } from "./ipc-model-handlers";
@@ -20,21 +19,7 @@ import { registerPermissionHandlers } from "./permission-manager";
 import { registerMiniOverlayHandlers } from "./mini-overlay-ipc-handlers";
 import { registerOverlaySessionHandlers } from "./ipc-overlay-session-handlers";
 import { registerGhostOsHandlers } from "./ipc-ghost-os-handlers";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface IpcHandlerContext {
-  mainWindow: () => BrowserWindow | null;
-  isDev: boolean;
-  dataDir: string;
-  mediaDir: string;
-  userDataPath: string;
-  userModelsDir: string;
-  prodServerPort: number;
-  prodUseHttps?: boolean;
-}
+export type { IpcHandlerContext } from "./ipc-context";
 
 // ---------------------------------------------------------------------------
 // Internal helpers used only within IPC handlers

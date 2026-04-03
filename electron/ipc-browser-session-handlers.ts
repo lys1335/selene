@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import { debugLog, debugError } from "./debug-logger";
-import type { IpcHandlerContext } from "./ipc-handlers";
+import type { IpcHandlerContext } from "./ipc-context";
 import {
   getWindowBackgroundColor,
   currentThemePreference,

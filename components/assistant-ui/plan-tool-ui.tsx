@@ -4,7 +4,7 @@ import { useState, type FC } from "react";
 import { ClipboardListIcon, AlertCircleIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
-import { type PlanStep, type PlanState } from "./plan-context";
+import { type PlanContextStep, type PlanContextState } from "./plan-context";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -18,7 +18,7 @@ interface UpdatePlanArgs {
 
 interface UpdatePlanResult {
   status: "success" | "error";
-  plan?: PlanState;
+  plan?: PlanContextState;
   version?: number;
   stepCount?: number;
   updatedStepIds?: string[];
@@ -37,26 +37,26 @@ type ToolCallContentPartComponent = FC<{
 // Status config
 // ---------------------------------------------------------------------------
 
-const STATUS_CONFIG: Record<PlanStep["status"], { glyph: string; color: string; textClass: string }> = {
+const STATUS_CONFIG: Record<PlanContextStep["status"], { glyph: string; color: string; textClass: string }> = {
   pending:     { glyph: "[ ]", color: "text-terminal-muted",  textClass: "text-terminal-muted" },
   in_progress: { glyph: "[>]", color: "text-terminal-amber",  textClass: "text-terminal-amber font-semibold" },
   completed:   { glyph: "[x]", color: "text-terminal-green",  textClass: "text-terminal-green" },
   canceled:    { glyph: "[-]", color: "text-terminal-muted",  textClass: "text-terminal-muted line-through" },
 };
 
-function coerceStepStatus(status: string | undefined): PlanStep["status"] {
+function coerceStepStatus(status: string | undefined): PlanContextStep["status"] {
   if (status === "in_progress" || status === "completed" || status === "canceled") {
     return status;
   }
   return "pending";
 }
 
-function buildPlanFromArgs(args: UpdatePlanArgs, version: number | undefined): PlanState | null {
+function buildPlanFromArgs(args: UpdatePlanArgs, version: number | undefined): PlanContextState | null {
   if (!args || !Array.isArray(args.steps) || args.steps.length === 0) {
     return null;
   }
 
-  const normalizedSteps: PlanStep[] = args.steps
+  const normalizedSteps: PlanContextStep[] = args.steps
     .map((step, idx) => {
       const text = typeof step?.text === "string" ? step.text.trim() : "";
       if (!text) return null;
@@ -69,7 +69,7 @@ function buildPlanFromArgs(args: UpdatePlanArgs, version: number | undefined): P
         status: coerceStepStatus(typeof step.status === "string" ? step.status : undefined),
       };
     })
-    .filter((step): step is PlanStep => Boolean(step));
+    .filter((step): step is PlanContextStep => Boolean(step));
 
   if (normalizedSteps.length === 0) {
     return null;

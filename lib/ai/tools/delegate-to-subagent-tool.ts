@@ -26,13 +26,15 @@ export { getActiveDelegationsForCharacter } from "./delegate-to-subagent-handler
 import {
   normalizeCompatibilityInput,
   buildDelegationsSummary,
+} from "./delegate-to-subagent-handlers";
+import {
   handleStartAction,
   handleObserve,
   handleContinue,
   handleAnswer,
   handleStop,
   handleList,
-} from "./delegate-to-subagent-handlers";
+} from "./delegate-subagent-action-handlers";
 
 import {
   MAX_OBSERVE_WAIT_SECONDS,

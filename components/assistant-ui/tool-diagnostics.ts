@@ -1,4 +1,4 @@
-export interface DiagnosticResult {
+export interface ToolDiagnosticResult {
   tool: string;
   errors?: number;
   warnings?: number;
@@ -8,7 +8,7 @@ export interface DiagnosticResult {
   diagnostics?: string;
 }
 
-export function normalizeDiagnostics(diagnostic: DiagnosticResult) {
+export function normalizeDiagnostics(diagnostic: ToolDiagnosticResult) {
   return {
     tool: diagnostic.tool,
     errors: diagnostic.errors ?? diagnostic.errorCount ?? 0,
@@ -17,11 +17,11 @@ export function normalizeDiagnostics(diagnostic: DiagnosticResult) {
   };
 }
 
-export function getDiagnosticCounts(diagnostic: DiagnosticResult) {
+export function getDiagnosticCounts(diagnostic: ToolDiagnosticResult) {
   const { errors, warnings } = normalizeDiagnostics(diagnostic);
   return { errors, warnings };
 }
 
-export function getDiagnosticOutput(diagnostic: DiagnosticResult) {
+export function getDiagnosticOutput(diagnostic: ToolDiagnosticResult) {
   return normalizeDiagnostics(diagnostic).output;
 }

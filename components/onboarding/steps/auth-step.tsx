@@ -8,10 +8,10 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { resilientFetch, resilientPut } from "@/lib/utils/resilient-fetch";
 
-import type { LLMProvider } from "./provider-step";
+import type { OnboardingProvider } from "./provider-step";
 
 interface AuthStepProps {
-    provider: LLMProvider;
+    provider: OnboardingProvider;
     onAuthenticated: () => void;
     onBack: () => void;
     onSkip: () => void;

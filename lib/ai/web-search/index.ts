@@ -18,18 +18,14 @@ import {
   getSearchProvider,
   getWebSearchProviderStatus,
   isAnySearchProviderAvailable,
+  type WebSearchSource,
 } from "./providers";
+
+export type { WebSearchSource };
 
 // ============================================================================
 // Types
 // ============================================================================
-
-export interface WebSearchSource {
-  url: string;
-  title: string;
-  snippet: string;
-  relevanceScore: number;
-}
 
 export type WebSearchAction = "search" | "browse" | "synthesize";
 

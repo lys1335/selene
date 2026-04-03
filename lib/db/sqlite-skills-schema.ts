@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer, index, blob, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
-import { users, sessions } from "./sqlite-schema";
+import { users, sessions } from "./sqlite-schema-base";
 import { characters } from "./sqlite-character-schema";
 export const skills = sqliteTable(
   "skills",

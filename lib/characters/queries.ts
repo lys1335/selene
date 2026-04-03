@@ -8,8 +8,28 @@ import {
 } from "@/lib/db/sqlite-character-schema";
 import { skills } from "@/lib/db/sqlite-skills-schema";
 import { eq, desc, and, sql } from "drizzle-orm";
-import { getAgentModelConfigFromMetadata, type SessionResolverOptions } from "@/lib/ai/session-model-resolver";
 import type { AgentModelConfig } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/providers";
+
+// Inline helper — avoids a circular dependency with session-model-resolver.ts
+// (which dynamically imports getCharacter from this file).
+function parseAgentModelConfigFromMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): AgentModelConfig | null {
+  const raw = metadata?.modelConfig;
+  if (!raw || typeof raw !== "object") return null;
+  const config = raw as Record<string, unknown>;
+  const result: AgentModelConfig = {};
+  if (typeof config.provider === "string") {
+    result.provider = config.provider as LLMProvider;
+  }
+  for (const field of ["chatModel", "researchModel", "visionModel", "utilityModel"] as const) {
+    if (typeof config[field] === "string" && config[field]) {
+      result[field] = config[field] as string;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
 
 // Helper to get current timestamp as ISO string for SQLite
 const now = () => new Date().toISOString();
@@ -33,19 +53,9 @@ export async function getCharacterModelConfig(
   id: string,
 ): Promise<AgentModelConfig | null> {
   const character = await getCharacter(id);
-  return getAgentModelConfigFromMetadata(
+  return parseAgentModelConfigFromMetadata(
     (character?.metadata as Record<string, unknown> | null) ?? null,
   );
-}
-
-function buildSessionResolverOptions(
-  characterId: string | null | undefined,
-  agentModelConfig?: AgentModelConfig | null,
-): SessionResolverOptions {
-  return {
-    characterId,
-    agentModelConfig: agentModelConfig ?? undefined,
-  };
 }
 
 export async function getCharacterFull(id: string): Promise<CharacterFull | null> {

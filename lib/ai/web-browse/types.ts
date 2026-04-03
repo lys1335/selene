@@ -104,7 +104,7 @@ export type WebBrowseEventEmitter = (event: WebBrowseEvent) => void;
 // Synthesis Types
 // ============================================================================
 
-export interface SynthesisRequest {
+export interface WebBrowseSynthesisRequest {
   sessionId: string;
   query: string;
   urls?: string[]; // Optional: limit to specific URLs
@@ -112,7 +112,7 @@ export interface SynthesisRequest {
   abortSignal?: AbortSignal;
 }
 
-export interface SynthesisResult {
+export interface WebBrowseSynthesisResult {
   success: boolean;
   synthesis: string;
   sourcesUsed: string[];

@@ -7,7 +7,7 @@ import { useTranslations } from "next-intl";
 import { useToolExpansion } from "./tool-expansion-context";
 import { DiffStyledPre } from "./diff-styled-pre";
 import {
-  type DiagnosticResult,
+  type ToolDiagnosticResult,
   getDiagnosticCounts,
   getDiagnosticOutput,
 } from "./tool-diagnostics";
@@ -18,7 +18,7 @@ interface EditFileResult {
   message: string;
   linesChanged?: number;
   created?: boolean;
-  diagnostics?: DiagnosticResult;
+  diagnostics?: ToolDiagnosticResult;
   diff?: string;
 }
 
@@ -29,7 +29,7 @@ interface WriteFileResult {
   bytesWritten?: number;
   lineCount?: number;
   created?: boolean;
-  diagnostics?: DiagnosticResult;
+  diagnostics?: ToolDiagnosticResult;
   diff?: string;
 }
 

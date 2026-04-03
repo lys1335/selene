@@ -6,7 +6,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { spawn } from "child_process";
 import { debugLog, debugError, debugVerbose } from "./debug-logger";
-import type { IpcHandlerContext } from "./ipc-handlers";
+import type { IpcHandlerContext } from "./ipc-context";
 import {
   COMFYUI_MODELS,
   getComfyUIBackendPath,

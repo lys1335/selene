@@ -4,7 +4,7 @@ import {
   type ChatWorkspaceMode,
 } from "@/lib/chat/workspace-mode";
 
-export interface AppSettings {
+export interface AppSettingsPublic {
   llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
   anthropicApiKey?: string;
   openrouterApiKey?: string;

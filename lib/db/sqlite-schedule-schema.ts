@@ -12,7 +12,7 @@ import {
   integer,
 } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
-import { users, sessions } from "./sqlite-schema";
+import { users, sessions } from "./sqlite-schema-base";
 import { characters } from "./sqlite-character-schema";
 import { skills } from "./sqlite-skills-schema";
 
@@ -168,7 +168,7 @@ export interface ContextSource {
 }
 
 // Built-in template variables
-export type TemplateVariable =
+export type TemplateVariableToken =
   | "{{NOW}}"
   | "{{TODAY}}"
   | "{{YESTERDAY}}"

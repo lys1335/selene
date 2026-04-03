@@ -29,7 +29,7 @@ export interface BaseTask {
   metadata?: Record<string, unknown>;
 }
 
-export interface ScheduledTask extends BaseTask {
+export interface BackgroundTask extends BaseTask {
   type: "scheduled";
   taskId: string;
   taskName: string;
@@ -55,7 +55,7 @@ export interface ChatTask extends BaseTask {
   messageCount?: number;
 }
 
-export type UnifiedTask = ScheduledTask | ChannelTask | ChatTask;
+export type UnifiedTask = BackgroundTask | ChannelTask | ChatTask;
 
 export interface TaskStartedEvent {
   eventType: "task:started";
@@ -94,7 +94,7 @@ export interface TaskCompletedEvent {
 
 export type TaskEvent = TaskStartedEvent | TaskProgressEvent | TaskCompletedEvent;
 
-function isScheduledTask(task: UnifiedTask): task is ScheduledTask {
+function isBackgroundTask(task: UnifiedTask): task is BackgroundTask {
   return task.type === "scheduled";
 }
 

@@ -14,13 +14,13 @@ import {
 } from "./steps";
 import { Sparkles, Key, Layers } from "lucide-react";
 
-import type { LLMProvider } from "./steps/provider-step";
+import type { OnboardingProvider } from "./steps/provider-step";
 import type { SelenePath, PathConfigState } from "./steps/path-selector";
 
 type OnboardingStep = "welcome" | "provider" | "auth" | "features";
 
 interface OnboardingState {
-    llmProvider: LLMProvider;
+    llmProvider: OnboardingProvider;
     apiKey: string;
     isAuthenticated: boolean;
 }

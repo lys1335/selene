@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { useToolExpansion } from "./tool-expansion-context";
 import { DiffStyledPre } from "./diff-styled-pre";
 import {
-  type DiagnosticResult,
+  type ToolDiagnosticResult,
   normalizeDiagnostics,
 } from "./tool-diagnostics";
 
@@ -24,7 +24,7 @@ interface PatchFileResult {
   message: string;
   filesChanged: number;
   operations: OperationResult[];
-  diagnostics?: DiagnosticResult[];
+  diagnostics?: ToolDiagnosticResult[];
 }
 
 type ToolCallContentPartComponent = FC<{

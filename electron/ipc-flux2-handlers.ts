@@ -6,7 +6,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { spawn } from "child_process";
 import { debugLog, debugError, debugVerbose } from "./debug-logger";
-import type { IpcHandlerContext } from "./ipc-handlers";
+import type { IpcHandlerContext } from "./ipc-context";
 import type { BrowserWindow } from "electron";
 import {
   FLUX2_KLEIN_4B_CONFIG,

@@ -6,7 +6,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { initializeRTK } from "../lib/rtk";
 import { debugLog, debugError } from "./debug-logger";
-import type { IpcHandlerContext } from "./ipc-handlers";
+import type { IpcHandlerContext } from "./ipc-context";
 
 // ---------------------------------------------------------------------------
 // Registration function

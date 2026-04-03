@@ -5,7 +5,7 @@ import {
   index,
 } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
-import { users, sessions, messages } from "./sqlite-schema";
+import { users, sessions, messages } from "./sqlite-schema-base";
 
 // ============================================================================
 // MAIN CHARACTERS TABLE

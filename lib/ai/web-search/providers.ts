@@ -9,9 +9,19 @@
  * It returns { title, href, body } per result — no relevance scores or AI answers.
  */
 
-import type { WebSearchSource } from "./index";
 import { loadSettings } from "@/lib/settings/settings-manager";
 import { createDDGS } from "./ddgs";
+
+// ============================================================================
+// Shared Types
+// ============================================================================
+
+export interface WebSearchSource {
+  url: string;
+  title: string;
+  snippet: string;
+  relevanceScore: number;
+}
 
 // ============================================================================
 // Provider Interface

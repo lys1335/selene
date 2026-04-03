@@ -1,5 +1,5 @@
 import { ipcMain } from "electron";
-import type { IpcHandlerContext } from "./ipc-handlers";
+import type { IpcHandlerContext } from "./ipc-context";
 import {
   captureDisplay,
   getScreenCapturePermissionStatus,

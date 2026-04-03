@@ -3,18 +3,18 @@
 import { createContext, useContext, useState, type FC, type ReactNode } from "react";
 
 // ---------------------------------------------------------------------------
-// Types (mirrored from server-side PlanState — keep in sync)
+// Types (mirrored from server-side PlanContextState — keep in sync)
 // ---------------------------------------------------------------------------
 
-export interface PlanStep {
+export interface PlanContextStep {
   id: string;
   text: string;
   status: "pending" | "in_progress" | "completed" | "canceled";
 }
 
-export interface PlanState {
+export interface PlanContextState {
   version: number;
-  steps: PlanStep[];
+  steps: PlanContextStep[];
   explanation?: string;
   updatedAt?: string;
 }
@@ -24,8 +24,8 @@ export interface PlanState {
 // ---------------------------------------------------------------------------
 
 interface PlanContextValue {
-  plan: PlanState | null;
-  setPlan: (plan: PlanState | null) => void;
+  plan: PlanContextState | null;
+  setPlan: (plan: PlanContextState | null) => void;
 }
 
 const PlanContext = createContext<PlanContextValue | null>(null);
@@ -37,11 +37,11 @@ const PlanContext = createContext<PlanContextValue | null>(null);
 interface PlanProviderProps {
   children: ReactNode;
   /** Initial plan loaded from session metadata on page load. */
-  initialPlan?: PlanState | null;
+  initialPlan?: PlanContextState | null;
 }
 
 const PlanProvider: FC<PlanProviderProps> = ({ children, initialPlan = null }) => {
-  const [plan, setPlan] = useState<PlanState | null>(initialPlan);
+  const [plan, setPlan] = useState<PlanContextState | null>(initialPlan);
 
   return (
     <PlanContext.Provider value={{ plan, setPlan }}>
