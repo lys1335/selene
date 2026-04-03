@@ -22,7 +22,7 @@ export const DEFAULT_DEPENDENCY_STATUS: DependencyStatus = {
   vertexAIProjectId: false,
 };
 
-export type HasDependencies = { dependencies?: ToolDependency[] };
+type HasDependencies = { dependencies?: ToolDependency[] };
 
 /**
  * Returns true if all of a tool's declared dependencies are satisfied by the
