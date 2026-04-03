@@ -36,16 +36,6 @@ import type {
 export type { AgentMetadataSeed } from "./import-parser-components";
 export {
   buildAgentMetadataSeed,
-  safeMatter,
-  resolveComponentPaths,
-  discoverComponents,
-  discoverSkills,
-  discoverAgents,
-  discoverHooks,
-  discoverMCPServers,
-  discoverLSPServers,
-  isAgentMarkdown,
-  inferAgentName,
 } from "./import-parser-components";
 
 import {

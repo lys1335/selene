@@ -5,9 +5,6 @@
  */
 
 export {
-    searchWithRipgrep,
-    isRipgrepAvailable,
-    getRipgrepPath,
     type RipgrepMatch,
     type RipgrepOptions,
     type RipgrepSearchResult,

@@ -5,6 +5,5 @@
  */
 
 export * from "./types";
-export { ContextSourceManager, getContextSourceManager } from "./manager";
-export { APIContextFetcher } from "./api-fetcher";
+export { getContextSourceManager } from "./manager";
 

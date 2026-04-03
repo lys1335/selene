@@ -4,16 +4,12 @@
  */
 
 export * from "./types";
-export { checkHealth, generateImage, checkStatus, getQueueStatus, cancelGeneration } from "./client";
+export { generateImage, checkStatus } from "./client";
 
 // FLUX.2 Klein exports
 export {
     checkFlux2KleinHealth,
-    generateFlux2KleinSync,
-    generateFlux2KleinAsync,
-    checkFlux2KleinJobStatus,
     generateFlux2KleinWithPolling,
-    base64ToDataUrl,
 } from "./flux2-klein-client";
 
 export type {

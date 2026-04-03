@@ -37,7 +37,6 @@ export { EverMemOSClient } from "./client";
 
 // Dual-layer manager
 export {
-  DualLayerMemoryManager,
   type UnifiedMemoryEntry,
   type DualLayerSearchResult,
 } from "./dual-layer";

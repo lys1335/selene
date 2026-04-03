@@ -86,4 +86,3 @@ function findLineNumber(lineStarts: number[], charOffset: number): number {
   return lo + 1;
 }
 
-export { chunkText } from "../chunking";

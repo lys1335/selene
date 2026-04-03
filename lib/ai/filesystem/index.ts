@@ -6,13 +6,10 @@
 
 export {
   isPathAllowed,
-  resolveSyncedFolderPaths,
   resolveWorkspaceAwarePaths,
   getActiveWorktreePath,
   ensureParentDirectories,
   findSimilarFiles,
-  validatePath,
-  normalizePath,
   isWorktreePath,
   isOtherWorktreePath,
 } from "./path-utils";
@@ -20,8 +17,6 @@ export {
 export {
   recordFileRead,
   recordFileWrite,
-  getLastReadTime,
-  getLastWriteTime,
   wasFileReadBefore,
   isFileStale,
 } from "./file-history";
@@ -34,7 +29,6 @@ export {
 export {
   generateLineNumberDiff,
   generateBeforeAfterDiff,
-  generateContentPreview,
 } from "./diff-utils";
 
 export {

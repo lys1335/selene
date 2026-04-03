@@ -607,7 +607,3 @@ export async function fetchAntigravityProjectId(): Promise<string | null> {
   return null;
 }
 
-/**
- * Get model display name for UI
- */
-export { getAntigravityModelDisplayName, getAntigravityModels } from "@/lib/auth/antigravity-models";

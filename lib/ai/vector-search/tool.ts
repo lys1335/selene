@@ -31,7 +31,6 @@ import { extname } from "path";
 
 // Re-export the readFile tool for backward compatibility
 export type { ReadFileToolOptions } from "./read-file-tool";
-export { createReadFileTool } from "./read-file-tool";
 
 // ============================================================================
 // Input Schema

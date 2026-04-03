@@ -39,13 +39,10 @@ export type {
   RhubarbOutput,
   RhubarbMouthCue,
 } from "./types";
-export { OCULUS_VISEMES, DEFAULT_LIPSYNC_CONFIG } from "./types";
+export { OCULUS_VISEMES } from "./types";
 
 // Amplitude analysis
 export { analyzeAmplitude } from "./lipsync-amplitude";
-
-// Rhubarb analysis
-export { analyzeRhubarb, isRhubarbAvailable } from "./lipsync-rhubarb";
 
 // Mood bridge
 export { emotionToAvatarMood } from "./mood-bridge";

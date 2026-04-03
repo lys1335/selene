@@ -713,6 +713,4 @@ export class ContextWindowManager {
 // Convenience Exports
 // ---------------------------------------------------------------------------
 
-export { formatTokenCount } from "./token-tracker";
-export { getContextWindowConfig, getTokenThresholds } from "./provider-limits";
-export { CompactionService, type CompactionResult } from "./compaction-service";
+export { type CompactionResult } from "./compaction-service";

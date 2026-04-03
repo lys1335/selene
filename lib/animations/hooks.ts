@@ -10,7 +10,7 @@ import { animate, stagger, createScope, type Scope } from "animejs";
 import { ZLUTTY_EASINGS, ZLUTTY_DURATIONS, ZLUTTY_VALUES } from "./utils";
 
 // Re-export the reduced motion hook
-export { useReducedMotion, useAnimationDuration } from "@/components/character-creation/hooks/use-reduced-motion";
+export { useReducedMotion } from "@/components/character-creation/hooks/use-reduced-motion";
 import { useReducedMotion } from "@/components/character-creation/hooks/use-reduced-motion";
 
 /**

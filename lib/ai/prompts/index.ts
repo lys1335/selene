@@ -21,20 +21,16 @@ export {
   TOOL_DISCOVERY_MINIMAL,
   TOOL_DISCOVERY_ALWAYS,
   MULTI_IMAGE_TOOL_USAGE,
-  combineBlocks,
 } from "./shared-blocks";
 
 // Channel-aware formatting rules
 export {
   getChannelFormattingBlock,
-  channelNeedsFormattingGuidance,
 } from "./channel-formatting";
 
 // Base system prompt builder
 export {
-  buildBaseSystemPrompt,
   buildDefaultSystemPrompt,
-  DEFAULT_AGENT_CONFIG,
   type BaseSystemPromptOptions,
 } from "./base-system-prompt";
 

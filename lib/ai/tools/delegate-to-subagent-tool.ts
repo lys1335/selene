@@ -19,7 +19,6 @@ import { tool, jsonSchema } from "ai";
 
 // Re-export all types and registry items for backward compatibility
 export type { DelegateToSubagentToolOptions } from "./delegate-to-subagent-types";
-export { MAX_OBSERVE_WAIT_SECONDS } from "./delegate-to-subagent-types";
 
 // Re-export the external accessor used by API routes and system prompt builders
 export { getActiveDelegationsForCharacter } from "./delegate-to-subagent-handlers";

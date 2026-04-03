@@ -70,14 +70,9 @@ import { getSyncFolders, setPrimaryFolder } from "./sync-folder-crud";
 
 // Re-export scheduler functions so existing imports from this path continue to work
 export {
-  isSyncing,
-  isSyncingPath,
-  cancelSyncByPath,
   cancelSyncById,
   recoverStuckSyncingFolders,
   forceCleanupStuckFolders,
-  getSyncedFoldersNeedingWatch,
-  getStaleFolders,
   restartAllWatchers,
 } from "./sync-scheduler";
 import {
