@@ -81,16 +81,7 @@ import { BLACKBOX_ALL_MODEL_IDS } from "@/lib/auth/blackboxai-models";
 export {
   getEmbeddingModel,
   getEmbeddingModelId,
-  type EmbeddingProvider,
 } from "@/lib/ai/providers/embedding-provider";
-
-// Re-export client-level helpers that other modules may use directly
-export { getOpenRouterApiKey, getOpenRouterClient } from "@/lib/ai/providers/openrouter-client";
-export { getKimiApiKey, getKimiClient } from "@/lib/ai/providers/kimi-client";
-export { getOllamaClient, getOllamaBaseUrl } from "@/lib/ai/providers/ollama-client";
-export { getVllmClient, getVllmBaseUrl, getVllmApiKey } from "@/lib/ai/providers/vllm-client";
-export { getMiniMaxApiKey, getMiniMaxClient } from "@/lib/ai/providers/minimax-client";
-export { getBlackBoxApiKey, getBlackBoxClient } from "@/lib/ai/providers/blackboxai-client";
 
 // ---- Types -------------------------------------------------------------------
 

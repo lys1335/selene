@@ -22,34 +22,6 @@ import { searchWithRouter, type VectorSearchHit } from "@/lib/vectordb";
 import { isVectorDBEnabled } from "@/lib/vectordb/client";
 import { getSyncFolders } from "@/lib/vectordb/sync-service";
 
-// Re-export utilities for backward compatibility
-export type {
-  TokenBudget,
-  FileDependency,
-  ConceptExpansionResult,
-  RankedSnippet,
-  FileGroup,
-} from "./prompt-enhancement-utils";
-
-export {
-  DEFAULT_TOKEN_BUDGET,
-  estimateTokens,
-  truncateToTokenBudget,
-  DOMAIN_EXPANSIONS,
-  extractDependenciesFromChunk,
-  normalizeDependencyPath,
-  resolveDependencies,
-  expandQueryConcepts,
-  selectSnippets,
-  getCodeLanguage,
-  formatSnippetsAsContext,
-  getFileType,
-  groupResultsByFile,
-  extractBriefDescription,
-  formatAsStructuredContext,
-  buildEnhancedPrompt,
-  buildEnhancedPromptV2,
-} from "./prompt-enhancement-utils";
 
 import {
   DEFAULT_TOKEN_BUDGET,
