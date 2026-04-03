@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, use } from "react";
+import { use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Shell } from "@/components/layout/shell";
@@ -9,42 +9,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { SkillFormFields } from "@/components/skills/skill-form-fields";
-import type { SkillFormValues } from "@/components/skills/skill-form-fields";
-
-function splitLines(value: string): string[] {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-}
+import { useSkillForm, splitLines } from "@/lib/hooks/use-skill-form";
 
 export default function NewSkillPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: characterId } = use(params);
   const router = useRouter();
   const t = useTranslations("skills.new");
 
-  const [form, setForm] = useState<SkillFormValues>({
-    name: "",
-    description: "",
-    promptTemplate: "",
-    category: "general",
-    toolHints: "",
-    triggerExamples: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { form, setForm, saving, error, canSave, runSave } = useSkillForm();
 
-  const canSubmit = useMemo(
-    () => form.name.trim().length > 0 && form.promptTemplate.trim().length > 0,
-    [form.name, form.promptTemplate],
-  );
-
-  const handleSubmit = async () => {
-    if (!canSubmit || saving) return;
-    setSaving(true);
-    setError(null);
-
-    try {
+  const handleSubmit = () =>
+    runSave(async () => {
       const response = await fetch("/api/skills", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -72,12 +47,7 @@ export default function NewSkillPage({ params }: { params: Promise<{ id: string 
       } else {
         router.push(`/agents/${characterId}/skills`);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("createFailed"));
-    } finally {
-      setSaving(false);
-    }
-  };
+    });
 
   return (
     <Shell>
@@ -96,7 +66,7 @@ export default function NewSkillPage({ params }: { params: Promise<{ id: string 
           <CardContent className="space-y-4">
             <SkillFormFields
               values={form}
-              onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+              onChange={setForm}
             />
 
             {error ? <p className="text-sm font-mono text-red-600">{error}</p> : null}
@@ -105,7 +75,7 @@ export default function NewSkillPage({ params }: { params: Promise<{ id: string 
               <Button variant="outline" className="font-mono" asChild>
                 <Link href={`/agents/${characterId}/skills`}>{t("cancel")}</Link>
               </Button>
-              <Button onClick={handleSubmit} className="font-mono" disabled={!canSubmit || saving}>
+              <Button onClick={handleSubmit} className="font-mono" disabled={!canSave || saving}>
                 {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 {t("create")}
               </Button>

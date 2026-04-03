@@ -18,6 +18,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useChatSessionId } from "@/components/chat-provider";
 import { useBrowserActive } from "./browser-active-context";
+import { type ActionRecord } from "@/lib/browser/action-history";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,20 +37,6 @@ interface ChromiumWorkspaceArgs {
   text?: string;
   expression?: string;
   timeout?: number;
-}
-
-interface ActionRecord {
-  seq: number;
-  timestamp: string;
-  action: string;
-  input: Record<string, unknown>;
-  output: unknown;
-  success: boolean;
-  durationMs: number;
-  pageUrl?: string;
-  pageTitle?: string;
-  domSnapshot?: string;
-  error?: string;
 }
 
 interface HistorySummary {

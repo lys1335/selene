@@ -14,4 +14,5 @@ export { DaySelector } from "./day-selector";
 export { PromptEditor, type PromptEditorRef } from "./prompt-editor";
 export { VariableChips } from "./variable-chips";
 export { ScheduleSummaryCard } from "./schedule-summary-card";
+export { SchedulePageShell } from "./schedule-page-shell";
 

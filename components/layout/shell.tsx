@@ -63,6 +63,62 @@ const DESKTOP_SIDEBAR_MEDIA_QUERY = "(min-width: 768px)";
 
 export const useSidebarCollapsed = () => useContext(SidebarContext);
 
+function storeReturnUrl() {
+  if (typeof window !== "undefined") {
+    sessionStorage.setItem("selene-return-url", window.location.href);
+  }
+}
+
+interface UserMenuItemsProps {
+  signOut: () => void;
+  t: (key: string) => string;
+}
+
+function UserMenuItems({ signOut, t }: UserMenuItemsProps) {
+  return (
+    <>
+      <DropdownMenuItem asChild className="font-mono">
+        <Link href="/usage" onClick={storeReturnUrl}>
+          <BarChart2Icon className="mr-2 size-4" />
+          {t("sidebar.usage")}
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem asChild className="font-mono">
+        <Link href="/dashboard">
+          <LayoutDashboardIcon className="mr-2 size-4" />
+          {t("sidebar.dashboard")}
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        asChild
+        className="font-mono text-terminal-dark hover:bg-terminal-dark/5"
+      >
+        <Link href="/settings" onClick={storeReturnUrl}>
+          <SettingsIcon className="mr-2 size-4" />
+          {t("sidebar.settings")}
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        asChild
+        className="font-mono text-terminal-dark hover:bg-terminal-dark/5"
+      >
+        <Link href="/about">
+          <InfoIcon className="mr-2 size-4" />
+          {t("sidebar.about")}
+        </Link>
+      </DropdownMenuItem>
+      <DropdownMenuSeparator className="bg-terminal-dark/10" />
+      <DropdownMenuItem
+        onClick={signOut}
+        className="font-mono text-red-600 hover:bg-red-50"
+      >
+        <LogOutIcon className="mr-2 size-4" />
+        {t("sidebar.signOut")}
+      </DropdownMenuItem>
+    </>
+  );
+}
+
 interface ShellProps {
   sidebar?: ReactNode;
   sidebarHeader?: ReactNode;
@@ -321,66 +377,7 @@ export const Shell: FC<ShellProps> = ({
                       <span className="truncate">{user.email}</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild className="font-mono">
-                      <Link
-                        href="/usage"
-                        onClick={() => {
-                          // Store current URL for smart back navigation
-                          if (typeof window !== "undefined") {
-                            sessionStorage.setItem(
-                              "selene-return-url",
-                              window.location.href,
-                            );
-                          }
-                        }}
-                      >
-                        <BarChart2Icon className="mr-2 size-4" />
-                        {t("sidebar.usage")}
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild className="font-mono">
-                      <Link href="/dashboard">
-                        <LayoutDashboardIcon className="mr-2 size-4" />
-                        {t("sidebar.dashboard")}
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      asChild
-                      className="font-mono text-terminal-dark hover:bg-terminal-dark/5"
-                    >
-                      <Link
-                        href="/settings"
-                        onClick={() => {
-                          // Store current URL for smart back navigation
-                          if (typeof window !== "undefined") {
-                            sessionStorage.setItem(
-                              "selene-return-url",
-                              window.location.href,
-                            );
-                          }
-                        }}
-                      >
-                        <SettingsIcon className="mr-2 size-4" />
-                        {t("sidebar.settings")}
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      asChild
-                      className="font-mono text-terminal-dark hover:bg-terminal-dark/5"
-                    >
-                      <Link href="/about">
-                        <InfoIcon className="mr-2 size-4" />
-                        {t("sidebar.about")}
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="bg-terminal-dark/10" />
-                    <DropdownMenuItem
-                      onClick={signOut}
-                      className="font-mono text-red-600 hover:bg-red-50"
-                    >
-                      <LogOutIcon className="mr-2 size-4" />
-                      {t("sidebar.signOut")}
-                    </DropdownMenuItem>
+                    <UserMenuItems signOut={signOut} t={t} />
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -475,66 +472,7 @@ export const Shell: FC<ShellProps> = ({
                         <span className="truncate">{user.email}</span>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild className="font-mono">
-                        <Link
-                          href="/usage"
-                          onClick={() => {
-                            // Store current URL for smart back navigation
-                            if (typeof window !== "undefined") {
-                              sessionStorage.setItem(
-                                "selene-return-url",
-                                window.location.href,
-                              );
-                            }
-                          }}
-                        >
-                          <BarChart2Icon className="mr-2 size-4" />
-                          {t("sidebar.usage")}
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="font-mono">
-                        <Link href="/dashboard">
-                          <BarChart2Icon className="mr-2 size-4" />
-                          {t("sidebar.dashboard")}
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        asChild
-                        className="font-mono text-terminal-dark hover:bg-terminal-dark/5"
-                      >
-                        <Link
-                          href="/settings"
-                          onClick={() => {
-                            // Store current URL for smart back navigation
-                            if (typeof window !== "undefined") {
-                              sessionStorage.setItem(
-                                "selene-return-url",
-                                window.location.href,
-                              );
-                            }
-                          }}
-                        >
-                          <SettingsIcon className="mr-2 size-4" />
-                          {t("sidebar.settings")}
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        asChild
-                        className="font-mono text-terminal-dark hover:bg-terminal-dark/5"
-                      >
-                        <Link href="/about">
-                          <InfoIcon className="mr-2 size-4" />
-                          {t("sidebar.about")}
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-terminal-dark/10" />
-                      <DropdownMenuItem
-                        onClick={signOut}
-                        className="font-mono text-red-600 hover:bg-red-50"
-                      >
-                        <LogOutIcon className="mr-2 size-4" />
-                        {t("sidebar.signOut")}
-                      </DropdownMenuItem>
+                      <UserMenuItems signOut={signOut} t={t} />
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}

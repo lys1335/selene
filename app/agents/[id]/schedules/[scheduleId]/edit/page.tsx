@@ -1,11 +1,7 @@
 "use client";
 
 import { use } from "react";
-import Link from "next/link";
-import { Shell } from "@/components/layout/shell";
-import { Button } from "@/components/ui/button";
-import { Loader2, AlertCircle } from "lucide-react";
-import { ScheduleFormFullPage } from "@/components/schedules/schedule-form-full-page";
+import { SchedulePageShell } from "@/components/schedules/schedule-page-shell";
 import { useTranslations } from "next-intl";
 import { useScheduleCharacter } from "@/hooks/use-schedule-character";
 import type { ScheduledTask } from "@/lib/db/sqlite-schedule-schema";
@@ -16,7 +12,6 @@ export default function EditSchedulePage({
     params: Promise<{ id: string; scheduleId: string }>;
 }) {
     const { id: characterId, scheduleId } = use(params);
-    const tc = useTranslations("common");
     const t = useTranslations("schedules");
 
     const { agentName, schedule, isLoading, error } = useScheduleCharacter({
@@ -36,56 +31,16 @@ export default function EditSchedulePage({
         }
     };
 
-    if (isLoading) {
-        return (
-            <Shell hideNav>
-                <div className="flex h-full items-center justify-center">
-                    <Loader2 className="h-8 w-8 animate-spin text-terminal-green" />
-                </div>
-            </Shell>
-        );
-    }
-
-    if (error) {
-        return (
-            <Shell hideNav>
-                <div className="flex h-full items-center justify-center">
-                    <div className="flex flex-col items-center gap-4 max-w-md text-center">
-                        <AlertCircle className="h-12 w-12 text-destructive" />
-                        <h1 className="text-xl font-semibold font-mono">{error}</h1>
-                        <Button asChild>
-                            <Link href={`/agents/${characterId}/schedules`}>{tc("back")}</Link>
-                        </Button>
-                    </div>
-                </div>
-            </Shell>
-        );
-    }
-
-    if (!schedule) {
-        return (
-            <Shell hideNav>
-                <div className="flex h-full items-center justify-center">
-                    <div className="flex flex-col items-center gap-4 max-w-md text-center">
-                        <AlertCircle className="h-12 w-12 text-destructive" />
-                        <h1 className="text-xl font-semibold font-mono">Schedule not found</h1>
-                        <Button asChild>
-                            <Link href={`/agents/${characterId}/schedules`}>{tc("back")}</Link>
-                        </Button>
-                    </div>
-                </div>
-            </Shell>
-        );
-    }
-
     return (
-        <Shell hideNav>
-            <ScheduleFormFullPage
-                characterId={characterId}
-                characterName={agentName}
-                schedule={schedule}
-                onSubmit={handleUpdate}
-            />
-        </Shell>
+        <SchedulePageShell
+            characterId={characterId}
+            scheduleId={scheduleId}
+            agentName={agentName}
+            schedule={schedule}
+            isLoading={isLoading}
+            error={error}
+            backHref={`/agents/${characterId}/schedules`}
+            onSubmit={handleUpdate}
+        />
     );
 }

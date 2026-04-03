@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, use } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -10,8 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Download, Loader2, Play } from "lucide-react";
 import { SkillFormFields } from "@/components/skills/skill-form-fields";
-import type { SkillFormValues } from "@/components/skills/skill-form-fields";
 import type { SkillStatus } from "@/lib/skills/types";
+import { useSkillForm, splitLines } from "@/lib/hooks/use-skill-form";
 
 type SkillRecord = {
   id: string;
@@ -44,41 +44,25 @@ type SkillVersion = {
 
 type CharacterOption = { id: string; name: string; displayName?: string | null };
 
-function splitLines(value: string): string[] {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-}
-
 export default function SkillDetailPage({ params }: { params: Promise<{ id: string; skillId: string }> }) {
   const { id: characterId, skillId } = use(params);
   const router = useRouter();
   const t = useTranslations("skills.detail");
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [copying, setCopying] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const [skill, setSkill] = useState<SkillRecord | null>(null);
   const [runs, setRuns] = useState<SkillRun[]>([]);
   const [versions, setVersions] = useState<SkillVersion[]>([]);
   const [characters, setCharacters] = useState<CharacterOption[]>([]);
-
-  const [form, setForm] = useState<SkillFormValues>({
-    name: "",
-    description: "",
-    promptTemplate: "",
-    category: "general",
-    toolHints: "",
-    triggerExamples: "",
-  });
   const [status, setStatus] = useState<SkillStatus>("active");
   const [copyTargetCharacterId, setCopyTargetCharacterId] = useState("");
+
+  const { form, setForm, resetForm, saving, error, setError, canSave, runSave } = useSkillForm();
 
   const loadSkill = async () => {
     setLoading(true);
@@ -96,7 +80,7 @@ export default function SkillDetailPage({ params }: { params: Promise<{ id: stri
       setRuns(nextRuns);
       setVersions(nextVersions);
 
-      setForm({
+      resetForm({
         name: nextSkill.name || "",
         description: nextSkill.description || "",
         promptTemplate: nextSkill.promptTemplate || "",
@@ -129,18 +113,10 @@ export default function SkillDetailPage({ params }: { params: Promise<{ id: stri
     void loadSkill();
   }, [skillId]);
 
-  const canSave = useMemo(
-    () => form.name.trim().length > 0 && form.promptTemplate.trim().length > 0,
-    [form.name, form.promptTemplate],
-  );
-
-  const onSave = async () => {
-    if (!canSave || saving || !skill) return;
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-
-    try {
+  const onSave = () => {
+    if (!skill) return;
+    runSave(async () => {
+      setMessage(null);
       const response = await fetch(`/api/skills/${skill.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -159,14 +135,9 @@ export default function SkillDetailPage({ params }: { params: Promise<{ id: stri
       if (!response.ok) {
         throw new Error(payload?.error || t("saveFailed"));
       }
-
       setMessage(t("updatedSuccess"));
       await loadSkill();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("saveFailed"));
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   const onRunNow = async () => {
@@ -186,7 +157,6 @@ export default function SkillDetailPage({ params }: { params: Promise<{ id: stri
         throw new Error(payload?.error || t("runFailed"));
       }
 
-      // Redirect to the session where the skill is running
       if (payload.sessionId && payload.characterId) {
         router.push(`/chat/${payload.characterId}?sessionId=${payload.sessionId}`);
         return;
@@ -297,7 +267,7 @@ export default function SkillDetailPage({ params }: { params: Promise<{ id: stri
               <CardContent className="space-y-4">
                 <SkillFormFields
                   values={form}
-                  onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+                  onChange={setForm}
                   status={status}
                   onStatusChange={setStatus}
                 />

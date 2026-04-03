@@ -35,32 +35,10 @@ import { useScreencastRecorder } from "./use-screencast-recorder";
 import { useBrowserInteraction } from "./use-browser-interaction";
 import { useActionIndicators, type ActionSSEData } from "./use-action-indicators";
 import { ActionIndicators } from "./action-indicators";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ActionRecord {
-  seq: number;
-  timestamp: string;
-  action: string;
-  input: Record<string, unknown>;
-  output: unknown;
-  success: boolean;
-  durationMs: number;
-  pageUrl?: string;
-  pageTitle?: string;
-  domSnapshot?: string;
-  error?: string;
-  source?: "agent" | "user";
-}
-
-interface SessionHistory {
-  sessionId: string;
-  agentId?: string;
-  startedAt: string;
-  endedAt?: string;
-  totalDurationMs?: number;
-  actions: ActionRecord[];
-}
+import {
+  type ActionRecord,
+  type SessionHistory,
+} from "@/lib/browser/action-history";
 
 // ─── Action helpers ───────────────────────────────────────────────────────────
 // Imported from browser-action-helpers.ts

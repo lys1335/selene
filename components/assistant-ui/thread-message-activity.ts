@@ -34,7 +34,7 @@ function asParts(parts: unknown): MessagePartLike[] {
   );
 }
 
-function getResultCount(result: unknown): number | null {
+export function getResultCount(result: unknown): number | null {
   if (!result || typeof result !== "object") return null;
   const record = result as Record<string, unknown>;
 

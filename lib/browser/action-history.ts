@@ -16,7 +16,7 @@
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface ActionRecord {
+export interface ActionRecord {
   /** Monotonically increasing sequence number */
   seq: number;
 

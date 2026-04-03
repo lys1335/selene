@@ -1,8 +1,8 @@
 import { tool, jsonSchema } from "ai";
 import { callRunwayVideo } from "@/lib/ai/runway-video-client";
-import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
+import { createToolRun } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
-import { now, failToolRun } from "@/lib/ai/tools/tool-run-utils";
+import { failToolRun, saveGeneratedVideos } from "@/lib/ai/tools/tool-run-utils";
 
 // ==========================================================================
 // RUNWAY VIDEO TOOL (Text-to-Video and Image-to-Video)
@@ -90,37 +90,10 @@ async function executeRunwayVideo(sessionId: string, args: RunwayVideoArgs) {
       sessionId
     );
 
-    // Store each video in the images table with mediaType: "video"
-    for (const video of result.videos) {
-      await createImage({
-        sessionId,
-        toolRunId: toolRun.id,
-        role: "generated",
-        localPath: video.localPath || video.url,
-        url: video.url,
-        format: video.format,
-        metadata: {
-          prompt,
-          fps: video.fps,
-          duration: video.duration,
-          mediaType: "video",
-          provider: "runway",
-          model: model ?? "gen4_turbo",
-        },
-      });
-    }
-
-    await updateToolRun(toolRun.id, {
-      status: "succeeded",
-      result: { videos: result.videos },
-      completedAt: now(),
+    return saveGeneratedVideos(sessionId, toolRun.id, result, prompt, {
+      provider: "runway",
+      model: model ?? "gen4_turbo",
     });
-
-    return {
-      status: "completed",
-      videos: result.videos,
-      timeTaken: result.timeTaken,
-    };
   } catch (error) {
     return failToolRun(toolRun.id, error);
   }

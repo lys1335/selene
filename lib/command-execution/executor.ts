@@ -514,6 +514,41 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
             void executeCommand(buildShellRetryOptionsFromCurrentState()).then(resolve);
         };
 
+        /**
+         * Check whether this RTK-wrapped command should fall back to direct execution
+         * based on the RTK error output. If so, kick off the retry and return true
+         * (caller should return immediately). Otherwise return false.
+         *
+         * Also computes and returns the fallbackReason so the caller can attach it
+         * to search metadata without recomputing.
+         */
+        const checkRtkRetry = (params: {
+            stderr?: string;
+            error?: string;
+            wrappedByRTK: boolean;
+        }): { fallbackReason: ReturnType<typeof getRtkFallbackReason>; retried: boolean } => {
+            const fallbackReason = getRtkFallbackReason({
+                command,
+                wrappedByRTK: params.wrappedByRTK,
+                stderr: params.stderr,
+                error: params.error,
+            });
+            const shouldRetryDirect =
+                params.wrappedByRTK
+                && !forceDirectExecution
+                && (fallbackReason === "rtk_unrecognized_subcommand" || fallbackReason === "rtk_unknown_command");
+
+            if (shouldRetryDirect) {
+                void executeCommand({
+                    ...options,
+                    forceDirectExecution: true,
+                    fallbackReasonForDirectExecution: fallbackReason,
+                }).then(resolve);
+                return { fallbackReason, retried: true };
+            }
+            return { fallbackReason, retried: false };
+        };
+
         const emitProgress = (overrides: Partial<ExecuteCommandProgressUpdate> = {}) => {
             onProgress?.({
                 toolCallId,
@@ -654,24 +689,8 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
 
                 const logId = saveTerminalLog(stdout, stderr);
 
-                const fallbackReason = getRtkFallbackReason({
-                    command,
-                    wrappedByRTK: wrapped.usingRTK,
-                    stderr,
-                });
-                const shouldRetryDirect =
-                    wrapped.usingRTK
-                    && !forceDirectExecution
-                    && (fallbackReason === "rtk_unrecognized_subcommand" || fallbackReason === "rtk_unknown_command");
-
-                if (shouldRetryDirect) {
-                    void executeCommand({
-                        ...options,
-                        forceDirectExecution: true,
-                        fallbackReasonForDirectExecution: fallbackReason,
-                    }).then(resolve);
-                    return;
-                }
+                const { fallbackReason, retried } = checkRtkRetry({ stderr, wrappedByRTK: wrapped.usingRTK });
+                if (retried) return;
 
                 const finalResult: ExecuteResult = {
                     success: !killed && code === 0,
@@ -757,26 +776,8 @@ ${commandHint}`;
 
                 commandLogger.logExecutionError(command, errorMessage, context);
 
-                const fallbackReason = getRtkFallbackReason({
-                    command,
-                    wrappedByRTK: wrapped.usingRTK,
-                    stderr,
-                    error: errorMessage,
-                });
-
-                const shouldRetryDirect =
-                    wrapped.usingRTK
-                    && !forceDirectExecution
-                    && (fallbackReason === "rtk_unrecognized_subcommand" || fallbackReason === "rtk_unknown_command");
-
-                if (shouldRetryDirect) {
-                    void executeCommand({
-                        ...options,
-                        forceDirectExecution: true,
-                        fallbackReasonForDirectExecution: fallbackReason,
-                    }).then(resolve);
-                    return;
-                }
+                const { fallbackReason, retried } = checkRtkRetry({ stderr, error: errorMessage, wrappedByRTK: wrapped.usingRTK });
+                if (retried) return;
 
                 const failedResult: ExecuteResult = {
                     success: false,
@@ -840,25 +841,8 @@ ${commandHint}`;
             }
 
             commandLogger.logExecutionError(command, errorMessage, context);
-            const fallbackReason = getRtkFallbackReason({
-                command,
-                wrappedByRTK: wrapped.usingRTK,
-                error: errorMessage,
-            });
-
-            const shouldRetryDirect =
-                wrapped.usingRTK
-                && !forceDirectExecution
-                && (fallbackReason === "rtk_unrecognized_subcommand" || fallbackReason === "rtk_unknown_command");
-
-            if (shouldRetryDirect) {
-                void executeCommand({
-                    ...options,
-                    forceDirectExecution: true,
-                    fallbackReasonForDirectExecution: fallbackReason,
-                }).then(resolve);
-                return;
-            }
+            const { fallbackReason, retried } = checkRtkRetry({ error: errorMessage, wrappedByRTK: wrapped.usingRTK });
+            if (retried) return;
 
             const failedResult: ExecuteResult = {
                 success: false,
