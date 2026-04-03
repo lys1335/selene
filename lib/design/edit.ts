@@ -48,6 +48,13 @@ function substituteAssetPlaceholders(code: string, assetMap: Map<string, string>
   return result;
 }
 
+function sanitizeMediaPaths(code: string): string {
+  return code.replace(
+    /(?:\/[^\s'"()]+|\.local-data)\/media\/([\w-]+\/[\w-]+\/[^\s'"()]+\.(?:png|jpe?g|gif|webp|svg))/gi,
+    '/api/media/$1',
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main editor
 // ---------------------------------------------------------------------------
@@ -176,7 +183,8 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
     let finalCode: string;
     try {
       const patched = applyInlineEdits(code, fullResponse);
-      finalCode = assetMap.size > 0 ? substituteAssetPlaceholders(patched, assetMap) : patched;
+      const withAssets = assetMap.size > 0 ? substituteAssetPlaceholders(patched, assetMap) : patched;
+      finalCode = sanitizeMediaPaths(withAssets);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Unknown error applying inline edits';
       const error = {
@@ -251,7 +259,8 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
     }
 
     const rawCode = stripMarkdownFences(fullResponse);
-    const finalCode = assetMap.size > 0 ? substituteAssetPlaceholders(rawCode, assetMap) : rawCode;
+    const withAssets = assetMap.size > 0 ? substituteAssetPlaceholders(rawCode, assetMap) : rawCode;
+    const finalCode = sanitizeMediaPaths(withAssets);
 
     onFinish?.({ success: true, content: finalCode, metadata: { editMode: 'full' }, durationMs: Date.now() - startTime });
     yield {

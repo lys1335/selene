@@ -50,6 +50,22 @@ function substituteAssetPlaceholders(code: string, assetMap: Map<string, string>
   return result;
 }
 
+/**
+ * Convert raw filesystem media paths in generated code to `/api/media/` URLs.
+ * Catches paths the outer agent embeds directly in the prompt text, bypassing
+ * the asset placeholder pipeline. Matches patterns like:
+ *   /Users/.../media/sessionId/role/file.png
+ *   /home/.../media/sessionId/role/file.png
+ *   .local-data/media/sessionId/role/file.png
+ */
+function sanitizeMediaPaths(code: string): string {
+  // Match absolute or relative paths containing /media/ followed by path segments ending in an image extension
+  return code.replace(
+    /(?:\/[^\s'"()]+|\.local-data)\/media\/([\w-]+\/[\w-]+\/[^\s'"()]+\.(?:png|jpe?g|gif|webp|svg))/gi,
+    '/api/media/$1',
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main generator
 // ---------------------------------------------------------------------------
@@ -168,10 +184,12 @@ export async function* generateCard(opts: GenerateOpts): AsyncGenerator<StreamEv
     ? fenceMatch[1].trim()
     : fullContent.trim();
 
-  // Substitute __ASSET_N__ placeholders with real URLs
-  const finalCode = assetMap.size > 0
+  // Substitute __ASSET_N__ placeholders with real URLs, then sanitize any
+  // raw filesystem paths the LLM may have copied from the prompt context
+  const withAssets = assetMap.size > 0
     ? substituteAssetPlaceholders(rawCode, assetMap)
     : rawCode;
+  const finalCode = sanitizeMediaPaths(withAssets);
 
   onFinish?.({
     success: true,

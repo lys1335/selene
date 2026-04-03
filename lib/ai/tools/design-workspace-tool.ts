@@ -140,13 +140,24 @@ function parseDataUri(uri: string): { base64Data: string; mediaType: string } | 
 }
 
 /**
+ * Convert a raw filesystem media path to an `/api/media/` URL.
+ * Handles paths like `/Users/.../seline/.local-data/media/sessionId/role/file.png`
+ * by extracting the relative portion after `/media/`.
+ */
+function filesystemPathToMediaUrl(filePath: string): string | null {
+  const mediaMarker = /[/\\]media[/\\]/;
+  const match = filePath.match(mediaMarker);
+  if (!match || match.index === undefined) return null;
+  const relativePart = filePath.slice(match.index + match[0].length).replace(/\\/g, "/");
+  return relativePart ? `/api/media/${relativePart}` : null;
+}
+
+/**
  * Resolve input assets into `AssetContext[]` with multimodal data.
  *
- * The outer chat agent may pass either `/api/media/...` paths or full
- * `data:` URIs. In both cases we:
- *  - Extract base64 for multimodal (inner LLM can *see* the image)
- *  - Keep a short `/api/media/...` URL for the text prompt (so the
- *    generated code references a clean URL, not a massive data blob)
+ * The outer chat agent may pass `/api/media/...` paths, `data:` URIs,
+ * or raw filesystem paths. In all cases we normalize to an `/api/media/`
+ * URL and extract base64 for multimodal vision.
  */
 async function resolveAssets(
   inputAssets: Array<{ url: string; description?: string }>,
@@ -160,8 +171,7 @@ async function resolveAssets(
         metadata: asset.description ? { description: asset.description } : undefined,
       };
 
-      // Data URIs — extract base64 for multimodal, but keep the data URI
-      // as the URL (the generated code will use it directly)
+      // Data URIs — extract base64 for multimodal
       const parsed = parseDataUri(asset.url);
       if (parsed) {
         ctx.base64Data = parsed.base64Data;
@@ -169,21 +179,28 @@ async function resolveAssets(
         return ctx;
       }
 
-      // /api/media/ paths — read from disk for multimodal, keep path as URL
-      if (asset.url.startsWith("/api/media/")) {
-        const fullPath = getFullPathFromMediaRef(asset.url);
-        if (fullPath) {
-          try {
-            const buffer = await fs.readFile(fullPath);
-            const ext = path.extname(fullPath).toLowerCase();
-            const mediaType = IMAGE_MEDIA_TYPES[ext];
-            if (mediaType) {
-              ctx.base64Data = buffer.toString("base64");
-              ctx.mediaType = mediaType;
-            }
-          } catch {
-            // File not accessible — proceed without multimodal
+      // Normalize filesystem paths to /api/media/ URLs
+      if (!asset.url.startsWith("/api/media/") && !asset.url.startsWith("http")) {
+        const mediaUrl = filesystemPathToMediaUrl(asset.url);
+        if (mediaUrl) {
+          ctx.url = mediaUrl;
+        }
+      }
+
+      // /api/media/ paths — read from disk for multimodal
+      const mediaRef = ctx.url.startsWith("/api/media/") ? ctx.url : asset.url;
+      const fullPath = getFullPathFromMediaRef(mediaRef);
+      if (fullPath) {
+        try {
+          const buffer = await fs.readFile(fullPath);
+          const ext = path.extname(fullPath).toLowerCase();
+          const mediaType = IMAGE_MEDIA_TYPES[ext];
+          if (mediaType) {
+            ctx.base64Data = buffer.toString("base64");
+            ctx.mediaType = mediaType;
           }
+        } catch {
+          // File not accessible — proceed without multimodal
         }
       }
 
