@@ -2,8 +2,8 @@
 // Avatar 3D — Type definitions
 // =============================================================================
 
-// Re-export backend types to avoid duplication
-export type { VisemeCue, OculusViseme, AvatarMood } from "@/lib/avatar/types";
+// Import backend types for local use
+
 
 // Import for local use within this file
 import type { VisemeCue } from "@/lib/avatar/types";
@@ -57,7 +57,7 @@ export interface Avatar3DRef {
 /**
  * Viseme data structure expected by TalkingHead.speakAudio().
  */
-export interface TalkingHeadAudioPayload {
+interface TalkingHeadAudioPayload {
   audio: AudioBuffer;
   words: string[];
   wtimes: number[];
@@ -70,14 +70,14 @@ export interface TalkingHeadAudioPayload {
 /**
  * Options passed to TalkingHead.speakAudio().
  */
-export interface TalkingHeadSpeakOptions {
+interface TalkingHeadSpeakOptions {
   lipsyncLang?: string;
 }
 
 /**
  * Options for TalkingHead constructor.
  */
-export interface TalkingHeadConstructorOptions {
+interface TalkingHeadConstructorOptions {
   lipsyncModules?: string[];
   modelFPS?: number;
   cameraView?: string;
@@ -93,7 +93,7 @@ export interface TalkingHeadConstructorOptions {
 /**
  * Options for TalkingHead.showAvatar().
  */
-export interface TalkingHeadShowAvatarOptions {
+interface TalkingHeadShowAvatarOptions {
   url: string;
   body?: string;
   avatarMood?: string;
@@ -135,7 +135,7 @@ export interface TalkingHeadInstance {
 /**
  * The TalkingHead class constructor shape exposed by the library module.
  */
-export interface TalkingHeadConstructor {
+interface TalkingHeadConstructor {
   new (
     container: HTMLDivElement,
     options?: TalkingHeadConstructorOptions,

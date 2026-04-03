@@ -88,28 +88,28 @@ export type VectorSearchPhase =
   | "complete"
   | "error";
 
-export interface VectorSearchProgressEvent {
+interface VectorSearchProgressEvent {
   type: "phase_change";
   phase: VectorSearchPhase;
   message: string;
   timestamp: Date;
 }
 
-export interface VectorSearchResultEvent {
+interface VectorSearchResultEvent {
   type: "search_complete";
   resultsCount: number;
   filesCount: number;
   timestamp: Date;
 }
 
-export interface VectorSearchSynthesisEvent {
+interface VectorSearchSynthesisEvent {
   type: "synthesis_complete";
   summary: string;
   findingsCount: number;
   timestamp: Date;
 }
 
-export interface VectorSearchErrorEvent {
+interface VectorSearchErrorEvent {
   type: "error";
   error: string;
   timestamp: Date;

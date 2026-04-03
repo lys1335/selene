@@ -8,7 +8,7 @@
 /**
  * Base result status for all tools
  */
-export type ToolResultStatus =
+type ToolResultStatus =
   | "completed"     // Tool completed successfully
   | "processing"    // Async job started, result pending
   | "error";        // Tool execution failed
@@ -16,7 +16,7 @@ export type ToolResultStatus =
 /**
  * Generated image information
  */
-export interface GeneratedImage {
+interface GeneratedImage {
   url: string;
   width: number;
   height: number;
@@ -26,7 +26,7 @@ export interface GeneratedImage {
 /**
  * Generated video information
  */
-export interface GeneratedVideo {
+interface GeneratedVideo {
   url: string;
   width: number;
   height: number;
@@ -38,7 +38,7 @@ export interface GeneratedVideo {
 /**
  * Metadata about tool execution
  */
-export interface ToolExecutionMetadata {
+interface ToolExecutionMetadata {
   /** Time taken to execute in milliseconds */
   timeTaken?: number;
   /** Async job ID for polling */
@@ -54,7 +54,7 @@ export interface ToolExecutionMetadata {
 /**
  * Base tool result interface
  */
-export interface ToolResultBase {
+interface ToolResultBase {
   /** Result status */
   status: ToolResultStatus;
   /** Execution metadata */
@@ -64,7 +64,7 @@ export interface ToolResultBase {
 /**
  * Successful result with images
  */
-export interface ImageGenerationResult extends ToolResultBase {
+interface ImageGenerationResult extends ToolResultBase {
   status: "completed";
   /** Generated images */
   images: GeneratedImage[];
@@ -75,7 +75,7 @@ export interface ImageGenerationResult extends ToolResultBase {
 /**
  * Successful result with videos
  */
-export interface VideoGenerationResult extends ToolResultBase {
+interface VideoGenerationResult extends ToolResultBase {
   status: "completed";
   /** Generated videos */
   videos: GeneratedVideo[];
@@ -84,7 +84,7 @@ export interface VideoGenerationResult extends ToolResultBase {
 /**
  * Async processing result
  */
-export interface ProcessingResult extends ToolResultBase {
+interface ProcessingResult extends ToolResultBase {
   status: "processing";
   /** Status message */
   message: string;
@@ -95,7 +95,7 @@ export interface ProcessingResult extends ToolResultBase {
 /**
  * Error result
  */
-export interface ErrorResult extends ToolResultBase {
+interface ErrorResult extends ToolResultBase {
   status: "error";
   /** Error message */
   error: string;

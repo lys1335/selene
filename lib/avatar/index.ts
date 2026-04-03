@@ -34,10 +34,7 @@ export type {
   OculusViseme,
   VisemeCue,
   LipsyncResult,
-  LipsyncConfig,
   AvatarMood,
-  RhubarbOutput,
-  RhubarbMouthCue,
 } from "./types";
 export { OCULUS_VISEMES } from "./types";
 

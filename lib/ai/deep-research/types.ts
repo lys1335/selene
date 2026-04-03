@@ -83,7 +83,7 @@ export type ResearchPhase =
 // Streaming Event Types
 // ============================================================================
 
-export type DeepResearchEventType =
+type DeepResearchEventType =
   | 'phase_change'
   | 'search_progress'
   | 'search_result'
@@ -94,53 +94,53 @@ export type DeepResearchEventType =
   | 'error'
   | 'complete';
 
-export interface BaseResearchEvent {
+interface BaseResearchEvent {
   type: DeepResearchEventType;
   timestamp: Date;
 }
 
-export interface PhaseChangeEvent extends BaseResearchEvent {
+interface PhaseChangeEvent extends BaseResearchEvent {
   type: 'phase_change';
   phase: ResearchPhase;
   message: string;
 }
 
-export interface SearchProgressEvent extends BaseResearchEvent {
+interface SearchProgressEvent extends BaseResearchEvent {
   type: 'search_progress';
   completed: number;
   total: number;
   currentQuery: string;
 }
 
-export interface SearchResultEvent extends BaseResearchEvent {
+interface SearchResultEvent extends BaseResearchEvent {
   type: 'search_result';
   finding: ResearchFinding;
 }
 
-export interface AnalysisUpdateEvent extends BaseResearchEvent {
+interface AnalysisUpdateEvent extends BaseResearchEvent {
   type: 'analysis_update';
   message: string;
   progress?: number;
 }
 
-export interface DraftUpdateEvent extends BaseResearchEvent {
+interface DraftUpdateEvent extends BaseResearchEvent {
   type: 'draft_update';
   draft: DraftReport;
 }
 
-export interface RefinementUpdateEvent extends BaseResearchEvent {
+interface RefinementUpdateEvent extends BaseResearchEvent {
   type: 'refinement_update';
   iteration: number;
   maxIterations: number;
   gaps: string[];
 }
 
-export interface FinalReportEvent extends BaseResearchEvent {
+interface FinalReportEvent extends BaseResearchEvent {
   type: 'final_report';
   report: FinalReport;
 }
 
-export interface ErrorEvent extends BaseResearchEvent {
+interface ErrorEvent extends BaseResearchEvent {
   type: 'error';
   error: string;
   failedPhase?: Exclude<ResearchPhase, 'idle' | 'complete' | 'error'>;
@@ -153,7 +153,7 @@ export interface ErrorEvent extends BaseResearchEvent {
   };
 }
 
-export interface CompleteEvent extends BaseResearchEvent {
+interface CompleteEvent extends BaseResearchEvent {
   type: 'complete';
   state: DeepResearchState;
 }

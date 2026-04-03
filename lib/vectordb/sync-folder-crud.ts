@@ -15,7 +15,12 @@ import {
   normalizeReindexPolicy,
 } from "./sync-mode-resolver";
 import { notifyFolderChange } from "./folder-events";
-import { propagateWorkflowFolderChange } from "@/lib/agents/workflow-folder-sharing";
+// Lazy import to break the cycle:
+// workflow-folder-sharing → sync-service → sync-folder-crud → workflow-folder-sharing
+async function loadPropagateWorkflowFolderChange() {
+  const { propagateWorkflowFolderChange } = await import("@/lib/agents/workflow-folder-sharing");
+  return propagateWorkflowFolderChange;
+}
 import { normalizeExtensions } from "./sync-helpers";
 import type { SyncFolderConfig } from "./sync-types";
 
@@ -108,6 +113,7 @@ export async function addSyncFolder(config: SyncFolderConfig): Promise<string> {
     type: "added",
     folderId: folder.id,
   });
+  const propagateWorkflowFolderChange = await loadPropagateWorkflowFolderChange();
   await propagateWorkflowFolderChange(characterId, {
     type: "added",
     folderId: folder.id,
@@ -193,7 +199,8 @@ export async function setPrimaryFolder(folderId: string, characterId: string) {
     type: "primary_changed",
     folderId,
   });
-  await propagateWorkflowFolderChange(characterId, {
+  const propagateChange = await loadPropagateWorkflowFolderChange();
+  await propagateChange(characterId, {
     type: "primary_changed",
     folderId,
   });

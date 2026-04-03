@@ -19,13 +19,13 @@ export interface MessageInput {
   createdAt?: string | Date;
 }
 
-export interface TokenUsageSummary {
+interface TokenUsageSummary {
   totalInputTokens: number;
   totalOutputTokens: number;
   totalTokens: number;
 }
 
-export interface CacheUsageSummary {
+interface CacheUsageSummary {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   estimatedSavingsUsd: number;
@@ -33,14 +33,14 @@ export interface CacheUsageSummary {
   messagesCached: number;
 }
 
-export interface ToolUsageEntry {
+interface ToolUsageEntry {
   toolName: string;
   callCount: number;
   totalTimeMs: number;
   averageTimeMs: number;
 }
 
-export interface ToolUsageSummary {
+interface ToolUsageSummary {
   totalToolCalls: number;
   totalExecutionTimeMs: number;
   tools: ToolUsageEntry[];

@@ -21,7 +21,7 @@ export interface InstallProgress {
 }
 
 // Model definitions
-export const ZIMAGE_MODELS = {
+const ZIMAGE_MODELS = {
     checkpoint: {
         name: "z-image-turbo-fp8-aio.safetensors",
         url: "https://huggingface.co/SeeSee21/Z-Image-Turbo-AIO/resolve/main/z-image-turbo-fp8-aio.safetensors",

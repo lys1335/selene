@@ -1,3 +1,4 @@
+// fallow-ignore-file circular-dependency
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -891,7 +892,7 @@ function createStreamingClaudeCodeResponse(options: {
         const sdkToolResultBridge = mcpCtx?.sdkToolResultBridge;
 
         const seleneMcpServers = mcpCtx
-          ? { "selene-platform": createSeleneSdkMcpServer(mcpCtx) }
+          ? { "selene-platform": await createSeleneSdkMcpServer(mcpCtx) }
           : undefined;
 
         const candidateCwd = sdk?.cwd ?? mcpCtx?.cwd ?? process.cwd();
@@ -1664,7 +1665,7 @@ async function runClaudeAgentQuery(options: {
   // Build an in-process MCP server that exposes Selene platform tools to the
   // SDK agent when context is available.
   const seleneMcpServers = mcpCtx
-    ? { "selene-platform": createSeleneSdkMcpServer(mcpCtx) }
+    ? { "selene-platform": await createSeleneSdkMcpServer(mcpCtx) }
     : undefined;
 
   // Resolve working directory: explicit SDK option > MCP context > process.cwd()

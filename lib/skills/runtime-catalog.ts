@@ -9,9 +9,9 @@ import {
 } from "@/lib/skills/queries";
 import type { SkillRecord } from "@/lib/skills/types";
 
-export type RuntimeSkillSource = "db" | "plugin";
+type RuntimeSkillSource = "db" | "plugin";
 
-export interface RuntimeSkillBase {
+interface RuntimeSkillBase {
   canonicalId: string;
   source: RuntimeSkillSource;
   name: string;
@@ -21,12 +21,12 @@ export interface RuntimeSkillBase {
   versionRef: number;
 }
 
-export interface RuntimeDbSkill extends RuntimeSkillBase {
+interface RuntimeDbSkill extends RuntimeSkillBase {
   source: "db";
   dbSkill: SkillRecord;
 }
 
-export interface RuntimePluginSkill extends RuntimeSkillBase {
+interface RuntimePluginSkill extends RuntimeSkillBase {
   source: "plugin";
   pluginId: string;
   pluginName: string;
@@ -39,7 +39,7 @@ export interface RuntimePluginSkill extends RuntimeSkillBase {
 
 export type RuntimeSkill = RuntimeDbSkill | RuntimePluginSkill;
 
-export interface ListRuntimeSkillsInput {
+interface ListRuntimeSkillsInput {
   userId: string;
   characterId?: string;
   source?: RuntimeSkillSource;

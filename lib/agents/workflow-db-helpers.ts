@@ -174,3 +174,64 @@ export async function refreshWorkflowSharedResources(
     })
     .where(eq(agentWorkflows.id, workflowId));
 }
+
+/**
+ * Read-only workflow query helpers.
+ * Kept here (separate from workflows.ts) so workflow-folder-sharing.ts can
+ * import them without creating a cycle through workflows.ts.
+ */
+
+export async function getWorkflowByAgentId(
+  agentId: string
+): Promise<WorkflowMembershipContext | null> {
+  const rows = await db
+    .select({
+      workflow: agentWorkflows,
+      member: agentWorkflowMembers,
+    })
+    .from(agentWorkflowMembers)
+    .innerJoin(agentWorkflows, eq(agentWorkflowMembers.workflowId, agentWorkflows.id))
+    .where(
+      and(
+        eq(agentWorkflowMembers.agentId, agentId),
+        ne(agentWorkflows.status, "archived")
+      )
+    )
+    .orderBy(desc(agentWorkflows.updatedAt))
+    .limit(1);
+
+  if (rows.length === 0) return null;
+
+  return {
+    workflow: mapWorkflowRow(rows[0].workflow),
+    member: mapWorkflowMemberRow(rows[0].member),
+  };
+}
+
+export async function getWorkflowById(
+  workflowId: string,
+  userId?: string
+): Promise<AgentWorkflow | null> {
+  const conditions = [eq(agentWorkflows.id, workflowId)];
+  if (userId) {
+    conditions.push(eq(agentWorkflows.userId, userId));
+  }
+
+  const rows = await db
+    .select()
+    .from(agentWorkflows)
+    .where(and(...conditions))
+    .limit(1);
+
+  if (rows.length === 0) return null;
+  return mapWorkflowRow(rows[0]);
+}
+
+export async function getWorkflowMembers(workflowId: string): Promise<AgentWorkflowMember[]> {
+  const rows = await db
+    .select()
+    .from(agentWorkflowMembers)
+    .where(eq(agentWorkflowMembers.workflowId, workflowId))
+    .orderBy(desc(agentWorkflowMembers.createdAt));
+  return rows.map(mapWorkflowMemberRow);
+}

@@ -7,14 +7,10 @@
 
 // Export types
 export type {
-    ExecuteOptions,
     ExecuteResult,
-    ValidationResult,
     ExecuteCommandToolOptions,
     ExecuteCommandInput,
     ExecuteCommandToolResult,
-    CommandLogEntry,
-    BackgroundProcessInfo,
 } from "./types";
 
 // Export executor functions

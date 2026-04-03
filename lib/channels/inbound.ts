@@ -1,3 +1,4 @@
+// fallow-ignore-file circular-dependency
 import { loadSettings } from "@/lib/settings/settings-manager";
 import { saveFile } from "@/lib/storage/local-storage";
 import { convertDBMessagesToUIMessages } from "@/lib/messages/converter";

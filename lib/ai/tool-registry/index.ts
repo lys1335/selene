@@ -15,7 +15,3 @@ export { ToolRegistry } from "./registry";
 export { createToolSearchTool, createListToolsTool, type ToolSearchContext } from "./search-tool";
 export { registerAllTools } from "./tool-definitions";
 
-// Logging utilities
-export {
-  logToolEvent,
-} from "./logging";

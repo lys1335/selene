@@ -189,7 +189,7 @@ export const getMessagesSignature = (messages: UIMessage[]) => {
     return `${messages.length}:${getMessageSignature(lastMessage)}`;
 };
 
-export interface LivePromptForegroundReconciliationInput {
+interface LivePromptForegroundReconciliationInput {
     liveThreadMessageCount: number;
     persistedConversationMessageCount: number;
     hasInjectedMessages: boolean;
@@ -201,7 +201,7 @@ export const shouldDeferLivePromptForegroundReconciliation = (
     input.hasInjectedMessages &&
     input.persistedConversationMessageCount <= input.liveThreadMessageCount;
 
-export interface LivePromptForegroundDeferralBypassInput {
+interface LivePromptForegroundDeferralBypassInput {
     liveThreadMessages: UIMessage[];
     persistedUiMessages: UIMessage[];
     progressAssistantMessageId?: string | null;
@@ -232,7 +232,7 @@ export const shouldBypassLivePromptForegroundDeferral = (
     );
 };
 
-export interface BackgroundRunResolutionInput {
+interface BackgroundRunResolutionInput {
     isForegroundStreaming: boolean;
     hasActiveRun?: boolean;
     runId?: string | null;
@@ -241,7 +241,7 @@ export interface BackgroundRunResolutionInput {
     latestDeepResearchRunId?: string | null;
 }
 
-export interface BackgroundRunResolution {
+interface BackgroundRunResolution {
     activeForegroundRunId: string | null;
     resumedForegroundRunId: string | null;
     deepResearchRunId: string | null;
@@ -249,7 +249,7 @@ export interface BackgroundRunResolution {
     shouldShowBackgroundRun: boolean;
 }
 
-export interface SessionScopedAsyncResultInput {
+interface SessionScopedAsyncResultInput {
     activeSessionId: string | null | undefined;
     targetSessionId: string;
     requestId: number;

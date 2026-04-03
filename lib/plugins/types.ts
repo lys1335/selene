@@ -61,7 +61,7 @@ export interface PluginManifest {
   lspServers?: string | PluginLSPConfig;
 }
 
-export interface PluginAuthor {
+interface PluginAuthor {
   name: string;
   email?: string;
 }
@@ -88,7 +88,7 @@ export type HookEventType =
   | "SessionEnd";
 
 /** Hook handler type. */
-export type HookHandlerType = "command" | "prompt" | "agent";
+type HookHandlerType = "command" | "prompt" | "agent";
 
 /** A single hook handler definition. */
 export interface HookHandler {
@@ -146,7 +146,7 @@ export interface PostToolUseFailureHookInput {
 }
 
 /** JSON input provided to SessionStart hooks via stdin. */
-export interface SessionStartHookInput {
+interface SessionStartHookInput {
   hook_type: "SessionStart";
   session_id: string;
 }
@@ -223,7 +223,7 @@ export type PluginMCPConfig = Record<string, PluginMCPServerEntry>;
 // LSP Server Configuration (per-plugin)
 // =============================================================================
 
-export interface PluginLSPServerEntry {
+interface PluginLSPServerEntry {
   /** Command to run the language server. */
   command: string;
 
@@ -361,7 +361,7 @@ export interface MarketplaceManifest {
   plugins: MarketplacePluginEntry[];
 }
 
-export interface MarketplaceMetadata {
+interface MarketplaceMetadata {
   description?: string;
   version?: string;
   /** Base directory prepended to relative plugin source paths. */
@@ -369,7 +369,7 @@ export interface MarketplaceMetadata {
 }
 
 /** A plugin entry in a marketplace catalog. */
-export interface MarketplacePluginEntry extends Partial<PluginManifest> {
+interface MarketplacePluginEntry extends Partial<PluginManifest> {
   /** Plugin identifier (required). */
   name: string;
 
@@ -391,34 +391,34 @@ export interface MarketplacePluginEntry extends Partial<PluginManifest> {
 }
 
 /** Plugin source types for fetching from marketplaces. */
-export type PluginSource =
+type PluginSource =
   | PluginSourceGitHub
   | PluginSourceURL
   | PluginSourceNPM
   | PluginSourcePIP;
 
-export interface PluginSourceGitHub {
+interface PluginSourceGitHub {
   source: "github";
   repo: string;
   ref?: string;
   sha?: string;
 }
 
-export interface PluginSourceURL {
+interface PluginSourceURL {
   source: "url";
   url: string;
   ref?: string;
   sha?: string;
 }
 
-export interface PluginSourceNPM {
+interface PluginSourceNPM {
   source: "npm";
   package: string;
   version?: string;
   registry?: string;
 }
 
-export interface PluginSourcePIP {
+interface PluginSourcePIP {
   source: "pip";
   package: string;
   version?: string;

@@ -35,9 +35,16 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { ToolRegistry } from "@/lib/ai/tool-registry/registry";
-import { getMCPToolsForAgent, getMCPToolId } from "@/lib/ai/tool-registry/mcp-tool-adapter";
-import { createToolSearchTool, createListToolsTool } from "@/lib/ai/tool-registry/search-tool";
-import type { ToolSearchContext } from "@/lib/ai/tool-registry/search-tool";
+// Lazy imports to break the cycle:
+// providers → claudecode-provider → selene-sdk-mcp-server → mcp-tool-adapter → client-manager → ... → providers
+// providers → claudecode-provider → selene-sdk-mcp-server → search-tool → providers
+async function loadMcpToolAdapter() {
+  return import("@/lib/ai/tool-registry/mcp-tool-adapter");
+}
+async function loadSearchTool() {
+  return import("@/lib/ai/tool-registry/search-tool");
+}
+import type { ToolSearchContext } from "@/lib/ai/tool-registry/types";
 import type { SeleneMcpContext } from "./mcp-context-store";
 
 // ---------------------------------------------------------------------------
@@ -224,9 +231,11 @@ function nextSdkToolCallId(toolName: string): string {
  * Call this once per SDK query — the underlying MCP server is lightweight
  * (no subprocess, no network) and is garbage-collected when the query ends.
  */
-export function createSeleneSdkMcpServer(
+export async function createSeleneSdkMcpServer(
   ctx: SeleneMcpContext
-): McpSdkServerConfigWithInstance {
+): Promise<McpSdkServerConfigWithInstance> {
+  const { getMCPToolsForAgent, getMCPToolId } = await loadMcpToolAdapter();
+  const { createToolSearchTool, createListToolsTool } = await loadSearchTool();
   const registry = ToolRegistry.getInstance();
 
   const enabledSet = ctx.enabledTools ? new Set(ctx.enabledTools) : null;

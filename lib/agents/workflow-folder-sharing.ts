@@ -1,3 +1,4 @@
+// fallow-ignore-file circular-dependency
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/sqlite-client";
 import {
@@ -6,7 +7,12 @@ import {
 } from "@/lib/db/sqlite-workflows-schema";
 import { agentSyncFolders } from "@/lib/db/sqlite-character-schema";
 import { notifyFolderChange, type FolderChangeEvent } from "@/lib/vectordb/folder-events";
-import { refreshWorkflowSharedResources } from "./workflow-db-helpers";
+import {
+  refreshWorkflowSharedResources,
+  getWorkflowById,
+  getWorkflowByAgentId,
+  getWorkflowMembers,
+} from "./workflow-db-helpers";
 
 function cloneFolderForMember(
   folder: typeof agentSyncFolders.$inferSelect,
@@ -50,12 +56,10 @@ function cloneFolderForMember(
 }
 
 async function touchWorkflowSharedResources(workflowId: string, initiatorId: string) {
-  const { getWorkflowById } = await import("./workflows");
   await refreshWorkflowSharedResources(workflowId, initiatorId, getWorkflowById);
 }
 
 async function getWorkflowPropagationContext(characterId: string) {
-  const { getWorkflowByAgentId, getWorkflowMembers } = await import("./workflows");
   const membership = await getWorkflowByAgentId(characterId);
   if (!membership || membership.workflow.status === "archived") return null;
   const members = await getWorkflowMembers(membership.workflow.id);

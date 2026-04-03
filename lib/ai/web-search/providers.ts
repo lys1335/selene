@@ -27,7 +27,7 @@ export interface WebSearchSource {
 // Provider Interface
 // ============================================================================
 
-export interface WebSearchProviderResult {
+interface WebSearchProviderResult {
   sources: WebSearchSource[];
   /** AI-generated answer summary (Tavily only) */
   answer?: string;
@@ -37,19 +37,19 @@ export interface WebSearchProviderResult {
   error?: string;
 }
 
-export interface WebSearchProviderOptions {
+interface WebSearchProviderOptions {
   maxResults?: number;
   searchDepth?: "basic" | "advanced";
   includeAnswer?: boolean;
 }
 
-export interface WebSearchProvider {
+interface WebSearchProvider {
   name: string;
   search(query: string, options?: WebSearchProviderOptions): Promise<WebSearchProviderResult>;
   isAvailable(): boolean;
 }
 
-export interface WebSearchProviderStatus {
+interface WebSearchProviderStatus {
   configuredProvider: WebSearchProviderType;
   activeProvider: "tavily" | "duckduckgo";
   available: boolean;
@@ -292,7 +292,7 @@ export class DuckDuckGoProvider implements WebSearchProvider {
 // Provider Selection
 // ============================================================================
 
-export type WebSearchProviderType = "tavily" | "duckduckgo" | "auto";
+type WebSearchProviderType = "tavily" | "duckduckgo" | "auto";
 
 /**
  * Get the runtime search provider based on settings and availability.

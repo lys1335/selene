@@ -28,17 +28,11 @@ export type {
 export {
   installPlugin,
   getInstalledPlugins,
-  getPluginById,
-  getPluginByName,
   getActivePluginMCPServers,
   updatePluginMCPServerConfig,
-  updatePluginStatus,
-  uninstallPlugin,
   addMarketplace,
   getMarketplaces,
   removeMarketplace,
-  updateMarketplaceCatalog,
-  loadActivePluginHooks,
 } from "./registry";
 
 // Import parser
@@ -65,8 +59,6 @@ export {
 // MCP integration
 export {
   connectPluginMCPServers,
-  disconnectPluginMCPServers,
-  loadAllPluginMCPServers,
 } from "./mcp-integration";
 
 // Skill loader (for system prompt injection)

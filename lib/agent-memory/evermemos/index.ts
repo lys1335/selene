@@ -25,18 +25,9 @@
 
 // Types
 export type {
-  EverMemOSConfig,
   EverMemOSMemoryEntry,
-  EverMemOSSearchResult,
-  EverMemOSStoreRequest,
-  EverMemOSSearchOptions,
 } from "./types";
 
 // Client
 export { EverMemOSClient } from "./client";
 
-// Dual-layer manager
-export {
-  type UnifiedMemoryEntry,
-  type DualLayerSearchResult,
-} from "./dual-layer";

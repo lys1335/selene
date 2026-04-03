@@ -9,7 +9,7 @@ import {
 import { skills } from "@/lib/db/sqlite-skills-schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import type { AgentModelConfig } from "@/components/model-bag/model-bag.types";
-import type { LLMProvider } from "@/lib/ai/providers";
+import type { LLMProvider } from "@/lib/ai/provider-types";
 
 // Inline helper — avoids a circular dependency with session-model-resolver.ts
 // (which dynamically imports getCharacter from this file).

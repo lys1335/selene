@@ -10,8 +10,6 @@
 export {
   createDocsSearchTool,
   createRetrieveFullContentTool,
-  type DocsSearchToolOptions,
-  type RetrieveFullContentToolOptions,
 } from "@/lib/ai/tools/docs-tools";
 
 // Image tools (edit, describe, flux2, wan22 imagen)
@@ -20,7 +18,6 @@ export {
   createDescribeImageTool,
   createFlux2GenerateTool,
   createWan22ImagenTool,
-  type Flux2GenerateToolOptions,
 } from "@/lib/ai/tools/image-tools";
 
 // Video tools (wan22 video, wan22 pixel video)
@@ -49,8 +46,3 @@ export {
   createOpenRouterGemini3ProImageReference,
 } from "@/lib/ai/tools/openrouter-image-tools";
 
-// Interactive question tools
-export {
-  type AskUserQuestionToolOptions,
-  type AskUserQuestionArgs,
-} from "@/lib/ai/tools/ask-user-question-tool";
