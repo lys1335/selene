@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { GradientBackground } from "@/components/ui/noisy-gradient-backgrounds";
 import type { GradientColor } from "@/components/ui/noisy-gradient-backgrounds";
-import { getAgentAccentColor } from "@/lib/personalization/accent-colors";
+import { getAgentAccentColor, buildAgentGradientColors } from "@/lib/personalization/accent-colors";
 import { useCharacter, DEFAULT_CHARACTER } from "./character-context";
 import { animate } from "animejs";
 import { useReducedMotion } from "@/lib/animations/hooks";
@@ -27,20 +27,10 @@ export const ThreadWelcome: FC = () => {
     [displayChar.id]
   );
 
-  const gradientColors = useMemo((): GradientColor[] => {
-    const hex = accentColor.hex;
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    const dr = Math.max(0, Math.round(r * 0.3));
-    const dg = Math.max(0, Math.round(g * 0.3));
-    const db = Math.max(0, Math.round(b * 0.3));
-    return [
-      { color: `rgba(${dr},${dg},${db},1)`, stop: "0%" },
-      { color: `rgba(${r},${g},${b},1)`, stop: "60%" },
-      { color: `rgba(${Math.min(255, r + 30)},${Math.min(255, g + 30)},${Math.min(255, b + 30)},1)`, stop: "100%" },
-    ];
-  }, [accentColor.hex]);
+  const gradientColors = useMemo(
+    (): GradientColor[] => buildAgentGradientColors(accentColor.hex) as GradientColor[],
+    [accentColor.hex]
+  );
 
   // Extract short labels for suggestion buttons (first 2-3 words or truncate)
   const getSuggestionLabel = (prompt: string): string => {

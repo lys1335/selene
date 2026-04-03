@@ -70,3 +70,23 @@ export function getAgentAccentColor(
   const index = hashString(characterId) % ACCENT_COLORS.length;
   return ACCENT_COLORS[index];
 }
+
+/**
+ * Build a three-stop gradient from an accent color hex value.
+ * Returns values compatible with GradientBackground's `colors` prop.
+ */
+export function buildAgentGradientColors(
+  hex: string
+): Array<{ color: string; stop: string }> {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const dr = Math.max(0, Math.round(r * 0.3));
+  const dg = Math.max(0, Math.round(g * 0.3));
+  const db = Math.max(0, Math.round(b * 0.3));
+  return [
+    { color: `rgba(${dr},${dg},${db},1)`, stop: "0%" },
+    { color: `rgba(${r},${g},${b},1)`, stop: "60%" },
+    { color: `rgba(${Math.min(255, r + 30)},${Math.min(255, g + 30)},${Math.min(255, b + 30)},1)`, stop: "100%" },
+  ];
+}

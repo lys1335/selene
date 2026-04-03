@@ -6,15 +6,7 @@
  *   npx tsx scripts/validation/validate-localgrep-default-paths.ts --dry-run
  */
 
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
-interface Check {
-  id: string;
-  description: string;
-  filePath: string;
-  requiredSnippets: string[];
-}
+import { type Check, runChecks } from "./check-runner";
 
 const checks: Check[] = [
   {
@@ -68,10 +60,6 @@ const checks: Check[] = [
   },
 ];
 
-function readUtf8(relativePath: string): string {
-  return readFileSync(resolve(process.cwd(), relativePath), "utf8");
-}
-
 function main(): void {
   const dryRun = process.argv.includes("--dry-run");
 
@@ -79,30 +67,16 @@ function main(): void {
   console.log(`Mode: ${dryRun ? "dry-run" : "validate"}`);
   console.log("This validation script is read-only and does not modify files.\n");
 
-  let failed = 0;
-
-  for (const check of checks) {
-    const fileContent = readUtf8(check.filePath);
-    const missing = check.requiredSnippets.filter((snippet) => !fileContent.includes(snippet));
-
-    if (missing.length === 0) {
-      console.log(`PASS ${check.id}`);
-      console.log(`  ${check.description}`);
-      continue;
-    }
-
-    failed += 1;
-    console.error(`FAIL ${check.id}`);
-    console.error(`  ${check.description}`);
-    console.error(`  File: ${check.filePath}`);
-    for (const snippet of missing) {
-      console.error(`  Missing snippet: ${snippet}`);
-    }
-  }
+  const failed = runChecks(checks);
 
   console.log("\n=== Validation Summary ===");
   if (failed > 0) {
-    console.error(`Failed checks: ${failed}/${checks.length}`);
+    const summary = `Failed checks: ${failed}/${checks.length}`;
+    if (dryRun) {
+      console.warn(`${summary} (dry-run: non-fatal)`);
+      return;
+    }
+    console.error(summary);
     process.exit(1);
   }
 

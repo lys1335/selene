@@ -11,6 +11,7 @@ import {
 import { CODEX_MODEL_IDS } from "@/lib/auth/codex-models";
 import { invalidateProviderCache } from "@/lib/ai/providers";
 import { invalidateSettingsCache } from "@/lib/settings/settings-manager";
+import { authRouteErrorResponse } from "@/lib/api/shared-handlers";
 
 export async function GET() {
   try {
@@ -30,10 +31,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("[CodexAuth] Failed to get auth status:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to get authentication status" },
-      { status: 500 }
-    );
+    return authRouteErrorResponse("Failed to get authentication status");
   }
 }
 
@@ -86,10 +84,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error("[CodexAuth] Failed to save token:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to save authentication" },
-      { status: 500 }
-    );
+    return authRouteErrorResponse("Failed to save authentication");
   }
 }
 
@@ -103,9 +98,6 @@ export async function DELETE() {
     });
   } catch (error) {
     console.error("[CodexAuth] Failed to clear auth:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to clear authentication" },
-      { status: 500 }
-    );
+    return authRouteErrorResponse("Failed to clear authentication");
   }
 }

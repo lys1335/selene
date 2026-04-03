@@ -5,8 +5,10 @@ import {
 } from "@/lib/chat/workspace-mode";
 import type { VoiceSettingsFields } from "@/lib/settings/voice-settings-fields";
 
+export type LlmProvider = "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
+
 interface AppSettingsPublic {
-  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
+  llmProvider: LlmProvider;
   anthropicApiKey?: string;
   openrouterApiKey?: string;
   kimiApiKey?: string;
@@ -105,7 +107,7 @@ interface AppSettingsPublic {
 export type SettingsSection = "api-keys" | "models" | "vector-search" | "comfyui" | "preferences" | "memory" | "mcp" | "plugins" | "voice";
 
 export interface FormState {
-  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
+  llmProvider: LlmProvider;
   anthropicApiKey: string;
   openrouterApiKey: string;
   kimiApiKey: string;

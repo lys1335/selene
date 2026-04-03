@@ -92,6 +92,51 @@ function emitPhaseChange(
 }
 
 /**
+ * Group raw hits by file and build a direct (unsynthesized) search result.
+ */
+function buildDirectSearchResult(
+  rawHits: VectorSearchHit[],
+  reasoning: string,
+  message?: string
+): {
+  status: "success";
+  strategy: "semantic";
+  reasoning: string;
+  findings: Array<{ filePath: string; snippet: string; explanation: string; confidence: number }>;
+  summary: string;
+  stats: { totalChunks: number; totalFiles: number; fileTypes: string[] };
+  message?: string;
+} {
+  const fileGroups = new Map<string, typeof rawHits>();
+  for (const hit of rawHits) {
+    const existing = fileGroups.get(hit.relativePath) || [];
+    existing.push(hit);
+    fileGroups.set(hit.relativePath, existing);
+  }
+
+  const findings = Array.from(fileGroups.entries()).map(([filePath, hits]) => ({
+    filePath,
+    snippet: hits[0].text.slice(0, 800),
+    explanation: `Found ${hits.length} matching section(s)`,
+    confidence: hits[0].score ?? 0.5,
+  }));
+
+  return {
+    status: "success",
+    strategy: "semantic",
+    reasoning,
+    findings,
+    summary: `Found ${rawHits.length} results across ${fileGroups.size} files.`,
+    stats: {
+      totalChunks: rawHits.length,
+      totalFiles: fileGroups.size,
+      fileTypes: [...new Set(Array.from(fileGroups.keys()).map(getFileType))],
+    },
+    ...(message !== undefined && { message }),
+  };
+}
+
+/**
  * Detect the type of content based on file extension
  */
 function getFileType(filePath: string): string {
@@ -353,32 +398,7 @@ async function executeVectorSearch(
       characterId
     );
 
-    const fileGroups = new Map<string, typeof rawHits>();
-    for (const hit of rawHits) {
-      const existing = fileGroups.get(hit.relativePath) || [];
-      existing.push(hit);
-      fileGroups.set(hit.relativePath, existing);
-    }
-
-    const findings = Array.from(fileGroups.entries()).map(([filePath, hits]) => ({
-      filePath,
-      snippet: hits[0].text.slice(0, 800),
-      explanation: `Found ${hits.length} matching section(s)`,
-      confidence: hits[0].score ?? 0.5,
-    }));
-
-    return {
-      status: "success",
-      strategy: "semantic",
-      reasoning: "Direct search (LLM synthesis disabled)",
-      findings,
-      summary: `Found ${rawHits.length} results across ${fileGroups.size} files.`,
-      stats: {
-        totalChunks: rawHits.length,
-        totalFiles: fileGroups.size,
-        fileTypes: [...new Set(Array.from(fileGroups.keys()).map(getFileType))],
-      },
-    };
+    return buildDirectSearchResult(rawHits, "Direct search (LLM synthesis disabled)");
   }
 
   // Get synced folder paths for the readFile tool
@@ -412,34 +432,7 @@ async function executeVectorSearch(
       characterId
     );
 
-    // Group raw results by file for basic presentation
-    const fileGroups = new Map<string, typeof rawHits>();
-    for (const hit of rawHits) {
-      const existing = fileGroups.get(hit.relativePath) || [];
-      existing.push(hit);
-      fileGroups.set(hit.relativePath, existing);
-    }
-
-    const findings = Array.from(fileGroups.entries()).map(([filePath, hits]) => ({
-      filePath,
-      snippet: hits[0].text.slice(0, 800),
-      explanation: `Found ${hits.length} matching section(s)`,
-      confidence: hits[0].score ?? 0.5,
-    }));
-
-    return {
-      status: "success",
-      strategy: "semantic",
-      reasoning: "Direct search (synthesis unavailable)",
-      findings,
-      summary: `Found ${rawHits.length} results across ${fileGroups.size} files.`,
-      stats: {
-        totalChunks: rawHits.length,
-        totalFiles: fileGroups.size,
-        fileTypes: [...new Set(Array.from(fileGroups.keys()).map(getFileType))],
-      },
-      message: synthesisResult.error,
-    };
+    return buildDirectSearchResult(rawHits, "Direct search (synthesis unavailable)", synthesisResult.error);
   }
 
   // Add to search history

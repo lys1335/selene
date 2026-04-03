@@ -4,7 +4,7 @@ import { readLocalFile } from "@/lib/storage/local-storage";
 const DEFAULT_PORTS = [8081, 8188, 8189];
 const OUTPUT_BUCKETS = ["images", "gifs", "videos"];
 
-type HistoryStatus = {
+export type HistoryStatusInfo = {
   completed: boolean;
   statusStr?: string;
 };
@@ -36,7 +36,7 @@ function wrapComfyUIFetchError(error: unknown, context: string): never {
   throw error;
 }
 
-function getHistoryStatus(entry: Record<string, unknown>): HistoryStatus {
+export function getHistoryStatusInfo(entry: Record<string, unknown>): HistoryStatusInfo {
   const status = entry.status as Record<string, unknown> | undefined;
   if (!status || typeof status !== "object") {
     return { completed: false };
@@ -50,7 +50,7 @@ function getHistoryStatus(entry: Record<string, unknown>): HistoryStatus {
 }
 
 function isTerminalHistoryStatus(entry: Record<string, unknown>): boolean {
-  const { completed, statusStr } = getHistoryStatus(entry);
+  const { completed, statusStr } = getHistoryStatusInfo(entry);
   if (completed) return true;
   if (!statusStr) return false;
   return [

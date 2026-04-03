@@ -25,6 +25,7 @@ import {
   WS_DISABLED_COOLDOWN_MS,
 } from "./codex-session-store";
 import { tryAcquireWs, releaseWs, type WsTicket } from "./codex-ws-gate";
+import { readRequestBody } from "./provider-utils";
 
 const DUMMY_API_KEY = "chatgpt-oauth";
 const CODEX_MAX_RETRY_ATTEMPTS = 5;
@@ -43,30 +44,6 @@ function rewriteCodexUrl(url: string): string {
   return url.replace("/responses", CODEX_CONFIG.API_PATH);
 }
 
-async function readRequestBody(body: BodyInit): Promise<string> {
-  if (typeof body === "string") {
-    return body;
-  }
-
-  if (body instanceof ArrayBuffer) {
-    return new TextDecoder().decode(body);
-  }
-
-  if (ArrayBuffer.isView(body)) {
-    const view = body as ArrayBufferView;
-    return new TextDecoder().decode(view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength));
-  }
-
-  if (body instanceof URLSearchParams) {
-    return body.toString();
-  }
-
-  if (typeof (body as Blob).text === "function") {
-    return await (body as Blob).text();
-  }
-
-  throw new Error("Unsupported request body type for Codex request");
-}
 
 function getCodexUserAgent(): string {
   const platform = process.platform === "darwin" ? "Mac OS" : process.platform === "win32" ? "Windows" : "Linux";

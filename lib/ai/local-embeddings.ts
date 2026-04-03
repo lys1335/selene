@@ -141,12 +141,12 @@ function applyQueryPrefix(text: string, prefix: string, maxChars: number): strin
   return `${prefix} ${text}`.trim();
 }
 
-function resolveTokenizerPath(cacheDir: string, modelId: string): string {
+export function resolveTokenizerPath(cacheDir: string, modelId: string): string {
   const parts = modelId.split("/");
   return path.join(cacheDir, ...parts, "tokenizer.json");
 }
 
-function patchTokenizerMerges(tokenizerPath: string): boolean {
+export function patchTokenizerMerges(tokenizerPath: string): boolean {
   if (!tokenizerPath || !fs.existsSync(tokenizerPath)) {
     return false;
   }

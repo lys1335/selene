@@ -9,6 +9,7 @@ import { DiffStyledPre } from "./diff-styled-pre";
 import {
   type ToolDiagnosticResult,
   normalizeDiagnostics,
+  parseLintOutput,
 } from "./tool-diagnostics";
 
 interface OperationResult {
@@ -187,31 +188,10 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
             const { errors, warnings, output, tool } = normalizeDiagnostics(diag);
             if (!output) return null;
             const totalIssues = errors + warnings;
-            const outputLines = output.split('\n');
             const hasMultipleIssues = totalIssues > 1;
             const isExpanded = showFullDiagnostics[i] || false;
-            
-            // Parse output to separate errors and warnings (basic heuristic)
-            const errorLines: string[] = [];
-            const warningLines: string[] = [];
-            const otherLines: string[] = [];
-            
-            outputLines.forEach(line => {
-              if (line.includes('error') || line.includes('✖')) {
-                errorLines.push(line);
-              } else if (line.includes('warning') || line.includes('⚠')) {
-                warningLines.push(line);
-              } else {
-                otherLines.push(line);
-              }
-            });
-            
-            // Reconstruct output with errors first, then warnings
-            const sortedOutput = [
-              ...errorLines,
-              ...warningLines,
-              ...otherLines
-            ].join('\n');
+            const { sortedOutput, errorLines, warningLines, otherLines } = parseLintOutput(output);
+            const outputLineCount = errorLines.length + warningLines.length + otherLines.length;
             
             return (
               <div key={i} className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 mt-1 space-y-2">
@@ -245,13 +225,13 @@ export const PatchFileToolUI: ToolCallContentPartComponent = ({
                     {sortedOutput}
                   </pre>
 
-                  {outputLines.length > 20 && (
+                  {outputLineCount > 20 && (
                     <button
                       type="button"
                       onClick={() => setShowFullDiagnostics(prev => ({ ...prev, [i]: !prev[i] }))}
                       className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline mt-1"
                     >
-                      {isExpanded ? t("showLess") : t("showAll", { count: outputLines.length })}
+                      {isExpanded ? t("showLess") : t("showAll", { count: outputLineCount })}
                     </button>
                   )}
                 </div>

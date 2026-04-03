@@ -22,6 +22,65 @@ export async function failToolRun(
   return { status: "error", error: errorMessage };
 }
 
+interface GeneratedImageItem {
+  url: string;
+  localPath?: string;
+  width?: number;
+  height?: number;
+  format?: string;
+}
+
+interface ImageSyncResult {
+  images: GeneratedImageItem[];
+  seed?: number;
+  timeTaken?: number;
+}
+
+/**
+ * Persist each generated image to the images table, mark the tool run as
+ * succeeded, and return the standard "completed" response object.
+ *
+ * @param sessionId  - Active session ID
+ * @param toolRunId  - ID of the already-created tool run record
+ * @param result     - The sync result returned by the image generation client
+ * @param prompt     - The prompt used for generation (stored in metadata)
+ * @param extraMeta  - Any additional metadata fields (seed, imageType, ...)
+ */
+export async function saveGeneratedImages(
+  sessionId: string,
+  toolRunId: string,
+  result: ImageSyncResult,
+  prompt: string,
+  extraMeta?: Record<string, unknown>
+): Promise<{ status: "completed"; images: GeneratedImageItem[]; seed?: number; timeTaken?: number }> {
+  for (const img of result.images) {
+    await createImage({
+      sessionId,
+      toolRunId,
+      role: "generated",
+      localPath: img.localPath || img.url,
+      url: img.url,
+      width: img.width,
+      height: img.height,
+      format: img.format,
+      metadata: { prompt, seed: result.seed, ...extraMeta },
+    });
+  }
+
+  await updateToolRun(toolRunId, {
+    status: "succeeded",
+    result: { images: result.images, seed: result.seed },
+    completedAt: now(),
+  });
+
+  return {
+    status: "completed",
+    images: result.images,
+    seed: result.seed,
+    timeTaken: result.timeTaken,
+  };
+}
+
 interface GeneratedVideoItem {
   url: string;
   localPath?: string;
@@ -43,7 +102,7 @@ interface VideoSyncResult {
  * @param toolRunId   - ID of the already-created tool run record
  * @param result      - The sync result returned by the video generation client
  * @param prompt      - The prompt used for generation (stored in metadata)
- * @param extraMeta   - Any additional metadata fields (provider, model, toolType, …)
+ * @param extraMeta   - Any additional metadata fields (provider, model, toolType, ...)
  */
 export async function saveGeneratedVideos(
   sessionId: string,

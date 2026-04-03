@@ -5,10 +5,12 @@ import { convertWorkflowToApi } from "./converter";
 import {
   fetchMediaBuffer,
   fetchOutputFile,
+  getHistoryStatusInfo,
   resolveCustomComfyUIBaseUrl,
   submitPrompt,
   uploadInputFile,
   waitForHistory,
+  type HistoryStatusInfo,
 } from "./client";
 import type { CustomComfyUIInput, CustomComfyUIWorkflow } from "./types";
 
@@ -25,24 +27,6 @@ type ExecutionResult = {
   promptId?: string;
   error?: string;
 };
-
-type HistoryStatusInfo = {
-  completed: boolean;
-  statusStr?: string;
-};
-
-function getHistoryStatusInfo(entry: Record<string, unknown>): HistoryStatusInfo {
-  const status = entry.status as Record<string, unknown> | undefined;
-  if (!status || typeof status !== "object") {
-    return { completed: false };
-  }
-  const completed = status.completed === true;
-  const statusStr =
-    typeof status.status_str === "string"
-      ? status.status_str.toLowerCase()
-      : undefined;
-  return { completed, statusStr };
-}
 
 function isFailureStatus(statusStr?: string): boolean {
   if (!statusStr) return false;

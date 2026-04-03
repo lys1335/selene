@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { getOrCreateLocalUser } from "@/lib/db/queries";
-import { loadSettings } from "@/lib/settings/settings-manager";
 import { getCharacter, getCharacterStats } from "@/lib/characters/queries";
 import { getAvailablePluginsForAgent } from "@/lib/plugins/registry";
 import { getWorkflowByAgentId } from "@/lib/agents/workflows";
 import { getWorkflowResources } from "@/lib/agents/workflow-resource-context";
 import { toStringArray } from "@/lib/utils/array-utils";
+import { requireCharacterAuth } from "../_utils";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -30,28 +28,20 @@ function countHookHandlers(value: unknown): number {
 
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const authUserId = await requireAuth(request);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(authUserId, settings.localUserEmail);
-    const { id } = await params;
+    const auth = await requireCharacterAuth(request, params);
+    if (auth instanceof NextResponse) return auth;
+    const { characterId, dbUserId } = auth;
 
-    const character = await getCharacter(id);
-    if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
-    }
-    if (character.userId !== dbUser.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const metadata = (character.metadata as Record<string, unknown> | null) ?? {};
+    const character = await getCharacter(characterId);
+    const metadata = (character?.metadata as Record<string, unknown> | null) ?? {};
     const enabledTools = toStringArray(metadata.enabledTools);
     const enabledMcpTools = toStringArray(metadata.enabledMcpTools);
     const customComfyUIWorkflowIds = toStringArray(metadata.customComfyUIWorkflowIds);
 
     const [stats, pluginAssignments, workflowContext] = await Promise.all([
-      getCharacterStats(dbUser.id, id),
-      getAvailablePluginsForAgent(dbUser.id, id, id),
-      getWorkflowByAgentId(id),
+      getCharacterStats(dbUserId, characterId),
+      getAvailablePluginsForAgent(dbUserId, characterId, characterId),
+      getWorkflowByAgentId(characterId),
     ]);
 
     const pluginRows = pluginAssignments.map((entry) => {
@@ -94,7 +84,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     } | null = null;
 
     if (workflowContext) {
-      const resources = await getWorkflowResources(workflowContext.workflow.id, id);
+      const resources = await getWorkflowResources(workflowContext.workflow.id, characterId);
       if (resources) {
         workflow = {
           id: workflowContext.workflow.id,
@@ -137,13 +127,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.message === "Unauthorized" || error.message === "Invalid session")
-    ) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to get character resources" },
       { status: 500 }

@@ -90,6 +90,14 @@ function getSkillSummariesFromMetadata(metadata: Record<string, any>): Array<{
     .filter((skill) => skill.name.length > 0);
 }
 
+function logMemoryInjection(characterName: string, memoryCount: number, tokenEstimate: number, suffix = ""): void {
+  console.log(`[Character Prompt] Injected ${memoryCount} memories (~${tokenEstimate} tokens) for ${characterName}${suffix}`);
+}
+
+function logSkillsInjection(characterName: string, skillCount: number, tokenEstimate: number, suffix = ""): void {
+  console.log(`[Character Prompt] Injected ${skillCount} skills (~${tokenEstimate} tokens) for ${characterName}${suffix}`);
+}
+
 /**
  * Builds a dynamic system prompt from character data
  * Used for user-created agents on Styly Agents
@@ -125,7 +133,7 @@ export function buildCharacterSystemPrompt(
   const { markdown: memoryMarkdown, tokenEstimate, memoryCount } = formatMemoriesForPrompt(character.id);
   if (memoryMarkdown) {
     sections.push(memoryMarkdown);
-    console.log(`[Character Prompt] Injected ${memoryCount} memories (~${tokenEstimate} tokens) for ${character.name}`);
+    logMemoryInjection(character.name, memoryCount, tokenEstimate);
   }
 
   const skillSummaries = options.skillSummaries || getSkillSummariesFromMetadata(metadata);
@@ -144,9 +152,7 @@ export function buildCharacterSystemPrompt(
           "- If confidence is low, ask for confirmation instead of auto-running.",
         ].join("\n")
       );
-      console.log(
-        `[Character Prompt] Injected ${skillBlock.skillCount} skills (~${skillBlock.tokenEstimate} tokens) for ${character.name}`
-      );
+      logSkillsInjection(character.name, skillBlock.skillCount, skillBlock.tokenEstimate);
     }
   }
 
@@ -263,9 +269,7 @@ export function buildCacheableCharacterPrompt(
         },
       }),
     });
-    console.log(
-      `[Character Prompt] Injected ${memoryCount} memories (~${tokenEstimate} tokens) for ${character.name}`
-    );
+    logMemoryInjection(character.name, memoryCount, tokenEstimate);
   }
 
   const skillSummaries = options.skillSummaries || getSkillSummariesFromMetadata(metadata);
@@ -292,9 +296,7 @@ export function buildCacheableCharacterPrompt(
           "- If confidence is low, ask for confirmation instead of auto-running.",
         ].join("\n"),
       });
-      console.log(
-        `[Character Prompt] Injected ${skillBlock.skillCount} skills (~${skillBlock.tokenEstimate} tokens) for ${character.name} (cacheable)`
-      );
+      logSkillsInjection(character.name, skillBlock.skillCount, skillBlock.tokenEstimate, " (cacheable)");
     }
   }
 

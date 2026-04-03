@@ -2,32 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getSessionWithMessages,
   updateSession,
-  getOrCreateLocalUser,
 } from "@/lib/db/queries";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { loadSettings } from "@/lib/settings/settings-manager";
-import { validateSessionOwnership } from "@/lib/session/session-ownership";
+import { resolveSessionAuth } from "@/lib/api/shared-handlers";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Get local user for offline mode
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-
     const { id } = await params;
-
-    // Validate ownership
-    const ownershipResult = await validateSessionOwnership(id, dbUser.id);
-    if ("error" in ownershipResult) {
-      return NextResponse.json(
-        { error: ownershipResult.error },
-        { status: ownershipResult.status }
-      );
-    }
+    const authResult = await resolveSessionAuth(req, id);
+    if ("errorResponse" in authResult) return authResult.errorResponse;
 
     const result = await getSessionWithMessages(id);
 
@@ -52,21 +37,10 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Get local user for offline mode
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-
     const { id } = await params;
-
-    // Validate ownership
-    const ownershipResult = await validateSessionOwnership(id, dbUser.id);
-    if ("error" in ownershipResult) {
-      return NextResponse.json(
-        { error: ownershipResult.error },
-        { status: ownershipResult.status }
-      );
-    }
+    const authResult = await resolveSessionAuth(req, id);
+    if ("errorResponse" in authResult) return authResult.errorResponse;
+    const { session } = authResult;
 
     const body = await req.json();
     const { title, status, metadata } = body as {
@@ -79,7 +53,7 @@ export async function PATCH(
     const mergedMetadata =
       metadata !== undefined
         ? {
-            ...((ownershipResult.session.metadata as Record<string, unknown>) ?? {}),
+            ...((session.metadata as Record<string, unknown>) ?? {}),
             ...metadata,
           }
         : undefined;
@@ -105,21 +79,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Get local user for offline mode
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-
     const { id } = await params;
-
-    // Validate ownership
-    const ownershipResult = await validateSessionOwnership(id, dbUser.id);
-    if ("error" in ownershipResult) {
-      return NextResponse.json(
-        { error: ownershipResult.error },
-        { status: ownershipResult.status }
-      );
-    }
+    const authResult = await resolveSessionAuth(req, id);
+    if ("errorResponse" in authResult) return authResult.errorResponse;
 
     // Soft delete by setting status to 'deleted'
     await updateSession(id, { status: "deleted" });

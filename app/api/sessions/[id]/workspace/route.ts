@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/queries";
 import { requireAuth } from "@/lib/auth/local-auth";
 import { loadSettings } from "@/lib/settings/settings-manager";
+import { resolveSessionAuth } from "@/lib/api/shared-handlers";
 import {
   getSessionProviderTemperatureForSession,
   resolveSessionUtilityModelForSession,
@@ -677,21 +678,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-
     const { id } = await params;
+    const authResult = await resolveSessionAuth(req, id);
+    if ("errorResponse" in authResult) return authResult.errorResponse;
+    const { session } = authResult;
 
-    const ownershipResult = await validateSessionOwnership(id, dbUser.id);
-    if ("error" in ownershipResult) {
-      return NextResponse.json(
-        { error: ownershipResult.error },
-        { status: ownershipResult.status }
-      );
-    }
-
-    const { session } = ownershipResult;
     const safePayload = sanitizeWorkspacePatch(await req.json());
 
     const existingMetadata = (session.metadata as Record<string, unknown>) || {};

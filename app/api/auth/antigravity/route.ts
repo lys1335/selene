@@ -18,6 +18,7 @@ import {
 } from "@/lib/auth/antigravity-auth";
 import { invalidateProviderCacheFor } from "@/lib/ai/providers";
 import { invalidateSettingsCache } from "@/lib/settings/settings-manager";
+import { authRouteErrorResponse } from "@/lib/api/shared-handlers";
 
 /**
  * GET /api/auth/antigravity
@@ -41,10 +42,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("[AntigravityAuth] Failed to get auth status:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to get authentication status" },
-      { status: 500 }
-    );
+    return authRouteErrorResponse("Failed to get authentication status");
   }
 }
 
@@ -103,10 +101,7 @@ export async function POST(request: Request) {
     );
   } catch (error) {
     console.error("[AntigravityAuth] Failed to save token:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to save authentication" },
-      { status: 500 }
-    );
+    return authRouteErrorResponse("Failed to save authentication");
   }
 }
 
@@ -125,10 +120,7 @@ export async function DELETE() {
     });
   } catch (error) {
     console.error("[AntigravityAuth] Failed to clear auth:", error);
-    return NextResponse.json(
-      { success: false, error: "Failed to clear authentication" },
-      { status: 500 }
-    );
+    return authRouteErrorResponse("Failed to clear authentication");
   }
 }
 

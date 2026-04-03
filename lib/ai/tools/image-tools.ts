@@ -7,7 +7,7 @@ import {
 } from "@/lib/ai/wan22-imagen-client";
 import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
-import { now, failToolRun } from "@/lib/ai/tools/tool-run-utils";
+import { now, failToolRun, saveGeneratedImages } from "@/lib/ai/tools/tool-run-utils";
 
 // Re-export shared utilities from image-tools-utils
 export { imageToDataUrl, createDescribeImageTool } from "@/lib/ai/tools/image-tools-utils";
@@ -358,32 +358,7 @@ async function executeFlux2Generate(
       sessionId
     );
 
-    for (const img of result.images) {
-      await createImage({
-        sessionId,
-        toolRunId: toolRun.id,
-        role: "generated",
-        localPath: img.localPath || img.url,
-        url: img.url,
-        width: img.width,
-        height: img.height,
-        format: img.format,
-        metadata: { prompt, seed: result.seed },
-      });
-    }
-
-    await updateToolRun(toolRun.id, {
-      status: "succeeded",
-      result: { images: result.images, seed: result.seed },
-      completedAt: now(),
-    });
-
-    return {
-      status: "completed",
-      images: result.images,
-      seed: result.seed,
-      timeTaken: result.timeTaken,
-    };
+    return await saveGeneratedImages(sessionId, toolRun.id, result, prompt);
   } catch (error) {
     return failToolRun(toolRun.id, error);
   }

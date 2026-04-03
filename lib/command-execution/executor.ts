@@ -617,7 +617,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
 
             emitProgress({ message: runningMessage });
 
-            child.stdout?.on("data", (chunk: Buffer) => {
+            function handleStreamData(stream: "stdout" | "stderr", chunk: Buffer): void {
                 const data = chunk.toString();
                 outputSize += data.length;
 
@@ -634,42 +634,19 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                         });
                     }
                 } else {
-                    stdout += data;
-                    emitProgress({
-                        stdout,
-                        chunkStream: "stdout",
-                        chunkText: data,
-                        message: runningMessage,
-                    });
-                }
-            });
-
-            child.stderr?.on("data", (chunk: Buffer) => {
-                const data = chunk.toString();
-                outputSize += data.length;
-
-                if (outputSize > maxOutputSize) {
-                    if (!killed) {
-                        killed = true;
-                        child.kill("SIGTERM");
-                        stderr += "\n[Output size limit exceeded]";
-                        emitProgress({
-                            stderr,
-                            status: "error",
-                            message: failedMessage,
-                            error: "Process terminated due to timeout or output limit",
-                        });
+                    if (stream === "stdout") {
+                        stdout += data;
+                    } else {
+                        stderr += data;
                     }
-                } else {
-                    stderr += data;
-                    emitProgress({
-                        stderr,
-                        chunkStream: "stderr",
-                        chunkText: data,
-                        message: runningMessage,
-                    });
+                    // stdout/stderr are captured from the outer closure by emitProgress
+                    emitProgress({ chunkStream: stream, chunkText: data, message: runningMessage });
                 }
-            });
+            }
+
+            child.stdout?.on("data", (chunk: Buffer) => handleStreamData("stdout", chunk));
+
+            child.stderr?.on("data", (chunk: Buffer) => handleStreamData("stderr", chunk));
 
             child.on("close", (code, signal) => {
                 if (timeoutId) clearTimeout(timeoutId);

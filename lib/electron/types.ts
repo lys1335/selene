@@ -21,10 +21,28 @@ interface ElectronWindowAPI {
 interface ElectronAppAPI {
   getVersion: () => Promise<string>;
   getName: () => Promise<string>;
+  getDataPath: () => Promise<string>;
+  getMediaPath: () => Promise<string>;
 }
 
 interface ElectronShellAPI {
   openExternal: (url: string) => Promise<void>;
+}
+
+interface ElectronDialogAPI {
+  selectFolder: () => Promise<string | null>;
+}
+
+interface ElectronSettingsAPI {
+  get: () => Promise<Record<string, unknown> | null>;
+  save: (settings: Record<string, unknown>) => Promise<boolean>;
+}
+
+interface ElectronFileAPI {
+  read: (filePath: string) => Promise<Buffer | null>;
+  write: (filePath: string, data: Buffer | string) => Promise<boolean>;
+  delete: (filePath: string) => Promise<boolean>;
+  exists: (filePath: string) => Promise<boolean>;
 }
 
 interface ElectronIpcAPI {
@@ -211,9 +229,12 @@ export interface ElectronAPI {
   window: ElectronWindowAPI;
   app: ElectronAppAPI;
   shell: ElectronShellAPI;
+  dialog: ElectronDialogAPI;
+  settings: ElectronSettingsAPI;
+  file: ElectronFileAPI;
   ipc: ElectronIpcAPI;
   model: ElectronModelAPI;
-  logs?: ElectronLogsAPI;
+  logs: ElectronLogsAPI;
   browserSession?: ElectronBrowserSessionAPI;
   voiceHotkey?: ElectronVoiceHotkeyAPI;
   screenCapture?: ElectronScreenCaptureAPI;

@@ -768,7 +768,7 @@ export async function extractContent(
       );
     }
 
-    for (const attachment of msg.metadata?.custom?.attachments ?? []) {
+    async function processAttachment(attachment: AttachmentPathMetadata): Promise<void> {
       const contentType = inferAttachmentContentType(attachment, attachment.name);
       if (!attachment.url) {
         if (contentType.startsWith("image/")) {
@@ -779,7 +779,7 @@ export async function extractContent(
               : null,
           );
         }
-        continue;
+        return;
       }
       if (contentType.startsWith("image/")) {
         await appendImagePart(
@@ -793,39 +793,17 @@ export async function extractContent(
           isUserMessage,
         );
       } else {
-        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
+        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) return;
         await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
       }
     }
 
+    for (const attachment of msg.metadata?.custom?.attachments ?? []) {
+      await processAttachment(attachment);
+    }
+
     for (const attachment of msg.experimental_attachments ?? []) {
-      const contentType = inferAttachmentContentType(attachment, attachment.name);
-      if (!attachment.url) {
-        if (contentType.startsWith("image/")) {
-          appendTextPartIfPresent(
-            contentParts,
-            includeUrlHelpers
-              ? formatAttachmentHelperText(resolveAttachmentForHelper(attachmentLookup, attachment), attachment.name || "uploaded image")
-              : null,
-          );
-        }
-        continue;
-      }
-      if (contentType.startsWith("image/")) {
-        await appendImagePart(
-          contentParts,
-          attachmentLookup,
-          seenAttachmentUrls,
-          attachment.url,
-          attachment.name || "uploaded image",
-          includeUrlHelpers,
-          convertUserImagesToBase64,
-          isUserMessage,
-        );
-      } else {
-        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
-        await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
-      }
+      await processAttachment(attachment);
     }
 
     if (contentParts.length > 0) {

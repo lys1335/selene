@@ -32,6 +32,39 @@ interface UseThreadDropHandlerOptions {
   router: { push: (path: string) => void };
 }
 
+export interface ThreadDropHandlerResult {
+  // Drag state
+  isDragging: boolean;
+  // Skill import overlay state
+  isImportingSkill: boolean;
+  skillImportPhase: "idle" | "uploading" | "parsing" | "importing" | "success" | "error";
+  skillImportProgress: number;
+  skillImportName: string | null;
+  skillImportError: string | null;
+  importResultDetail: string | null;
+  // ComfyUI import dialog state
+  comfyImportDialogOpen: boolean;
+  setComfyImportDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  comfyImportPreviews: ComfyWorkflowImportPreview[];
+  comfyImportLoading: boolean;
+  comfyImportSelected: Record<string, boolean>;
+  setComfyImportSelected: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  comfyImportNameOverrides: Record<string, string>;
+  setComfyImportNameOverrides: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  comfyImportExpanded: Record<string, boolean>;
+  setComfyImportExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
+  comfyImportSubmitting: boolean;
+  selectedComfyPreviewCount: number;
+  validComfyPreviewCount: number;
+  // Handlers
+  handleDragOver: (e: React.DragEvent) => void;
+  handleDragEnter: (e: React.DragEvent) => void;
+  handleDragLeave: (e: React.DragEvent) => void;
+  handleDrop: (e: React.DragEvent) => void;
+  resetComfyImportState: () => void;
+  submitComfyWorkflowImport: () => Promise<void>;
+}
+
 export function useThreadDropHandler({
   characterId,
   characterName,
@@ -39,7 +72,7 @@ export function useThreadDropHandler({
   isDeepResearchMode,
   threadRuntime,
   router,
-}: UseThreadDropHandlerOptions) {
+}: UseThreadDropHandlerOptions): ThreadDropHandlerResult {
   const t = useTranslations("assistantUi");
 
   // Drag and drop state for full-page drop zone

@@ -1,4 +1,5 @@
 import { saveBase64Video } from "@/lib/storage/local-storage";
+import { throwWan22ApiError, parseWan22AsyncResult } from "@/lib/ai/wan22-utils";
 import { urlToBase64, localPathToBase64, isLocalMediaPath } from "@/lib/ai/media-utils";
 
 // WAN 2.2 Video API configuration
@@ -147,31 +148,14 @@ export async function callWan22Video(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-
-    // Handle specific error codes
-    if (response.status === 401) {
-      throw new Error("WAN 2.2 Video API authentication failed: Invalid API key");
-    } else if (response.status === 422) {
-      throw new Error(`WAN 2.2 Video API validation error: ${errorText}`);
-    } else if (response.status === 503) {
-      throw new Error("WAN 2.2 Video API is temporarily unavailable. Please try again later.");
-    } else {
-      throw new Error(`WAN 2.2 Video API error: ${response.status} - ${errorText}`);
-    }
+    await throwWan22ApiError(response, "WAN 2.2 Video API");
   }
 
   const data = await response.json();
 
   // Handle async response
   if (input.async) {
-    return {
-      jobId: data.job_id,
-      status: data.status,
-      statusUrl: data.status_url,
-      modelName: data.model_name,
-      createdAt: data.created_at,
-    };
+    return parseWan22AsyncResult(data);
   }
 
   // Handle sync response - save base64 result to local storage

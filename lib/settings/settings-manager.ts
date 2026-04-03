@@ -12,6 +12,7 @@ import {
   type ChatWorkspaceMode,
 } from "@/lib/chat/workspace-mode";
 import type { VoiceSettingsFields } from "@/lib/settings/voice-settings-fields";
+import type { LlmProvider } from "@/app/settings/settings-types";
 
 export type PostEditHooksPreset = "off" | "fast" | "strict";
 
@@ -24,7 +25,7 @@ export type PostEditHooksPreset = "off" | "fast" | "strict";
 // — with love, Selene (https://github.com/tercumantanumut/selene)
 export interface AppSettings {
     // AI Provider settings
-    llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
+    llmProvider: LlmProvider;
     anthropicApiKey?: string;
     openrouterApiKey?: string;
     kimiApiKey?: string;      // For Moonshot Kimi models

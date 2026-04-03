@@ -6,6 +6,7 @@ import { Loader2Icon, CheckIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { WHISPER_MODELS, DEFAULT_WHISPER_MODEL } from "@/lib/config/whisper-models";
 import type { FormState } from "./settings-types";
+import { useModelDownload } from "./use-model-download";
 
 // ---------------------------------------------------------------------------
 // Whisper Model Selector (follows LocalEmbeddingModelSelector pattern)
@@ -18,10 +19,17 @@ interface WhisperModelSelectorProps {
 
 export function WhisperModelSelector({ formState, updateField }: WhisperModelSelectorProps) {
   const t = useTranslations("settings.voice.stt");
-  const [modelStatus, setModelStatus] = useState<Record<string, boolean>>({});
-  const [downloading, setDownloading] = useState<string | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<number>(0);
-  const [downloadError, setDownloadError] = useState<string | null>(null);
+  const {
+    modelStatus,
+    setModelStatus,
+    downloading,
+    setDownloading,
+    downloadProgress,
+    setDownloadProgress,
+    downloadError,
+    setDownloadError,
+    attachProgressListener,
+  } = useModelDownload();
   const [isElectronEnv, setIsElectronEnv] = useState(false);
 
   // Check if running in Electron and model existence on mount
@@ -85,22 +93,13 @@ export function WhisperModelSelector({ formState, updateField }: WhisperModelSel
     }
 
     // Set up progress listener (if available)
+    let cleanup: (() => void) | undefined;
     if (electronAPI.model.onProgress) {
-      electronAPI.model.onProgress((data) => {
-        if (data.modelId === modelId) {
-          if (data.progress !== undefined) {
-            setDownloadProgress(data.progress);
-          }
-          if (data.status === "completed") {
-            setDownloading(null);
-            setModelStatus((prev) => ({ ...prev, [modelId]: true }));
-          }
-          if (data.status === "error") {
-            setDownloading(null);
-            setDownloadError(data.error || "Download failed");
-          }
-        }
-      });
+      cleanup = attachProgressListener(
+        electronAPI.model.onProgress,
+        electronAPI.model.removeProgressListener,
+        modelId,
+      );
     }
 
     try {
@@ -127,7 +126,7 @@ export function WhisperModelSelector({ formState, updateField }: WhisperModelSel
       setDownloadError(err instanceof Error ? err.message : "Download failed");
     } finally {
       setDownloading(null);
-      electronAPI.model.removeProgressListener?.();
+      cleanup?.();
     }
   };
 
