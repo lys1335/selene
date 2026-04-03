@@ -164,18 +164,15 @@ vi.mock("@/lib/vectordb/folder-events", () => ({
 
 vi.mock("@/lib/agents/workflow-db-helpers", () => ({
   refreshWorkflowSharedResources: mocks.refreshWorkflowSharedResources,
+  getWorkflowByAgentId: mocks.getWorkflowByAgentId,
+  getWorkflowMembers: mocks.getWorkflowMembers,
+  getWorkflowById: mocks.getWorkflowById,
 }));
 
 vi.mock("@/lib/vectordb/sync-service", () => ({
   removeSyncFolder: async (folderId: string) => {
     mocks.state.folders = mocks.state.folders.filter((row) => row.id !== folderId);
   },
-}));
-
-vi.mock("@/lib/agents/workflows", () => ({
-  getWorkflowByAgentId: mocks.getWorkflowByAgentId,
-  getWorkflowMembers: mocks.getWorkflowMembers,
-  getWorkflowById: mocks.getWorkflowById,
 }));
 
 vi.mock("@/lib/db/sqlite-client", () => ({
