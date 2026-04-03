@@ -1,4 +1,4 @@
-export class DeviceColour {
+class DeviceColour {
     colourName: string;
     hexCode: string;
 

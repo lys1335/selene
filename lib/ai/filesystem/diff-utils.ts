@@ -118,7 +118,7 @@ export function generateBeforeAfterDiff(
  * readFile tool has its own built-in formatting (line numbers, range selection).
  * Kept temporarily for reference; safe to delete in a follow-up cleanup.
  */
-export function generateContentPreview(
+function generateContentPreview(
   filePath: string,
   content: string,
   maxLines: number = 20

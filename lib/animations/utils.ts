@@ -7,14 +7,14 @@ import { cubicBezier, spring, eases } from "animejs";
 /**
  * Generates a random value within a range for organic animations
  */
-export function randomInRange(min: number, max: number): number {
+function randomInRange(min: number, max: number): number {
   return Math.random() * (max - min) + min;
 }
 
 /**
  * Creates stagger delays for list animations
  */
-export function staggerDelay(index: number, baseDelay: number = 50): number {
+function staggerDelay(index: number, baseDelay: number = 50): number {
   return index * baseDelay;
 }
 

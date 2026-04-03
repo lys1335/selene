@@ -24,7 +24,7 @@ export const useGallery = (): GalleryContextValue | null => {
     return useContext(GalleryContext);
 };
 
-export const useGalleryRequired = (): GalleryContextValue => {
+const useGalleryRequired = (): GalleryContextValue => {
     const context = useContext(GalleryContext);
     if (!context) {
         throw new Error("useGalleryRequired must be used within a GalleryProvider");

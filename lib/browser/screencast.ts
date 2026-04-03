@@ -200,7 +200,7 @@ export function isScreencastActive(sessionId: string): boolean {
 /**
  * Get count of active screencasts (diagnostics).
  */
-export function getActiveScreencastCount(): number {
+function getActiveScreencastCount(): number {
   return getState().sessions.size;
 }
 

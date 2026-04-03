@@ -184,7 +184,7 @@ export interface DeepResearchConfig {
   abortSignal?: AbortSignal;
 }
 
-export const DEFAULT_CONFIG: DeepResearchConfig = {
+const DEFAULT_CONFIG: DeepResearchConfig = {
   maxSearchQueries: 10,
   maxIterations: 3,
   maxConcurrentSearches: 3,

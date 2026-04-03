@@ -31,11 +31,11 @@ export const DEFAULT_TOKEN_BUDGET: TokenBudget = {
   metadata: 500,     // ~2K chars for instructions
 };
 
-export function estimateTokens(text: string): number {
+function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
-export function truncateToTokenBudget(text: string, maxTokens: number): string {
+function truncateToTokenBudget(text: string, maxTokens: number): string {
   const maxChars = maxTokens * 4;
   if (text.length <= maxChars) return text;
   return text.slice(0, maxChars - 3) + "...";
@@ -45,7 +45,7 @@ export function truncateToTokenBudget(text: string, maxTokens: number): string {
 // Domain-specific concept expansions (fast, no LLM call)
 // =============================================================================
 
-export const DOMAIN_EXPANSIONS: Record<string, string[]> = {
+const DOMAIN_EXPANSIONS: Record<string, string[]> = {
   // Authentication & Security
   auth: ["authentication", "session", "token", "login", "user", "jwt", "oauth", "credential"],
   login: ["authentication", "signin", "session", "user", "password"],
@@ -156,7 +156,7 @@ export function extractDependenciesFromChunk(chunkText: string, sourceFile: stri
 /**
  * Normalize import path relative to source file
  */
-export function normalizeDependencyPath(importPath: string, sourceFile: string): string {
+function normalizeDependencyPath(importPath: string, sourceFile: string): string {
   // Remove @ alias prefix (common in Next.js/TypeScript)
   let normalized = importPath.replace(/^@\//, "");
 
@@ -353,7 +353,7 @@ export function selectSnippets(
 /**
  * Get code language for syntax highlighting
  */
-export function getCodeLanguage(filePath: string): string {
+function getCodeLanguage(filePath: string): string {
   const ext = extname(filePath).toLowerCase().slice(1);
   const langMap: Record<string, string> = {
     ts: "typescript",
@@ -431,7 +431,7 @@ export interface FileGroup {
 /**
  * Get the file type from a path
  */
-export function getFileType(filePath: string): string {
+function getFileType(filePath: string): string {
   const ext = extname(filePath).toLowerCase().slice(1);
   const typeMap: Record<string, string> = {
     ts: "TypeScript",
@@ -497,7 +497,7 @@ export function groupResultsByFile(hits: VectorSearchHit[]): FileGroup[] {
  * Extract a brief description from the first chunk of a file
  * Returns the first meaningful line or a truncated preview
  */
-export function extractBriefDescription(chunks: Array<{ text: string; chunkIndex: number }>): string {
+function extractBriefDescription(chunks: Array<{ text: string; chunkIndex: number }>): string {
   if (chunks.length === 0) return "";
 
   const firstChunk = chunks[0].text.trim();

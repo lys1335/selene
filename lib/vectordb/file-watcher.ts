@@ -892,7 +892,7 @@ export async function stopAllWatchers(): Promise<void> {
 /**
  * Get list of currently watched folder IDs (all subscribers, not just owners).
  */
-export function getWatchedFolders(): string[] {
+function getWatchedFolders(): string[] {
   return Array.from(folderSubscribers.keys());
 }
 

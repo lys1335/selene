@@ -21,7 +21,7 @@ export interface AccentColor {
   hex: string;
 }
 
-export const ACCENT_COLORS: AccentColor[] = [
+const ACCENT_COLORS: AccentColor[] = [
   { id: "scuderia",    label: "Scuderia",    hsl: "0 85% 48%",   hslDark: "0 85% 54%",   hex: "#DC2626" },
   { id: "papaya",      label: "Papaya",      hsl: "25 95% 53%",  hslDark: "25 95% 58%",  hex: "#F97316" },
   { id: "petronas",    label: "Petronas",    hsl: "174 85% 42%", hslDark: "174 85% 50%", hex: "#10B4A6" },

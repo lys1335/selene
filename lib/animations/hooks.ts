@@ -17,7 +17,7 @@ import { useReducedMotion } from "@/components/character-creation/hooks/use-redu
  * Hook for ambient floating animation
  * Creates organic, gentle vertical movement
  */
-export function useFloat(
+function useFloat(
   options: {
     distance?: number;
     duration?: number;
@@ -53,7 +53,7 @@ export function useFloat(
  * Hook for 3D rotation effect
  * Adds subtle depth and movement
  */
-export function useGentleRotate(
+function useGentleRotate(
   options: {
     rotateY?: number;
     rotateX?: number;
@@ -93,7 +93,7 @@ export function useGentleRotate(
  * Hook for staggered list reveal animation
  * Elements fade and slide in sequentially
  */
-export function useStaggerReveal(
+function useStaggerReveal(
   options: {
     staggerMs?: number;
     duration?: number;
@@ -177,7 +177,7 @@ export function useCardHover() {
  * Hook for button press effect
  * Quick scale down and back
  */
-export function useButtonPress() {
+function useButtonPress() {
   const ref = useRef<HTMLButtonElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
@@ -208,7 +208,7 @@ export function useButtonPress() {
  * Hook for entrance animation
  * Fade in with optional slide direction
  */
-export function useEntrance(
+function useEntrance(
   options: {
     direction?: "up" | "down" | "left" | "right" | "none";
     duration?: number;
@@ -258,7 +258,7 @@ export function useEntrance(
  * Hook for wave animation on list items
  * Creates a gentle wave effect across children
  */
-export function useWave(
+function useWave(
   options: {
     amplitude?: number;
     duration?: number;
@@ -345,7 +345,7 @@ export function useMagnetic(strength: number = 0.3) {
  * Hook for typewriter text animation
  * Characters appear one by one
  */
-export function useTypewriter(
+function useTypewriter(
   text: string,
   options: {
     charDelay?: number;
@@ -395,7 +395,7 @@ export function useTypewriter(
 /**
  * Hook for progress bar animation
  */
-export function useProgressBar(progress: number) {
+function useProgressBar(progress: number) {
   const ref = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
@@ -420,7 +420,7 @@ export function useProgressBar(progress: number) {
 /**
  * Hook for shake animation (for errors/attention)
  */
-export function useShake() {
+function useShake() {
   const ref = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 

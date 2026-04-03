@@ -37,7 +37,7 @@ export const KIMI_MODEL_IDS = [
 export type KimiModelId = (typeof KIMI_MODEL_IDS)[number];
 
 // Models that support vision
-export const KIMI_VISION_MODELS = new Set<string>([
+const KIMI_VISION_MODELS = new Set<string>([
   "kimi-k2.5",
   "moonshot-v1-8k-vision-preview",
   "moonshot-v1-32k-vision-preview",
@@ -45,14 +45,14 @@ export const KIMI_VISION_MODELS = new Set<string>([
 ]);
 
 // Models that support thinking mode
-export const KIMI_THINKING_MODELS = new Set<string>([
+const KIMI_THINKING_MODELS = new Set<string>([
   "kimi-k2.5",
   "kimi-k2-thinking",
   "kimi-k2-thinking-turbo",
 ]);
 
 // Default models for different roles
-export const KIMI_DEFAULT_MODELS = {
+const KIMI_DEFAULT_MODELS = {
   chat: "kimi-k2.5" as KimiModelId,
   research: "kimi-k2-thinking" as KimiModelId,
   vision: "kimi-k2.5" as KimiModelId,
@@ -86,7 +86,7 @@ const MODEL_LABELS: Record<string, string> = {
 /**
  * Get display name for a Kimi model
  */
-export function getKimiModelDisplayName(modelId: string): string {
+function getKimiModelDisplayName(modelId: string): string {
   return MODEL_LABELS[modelId] || modelId;
 }
 
@@ -103,13 +103,13 @@ export function getKimiModels(): Array<{ id: KimiModelId; name: string }> {
 /**
  * Check if a model supports vision
  */
-export function kimiModelSupportsVision(modelId: string): boolean {
+function kimiModelSupportsVision(modelId: string): boolean {
   return KIMI_VISION_MODELS.has(modelId);
 }
 
 /**
  * Check if a model supports thinking mode
  */
-export function kimiModelSupportsThinking(modelId: string): boolean {
+function kimiModelSupportsThinking(modelId: string): boolean {
   return KIMI_THINKING_MODELS.has(modelId);
 }

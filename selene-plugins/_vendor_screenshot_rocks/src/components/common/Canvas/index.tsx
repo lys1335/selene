@@ -24,7 +24,7 @@ export interface ICanvasProps {
     borderRadius: number;
 }
 
-export const Canvas = view((props: ICanvasProps) => {
+const Canvas = view((props: ICanvasProps) => {
     const scaleCanvasOnWindowResize = () => {
         const canvas = document.querySelector<HTMLElement>('.canvas');
         const mainContent = document.querySelector<HTMLElement>('.main-content');

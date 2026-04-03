@@ -18,7 +18,7 @@ import { eq, like, and } from "drizzle-orm";
 /**
  * Normalize a path and ensure it uses correct separators
  */
-export function normalizePath(filePath: string): string {
+function normalizePath(filePath: string): string {
   return normalize(filePath);
 }
 
@@ -26,7 +26,7 @@ export function normalizePath(filePath: string): string {
  * Validate path for traversal attacks
  * @throws Error if path contains traversal attempts after normalization
  */
-export function validatePath(filePath: string): void {
+function validatePath(filePath: string): void {
   if (filePath.includes("..")) {
     // This is a simple check. normalize() usually handles .. 
     // but if someone passes "foo/../bar", normalize makes it "bar".
@@ -126,7 +126,7 @@ export async function isPathAllowed(filePath: string, allowedFolderPaths: string
 /**
  * Get allowed synced folder paths for a character.
  */
-export async function resolveSyncedFolderPaths(characterId: string): Promise<string[]> {
+async function resolveSyncedFolderPaths(characterId: string): Promise<string[]> {
   const syncedFolders = await getAccessibleSyncFolders(characterId);
   return syncedFolders.map((f) => f.folderPath);
 }

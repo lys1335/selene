@@ -169,7 +169,7 @@ export function loadConfigFromEnv(): void {
 }
 
 // Rollback capability (Section 6.4)
-export function rollbackToV1(): void {
+function rollbackToV1(): void {
   currentConfig = { ...defaultConfig };
   console.log("[VectorSearch] Rolled back to V1 configuration");
 }

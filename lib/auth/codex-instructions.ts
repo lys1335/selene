@@ -39,7 +39,7 @@ function getCacheDir(): string {
   return join(baseDir, "codex-cache");
 }
 
-export function getModelFamily(normalizedModel: string): CodexModelFamily {
+function getModelFamily(normalizedModel: string): CodexModelFamily {
   if (normalizedModel.includes("gpt-5.4") || normalizedModel.includes("gpt 5.4")) {
     return "gpt-5.4";
   }

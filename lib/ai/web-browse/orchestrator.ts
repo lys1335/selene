@@ -524,7 +524,7 @@ export async function browseAndSynthesize(
  * Query existing session content without fetching new URLs.
  * Useful for follow-up questions about already-fetched content.
  */
-export async function querySessionContent(
+async function querySessionContent(
   sessionId: string,
   query: string,
   urls?: string[],

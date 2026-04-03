@@ -40,7 +40,7 @@ export interface IBrowserStore {
     setBrowserTheme(browserTheme: BrowserThemes): void,
 }
 
-export let browserStore = store({
+let browserStore = store({
     setBrowserTheme(browserTheme: BrowserThemes) {
         browserStore.settings.activeTheme = browserTheme;
     },

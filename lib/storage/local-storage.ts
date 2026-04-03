@@ -236,7 +236,7 @@ export function getFullPath(relativePath: string): string {
 /**
  * Convert a media URL/local reference into a storage-relative path when possible.
  */
-export function getRelativeMediaPath(mediaRef: string): string | null {
+function getRelativeMediaPath(mediaRef: string): string | null {
   if (!mediaRef) return null;
 
   if (mediaRef.startsWith("/api/media/")) {

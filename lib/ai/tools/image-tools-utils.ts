@@ -87,7 +87,7 @@ function resolveAbsoluteImagePath(imageSource: string): string | undefined {
 // Shared schema definitions
 // ==========================================================================
 
-export const describeImageSchema = jsonSchema<{
+const describeImageSchema = jsonSchema<{
   imageUrl: string;
   focusAreas?: string[];
   analysisType?: string;

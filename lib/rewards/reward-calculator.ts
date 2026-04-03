@@ -45,7 +45,7 @@ export interface CompletedRewardInput {
 const MIN_REWARDABLE_CHARS = 24;
 const MAX_EXCERPT_LENGTH = 140;
 
-export function estimatePromptTokens(text: string): number {
+function estimatePromptTokens(text: string): number {
   const normalized = text.trim();
   if (!normalized) return 0;
   return Math.max(1, Math.ceil(normalized.length / 4));
@@ -115,7 +115,7 @@ export function formatUsdReward(amountUsd: number): string {
   }).format(amountUsd);
 }
 
-export function createQueryExcerpt(promptText: string): string {
+function createQueryExcerpt(promptText: string): string {
   const normalized = normalizePromptText(promptText);
   if (normalized.length <= MAX_EXCERPT_LENGTH) {
     return normalized;

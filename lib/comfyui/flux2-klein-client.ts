@@ -97,7 +97,7 @@ export async function checkFlux2KleinHealth(variant: Flux2KleinVariant): Promise
  * Generate an image synchronously using FLUX.2 Klein
  * Note: May timeout for long generations - prefer async endpoint
  */
-export async function generateFlux2KleinSync(
+async function generateFlux2KleinSync(
     variant: Flux2KleinVariant,
     request: Flux2KleinGenerateRequest,
     apiKey?: string
@@ -128,7 +128,7 @@ export async function generateFlux2KleinSync(
  * Submit an async generation job to FLUX.2 Klein
  * Returns immediately with a job_id for polling
  */
-export async function generateFlux2KleinAsync(
+async function generateFlux2KleinAsync(
     variant: Flux2KleinVariant,
     request: Flux2KleinGenerateRequest,
     apiKey?: string
@@ -158,7 +158,7 @@ export async function generateFlux2KleinAsync(
 /**
  * Check the status of an async generation job
  */
-export async function checkFlux2KleinJobStatus(
+async function checkFlux2KleinJobStatus(
     variant: Flux2KleinVariant,
     jobId: string,
     apiKey?: string
@@ -221,7 +221,7 @@ export async function generateFlux2KleinWithPolling(
 /**
  * Convert base64 result to a data URL for display
  */
-export function base64ToDataUrl(base64: string, mimeType: string = "image/png"): string {
+function base64ToDataUrl(base64: string, mimeType: string = "image/png"): string {
     // If already a data URL, return as-is
     if (base64.startsWith("data:")) {
         return base64;

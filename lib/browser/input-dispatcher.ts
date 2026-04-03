@@ -186,7 +186,7 @@ export async function dispatchClick(
 /**
  * Dispatch a mouse move to (x, y) in viewport coordinates.
  */
-export async function dispatchMouseMove(
+async function dispatchMouseMove(
   sessionId: string,
   page: Page,
   x: number,

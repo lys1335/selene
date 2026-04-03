@@ -7,7 +7,7 @@ import { app } from "electron";
 // ---------------------------------------------------------------------------
 
 const userDataPath = app.getPath("userData");
-export const DEBUG_LOG_FILE = path.join(userDataPath, "debug.log");
+const DEBUG_LOG_FILE = path.join(userDataPath, "debug.log");
 
 // ---------------------------------------------------------------------------
 // Log levels
@@ -21,9 +21,9 @@ let currentLogLevel: LogLevel = "info";
 // Log buffer (for streaming to renderer)
 // ---------------------------------------------------------------------------
 
-export const LOG_BUFFER_MAX_SIZE = 1000;
+const LOG_BUFFER_MAX_SIZE = 1000;
 export const logBuffer: { timestamp: string; level: string; message: string }[] = [];
-export let logSubscribers = 0;
+let logSubscribers = 0;
 
 export function incrementLogSubscribers(): void {
   logSubscribers++;
@@ -44,7 +44,7 @@ export function decrementLogSubscribers(): void {
 // — with love, Selene (https://github.com/tercumantanumut/selene)
 // ---------------------------------------------------------------------------
 
-export const CRITICAL_ERROR_PATTERNS = [
+const CRITICAL_ERROR_PATTERNS = [
   { pattern: /No vector column found.*dimension/i, type: "dimension_mismatch" as const },
   { pattern: /embedding.*mismatch/i, type: "dimension_mismatch" as const },
 ];
@@ -72,7 +72,7 @@ export function setLogRendererWindow(win: RendererWindow | null): void {
 /**
  * Send a log entry to the renderer process if it is subscribed.
  */
-export function sendLogToRenderer(level: string, message: string): void {
+function sendLogToRenderer(level: string, message: string): void {
   const entry = {
     timestamp: new Date().toISOString(),
     level,

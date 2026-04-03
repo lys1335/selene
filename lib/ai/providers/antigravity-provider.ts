@@ -52,7 +52,7 @@ function resolveModelName(modelId: string): string {
 /**
  * Create an Antigravity provider instance (async — fetches project ID if needed).
  */
-export async function createAntigravityProviderAsync(): Promise<
+async function createAntigravityProviderAsync(): Promise<
   ((modelId: string) => LanguageModel) | null
 > {
   const token = getAntigravityToken();

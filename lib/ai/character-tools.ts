@@ -162,7 +162,7 @@ async function executeCharacterImage(sessionId: string, args: CharacterImageArgs
   }
 }
 
-export function createCharacterImageTool(sessionId: string) {
+function createCharacterImageTool(sessionId: string) {
   // Wrap the execute function with logging
   const executeWithLogging = withToolLogging(
     "generateCharacterImage",

@@ -38,7 +38,7 @@ export const toOpenChatWorkspaceSession = (
     updatedAt: session.updatedAt ?? null,
 });
 
-export const toOpenChatWorkspaceSessionFromTab = (
+const toOpenChatWorkspaceSessionFromTab = (
     tab: Pick<ChatWorkspaceTab, "sessionId" | "title" | "characterId" | "characterName" | "updatedAt">,
 ): OpenChatWorkspaceSession => ({
     sessionId: tab.sessionId,
@@ -160,7 +160,7 @@ export const areSessionsEquivalent = (prev: SessionInfo[], next: SessionInfo[]) 
     return true;
 };
 
-export const isTextPart = (part: UIMessage["parts"][number] | undefined | null): part is { type: "text"; text: string } => {
+const isTextPart = (part: UIMessage["parts"][number] | undefined | null): part is { type: "text"; text: string } => {
     return Boolean(
         part &&
         part.type === "text" &&
@@ -168,7 +168,7 @@ export const isTextPart = (part: UIMessage["parts"][number] | undefined | null):
     );
 };
 
-export const getMessageSignature = (message: UIMessage) => {
+const getMessageSignature = (message: UIMessage) => {
     const parts = Array.isArray(message.parts) ? message.parts : [];
     const partTypes = parts.map((part) => (part?.type ? String(part.type) : "text")).join(",");
     const textDigest = parts

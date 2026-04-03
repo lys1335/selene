@@ -52,7 +52,7 @@ export interface BaseSystemPromptOptions {
  * 5. Media display rules (~100 tokens)
  * 6. Tool discovery hint (~70 tokens, optional)
  */
-export function buildBaseSystemPrompt(options: BaseSystemPromptOptions): string {
+function buildBaseSystemPrompt(options: BaseSystemPromptOptions): string {
   const {
     agentName,
     agentRole,
@@ -106,7 +106,7 @@ export function buildBaseSystemPrompt(options: BaseSystemPromptOptions): string 
 /**
  * Default Selene agent configuration
  */
-export const DEFAULT_AGENT_CONFIG: BaseSystemPromptOptions = {
+const DEFAULT_AGENT_CONFIG: BaseSystemPromptOptions = {
   agentName: "Selene",
   agentRole: `a powerful AI agent on the Selene platform — an open-source, self-hosted agent platform with rich capabilities including:
 - **Tools & Plugins**: Extensible tool system with plugin marketplace, hooks lifecycle (PreToolUse/PostToolUse), and MCP server integration
@@ -152,7 +152,7 @@ export function buildDefaultSystemPrompt(
  *
  * @see https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
  */
-export function buildCacheableSystemPrompt(
+function buildCacheableSystemPrompt(
   options: BaseSystemPromptOptions
 ): CacheableSystemBlock[] {
   const {

@@ -1,7 +1,7 @@
 import path from "path";
 import { ChannelType } from "./types";
 
-export function getChannelsBasePath(): string {
+function getChannelsBasePath(): string {
   if (process.env.LOCAL_DATA_PATH) {
     return path.join(process.env.LOCAL_DATA_PATH, "channels");
   }

@@ -437,7 +437,7 @@ function normalizeMcpInputSchema(
 /**
  * Category for MCP tools - they get their own category
  */
-export const MCP_TOOL_CATEGORY = "mcp" as const;
+const MCP_TOOL_CATEGORY = "mcp" as const;
 
 /**
  * Per-tool loading preference from agent settings
@@ -597,7 +597,7 @@ export function getMCPToolId(serverName: string, toolName: string): string {
 /**
  * Register all tools from connected MCP servers with the ToolRegistry
  */
-export function registerMCPTools(): void {
+function registerMCPTools(): void {
     const manager = MCPClientManager.getInstance();
     const registry = ToolRegistry.getInstance();
 

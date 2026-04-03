@@ -28,7 +28,7 @@ export function buildDuplicateMetadata(sourceMetadata: MetadataLike): Record<str
 // ---------------------------------------------------------------------------
 
 /** Check whether a path points to an existing directory (not a file). */
-export function isExistingDirectory(path: string): boolean {
+function isExistingDirectory(path: string): boolean {
   try {
     return statSync(path).isDirectory();
   } catch {

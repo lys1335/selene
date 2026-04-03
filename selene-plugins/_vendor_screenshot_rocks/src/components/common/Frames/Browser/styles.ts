@@ -3,7 +3,7 @@ import {ICanvasProps} from "../../Canvas";
 import {IBrowserStyles} from "../../../../stores/browserStore";
 import {app} from "../../../../stores/appStore";
 
-export enum BrowserThemes {
+enum BrowserThemes {
     Default,
     Dark,
     Square,
@@ -13,12 +13,12 @@ export enum BrowserThemes {
     Custom,
 }
 
-export enum BackgroundType {
+enum BackgroundType {
     Image,
     Color,
 }
 
-export const browserThemes = {
+const browserThemes = {
     [BrowserThemes.Default]: {
         browserChromeBgColor: '#e6ecefcf',
         browserControlsBgColor: '#ffffffa8',
@@ -93,7 +93,7 @@ export const browserThemes = {
     },
 }
 
-export const styles = (props: ICanvasProps): string => {
+const styles = (props: ICanvasProps): string => {
     const styleVars = props.styles as IBrowserStyles;
     const translateString = props.showControlsOnly ? '' : `${app.canvasStyles.horizontalPosition}% ${app.canvasStyles.verticalPosition}%`;
 

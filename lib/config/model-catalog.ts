@@ -34,7 +34,7 @@ const DEFAULT_CAPABILITIES: ModelCapabilities = {
   speed: "standard",
 };
 
-export const MODEL_METADATA: Record<
+const MODEL_METADATA: Record<
   string,
   Partial<Pick<ModelItem, "tier"> & { capabilities: Partial<ModelCapabilities> }>
 > = {

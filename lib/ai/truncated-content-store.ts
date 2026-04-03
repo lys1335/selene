@@ -222,7 +222,7 @@ export function clearSession(sessionId: string): void {
 /**
  * Clean up expired entries across all sessions
  */
-export function cleanupExpiredEntries(): number {
+function cleanupExpiredEntries(): number {
   const now = Date.now();
   let totalCleaned = 0;
   const sessionsToDelete: string[] = [];

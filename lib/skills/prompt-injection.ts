@@ -81,7 +81,7 @@ export function formatSkillsForPromptFromSummary(skills: SkillSummary[]): {
   };
 }
 
-export async function formatSkillsForPrompt(characterId: string): Promise<{
+async function formatSkillsForPrompt(characterId: string): Promise<{
   markdown: string;
   tokenEstimate: number;
   skillCount: number;

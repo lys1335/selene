@@ -11,7 +11,7 @@ import { EmailDeliveryHandler } from "./email-handler";
 import { SlackDeliveryHandler } from "./slack-handler";
 import { WebhookDeliveryHandler } from "./webhook-handler";
 
-export class DeliveryRouter {
+class DeliveryRouter {
   private handlers: Map<string, DeliveryHandler> = new Map();
 
   constructor() {

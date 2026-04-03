@@ -51,7 +51,7 @@ export function hasMeaningfulAssistantContent(message: UIMessage | undefined): b
   return Array.isArray(message.parts) && message.parts.some(isMeaningfulAssistantPart);
 }
 
-export function getLastUserMessage(messages: UIMessage[]): UIMessage | undefined {
+function getLastUserMessage(messages: UIMessage[]): UIMessage | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.role === "user") {

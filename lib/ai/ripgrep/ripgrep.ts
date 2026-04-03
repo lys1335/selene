@@ -283,6 +283,6 @@ export function isRipgrepAvailable(): boolean {
 /**
  * Get the path to the ripgrep binary
  */
-export function getRipgrepPath(): string {
+function getRipgrepPath(): string {
     return rgPath;
 }

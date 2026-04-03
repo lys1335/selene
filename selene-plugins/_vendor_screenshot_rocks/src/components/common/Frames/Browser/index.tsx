@@ -7,7 +7,7 @@ import {view} from "@risingstack/react-easy-state";
 import {browserStore} from "../../../../stores/browserStore";
 import {app} from "../../../../stores/appStore";
 
-export const BrowserFrame = view((props: ICanvasProps) => {
+const BrowserFrame = view((props: ICanvasProps) => {
     return (
         <div className={styles(props)}>
             <div className="browser-controls">

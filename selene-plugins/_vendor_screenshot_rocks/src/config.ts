@@ -1,6 +1,6 @@
 import {ScreenshotType} from "./types";
 
-export const CONFIG = {
+const CONFIG = {
     enabledScreenShotTypes: [ScreenshotType.Browser, ScreenshotType.Device, ScreenshotType.None],
     maxCanvasWidth: 2300,
     maxCanvasHeight: 2300,

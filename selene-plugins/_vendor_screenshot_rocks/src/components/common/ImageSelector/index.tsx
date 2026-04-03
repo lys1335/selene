@@ -8,7 +8,7 @@ import {routeStore} from "../../../stores/routeStore";
 import {loadImageFromImageUrl} from "../../../utils/image";
 import {browserStore} from "../../../stores/browserStore";
 
-export const ImageSelector = view(() => {
+const ImageSelector = view(() => {
     const existingUrl = () => {
         const parsedUrl = new URL(window.location.href);
         if (parsedUrl.searchParams.get('text')) {

@@ -1,7 +1,7 @@
 import {css} from "emotion";
 import {Routes} from "../../../stores/routeStore";
 
-export const styles = (currentRoute?: Routes): string => {
+const styles = (currentRoute?: Routes): string => {
     return css`
           width: 100%;
           background-color: #ffffff;

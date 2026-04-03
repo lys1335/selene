@@ -70,7 +70,7 @@ export function getChannelFormattingBlock(channelType?: string | null): string {
 /**
  * Check if a channel type requires special formatting instructions
  */
-export function channelNeedsFormattingGuidance(channelType?: string | null): boolean {
+function channelNeedsFormattingGuidance(channelType?: string | null): boolean {
   if (!channelType || channelType === "app") {
     return false;
   }

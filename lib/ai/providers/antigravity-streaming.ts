@@ -34,13 +34,13 @@ const ANTIGRAVITY_RETRY_CONFIG = {
 
 // ---- ID Generators -----------------------------------------------------------
 
-export function generateRequestId(): string {
+function generateRequestId(): string {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 10);
   return `req-${timestamp}-${random}`;
 }
 
-export function generateSessionId(): string {
+function generateSessionId(): string {
   return `session-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
 }
 
@@ -90,7 +90,7 @@ async function readRequestBody(body: BodyInit): Promise<string> {
  * Check if this is a Google Generative Language API request that should be
  * intercepted and forwarded to Antigravity.
  */
-export function isGenerativeLanguageRequest(url: string): boolean {
+function isGenerativeLanguageRequest(url: string): boolean {
   return (
     url.includes("generativelanguage.googleapis.com") ||
     (url.includes("/models/") &&
@@ -104,7 +104,7 @@ export function isGenerativeLanguageRequest(url: string): boolean {
  * The Antigravity Claude gateway expects strict call/result pairing by ID.
  * We only fill in missing IDs and preserve any IDs already provided by the SDK.
  */
-export function ensureClaudeFunctionPartIds(contents: unknown): void {
+function ensureClaudeFunctionPartIds(contents: unknown): void {
   if (!Array.isArray(contents)) return;
 
   const pendingIdsByName = new Map<string, string[]>();
@@ -279,7 +279,7 @@ function fixFunctionCallArgs(unwrapped: Record<string, unknown>): void {
 /**
  * Unwrap a non-streaming Antigravity response.
  */
-export function unwrapResponse(text: string): string {
+function unwrapResponse(text: string): string {
   try {
     const parsed = JSON.parse(text);
     const unwrapped = parsed.response !== undefined ? parsed.response : parsed;
@@ -303,7 +303,7 @@ export function unwrapResponse(text: string): string {
  * @param onComplete - Called when stream completes successfully
  * @param onRetryNeeded - Callback to get a new stream on retryable error, returns null if retry fails
  */
-export function createResponseTransformStreamWithRetry(
+function createResponseTransformStreamWithRetry(
   onComplete?: () => void,
   onRetryNeeded?: (errorText: string) => Promise<ReadableStream<string> | null>
 ): TransformStream<string, string> {

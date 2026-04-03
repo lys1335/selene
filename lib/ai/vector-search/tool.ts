@@ -533,7 +533,7 @@ export function createVectorSearchToolV2(options: VectorSearchOptions) {
 /**
  * Create a basic query tool for follow-up searches using existing context
  */
-export function createVectorQueryTool(options: VectorSearchOptions) {
+function createVectorQueryTool(options: VectorSearchOptions) {
   const { sessionId, characterId } = options;
 
   if (!sessionId) {

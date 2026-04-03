@@ -62,7 +62,7 @@ function ensureAbsoluteUrls(images: string[] | undefined): string[] | undefined 
 /**
  * Check if the ComfyUI API is healthy
  */
-export async function checkHealth(): Promise<boolean> {
+async function checkHealth(): Promise<boolean> {
     try {
         const response = await fetch(`${COMFYUI_API_URL}/health`, {
             method: "GET",
@@ -126,7 +126,7 @@ export async function checkStatus(promptId: string): Promise<GenerateResponse> {
 /**
  * Get queue status
  */
-export async function getQueueStatus(): Promise<{
+async function getQueueStatus(): Promise<{
     status: string;
     statistics: {
         total_enqueued: number;
@@ -148,7 +148,7 @@ export async function getQueueStatus(): Promise<{
 /**
  * Cancel a generation job
  */
-export async function cancelGeneration(promptId: string): Promise<{ status: string }> {
+async function cancelGeneration(promptId: string): Promise<{ status: string }> {
     const response = await fetch(`${COMFYUI_API_URL}/api/cancel/${promptId}`, {
         method: "POST",
     });

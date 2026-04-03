@@ -20,7 +20,7 @@ export interface ChatPreflightBlocked {
 
 export type ChatPreflightResult = ChatPreflightSuccess | ChatPreflightBlocked;
 
-export function parseLastSseDataBlock(text: string): string | null {
+function parseLastSseDataBlock(text: string): string | null {
   const matches = text.match(/^data:\s?(.*)$/gm);
   if (!matches || matches.length === 0) return null;
   const lastMatch = matches[matches.length - 1];

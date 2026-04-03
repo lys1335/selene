@@ -1,4 +1,4 @@
-export const INTERACTIVE_TOOL_NAMES = [
+const INTERACTIVE_TOOL_NAMES = [
   "ExitPlanMode",
   "AskUserQuestion",
   "AskFollowupQuestion",

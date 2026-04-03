@@ -205,7 +205,7 @@ export async function submitPrompt(
   return payload.prompt_id;
 }
 
-export async function fetchHistory(
+async function fetchHistory(
   baseUrl: string,
   promptId: string
 ): Promise<Record<string, unknown>> {

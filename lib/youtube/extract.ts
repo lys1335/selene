@@ -60,7 +60,7 @@ const parseTimeToSeconds = (value: string | null | undefined): number | null => 
   return asNumber;
 };
 
-export const extractTimestamps = (text: string): YouTubeTimestamp[] => {
+const extractTimestamps = (text: string): YouTubeTimestamp[] => {
   const matches = text.matchAll(TIMESTAMP_REGEX);
   const timestamps: YouTubeTimestamp[] = [];
   for (const match of matches) {
@@ -194,6 +194,6 @@ export const extractYouTubeReferences = (
   return { urls, queries, timestamps };
 };
 
-export const parseTimestampToSeconds = (value: string): number | null => {
+const parseTimestampToSeconds = (value: string): number | null => {
   return parseTimeToSeconds(value);
 };

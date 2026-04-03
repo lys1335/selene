@@ -19,7 +19,7 @@ const lastExtractionTime = new Map<string, number>();
 /**
  * Check if extraction should be triggered for a character
  */
-export async function shouldTriggerExtraction(
+async function shouldTriggerExtraction(
   characterId: string,
   sessionId: string
 ): Promise<boolean> {
@@ -160,13 +160,13 @@ export async function manualExtraction(
 /**
  * Reset cooldown for a character (useful for testing)
  */
-export function resetCooldown(characterId: string): void {
+function resetCooldown(characterId: string): void {
   lastExtractionTime.delete(characterId);
 }
 
 /**
  * Clear all cooldowns (useful for testing)
  */
-export function clearAllCooldowns(): void {
+function clearAllCooldowns(): void {
   lastExtractionTime.clear();
 }

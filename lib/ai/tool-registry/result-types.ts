@@ -127,21 +127,21 @@ export function isVideoResult(result: ToolResult): result is VideoGenerationResu
 /**
  * Type guard for processing results
  */
-export function isProcessingResult(result: ToolResult): result is ProcessingResult {
+function isProcessingResult(result: ToolResult): result is ProcessingResult {
   return result.status === "processing";
 }
 
 /**
  * Type guard for error results
  */
-export function isErrorResult(result: ToolResult): result is ErrorResult {
+function isErrorResult(result: ToolResult): result is ErrorResult {
   return result.status === "error";
 }
 
 /**
  * Create a standardized error result
  */
-export function createErrorResult(
+function createErrorResult(
   error: unknown,
   options?: { retryable?: boolean; retryCount?: number }
 ): ErrorResult {
@@ -159,7 +159,7 @@ export function createErrorResult(
 /**
  * Create a processing result for async jobs
  */
-export function createProcessingResult(
+function createProcessingResult(
   message: string,
   jobId: string
 ): ProcessingResult {

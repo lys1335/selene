@@ -32,7 +32,7 @@ export function useReducedMotion(): boolean {
  * @param normalDuration - Duration in ms when motion is allowed
  * @param reducedDuration - Duration in ms when reduced motion is preferred (default: 0)
  */
-export function useAnimationDuration(
+function useAnimationDuration(
   normalDuration: number,
   reducedDuration: number = 0
 ): number {

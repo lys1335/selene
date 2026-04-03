@@ -361,7 +361,7 @@ export const UserMessage: FC = () => {
   );
 };
 
-export const UserAttachment: FC = () => {
+const UserAttachment: FC = () => {
   const attachment = useMessageAttachment((a: { id: string; name?: string; contentType?: string; content?: Array<{ type?: string; image?: string; mimeType?: string }> }) => a);
 
   return (
@@ -384,7 +384,7 @@ export const SystemMessage: FC = () => {
   );
 };
 
-export const UserActionBar: FC = () => {
+const UserActionBar: FC = () => {
   const t = useTranslations("assistantUi");
   return (
     <ActionBarPrimitive.Root
@@ -652,7 +652,7 @@ export const AssistantMessage: FC<{ ttsEnabled?: boolean }> = ({ ttsEnabled = fa
   );
 };
 
-export const BranchPicker: FC = () => {
+const BranchPicker: FC = () => {
   const t = useTranslations("assistantUi");
   return (
     <BranchPickerPrimitive.Root
@@ -674,7 +674,7 @@ export const BranchPicker: FC = () => {
   );
 };
 
-export const AssistantActionBar: FC<{ ttsEnabled?: boolean; messageText?: string }> = ({
+const AssistantActionBar: FC<{ ttsEnabled?: boolean; messageText?: string }> = ({
   ttsEnabled = false,
   messageText,
 }) => {

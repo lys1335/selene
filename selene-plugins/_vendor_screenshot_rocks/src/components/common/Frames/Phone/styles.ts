@@ -1,7 +1,7 @@
 import {css} from "emotion";
 import {app} from "../../../../stores/appStore";
 
-export const styles = (): string => {
+const styles = (): string => {
     const boxShadow = `0 2px ${app.canvasStyles.shadowSize}px -1px rgba(0, 0, 0, .4)`;
     return css`
       border-radius: ${app.adjustMeasurementForDownload(10)}px;

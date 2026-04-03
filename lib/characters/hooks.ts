@@ -108,7 +108,7 @@ interface UseCharacterImageResult {
   rateLimitInfo: RateLimitInfo | null;
 }
 
-export function useCharacterImage(): UseCharacterImageResult {
+function useCharacterImage(): UseCharacterImageResult {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastPrompt, setLastPrompt] = useState<string | null>(null);
@@ -185,7 +185,7 @@ interface UseCharactersResult {
   refresh: () => Promise<void>;
 }
 
-export function useCharacters(): UseCharactersResult {
+function useCharacters(): UseCharactersResult {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -40,7 +40,7 @@ interface PlanProviderProps {
   initialPlan?: PlanState | null;
 }
 
-export const PlanProvider: FC<PlanProviderProps> = ({ children, initialPlan = null }) => {
+const PlanProvider: FC<PlanProviderProps> = ({ children, initialPlan = null }) => {
   const [plan, setPlan] = useState<PlanState | null>(initialPlan);
 
   return (
@@ -55,7 +55,7 @@ export const PlanProvider: FC<PlanProviderProps> = ({ children, initialPlan = nu
 // ---------------------------------------------------------------------------
 
 /** Use inside a PlanProvider. Throws if provider is missing. */
-export function usePlanContext(): PlanContextValue {
+function usePlanContext(): PlanContextValue {
   const ctx = useContext(PlanContext);
   if (!ctx) {
     throw new Error("usePlanContext must be used within a <PlanProvider>");
@@ -64,6 +64,6 @@ export function usePlanContext(): PlanContextValue {
 }
 
 /** Safe variant — returns null when no provider is present. */
-export function useOptionalPlan(): PlanContextValue | null {
+function useOptionalPlan(): PlanContextValue | null {
   return useContext(PlanContext);
 }

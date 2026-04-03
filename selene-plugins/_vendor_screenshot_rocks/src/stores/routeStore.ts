@@ -1,11 +1,11 @@
 import {store} from "@risingstack/react-easy-state";
 
-export enum Routes {
+enum Routes {
     App,
     Home,
 }
 
-export const RouteConfig = {
+const RouteConfig = {
     [Routes.App]: {
         path: '/app',
         regex: /^\/?app$/,
@@ -24,7 +24,7 @@ interface IRouteStore {
     determineRoute(): void;
 }
 
-export const routeStore = store({
+const routeStore = store({
     currentRoute: null,
 
     goToRoute: (route: Routes) => {

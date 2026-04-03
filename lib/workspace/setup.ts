@@ -34,7 +34,7 @@ export function getUserWorkspacePath(): string {
  * Initialize the workspace directory on app startup
  * This ensures the directory exists before any agents try to use it
  */
-export function initializeWorkspace(): void {
+function initializeWorkspace(): void {
   try {
     getUserWorkspacePath();
     console.log('[Workspace] Workspace initialized successfully');

@@ -9,13 +9,13 @@
 
 // ---- Constants ---------------------------------------------------------------
 
-export const DEFAULT_ANTIGRAVITY_INPUT_SCHEMA: Record<string, unknown> = {
+const DEFAULT_ANTIGRAVITY_INPUT_SCHEMA: Record<string, unknown> = {
   type: "object",
   properties: {},
   additionalProperties: true,
 };
 
-export const ANTIGRAVITY_ALLOWED_SCHEMA_KEYS = new Set([
+const ANTIGRAVITY_ALLOWED_SCHEMA_KEYS = new Set([
   "$id",
   "$ref",
   "$defs",
@@ -107,7 +107,7 @@ const ANTIGRAVITY_BOOLEAN_KEYS = new Set([
 
 // ---- Helpers -----------------------------------------------------------------
 
-export function isPlainObject(value: unknown): value is Record<string, unknown> {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -202,7 +202,7 @@ function ensureSchemaCompleteness(schema: Record<string, unknown>): Record<strin
   return schema;
 }
 
-export function sanitizeSchema(schema: Record<string, unknown>): Record<string, unknown> {
+function sanitizeSchema(schema: Record<string, unknown>): Record<string, unknown> {
   const input = { ...schema };
 
   if (isPlainObject(input.definitions)) {

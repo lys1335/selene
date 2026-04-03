@@ -155,7 +155,7 @@ export interface PendingInteractivePrompt {
   createdAt: number;
 }
 
-export function getPendingInteractivePrompt(
+function getPendingInteractivePrompt(
   sessionId: string,
   toolUseId: string,
 ): unknown | undefined {

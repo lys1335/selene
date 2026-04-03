@@ -76,7 +76,7 @@ export type ToolIconConfig = {
  * - fill: Execution, terminal, active states (solid, definitive)
  * - regular: Read, browse, utility operations (clean, unobtrusive)
  */
-export const TOOL_ICON_MAP: Record<string, ToolIconConfig> = {
+const TOOL_ICON_MAP: Record<string, ToolIconConfig> = {
   // Search & Discovery
   vectorSearch: { icon: Database, weight: "duotone" },
   webSearch: { icon: Globe, weight: "duotone" },
@@ -193,7 +193,7 @@ export function getToolIcon(toolName: string): ToolIconConfig {
 /**
  * Category icon map for agent cards and tool categorization
  */
-export const CATEGORY_ICON_MAP: Record<string, ToolIconConfig> = {
+const CATEGORY_ICON_MAP: Record<string, ToolIconConfig> = {
   "knowledge": { icon: Brain, weight: "duotone" },
   "search": { icon: MagnifyingGlass, weight: "duotone" },
   "image-generation": { icon: Image, weight: "duotone" },
@@ -210,6 +210,6 @@ export const CATEGORY_ICON_MAP: Record<string, ToolIconConfig> = {
  * Get category icon configuration
  * Falls back to Wrench icon with regular weight if category not found
  */
-export function getCategoryIcon(category: string): ToolIconConfig {
+function getCategoryIcon(category: string): ToolIconConfig {
   return CATEGORY_ICON_MAP[category] ?? { icon: Wrench, weight: "regular" };
 }

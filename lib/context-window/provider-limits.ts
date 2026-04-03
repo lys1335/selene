@@ -38,7 +38,7 @@ export interface ContextWindowConfig {
 /**
  * Parse context window string (e.g., "200K", "1M", "128K") to numeric tokens
  */
-export function parseContextWindowString(contextWindow: string): number {
+function parseContextWindowString(contextWindow: string): number {
   if (!contextWindow) return 128000; // Default fallback
 
   const normalized = contextWindow.toUpperCase().trim();
@@ -103,7 +103,7 @@ export const PROVIDER_DEFAULT_LIMITS: Record<LLMProvider, number> = {
  * Model-specific context window configurations.
  * Overrides defaults for known models with specific limits.
  */
-export const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>> = {
+const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>> = {
   // Anthropic Direct — 200K standard context window per Anthropic docs
   // (1M available only via opt-in beta header "context-1m-2025-08-07")
   "claude-sonnet-4-6": {
@@ -484,7 +484,7 @@ export function getContextWindowConfig(
  * @param provider - Optional provider for fallback
  * @returns Maximum tokens for the context window
  */
-export function getContextWindowLimit(modelId: string, provider?: LLMProvider): number {
+function getContextWindowLimit(modelId: string, provider?: LLMProvider): number {
   return getContextWindowConfig(modelId, provider).maxTokens;
 }
 
@@ -520,7 +520,7 @@ export function getTokenThresholds(
  * @param modelId - The model identifier
  * @returns Whether streaming is supported
  */
-export function supportsStreaming(modelId: string): boolean {
+function supportsStreaming(modelId: string): boolean {
   const config = MODEL_CONTEXT_CONFIGS[modelId];
   return config?.supportsStreaming ?? true;
 }
@@ -532,7 +532,7 @@ export function supportsStreaming(modelId: string): boolean {
  * @param provider - Optional provider for fallback
  * @returns Compaction configuration
  */
-export function getCompactionSettings(
+function getCompactionSettings(
   modelId: string,
   provider?: LLMProvider
 ): {
@@ -553,7 +553,7 @@ export function getCompactionSettings(
  * @param tokens - Number of tokens
  * @returns Formatted string (e.g., "200K", "1M")
  */
-export function formatContextWindowSize(tokens: number): string {
+function formatContextWindowSize(tokens: number): string {
   if (tokens >= 1_000_000) {
     const millions = tokens / 1_000_000;
     return millions === Math.floor(millions)

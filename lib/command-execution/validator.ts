@@ -160,7 +160,7 @@ export function validateCommand(
 /**
  * Check if a command is in the blocklist (for quick checks)
  */
-export function isCommandBlocked(command: string): boolean {
+function isCommandBlocked(command: string): boolean {
     const baseCommand = getBaseCommand(command);
     return (
         REMOVAL_COMMANDS.some((cmd) => baseCommand === cmd) ||
@@ -171,7 +171,7 @@ export function isCommandBlocked(command: string): boolean {
 /**
  * Get list of blocked commands (for documentation/display)
  */
-export function getBlockedCommands(): { dangerous: string[]; network: string[] } {
+function getBlockedCommands(): { dangerous: string[]; network: string[] } {
     return {
         dangerous: [...REMOVAL_COMMANDS],
         network: [...NETWORK_COMMANDS],

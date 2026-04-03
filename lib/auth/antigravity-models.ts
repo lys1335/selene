@@ -18,7 +18,7 @@ const ANTIGRAVITY_MODEL_LABELS: Record<AntigravityModelId, string> = {
   "gpt-oss-120b-medium": "GPT-OSS 120B (Medium)",
 };
 
-export function getAntigravityModelDisplayName(modelId: AntigravityModelId): string {
+function getAntigravityModelDisplayName(modelId: AntigravityModelId): string {
   return ANTIGRAVITY_MODEL_LABELS[modelId] || modelId;
 }
 

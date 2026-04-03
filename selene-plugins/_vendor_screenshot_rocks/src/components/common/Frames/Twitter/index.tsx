@@ -3,7 +3,7 @@ import {ICanvasProps} from "../../Canvas";
 import {view} from "@risingstack/react-easy-state";
 import {styles} from "./styles";
 
-export const TwitterFrame = view((props: ICanvasProps) => {
+const TwitterFrame = view((props: ICanvasProps) => {
     return (
         <div className={styles(props)}>
             <img className="twitter-logo" src="images/twitter/logo.png"/>

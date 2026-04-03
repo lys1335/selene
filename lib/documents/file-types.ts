@@ -1,4 +1,4 @@
-export const DOCUMENT_UPLOAD_EXTENSIONS = [
+const DOCUMENT_UPLOAD_EXTENSIONS = [
   ".pdf",
   ".docx",
   ".pptx",
@@ -34,13 +34,13 @@ export const DOCUMENT_SUPPORT_LABELS = [
   "JATS XML",
 ] as const;
 
-export const CHAT_ATTACHMENT_SUPPORT_LABELS = [
+const CHAT_ATTACHMENT_SUPPORT_LABELS = [
   ...DOCUMENT_SUPPORT_LABELS,
   "audio attachments",
   "images",
 ] as const;
 
-export const UNSUPPORTED_ATTACHMENT_EXTENSION_HINTS: Record<string, string> = {
+const UNSUPPORTED_ATTACHMENT_EXTENSION_HINTS: Record<string, string> = {
   ".xls": "Legacy Excel .xls is not supported yet. Save the workbook as .xlsx and try again.",
   ".doc": "Legacy Word .doc is not supported yet. Save the document as .docx and try again.",
   ".ppt": "Legacy PowerPoint .ppt is not supported yet. Save the presentation as .pptx and try again.",
@@ -82,7 +82,7 @@ function normalizeContentType(contentType: string | undefined): string {
   return contentType?.split(";")[0]?.trim().toLowerCase() || "application/octet-stream";
 }
 
-export function getFileExtension(filename: string | undefined): string {
+function getFileExtension(filename: string | undefined): string {
   if (!filename) return "";
   const dotIndex = filename.lastIndexOf(".");
   return dotIndex >= 0 ? filename.slice(dotIndex).toLowerCase() : "";
@@ -110,7 +110,7 @@ export function isImageAttachment(contentType: string | undefined): boolean {
   return normalizeContentType(contentType).startsWith("image/");
 }
 
-export function isAudioAttachment(contentType: string | undefined): boolean {
+function isAudioAttachment(contentType: string | undefined): boolean {
   return normalizeContentType(contentType).startsWith("audio/");
 }
 

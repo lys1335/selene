@@ -350,7 +350,7 @@ export interface UseSkillPickerStateReturn {
   setSelectedSkillIndex: (updater: ((index: number) => number) | number) => void;
 }
 
-export function useSkillPickerState({
+function useSkillPickerState({
   characterId,
   inputValue,
   cursorPosition,

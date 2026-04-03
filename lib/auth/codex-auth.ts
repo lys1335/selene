@@ -82,7 +82,7 @@ export function getCodexToken(): CodexOAuthToken | null {
   return cachedToken;
 }
 
-export function isCodexTokenValid(): boolean {
+function isCodexTokenValid(): boolean {
   const token = getCodexToken();
   if (!token) return false;
 

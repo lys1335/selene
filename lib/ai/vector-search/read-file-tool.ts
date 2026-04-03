@@ -374,7 +374,7 @@ async function executeReadFile(
  * 1. Knowledge Base documents (uploaded PDFs, text, Markdown, HTML)
  * 2. Synced folder files (indexed for vector search)
  */
-export function createReadFileTool(options: ReadFileToolOptions) {
+function createReadFileTool(options: ReadFileToolOptions) {
   const { sessionId, characterId } = options;
 
   // Wrap the execute function with logging

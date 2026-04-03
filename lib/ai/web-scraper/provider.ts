@@ -17,7 +17,7 @@ export function getWebScraperProvider(): WebScraperProvider {
   return hasFirecrawlKey ? "firecrawl" : "local";
 }
 
-export function isWebScraperConfigured(): boolean {
+function isWebScraperConfigured(): boolean {
   // Always true: local scraper is the baselene, Firecrawl is optional enhancement.
   return true;
 }

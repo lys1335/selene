@@ -14,7 +14,7 @@ const MODEL_LABELS: Record<string, string> = {
   "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
 };
 
-export function getClaudeCodeModelDisplayName(modelId: string): string {
+function getClaudeCodeModelDisplayName(modelId: string): string {
   return MODEL_LABELS[modelId] || modelId;
 }
 

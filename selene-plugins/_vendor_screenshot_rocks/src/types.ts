@@ -1,10 +1,10 @@
-export enum ImageFormats {
+enum ImageFormats {
     PNG = 'png',
     JPEG = 'jpeg',
     SVG = 'svg',
 }
 
-export enum ScreenshotType {
+enum ScreenshotType {
     Browser = 'Browser',
     Device = 'Device',
     None = 'None',
@@ -12,21 +12,21 @@ export enum ScreenshotType {
     Code = 'Code'
 }
 
-export enum CanvasBackgroundTypes {
+enum CanvasBackgroundTypes {
     Image = 'Image',
     Solid = 'Solid',
     Gradient = 'Gradient',
     None = 'None',
 }
 
-export enum Browsers {
+enum Browsers {
     Edge,
     Chrome,
     Firefox,
     Safari,
 }
 
-export enum SocialProviders {
+enum SocialProviders {
     Facebook,
     Twitter,
     WhatsApp,

@@ -824,7 +824,7 @@ export function hasRequiredApiKeys(): boolean {
 /**
  * Reset settings to defaults
  */
-export function resetSettings(): AppSettings {
+function resetSettings(): AppSettings {
     cachedSettings = null;
     const settings = { ...DEFAULT_SETTINGS, localUserId: crypto.randomUUID() };
     saveSettings(settings);

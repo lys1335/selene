@@ -85,7 +85,7 @@ async function resolveResearchGenerationConfig(config: Partial<DeepResearchConfi
 /**
  * Create initial research state
  */
-export function createInitialState(userQuery: string, config: Partial<DeepResearchConfig> = {}): DeepResearchState {
+function createInitialState(userQuery: string, config: Partial<DeepResearchConfig> = {}): DeepResearchState {
   return {
     userQuery,
     findings: [],

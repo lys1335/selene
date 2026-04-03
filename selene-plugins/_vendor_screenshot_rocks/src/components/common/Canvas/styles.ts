@@ -5,7 +5,7 @@ import {CanvasBackgroundTypes} from "../../../types";
 import {clamp} from "../../../utils/misc";
 import {CONFIG} from "../../../config";
 
-export const styles = (props: ICanvasProps): string => {
+const styles = (props: ICanvasProps): string => {
     return css`
       min-width: ${clamp(app.getCanvasDimensions().width, CONFIG.minCanvasWidth, CONFIG.maxCanvasWidth)}px;
       min-height: ${clamp(app.getCanvasDimensions().height, CONFIG.minCanvasHeight, CONFIG.maxCanvasHeight)}px;

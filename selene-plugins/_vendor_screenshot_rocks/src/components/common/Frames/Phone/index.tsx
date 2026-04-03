@@ -6,7 +6,7 @@ import "../../../../css/devices.css";
 import {deviceIdMap, phoneStore} from "../../../../stores/phoneStore";
 import {app} from "../../../../stores/appStore";
 
-export const PhoneFrame = view((props: ICanvasProps) => {
+const PhoneFrame = view((props: ICanvasProps) => {
     const colourVariant = phoneStore.getColourVariant() ? `device-${phoneStore.getColourVariant()}` : '';
     return (
         <div className={styles()}>

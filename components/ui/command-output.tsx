@@ -483,7 +483,7 @@ export function CommandOutput({
 /**
  * Inline command status for use in chat messages
  */
-export function CommandStatus({
+function CommandStatus({
     command,
     success,
     executionTime,

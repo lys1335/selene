@@ -56,13 +56,13 @@ export type WebkitDataTransferItem = DataTransferItem & {
   webkitGetAsEntry?: () => FileSystemEntry | null;
 };
 
-export function readEntryFile(entry: FileSystemFileEntry): Promise<File> {
+function readEntryFile(entry: FileSystemFileEntry): Promise<File> {
   return new Promise((resolve, reject) => {
     entry.file(resolve, reject);
   });
 }
 
-export function readDirectoryBatch(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
+function readDirectoryBatch(reader: FileSystemDirectoryReader): Promise<FileSystemEntry[]> {
   return new Promise((resolve, reject) => {
     reader.readEntries(resolve, reject);
   });

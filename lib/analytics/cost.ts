@@ -1,5 +1,5 @@
-export const CLAUDE_SONNET_45_INPUT_COST_PER_MILLION = 3;
-export const CLAUDE_SONNET_45_OUTPUT_COST_PER_MILLION = 15;
+const CLAUDE_SONNET_45_INPUT_COST_PER_MILLION = 3;
+const CLAUDE_SONNET_45_OUTPUT_COST_PER_MILLION = 15;
 
 export interface ClaudeCostBreakdown {
   inputTokens: number;

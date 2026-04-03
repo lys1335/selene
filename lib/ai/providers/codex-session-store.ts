@@ -114,16 +114,16 @@ export function disableWs(sessionId: string, cooldownMs: number = WS_DISABLED_CO
 }
 
 /** Get all active session IDs (for diagnostics). */
-export function getActiveSessionIds(): string[] {
+function getActiveSessionIds(): string[] {
   return [...sessions.keys()];
 }
 
 /** Get the total number of tracked sessions (for diagnostics). */
-export function getSessionCount(): number {
+function getSessionCount(): number {
   return sessions.size;
 }
 
 /** Clear all sessions (for testing). */
-export function clearAllSessions(): void {
+function clearAllSessions(): void {
   sessions.clear();
 }

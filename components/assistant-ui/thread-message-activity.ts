@@ -47,7 +47,7 @@ function getResultCount(result: unknown): number | null {
   return null;
 }
 
-export function hasVisibleText(parts: unknown): boolean {
+function hasVisibleText(parts: unknown): boolean {
   return asParts(parts).some(
     (part) => part.type === "text" && typeof part.text === "string" && part.text.length > 0
   );
@@ -61,7 +61,7 @@ export function isMessageInitiallyThinking(
   return !hasVisibleText(parts);
 }
 
-export function getVisibleTextSignature(parts: unknown): string {
+function getVisibleTextSignature(parts: unknown): string {
   return asParts(parts)
     .filter(
       (part): part is MessagePartLike & { type: "text"; text: string } =>
@@ -74,7 +74,7 @@ export function getVisibleTextSignature(parts: unknown): string {
     .join("|");
 }
 
-export function getVisibleToolSignature(
+function getVisibleToolSignature(
   parts: unknown,
   liveStatuses: Record<string, LiveToolStatus | undefined> = {}
 ): string {

@@ -2,7 +2,7 @@ import {store} from "@risingstack/react-easy-state";
 import {observe} from "@nx-js/observer-util";
 import {DeviceColour} from "../values/device-colour";
 
-export enum PhoneThemes {
+enum PhoneThemes {
     IPhone14Pro,
     IPhone14,
     Pixel6Pro,
@@ -14,7 +14,7 @@ export enum PhoneThemes {
     SurfaceBook,
 }
 
-export const deviceNamesMap = {
+const deviceNamesMap = {
     [PhoneThemes.IPhone14Pro]: "iPhone 14 Pro",
     [PhoneThemes.IPhone14]: "iPhone 14",
     [PhoneThemes.Pixel6Pro]: "Google Pixel 6 Pro",
@@ -26,7 +26,7 @@ export const deviceNamesMap = {
     [PhoneThemes.SurfaceBook]: "Surface Book",
 };
 
-export const deviceIdMap = {
+const deviceIdMap = {
     [PhoneThemes.IPhone14Pro]: "iphone-14-pro",
     [PhoneThemes.IPhone14]: "iphone-14",
     [PhoneThemes.Pixel6Pro]: "google-pixel-6-pro",
@@ -38,7 +38,7 @@ export const deviceIdMap = {
     [PhoneThemes.SurfaceBook]: "surface-book",
 };
 
-export const deviceColourVariantMap = new Map<PhoneThemes, DeviceColour[]>([
+const deviceColourVariantMap = new Map<PhoneThemes, DeviceColour[]>([
         [PhoneThemes.IPhone14Pro, [
             new DeviceColour("purple", "#342C3F"),
             new DeviceColour("silver", "#e2e3e4"),
@@ -54,7 +54,7 @@ export const deviceColourVariantMap = new Map<PhoneThemes, DeviceColour[]>([
     ]
 );
 
-export const deviceAspectRatioMap = {
+const deviceAspectRatioMap = {
     [PhoneThemes.IPhone14Pro]: 9 / 19.5,
     [PhoneThemes.IPhone14]: 9 / 19.5,
     [PhoneThemes.Pixel6Pro]: 9 / 19.5,
@@ -66,7 +66,7 @@ export const deviceAspectRatioMap = {
     [PhoneThemes.SurfaceBook]: 3 / 2,
 };
 
-export const defaultColourVariantMap = {
+const defaultColourVariantMap = {
     [PhoneThemes.IPhone14Pro]: 'purple',
 };
 
@@ -80,7 +80,7 @@ export interface IPhoneStore {
 
 }
 
-export let phoneStore = store({
+let phoneStore = store({
     colourVariant: new Map<PhoneThemes, string>([
         [PhoneThemes.IPhone14Pro, 'purple'],
     ]),

@@ -87,7 +87,7 @@ export function getRunContext(): RunContextData | undefined {
  * Get the current run context, throwing if not available.
  * Use this in code that MUST be within a run context.
  */
-export function requireRunContext(): RunContextData {
+function requireRunContext(): RunContextData {
   const ctx = runContextStorage.getStore();
   if (!ctx) {
     throw new Error("No run context available. Ensure code is called within withRunContext().");
@@ -122,7 +122,7 @@ export async function withRunContext<T>(
  * Execute a synchronous function within a run context.
  * For sync callbacks that don't need to await.
  */
-export function withRunContextSync<T>(
+function withRunContextSync<T>(
   options: CreateRunContextOptions,
   fn: () => T
 ): T {
@@ -144,7 +144,7 @@ export function withRunContextSync<T>(
  * Useful for setting messageId after it's known.
  * Note: This creates a NEW context for subsequent code.
  */
-export async function updateRunContext<T>(
+async function updateRunContext<T>(
   updates: Partial<Omit<RunContextData, "runId" | "startTime">>,
   fn: () => Promise<T>
 ): Promise<T> {
@@ -160,7 +160,7 @@ export async function updateRunContext<T>(
 /**
  * Get elapsed time since run started (in milliseconds)
  */
-export function getRunElapsedMs(): number | undefined {
+function getRunElapsedMs(): number | undefined {
   const ctx = getRunContext();
   return ctx ? Date.now() - ctx.startTime : undefined;
 }

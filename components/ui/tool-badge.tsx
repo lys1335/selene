@@ -115,7 +115,7 @@ export function ToolBadge({
 }
 
 /** Get icon configuration for a tool ID */
-export function getToolIconConfig(toolId: string): ToolIconConfig {
+function getToolIconConfig(toolId: string): ToolIconConfig {
   return getToolIcon(toolId);
 }
 

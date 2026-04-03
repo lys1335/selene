@@ -227,7 +227,7 @@ export function listPresets(): PresetId[] {
   return Object.keys(FRAME_MODELS) as PresetId[];
 }
 
-export function getFrameModel(preset: PresetId): FrameModel {
+function getFrameModel(preset: PresetId): FrameModel {
   return FRAME_MODELS[preset];
 }
 

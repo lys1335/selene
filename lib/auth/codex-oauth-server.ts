@@ -135,7 +135,7 @@ export function registerCodexOAuthState(state: string, verifier: string, origin:
   pendingStates.set(state, { verifier, origin });
 }
 
-export function isCodexOAuthServerReady(): boolean {
+function isCodexOAuthServerReady(): boolean {
   return serverReady;
 }
 

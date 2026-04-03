@@ -1,4 +1,4 @@
-export class Dimensions {
+class Dimensions {
     width: number;
     height: number;
 

@@ -160,7 +160,7 @@ export function subscribeToActions(
 /**
  * Remove all action event listeners for a session.
  */
-export function cleanupActionListeners(sessionId: string): void {
+function cleanupActionListeners(sessionId: string): void {
   getListenerStore().delete(sessionId);
 }
 

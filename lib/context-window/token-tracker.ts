@@ -309,7 +309,7 @@ export function getReliableMessageTokenCount(msg: Message): number {
  * @param text - The text to estimate
  * @returns Estimated token count
  */
-export function estimateTextTokens(text: string): number {
+function estimateTextTokens(text: string): number {
   if (!text) return 0;
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
@@ -320,7 +320,7 @@ export function estimateTextTokens(text: string): number {
  * @param content - The content to estimate (will be stringified if not string)
  * @returns Estimated token count
  */
-export function estimateContentTokens(content: unknown): number {
+function estimateContentTokens(content: unknown): number {
   if (!content) return 0;
 
   if (typeof content === "string") {
@@ -626,7 +626,7 @@ export function formatTokenCount(tokens: number): string {
  * @param maxTokens - Maximum allowed tokens
  * @returns Percentage (0-100)
  */
-export function calculateUsagePercentage(currentTokens: number, maxTokens: number): number {
+function calculateUsagePercentage(currentTokens: number, maxTokens: number): number {
   if (maxTokens <= 0) return 0;
   return (currentTokens / maxTokens) * 100;
 }

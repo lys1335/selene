@@ -1,7 +1,7 @@
 import { estimateTokens, CHARS_PER_TOKEN } from "@/lib/ai/output-limiter";
 import { middleTruncateText } from "@/lib/ai/truncation-utils";
 
-export const MIN_STREAM_TOOL_RESULT_TOKENS = 1;
+const MIN_STREAM_TOOL_RESULT_TOKENS = 1;
 export const MAX_STREAM_TOOL_RESULT_TOKENS = 25_000;
 
 export interface GuardToolResultForStreamingResult {

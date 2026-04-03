@@ -172,7 +172,7 @@ export async function getFileTreeForAgent(
 /**
  * Format file tree as markdown for LLM consumption
  */
-export function formatFileTreeAsMarkdown(
+function formatFileTreeAsMarkdown(
   trees: FileTreeResult[],
   maxLines: number = 100
 ): string {

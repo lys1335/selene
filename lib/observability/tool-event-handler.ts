@@ -212,7 +212,7 @@ export function initializeToolEventHandler(): void {
 /**
  * Check if the handler is initialized
  */
-export function isToolEventHandlerInitialized(): boolean {
+function isToolEventHandlerInitialized(): boolean {
   return isInitialized;
 }
 

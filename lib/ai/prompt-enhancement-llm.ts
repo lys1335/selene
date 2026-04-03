@@ -108,7 +108,7 @@ export function clearSession(sessionKey: string): void {
 /**
  * Clean up stale sessions (older than TTL)
  */
-export function cleanupStaleSessions(): number {
+function cleanupStaleSessions(): number {
   const now = Date.now();
   let cleaned = 0;
 

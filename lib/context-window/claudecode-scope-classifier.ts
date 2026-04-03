@@ -46,7 +46,7 @@ export function isDelegatedSubagentIntermediateResult(part: unknown): boolean {
   return part.result.running === true && part.result.completed !== true;
 }
 
-export function getDefaultScopeFromSessionMetadata(
+function getDefaultScopeFromSessionMetadata(
   sessionMetadata: Record<string, unknown> | null | undefined
 ): ContextScope {
   return sessionMetadata?.isDelegation === true ? "delegated" : "main";

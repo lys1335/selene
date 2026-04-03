@@ -38,7 +38,7 @@ export async function getCharacterModelConfig(
   );
 }
 
-export function buildSessionResolverOptions(
+function buildSessionResolverOptions(
   characterId: string | null | undefined,
   agentModelConfig?: AgentModelConfig | null,
 ): SessionResolverOptions {
@@ -124,7 +124,7 @@ export async function getCharacterStats(userId: string, characterId: string): Pr
   };
 }
 
-export async function getUserActiveCharacters(userId: string) {
+async function getUserActiveCharacters(userId: string) {
   return db.query.characters.findMany({
     where: and(
       eq(characters.userId, userId),
@@ -156,7 +156,7 @@ export async function deleteCharacter(id: string) {
   await db.delete(characters).where(eq(characters.id, id));
 }
 
-export async function archiveCharacter(id: string) {
+async function archiveCharacter(id: string) {
   return updateCharacter(id, { status: "archived" });
 }
 
@@ -208,7 +208,7 @@ export async function getCharacterImages(characterId: string) {
   });
 }
 
-export async function getPrimaryCharacterImage(characterId: string) {
+async function getPrimaryCharacterImage(characterId: string) {
   return db.query.characterImages.findFirst({
     where: and(
       eq(characterImages.characterId, characterId),
@@ -242,7 +242,7 @@ export async function setPrimaryCharacterImage(characterId: string, imageId: str
 // DRAFT/PROGRESS OPERATIONS
 // ============================================================================
 
-export async function getDraftCharacter(userId: string) {
+async function getDraftCharacter(userId: string) {
   return db.query.characters.findFirst({
     where: and(
       eq(characters.userId, userId),
@@ -252,7 +252,7 @@ export async function getDraftCharacter(userId: string) {
   });
 }
 
-export async function completeCharacterCreation(characterId: string) {
+async function completeCharacterCreation(characterId: string) {
   return updateCharacter(characterId, {
     status: "active"
   });
@@ -262,7 +262,7 @@ export async function completeCharacterCreation(characterId: string) {
 // INTERACTION TRACKING
 // ============================================================================
 
-export async function updateLastInteraction(characterId: string) {
+async function updateLastInteraction(characterId: string) {
   return db
     .update(characters)
     .set({ lastInteractionAt: now() })

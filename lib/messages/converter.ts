@@ -83,7 +83,7 @@ function parseMessageMetadata(metadata: unknown): Record<string, unknown> | null
   return typeof metadata === "object" ? metadata as Record<string, unknown> : null;
 }
 
-export function isInjectedLivePromptUserMessage(dbMessage: Pick<DBMessage, "role" | "metadata">): boolean {
+function isInjectedLivePromptUserMessage(dbMessage: Pick<DBMessage, "role" | "metadata">): boolean {
   if (dbMessage.role !== "user") return false;
   const metadata = parseMessageMetadata(dbMessage.metadata);
   return metadata?.livePromptInjected === true;
@@ -426,7 +426,7 @@ function buildUIPartsFromDBContent(
   return parts;
 }
 
-export function convertContentPartsToUIParts(content: DBContentPart[]): UIMessage["parts"] {
+function convertContentPartsToUIParts(content: DBContentPart[]): UIMessage["parts"] {
   const parts = buildUIPartsFromDBContent(content);
   return parts as UIMessage["parts"];
 }
@@ -434,7 +434,7 @@ export function convertContentPartsToUIParts(content: DBContentPart[]): UIMessag
 /**
  * Convert a database message to UIMessage format for assistant-ui
  */
-export function convertDBMessageToUIMessage(dbMessage: DBMessage): UIMessage | null {
+function convertDBMessageToUIMessage(dbMessage: DBMessage): UIMessage | null {
   // Skip system/tool role messages
   if (dbMessage.role === "system" || dbMessage.role === "tool") {
     return null;
@@ -709,7 +709,7 @@ export function convertToThreadMessageLike(messages: UIMessage[]): ThreadMessage
  * Generate a stable signature for content parts to detect meaningful changes.
  * Used to prevent unnecessary re-renders during streaming.
  */
-export function getContentPartsSignature(parts: DBContentPart[]): string {
+function getContentPartsSignature(parts: DBContentPart[]): string {
     if (!parts || parts.length === 0) return "";
     
     // Create a lightweight signature that captures meaningful changes

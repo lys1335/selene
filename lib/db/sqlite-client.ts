@@ -103,7 +103,7 @@ export const db: BetterSQLite3Database<typeof schema> = isBuildTime
   : getDb();
 
 // Export close function for cleanup
-export function closeDb(): void {
+function closeDb(): void {
   if (globalForDb.sqlite) {
     globalForDb.sqlite.close();
     globalForDb.sqlite = undefined;

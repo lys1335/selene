@@ -163,7 +163,7 @@ export function filterStreamingPartsForPersistence(
   return filteredParts;
 }
 
-export function buildProgressContentSnapshot(
+function buildProgressContentSnapshot(
   streamingState: StreamingMessageState,
   persistedParts: DBContentPart[]
 ): DBContentPart[] {

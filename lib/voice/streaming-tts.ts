@@ -5,7 +5,7 @@
 
 import { stripMarkdown } from "@/lib/utils/strip-markdown";
 import { formatCodeForSpeech } from "@/lib/voice/format-tts-text";
-export { stripMarkdown };
+{ stripMarkdown };
 
 // ---------------------------------------------------------------------------
 // StableStreamingLifecycle

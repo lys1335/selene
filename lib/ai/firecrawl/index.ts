@@ -436,7 +436,7 @@ Note: Crawling is async and may take up to 60 seconds depending on page count.`,
 /**
  * Check if Firecrawl is available (API key configured)
  */
-export function isFirecrawlAvailable(): boolean {
+function isFirecrawlAvailable(): boolean {
   const provider = getWebScraperProvider();
   if (provider === "local") {
     return true;

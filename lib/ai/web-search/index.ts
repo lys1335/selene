@@ -594,6 +594,6 @@ Recommended workflow:
   });
 }
 
-export function isWebSearchAvailable(): boolean {
+function isWebSearchAvailable(): boolean {
   return isAnySearchProviderAvailable();
 }

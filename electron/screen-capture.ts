@@ -39,7 +39,7 @@ const SCREENSHOT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
  * Delete screenshot files older than SCREENSHOT_TTL_MS.
  * Call once at app startup to prevent unbounded disk growth.
  */
-export function cleanOldScreenshots(mediaDir: string): void {
+function cleanOldScreenshots(mediaDir: string): void {
   const screenshotsDir = path.join(mediaDir, "screenshots");
   if (!fs.existsSync(screenshotsDir)) return;
   try {

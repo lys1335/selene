@@ -301,7 +301,7 @@ export const VoiceProvider: FC<VoiceProviderProps> = ({ children }) => {
 // ---------------------------------------------------------------------------
 
 /** Use inside a VoiceProvider. Throws if provider is missing. */
-export function useVoiceContext(): VoiceContextValue {
+function useVoiceContext(): VoiceContextValue {
   const ctx = useContext(VoiceContext);
   if (!ctx) {
     throw new Error("useVoiceContext must be used within a <VoiceProvider>");

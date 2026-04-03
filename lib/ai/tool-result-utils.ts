@@ -145,7 +145,7 @@ function summarizeToolKeys(result: Record<string, unknown>): string {
   return ` keys=${keys.join(", ")}`;
 }
 
-export function buildToolSummary(toolName: string, input?: unknown, output?: unknown): string {
+function buildToolSummary(toolName: string, input?: unknown, output?: unknown): string {
   const safeName = toolName || "tool";
 
   if (output === null || output === undefined) {
@@ -328,7 +328,7 @@ function hasProjectionTruncationMarker(value: unknown): boolean {
   return false;
 }
 
-export function getToolSummaryFromOutput(toolName: string, output?: unknown, input?: unknown): string {
+function getToolSummaryFromOutput(toolName: string, output?: unknown, input?: unknown): string {
   const resultObj = getRecord(output);
   const summary = getString(resultObj?.summary);
   if (summary) {
@@ -462,7 +462,7 @@ export function isMissingToolResult(output: unknown): boolean {
  * @param result - The tool result from database (could be string or object)
  * @returns Structured tool result object
  */
-export function normalizeLegacyToolResult(result: unknown): Record<string, unknown> {
+function normalizeLegacyToolResult(result: unknown): Record<string, unknown> {
   // If null/undefined, return empty error result
   if (result === null || result === undefined) {
     return { status: "error", error: "No result available" };

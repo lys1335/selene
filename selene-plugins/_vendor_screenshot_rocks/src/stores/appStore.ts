@@ -7,18 +7,18 @@ import {Crop} from "react-image-crop";
 import {Dimensions} from "../values/dimensions";
 import {deviceAspectRatioMap, phoneStore} from "./phoneStore";
 
-export const bgImages: string[] = [
+const bgImages: string[] = [
     '1.jpg',
     '2.jpg',
     '3.png',
     '4.jpg',
 ].map(img => `/images/backgrounds/${img}`);
 
-export const defaultCanvasBgColor: string = '#a090c1';
+const defaultCanvasBgColor: string = '#a090c1';
 
-export const defaultCanvasSize: number = 75;
+const defaultCanvasSize: number = 75;
 
-export const defaultResettableCanvasStyles: object = {
+const defaultResettableCanvasStyles: object = {
     verticalPosition: 0,
     horizontalPosition: 0,
     gradientAngle: 45,
@@ -31,7 +31,7 @@ export const defaultResettableCanvasStyles: object = {
     height: 1200,
 }
 
-export const defaultCanvasSizeMap = new Map<ScreenshotType, number>([
+const defaultCanvasSizeMap = new Map<ScreenshotType, number>([
     [ScreenshotType.Browser, 75],
     [ScreenshotType.Device, 120],
     [ScreenshotType.Twitter, 80],
@@ -100,7 +100,7 @@ export interface IStore {
     resetImage(): void;
 }
 
-export let app = store({
+let app = store({
     frameType: ScreenshotType.Browser,
     defaultImageFormat: ImageFormats.PNG,
     isDownloadMode: false,

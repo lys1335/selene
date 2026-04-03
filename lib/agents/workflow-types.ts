@@ -151,12 +151,12 @@ export function toObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-export function toStringArray(value: unknown): string[] {
+function toStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === "string");
 }
 
-export function parseSharedResources(raw: unknown): WorkflowSharedResources {
+function parseSharedResources(raw: unknown): WorkflowSharedResources {
   const parsed = toObject(raw);
   return {
     syncFolderIds: toStringArray(parsed.syncFolderIds),
@@ -166,7 +166,7 @@ export function parseSharedResources(raw: unknown): WorkflowSharedResources {
   };
 }
 
-export function parseWorkflowMetadata(raw: unknown): AgentWorkflow["metadata"] {
+function parseWorkflowMetadata(raw: unknown): AgentWorkflow["metadata"] {
   const parsed = toObject(raw);
   const source = parsed.source === "manual"
     ? "manual"
@@ -183,7 +183,7 @@ export function parseWorkflowMetadata(raw: unknown): AgentWorkflow["metadata"] {
   };
 }
 
-export function parseMemberMetadataSeed(raw: unknown): AgentWorkflowMember["metadataSeed"] {
+function parseMemberMetadataSeed(raw: unknown): AgentWorkflowMember["metadataSeed"] {
   const parsed = toObject(raw);
   const tags = toStringArray(parsed.tags);
   return {

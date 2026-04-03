@@ -1,6 +1,6 @@
 import {css} from "emotion";
 
-export const styles = () => {
+const styles = () => {
     return css`
       display: inline-block;
       font-size: .6em;

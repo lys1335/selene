@@ -11,26 +11,26 @@ import { z } from "zod";
 // Plugin Manifest Validation
 // =============================================================================
 
-export const pluginAuthorSchema = z.object({
+const pluginAuthorSchema = z.object({
   name: z.string().min(1).max(200),
   // Real-world plugins have comma-separated emails, URLs, etc. — don't validate format
   email: z.string().max(500).optional(),
   url: z.string().max(500).optional(),
 }).passthrough();
 
-export const hookHandlerSchema = z.object({
+const hookHandlerSchema = z.object({
   type: z.enum(["command", "prompt", "agent"]),
   command: z.string().max(4096).optional(),
   timeout: z.number().int().positive().max(3600).optional(),
   statusMessage: z.string().max(500).optional(),
 });
 
-export const hookEntrySchema = z.object({
+const hookEntrySchema = z.object({
   matcher: z.string().max(500).optional(),
   hooks: z.array(hookHandlerSchema).min(1).max(50),
 });
 
-export const hookEventTypeSchema = z.enum([
+const hookEventTypeSchema = z.enum([
   "SessionStart",
   "UserPromptSubmit",
   "PreToolUse",
@@ -52,7 +52,7 @@ export const pluginHooksConfigSchema = z.object({
   description: z.string().optional(),
 }).passthrough();
 
-export const pluginMCPServerEntrySchema = z.object({
+const pluginMCPServerEntrySchema = z.object({
   command: z.string().max(4096).optional(),
   args: z.array(z.string().max(4096)).optional(),
   env: z.record(z.string()).optional(),
@@ -61,7 +61,7 @@ export const pluginMCPServerEntrySchema = z.object({
   type: z.enum(["http", "sse", "stdio"]).optional(),
 });
 
-export const pluginLSPServerEntrySchema = z.object({
+const pluginLSPServerEntrySchema = z.object({
   command: z.string().min(1).max(4096),
   args: z.array(z.string().max(4096)).optional(),
   extensionToLanguage: z.record(z.string().min(1), z.string().min(1)),
@@ -121,14 +121,14 @@ const pluginSourcePIPSchema = z.object({
   registry: z.string().url().optional(),
 });
 
-export const pluginSourceSchema = z.union([
+const pluginSourceSchema = z.union([
   pluginSourceGitHubSchema,
   pluginSourceURLSchema,
   pluginSourceNPMSchema,
   pluginSourcePIPSchema,
 ]);
 
-export const marketplacePluginEntrySchema = z.object({
+const marketplacePluginEntrySchema = z.object({
   name: z.string().min(1).max(120),
   source: z.union([z.string(), pluginSourceSchema]),
   description: z.string().max(5000).optional(),

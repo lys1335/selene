@@ -36,7 +36,7 @@ function getTavilyApiKey(): string | undefined {
 /**
  * Search using Tavily API
  */
-export async function tavilySearch(
+async function tavilySearch(
   query: string,
   options: {
     maxResults?: number;
@@ -101,7 +101,7 @@ export async function tavilySearch(
 /**
  * Search using DuckDuckGo (free, no API key needed)
  */
-export async function duckduckgoSearch(
+async function duckduckgoSearch(
   query: string,
   options: {
     maxResults?: number;
@@ -136,7 +136,7 @@ export async function duckduckgoSearch(
 /**
  * Mock search for development when no API key is available
  */
-export function mockSearch(query: string): ResearchSource[] {
+function mockSearch(query: string): ResearchSource[] {
   console.log('[DEEP-RESEARCH] Using mock search for:', query);
 
   return [

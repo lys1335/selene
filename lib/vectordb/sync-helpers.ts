@@ -44,7 +44,7 @@ export const MAX_FILE_INDEXING_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
  * Extensions treated as plain text/code for line-based size checks.
  * Binary formats like PDF should not be decoded as UTF-8 for these checks.
  */
-export const TEXT_FILE_EXTENSIONS = new Set([
+const TEXT_FILE_EXTENSIONS = new Set([
   "txt",
   "md",
   "markdown",
@@ -191,7 +191,7 @@ export function warnIfLargeLocalEmbeddingSync(folderPath: string, fileCount: num
 /**
  * Check if a file should be included based on extension and patterns
  */
-export function shouldIncludeFile(
+function shouldIncludeFile(
   filePath: string,
   includeExtensions: string[],
   shouldIgnore: (filePath: string) => boolean
@@ -298,7 +298,7 @@ export function incrementSkipReason(reasons: Record<string, number>, key: string
 // Smart reindex helpers
 // ---------------------------------------------------------------------------
 
-export const SMART_REINDEX_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const SMART_REINDEX_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export function shouldSmartReindex(
   lastRunMetadata: unknown,

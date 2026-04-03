@@ -1,6 +1,6 @@
 import type { CatalogSkillCollection, CatalogSkillWithStatus } from "@/lib/skills/catalog/types";
 
-export const CATEGORY_LABELS: Record<string, string> = {
+const CATEGORY_LABELS: Record<string, string> = {
   design: "Design",
   deploy: "Deploy",
   "dev-tools": "Dev Tools",

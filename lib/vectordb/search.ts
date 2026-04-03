@@ -126,7 +126,7 @@ export async function searchVectorDB(params: {
 /**
  * Search with combined results from multiple agents (for future use)
  */
-export async function searchMultipleAgents(params: {
+async function searchMultipleAgents(params: {
   characterIds: string[];
   query: string;
   options?: VectorSearchOptions;

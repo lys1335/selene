@@ -23,7 +23,7 @@ const CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
 
 const sessionStore = new Map<string, WebBrowseSession>();
 
-export function getWebBrowseSession(sessionId: string): WebBrowseSession {
+function getWebBrowseSession(sessionId: string): WebBrowseSession {
   let session = sessionStore.get(sessionId);
 
   if (!session) {
@@ -161,7 +161,7 @@ export async function setSessionRecentUrls(sessionId: string, urls: string[]): P
   session.lastAccessedAt = new Date();
 }
 
-export async function getSessionRecentUrls(sessionId: string): Promise<string[]> {
+async function getSessionRecentUrls(sessionId: string): Promise<string[]> {
   const session = sessionStore.get(sessionId);
   if (session?.lastFetchedUrls && session.lastFetchedUrls.length > 0) {
     return session.lastFetchedUrls;
@@ -170,11 +170,11 @@ export async function getSessionRecentUrls(sessionId: string): Promise<string[]>
   return [];
 }
 
-export async function clearSession(sessionId: string): Promise<void> {
+async function clearSession(sessionId: string): Promise<void> {
   sessionStore.delete(sessionId);
 }
 
-export async function cleanupExpiredEntries(): Promise<number> {
+async function cleanupExpiredEntries(): Promise<number> {
   const now = Date.now();
   let totalCleaned = 0;
   const sessionsToDelete: string[] = [];

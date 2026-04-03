@@ -668,7 +668,7 @@ export class CompactionService {
  *
  * @deprecated Use CompactionService.compact() instead
  */
-export async function compactIfNeeded(
+async function compactIfNeeded(
   sessionId: string,
   modelId?: string,
   provider?: string

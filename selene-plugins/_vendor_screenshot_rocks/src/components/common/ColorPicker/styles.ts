@@ -1,6 +1,6 @@
 import {css} from "emotion";
 
-export const styles = (color: any) => {
+const styles = (color: any) => {
     return css`
         .color {
           width: 36px;

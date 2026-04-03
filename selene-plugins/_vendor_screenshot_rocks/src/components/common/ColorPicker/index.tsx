@@ -8,7 +8,7 @@ interface IColorPickerProps {
     onColorChange: ((color: RGBColor) => {});
 }
 
-export const ColorPicker = ({initialColor, onColorChange}: IColorPickerProps) => {
+const ColorPicker = ({initialColor, onColorChange}: IColorPickerProps) => {
     const [displayColorPicker, setDisplayColorPicker] = useState(false);
     const [color, setColor] = useState<RGBColor>(hex2rgba(initialColor))
 

@@ -181,7 +181,7 @@ export async function getSkillById(skillId: string, userId: string): Promise<Ski
   return row ? mapSkillRecord(row) : null;
 }
 
-export async function getSkillByName(
+async function getSkillByName(
   userId: string,
   characterId: string,
   skillName: string
@@ -193,7 +193,7 @@ export async function getSkillByName(
   return row ? mapSkillRecord(row) : null;
 }
 
-export async function findSkillByNameLike(
+async function findSkillByNameLike(
   userId: string,
   characterId: string,
   query: string
@@ -697,7 +697,7 @@ export async function getSkillFile(
 /**
  * Get all executable scripts for a skill.
  */
-export async function getSkillScripts(
+async function getSkillScripts(
   skillId: string,
   userId: string
 ): Promise<SkillFile[]> {

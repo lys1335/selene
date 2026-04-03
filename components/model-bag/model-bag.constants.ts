@@ -104,7 +104,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<LLMProvider, string> = {
 };
 
 /** Role display metadata */
-export const ROLE_THEME: Record<
+const ROLE_THEME: Record<
   ModelRole,
   {
     label: string;

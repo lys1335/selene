@@ -517,6 +517,6 @@ export function useAvatar(
 // Reset loader cache (for testing only)
 // =============================================================================
 
-export function _resetLoaderCache(): void {
+function _resetLoaderCache(): void {
   talkingHeadLoadPromise = null;
 }

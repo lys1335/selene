@@ -312,7 +312,7 @@ export async function getNonCompactedMessages(sessionId: string) {
   });
 }
 
-export async function markMessagesAsCompacted(
+async function markMessagesAsCompacted(
   sessionId: string,
   beforeMessageId: string
 ) {
@@ -473,7 +473,7 @@ export async function updateToolRun(
   return toolRun;
 }
 
-export async function getToolRun(id: string) {
+async function getToolRun(id: string) {
   return db.query.toolRuns.findFirst({
     where: eq(toolRuns.id, id),
   });

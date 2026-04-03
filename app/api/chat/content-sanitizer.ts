@@ -244,7 +244,7 @@ export function sanitizeTextContent(text: string, context: string, sessionId?: s
 // For DB storage: strip back to compact placeholder "[Pasted text #N +M lines]"
 // For AI: extract blocks before sanitization, re-insert after to bypass truncation
 
-export function stripPasteContentForStorage(text: string): string {
+function stripPasteContentForStorage(text: string): string {
   return text.replace(
     /\[PASTE_CONTENT:(\d+):(\d+)\]\n[\s\S]*?\n\[\/PASTE_CONTENT:\1\]/g,
     (_match, n, m) => `[Pasted text #${n} +${m} lines]`
@@ -288,7 +288,7 @@ export function reinsertPasteBlocks(text: string, pasteBlocks: PasteBlock[]): st
 
 // Strip paste content from a message's text fields before saving to DB.
 // Produces a shallow copy of the message with paste delimiters collapsed back to placeholders.
-export function stripPasteFromMessageForDB<T extends { content?: unknown; parts?: Array<{ type: string; text?: string; [key: string]: unknown }> }>(msg: T): T {
+function stripPasteFromMessageForDB<T extends { content?: unknown; parts?: Array<{ type: string; text?: string; [key: string]: unknown }> }>(msg: T): T {
   if (typeof msg.content === "string") {
     return { ...msg, content: stripPasteContentForStorage(msg.content) };
   }

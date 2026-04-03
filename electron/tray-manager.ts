@@ -246,6 +246,6 @@ export function destroyTray(): void {
  * Return the current Tray instance, or null if not yet initialized / already
  * destroyed.
  */
-export function getTray(): Tray | null {
+function getTray(): Tray | null {
   return getTrayInstance();
 }

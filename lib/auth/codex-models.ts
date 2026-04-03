@@ -60,7 +60,7 @@ export const CODEX_MODEL_IDS = [
 
 export type CodexModelId = (typeof CODEX_MODEL_IDS)[number];
 
-export const MODEL_MAP: Record<string, string> = {
+const MODEL_MAP: Record<string, string> = {
   // GPT-5.4
   "gpt-5.4": "gpt-5.4",
   "gpt-5.4-none": "gpt-5.4",
@@ -202,7 +202,7 @@ export function normalizeCodexModel(model: string | undefined): string {
   return "gpt-5.4";
 }
 
-export function getCodexModelDisplayName(modelId: string): string {
+function getCodexModelDisplayName(modelId: string): string {
   const match = modelId.match(/-(none|low|medium|high|xhigh)$/);
   const suffix = match?.[1];
   const baseId = suffix ? modelId.slice(0, -match[0].length) : modelId;

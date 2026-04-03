@@ -216,7 +216,7 @@ export async function appendRunEvent(options: AppendRunEventOptions): Promise<Ag
 /**
  * Get all events for a run
  */
-export async function getRunEvents(runId: string): Promise<AgentRunEvent[]> {
+async function getRunEvents(runId: string): Promise<AgentRunEvent[]> {
   return db.query.agentRunEvents.findMany({
     where: eq(agentRunEvents.runId, runId),
     orderBy: agentRunEvents.timestamp,
@@ -237,7 +237,7 @@ function hashContent(content: string): string {
 /**
  * Get or create a prompt template by key
  */
-export async function getOrCreatePromptTemplate(
+async function getOrCreatePromptTemplate(
   key: string,
   description?: string
 ): Promise<PromptTemplate> {
@@ -265,7 +265,7 @@ export async function getOrCreatePromptTemplate(
  * If the latest version has the same content hash, returns that version.
  * Otherwise creates a new version with incremented version number.
  */
-export async function getOrCreatePromptVersion(options: {
+async function getOrCreatePromptVersion(options: {
   templateKey: string;
   content: string;
   createdByUserId?: string;
@@ -307,7 +307,7 @@ export async function getOrCreatePromptVersion(options: {
 /**
  * Get a prompt version by ID
  */
-export async function getPromptVersion(versionId: string): Promise<PromptVersion | undefined> {
+async function getPromptVersion(versionId: string): Promise<PromptVersion | undefined> {
   return db.query.promptVersions.findFirst({
     where: eq(promptVersions.id, versionId),
   });
@@ -316,7 +316,7 @@ export async function getPromptVersion(versionId: string): Promise<PromptVersion
 /**
  * Get the latest version for a template key
  */
-export async function getLatestPromptVersion(templateKey: string): Promise<PromptVersion | undefined> {
+async function getLatestPromptVersion(templateKey: string): Promise<PromptVersion | undefined> {
   const template = await db.query.promptTemplates.findFirst({
     where: eq(promptTemplates.key, templateKey),
   });
@@ -455,7 +455,7 @@ export async function markRunAsCancelled(
 /**
  * Bulk cleanup stale runs
  */
-export async function cleanupStaleRuns(
+async function cleanupStaleRuns(
   thresholdMinutes: number = 30
 ): Promise<{ cleaned: number; runIds: string[] }> {
   const staleRuns = await findStaleRuns(thresholdMinutes);
@@ -620,7 +620,7 @@ export async function getPromptVersionMetrics(
 /**
  * Get runs that used a specific prompt version
  */
-export async function getRunsByPromptVersion(
+async function getRunsByPromptVersion(
   versionId: string,
   limit: number = 50
 ): Promise<AgentRun[]> {

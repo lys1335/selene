@@ -115,7 +115,7 @@ export async function findChannelConversationBySessionId(
   });
 }
 
-export async function listChannelConversationsByCharacter(
+async function listChannelConversationsByCharacter(
   characterId: string
 ): Promise<ChannelConversation[]> {
   return db.query.channelConversations.findMany({

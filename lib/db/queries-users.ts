@@ -2,7 +2,7 @@ import { db } from "./sqlite-client";
 import { users } from "./sqlite-schema";
 import { eq } from "drizzle-orm";
 
-export async function getOrCreateUserByExternalId(externalId: string, email?: string | null) {
+async function getOrCreateUserByExternalId(externalId: string, email?: string | null) {
   const existingUser = await db.query.users.findFirst({
     where: eq(users.externalId, externalId),
   });
@@ -25,7 +25,7 @@ export async function getOrCreateUserByExternalId(externalId: string, email?: st
   return newUser;
 }
 
-export async function getUserByExternalId(externalId: string) {
+async function getUserByExternalId(externalId: string) {
   return db.query.users.findFirst({
     where: eq(users.externalId, externalId),
   });

@@ -67,7 +67,7 @@ export async function seedPluginSkillRevisions(
   await db.insert(pluginSkillRevisions).values(rowsToInsert);
 }
 
-export async function getLatestPluginSkillRevision(
+async function getLatestPluginSkillRevision(
   pluginId: string,
   namespacedName: string,
 ): Promise<PluginSkillRevisionRecord | null> {

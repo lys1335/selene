@@ -293,7 +293,7 @@ export async function callImagenEdit(
   };
 }
 
-export async function checkAsyncJobStatus(
+async function checkAsyncJobStatus(
   statusUrl: string
 ): Promise<ImageEditResult> {
   const headers: Record<string, string> = {};

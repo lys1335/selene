@@ -737,7 +737,7 @@ export async function reindexAllFolders(
 /**
  * Reindex all folders for every character that has synced folders.
  */
-export async function reindexAllCharacters(
+async function reindexAllCharacters(
   parallelConfig: Partial<ParallelConfig> = {}
 ): Promise<Record<string, SyncResult[]>> {
   const rows = await db
@@ -887,7 +887,7 @@ let isSyncingStaleFolders = false;
 /**
  * Sync pending folders (folders that were added but never synced).
  */
-export async function syncPendingFolders(): Promise<SyncResult[]> {
+async function syncPendingFolders(): Promise<SyncResult[]> {
   console.log("[SyncService] Checking for pending folders to sync...");
 
   const pendingFolders = await db

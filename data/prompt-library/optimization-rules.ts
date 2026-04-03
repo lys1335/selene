@@ -17,7 +17,7 @@ export interface SceneTypeGuide {
   commonConstraints: string[];
 }
 
-export const OPTIMIZATION_RULES: OptimizationRule[] = [
+const OPTIMIZATION_RULES: OptimizationRule[] = [
   {
     id: "replace-feeling-words",
     name: "Replace feeling words with professional terms",
@@ -81,7 +81,7 @@ export const OPTIMIZATION_RULES: OptimizationRule[] = [
   },
 ];
 
-export const SCENE_TYPES: SceneTypeGuide[] = [
+const SCENE_TYPES: SceneTypeGuide[] = [
   // Alias export name follows the implementation plan wording.
   {
     type: "Product Photography",

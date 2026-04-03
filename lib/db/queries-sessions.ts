@@ -27,7 +27,7 @@ export interface ListSessionsPaginatedResult {
   totalCount: number;
 }
 
-export function extractSessionMetadataColumns(metadata: unknown) {
+function extractSessionMetadataColumns(metadata: unknown) {
   const meta = (metadata ?? {}) as SessionMetadataShape;
   return {
     characterId: meta.characterId ?? null,
@@ -146,7 +146,7 @@ export async function listSessionsByCharacterId(
 /**
  * Get session count for a character
  */
-export async function getCharacterSessionCount(
+async function getCharacterSessionCount(
   userId: string,
   characterId: string
 ): Promise<number> {

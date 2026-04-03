@@ -1,6 +1,6 @@
 import {Browsers, SocialProviders} from "../types";
 
-export const getBrowserType = (): Browsers | null => {
+const getBrowserType = (): Browsers | null => {
     const userAgent = window.navigator.userAgent;
     if (userAgent.includes('Edg')) {
         return Browsers.Edge;
@@ -21,7 +21,7 @@ export const getBrowserType = (): Browsers | null => {
     return null;
 }
 
-export const getBrowserExtensionInfo = () => {
+const getBrowserExtensionInfo = () => {
     const browser = getBrowserType();
 
     const availableExtension = {
@@ -45,8 +45,8 @@ export const getBrowserExtensionInfo = () => {
     return (availableExtension as any)[browser];
 }
 
-export const clamp = (number: number, min: number, max: number): number => {
+const clamp = (number: number, min: number, max: number): number => {
     return Math.max(min, Math.min(number, max));
 }
 
-export const equals = (thing1: any, thing2: any): boolean => (thing1 === thing2);
+const equals = (thing1: any, thing2: any): boolean => (thing1 === thing2);

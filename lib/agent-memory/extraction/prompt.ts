@@ -5,7 +5,7 @@
  * Designed for visual AI workflows, not coding-focused.
  */
 
-export const MEMORY_EXTRACTION_PROMPT = `You are a memory extraction system for an AI agent platform. Your job is to identify important patterns, preferences, and rules from conversations that should be remembered for future interactions.
+const MEMORY_EXTRACTION_PROMPT = `You are a memory extraction system for an AI agent platform. Your job is to identify important patterns, preferences, and rules from conversations that should be remembered for future interactions.
 
 IMPORTANT: This is an AI workflow platform used for:
 - Image and video generation

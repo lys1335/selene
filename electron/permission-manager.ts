@@ -45,7 +45,7 @@ function mapMediaAccessStatus(raw: string): PermissionStatus {
  * Synchronously returns the current screen-capture permission status without
  * prompting the user or triggering any system dialog.
  */
-export function getScreenPermissionStatus(): PermissionStatus {
+function getScreenPermissionStatus(): PermissionStatus {
   if (process.platform !== "darwin") {
     // Windows / Linux do not gate screen capture behind a permission prompt.
     return "granted";
@@ -58,7 +58,7 @@ export function getScreenPermissionStatus(): PermissionStatus {
  * Checks screen, microphone, and accessibility permissions and returns their
  * current statuses.
  */
-export async function checkPermissions(): Promise<PermissionCheckResult> {
+async function checkPermissions(): Promise<PermissionCheckResult> {
   if (process.platform === "darwin") {
     const screen = getScreenPermissionStatus();
     const micRaw = systemPreferences.getMediaAccessStatus("microphone");
@@ -93,7 +93,7 @@ export async function checkPermissions(): Promise<PermissionCheckResult> {
  * Opens System Preferences › Privacy › Screen Recording on macOS.
  * No-op on other platforms (screen capture is always permitted there).
  */
-export async function requestScreenPermission(): Promise<void> {
+async function requestScreenPermission(): Promise<void> {
   if (process.platform !== "darwin") return;
   await shell.openExternal(
     "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
@@ -105,7 +105,7 @@ export async function requestScreenPermission(): Promise<void> {
  * Returns true if access was granted, false otherwise.
  * On non-macOS platforms, returns true immediately.
  */
-export async function requestMicPermission(): Promise<boolean> {
+async function requestMicPermission(): Promise<boolean> {
   if (process.platform !== "darwin") return true;
   return systemPreferences.askForMediaAccess("microphone");
 }
@@ -115,7 +115,7 @@ export async function requestMicPermission(): Promise<boolean> {
  * automation features).  On macOS this opens the Accessibility pane; on
  * Windows and other platforms it returns true immediately.
  */
-export async function requestAccessibilityPermission(): Promise<boolean> {
+async function requestAccessibilityPermission(): Promise<boolean> {
   if (process.platform !== "darwin") return true;
   // Passing `true` causes the system to show the Accessibility permission
   // prompt / open System Settings if the app is not yet trusted.
@@ -127,7 +127,7 @@ export async function requestAccessibilityPermission(): Promise<boolean> {
  * Calls `onGranted` as soon as the status transitions to "granted".
  * Returns a cleanup function that cancels the poll early if needed.
  */
-export function pollScreenPermission(
+function pollScreenPermission(
   onGranted: () => void,
   timeoutMs = 30_000,
 ): () => void {

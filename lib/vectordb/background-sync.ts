@@ -110,7 +110,7 @@ async function runBackgroundSync(): Promise<void> {
 /**
  * Start the background sync scheduler
  */
-export function startBackgroundSync(): void {
+function startBackgroundSync(): void {
   if (syncIntervalId) {
     console.log("[BackgroundSync] Scheduler already running");
     return;
@@ -131,7 +131,7 @@ export function startBackgroundSync(): void {
 /**
  * Stop the background sync scheduler
  */
-export function stopBackgroundSync(): void {
+function stopBackgroundSync(): void {
   if (syncIntervalId) {
     clearInterval(syncIntervalId);
     syncIntervalId = null;
@@ -226,6 +226,6 @@ export async function initializeVectorSync(): Promise<void> {
 /**
  * Check if the sync system is initialized
  */
-export function isVectorSyncInitialized(): boolean {
+function isVectorSyncInitialized(): boolean {
   return isInitialized;
 }

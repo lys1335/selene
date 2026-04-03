@@ -19,7 +19,7 @@ interface SchedulerConfig {
   enabled?: boolean;
 }
 
-export class SchedulerService {
+class SchedulerService {
   private jobs: Map<string, CronJob> = new Map();
   private taskQueue: TaskQueue;
   private checkInterval: NodeJS.Timeout | null = null;
@@ -399,6 +399,6 @@ export async function startScheduler(): Promise<void> {
   }
 }
 
-export function stopScheduler(): Promise<void> {
+function stopScheduler(): Promise<void> {
   return getScheduler().stop();
 }

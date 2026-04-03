@@ -360,7 +360,7 @@ export interface CharacterPromptOptions {
   toolLoadingMode?: "deferred" | "always";
 }
 
-export function buildFullSystemPrompt(options: CharacterPromptOptions): string {
+function buildFullSystemPrompt(options: CharacterPromptOptions): string {
   const { character, toolInstructions, toolLoadingMode } = options;
 
   let prompt = buildCharacterSystemPrompt(character, { toolLoadingMode });

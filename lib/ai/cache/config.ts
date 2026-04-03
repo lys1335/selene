@@ -15,7 +15,7 @@ import type { CacheConfig } from "./types";
  * - Enabled by default for cost savings
  * - 1024 min tokens (Anthropic requirement for Sonnet/Opus 4)
  */
-export const DEFAULT_CACHE_CONFIG: CacheConfig = {
+const DEFAULT_CACHE_CONFIG: CacheConfig = {
   enabled: true,
   minTokensToCache: 1024,
 };
@@ -24,7 +24,7 @@ export const DEFAULT_CACHE_CONFIG: CacheConfig = {
  * Get cache configuration from settings
  * Falls back to defaults if not configured
  */
-export function getCacheConfig(): CacheConfig {
+function getCacheConfig(): CacheConfig {
   try {
     const settings = loadSettings();
 

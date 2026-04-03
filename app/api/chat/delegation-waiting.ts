@@ -33,7 +33,7 @@ export function registerBackgroundTask(
  * Check if a session has any background processes still running.
  * Cleans up finished processes from the registry as a side effect.
  */
-export function hasRunningBackgroundTasksForSession(
+function hasRunningBackgroundTasksForSession(
   characterId: string | null,
   sessionId: string,
 ): boolean {

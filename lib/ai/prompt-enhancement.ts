@@ -72,7 +72,7 @@ export interface EnhancedPromptOptions {
  * Since enhancement is now manual (user clicks button), we mainly check
  * that the query isn't empty or trivially short.
  */
-export function canEnhanceQuery(query: string): boolean {
+function canEnhanceQuery(query: string): boolean {
   const trimmed = query.trim();
   // Need at least 3 characters to do meaningful search
   return trimmed.length >= 3;
@@ -81,7 +81,7 @@ export function canEnhanceQuery(query: string): boolean {
 /**
  * Check if an agent has indexed files
  */
-export async function hasIndexedFiles(characterId: string): Promise<boolean> {
+async function hasIndexedFiles(characterId: string): Promise<boolean> {
   if (!isVectorDBEnabled()) {
     return false;
   }

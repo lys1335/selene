@@ -354,4 +354,4 @@ class TaskRegistry extends EventEmitter {
 }
 
 export const taskRegistry = TaskRegistry.getInstance();
-export { TaskRegistry };
+{ TaskRegistry };

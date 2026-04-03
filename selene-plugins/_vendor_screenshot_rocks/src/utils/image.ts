@@ -4,7 +4,7 @@ import {app} from "../stores/appStore";
 import {ImageFormats} from "../types";
 import {validURL} from "./url";
 
-export const checkForImageFromLocalstorageUrlOrPaste = () => {
+const checkForImageFromLocalstorageUrlOrPaste = () => {
     const handlePaste = (e: ClipboardEvent | Event) => {
         retrieveImageFromClipboardAsBase64(e, (base64Data: string) => {
             app.imageData = base64Data;
@@ -30,7 +30,7 @@ export const checkForImageFromLocalstorageUrlOrPaste = () => {
     return () => window.removeEventListener("paste", handlePaste)
 }
 
-export const hex2rgba = (hex: string, alpha: number = 1): RGBColor => {
+const hex2rgba = (hex: string, alpha: number = 1): RGBColor => {
     const [r, g, b] = (hex.length === 3)
         ? hex.match(/\w/g).map(x => parseInt(x + x, 16))
         : hex.match(/\w\w/g).map(x => parseInt(x, 16))
@@ -43,7 +43,7 @@ export const hex2rgba = (hex: string, alpha: number = 1): RGBColor => {
     }
 };
 
-export const rgba2hexa = (color: RGBColor) => {
+const rgba2hexa = (color: RGBColor) => {
     const r = color.r.toString(16);
     const g = color.g.toString(16);
     const b = color.b.toString(16);
@@ -53,7 +53,7 @@ export const rgba2hexa = (color: RGBColor) => {
     return "#" + pad(r) + pad(g) + pad(b) + pad(a);
 };
 
-export const copyImageToClipboard = (elementToDownload: HTMLElement): Promise<any> => {
+const copyImageToClipboard = (elementToDownload: HTMLElement): Promise<any> => {
     const setToClipboard = async (blob: Blob) => {
         const data = [new ClipboardItem({[blob.type]: blob})]
         return navigator.clipboard.write(data)
@@ -63,7 +63,7 @@ export const copyImageToClipboard = (elementToDownload: HTMLElement): Promise<an
         .then((data: Blob) => setToClipboard(data));
 }
 
-export const downloadImage = (
+const downloadImage = (
     elementToDownload: HTMLElement,
     imageFormat: ImageFormats,
     height: number,
@@ -93,7 +93,7 @@ export const downloadImage = (
     }
 };
 
-export const resizeImage = (
+const resizeImage = (
     base64Str: string,
     maxWidth: number = 3200,
     maxHeight: number = 3200
@@ -122,7 +122,7 @@ export const resizeImage = (
     })
 }
 
-export const retrieveImageFromClipboardAsBase64 = (pasteEvent: ClipboardEvent | Event, onSuccess: (data: string) => void) => {
+const retrieveImageFromClipboardAsBase64 = (pasteEvent: ClipboardEvent | Event, onSuccess: (data: string) => void) => {
     const items = (pasteEvent as ClipboardEvent).clipboardData.items;
 
     if (!items) {
@@ -151,7 +151,7 @@ export const retrieveImageFromClipboardAsBase64 = (pasteEvent: ClipboardEvent | 
     }
 };
 
-export const getImageDimensions = (file: string): Promise<{ width: number, height: number }> => {
+const getImageDimensions = (file: string): Promise<{ width: number, height: number }> => {
     return loadImageFromBase64(file).then(img => {
         return {
             width: img.width,
@@ -160,7 +160,7 @@ export const getImageDimensions = (file: string): Promise<{ width: number, heigh
     })
 };
 
-export const loadImageFromBase64 = (imageData: string): Promise<HTMLImageElement> => {
+const loadImageFromBase64 = (imageData: string): Promise<HTMLImageElement> => {
     return new Promise((resolved) => {
         const image = new Image()
         image.onload = function () {
@@ -170,7 +170,7 @@ export const loadImageFromBase64 = (imageData: string): Promise<HTMLImageElement
     });
 }
 
-export const rotateImage = (img: string): Promise<string> => {
+const rotateImage = (img: string): Promise<string> => {
     return loadImageFromBase64(img).then(image => {
         const degrees = 90;
         const canvas = document.createElement("canvas");
@@ -187,7 +187,7 @@ export const rotateImage = (img: string): Promise<string> => {
     })
 };
 
-export const loadImageFromImageUrl = (url: string): Promise<string | ArrayBuffer> => {
+const loadImageFromImageUrl = (url: string): Promise<string | ArrayBuffer> => {
     return new Promise((resolve, reject) => {
         fetch(url).then((res) => {
             return res.blob();

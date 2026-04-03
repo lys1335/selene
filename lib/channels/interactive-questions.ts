@@ -139,7 +139,7 @@ function normalizePlanApprovalPrompt(toolInput: unknown): PlanApprovalPrompt | n
   return isPlanApprovalPrompt(input) ? input : null;
 }
 
-export function parseToolInputToQuestions(toolInput: unknown): ParsedQuestion[] {
+function parseToolInputToQuestions(toolInput: unknown): ParsedQuestion[] {
   let input = toolInput;
 
   // Handle nested JSON strings (SDK sometimes double-encodes)
@@ -204,7 +204,7 @@ export function parseInteractivePromptInput(toolInput: unknown): InteractiveProm
 // Text formatting - fallback for WhatsApp or when native elements unavailable
 // ---------------------------------------------------------------------------
 
-export function formatQuestionsForChannel(questions: ParsedQuestion[]): string {
+function formatQuestionsForChannel(questions: ParsedQuestion[]): string {
   if (questions.length === 0) return "";
 
   const parts: string[] = [];
@@ -278,7 +278,7 @@ export function formatInteractivePromptForChannel(prompt: InteractivePromptPaylo
 // Response parsing - match user text to question options
 // ---------------------------------------------------------------------------
 
-export function parseUserResponseToAnswers(
+function parseUserResponseToAnswers(
   text: string,
   questions: ParsedQuestion[],
 ): Record<string, string> {
@@ -373,7 +373,7 @@ export function parseInteractiveResponseToAnswers(
 // Helpers
 // ---------------------------------------------------------------------------
 
-export function mapIndicesToAnswers(
+function mapIndicesToAnswers(
   selectedIndices: number[],
   questions: ParsedQuestion[],
 ): Record<string, string> {
@@ -418,7 +418,7 @@ export function mapIndicesToInteractiveAnswers(
   return {};
 }
 
-export function formatAnswerConfirmation(
+function formatAnswerConfirmation(
   answers: Record<string, string>,
   questions: ParsedQuestion[],
 ): string {
@@ -456,7 +456,7 @@ export function formatInteractiveAnswerConfirmation(
 
 const CHANNEL_QUESTION_TIMEOUT_MS = 5 * 60 * 1000;
 
-export function cleanupStaleChannelQuestions(): void {
+function cleanupStaleChannelQuestions(): void {
   const now = Date.now();
   for (const [key, entry] of pendingChannelQuestions) {
     if (now - entry.createdAt > CHANNEL_QUESTION_TIMEOUT_MS) {

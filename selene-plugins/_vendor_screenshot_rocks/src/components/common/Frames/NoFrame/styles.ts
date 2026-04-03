@@ -2,7 +2,7 @@ import {css} from "emotion";
 import {ICanvasProps} from "../../Canvas";
 import {app} from "../../../../stores/appStore";
 
-export const styles = (props: ICanvasProps): string => {
+const styles = (props: ICanvasProps): string => {
     return css`
        border-radius: ${props.borderRadius}px;
        overflow: hidden;

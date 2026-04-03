@@ -616,7 +616,7 @@ export function getConfiguredModel(): string {
  * Get the appropriate temperature for the current provider.
  * Kimi K2.5 models require temperature=1 (fixed value).
  */
-export function getProviderTemperature(requestedTemp: number): number {
+function getProviderTemperature(requestedTemp: number): number {
   const provider = getConfiguredProvider();
   if (provider === "kimi") {
     return 1; // Kimi K2.5 fixed value; custom fetch overrides to 0.6 for non-thinking mode
@@ -629,7 +629,7 @@ export function getProviderTemperature(requestedTemp: number): number {
 /**
  * Get a language model instance for the configured provider and model.
  */
-export function getLanguageModel(modelOverride?: string): LanguageModel {
+function getLanguageModel(modelOverride?: string): LanguageModel {
   const provider = getConfiguredProvider();
   const model =
     resolveModelForProvider(
@@ -792,7 +792,7 @@ export function getModelByName(modelId: string): LanguageModel {
 /**
  * Get the chat model for conversations.
  */
-export function getChatModel(): LanguageModel {
+function getChatModel(): LanguageModel {
   const settings = loadSettings();
   const provider = getConfiguredProvider();
   const chatModel = resolveModelForProvider(

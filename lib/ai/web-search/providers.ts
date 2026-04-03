@@ -73,7 +73,7 @@ function getTavilyApiKey(): string | undefined {
   return process.env.TAVILY_API_KEY;
 }
 
-export class TavilyProvider implements WebSearchProvider {
+class TavilyProvider implements WebSearchProvider {
   name = "tavily";
 
   isAvailable(): boolean {

@@ -80,7 +80,7 @@ export function getOrStartParakeetServer(options: StartOptions): Promise<string>
 /**
  * Returns a snapshot of the server state.
  */
-export function getParakeetServerStatus(): ParakeetServerStatus {
+function getParakeetServerStatus(): ParakeetServerStatus {
   return {
     state: serverState,
     endpoint: serverEndpoint,

@@ -13,7 +13,7 @@ import { loadSettings } from "@/lib/settings/settings-manager";
 
 const OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434/v1";
 
-export function getOllamaBaseUrl(): string {
+function getOllamaBaseUrl(): string {
   const settings = loadSettings();
   return settings.ollamaBaseUrl || process.env.OLLAMA_BASE_URL || OLLAMA_DEFAULT_BASE_URL;
 }

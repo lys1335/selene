@@ -112,7 +112,7 @@ export function appendTextPartToState(state: StreamingMessageState, delta: strin
   return true;
 }
 
-export function ensureToolCallPart(state: StreamingMessageState, toolCallId: string, toolName?: string): DBToolCallPart {
+function ensureToolCallPart(state: StreamingMessageState, toolCallId: string, toolName?: string): DBToolCallPart {
   let part = state.toolCallParts.get(toolCallId);
   if (!part) {
     part = applyProvenanceToPart(state, {
