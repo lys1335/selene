@@ -48,6 +48,3 @@ export {
   ensureVisionSidecar,
 } from "./vision-sidecar";
 
-// Recipe bridge (Phase 2 stub)
-export type { GhostOsRecipe } from "./recipe-bridge";
-export { listRecipes, registerRecipeAsSkill } from "./recipe-bridge";

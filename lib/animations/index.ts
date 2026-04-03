@@ -4,6 +4,5 @@
 	 */
 
 export * from "./hooks";
-export * from "./presets";
 export * from "./utils";
 
