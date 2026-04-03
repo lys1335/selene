@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeftIcon, Loader2Icon, ClockIcon, WrenchIcon, BrainIcon, AlertCircleIcon, CheckCircleIcon, XCircleIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import type { AgentRun, AgentRunEvent, AgentRunStatus } from "@/lib/db/sqlite-schema";
-
-interface RunDetailResponse { run: AgentRun; events: AgentRunEvent[]; }
-
-const STATUS_COLORS: Record<AgentRunStatus, string> = { running: "bg-yellow-500", succeeded: "bg-green-500", failed: "bg-red-500", cancelled: "bg-gray-500" };
+import {
+  type RunDetailResponse,
+  STATUS_COLORS,
+  formatDuration,
+  formatDate,
+  formatTime,
+} from "@/app/admin/_shared/run-detail-utils";
 const EVENT_ICONS: Record<string, React.ReactNode> = {
   step_started: <ClockIcon className="size-4 text-blue-500" />, step_completed: <CheckCircleIcon className="size-4 text-green-500" />,
   tool_call_started: <WrenchIcon className="size-4 text-purple-500" />, tool_call_completed: <WrenchIcon className="size-4 text-purple-600" />,
@@ -39,9 +41,6 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
     loadRun();
   }, [id]);
 
-  const formatDuration = (ms: number | null) => { if (!ms) return "-"; if (ms < 1000) return `${ms}ms`; if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`; return `${(ms / 60000).toFixed(1)}m`; };
-  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleString();
-  const formatTime = (dateStr: string) => new Date(dateStr).toLocaleTimeString();
 
   if (loading) return <Shell><div className="flex h-full items-center justify-center bg-terminal-cream"><Loader2Icon className="size-6 animate-spin text-terminal-muted" /></div></Shell>;
   if (error || !data) return <Shell><div className="flex h-full flex-col items-center justify-center bg-terminal-cream gap-4"><p className="font-mono text-red-500">{error || t("runNotFound")}</p><Link href="/admin/runs"><Button variant="outline"><ArrowLeftIcon className="mr-2 size-4" />{t("backToRuns")}</Button></Link></div></Shell>;

@@ -12,6 +12,8 @@ export {
   findSimilarFiles,
   isWorktreePath,
   isOtherWorktreePath,
+  resolveSyncedPath,
+  type ResolveSyncedPathResult,
 } from "./path-utils";
 
 export {

@@ -15,6 +15,68 @@ interface PreferencesSectionProps {
   updateField: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 }
 
+function CategoryFilterBar({
+  categories,
+  selected,
+  allLabel,
+  onSelect,
+}: {
+  categories: Array<{ id: string; label: string }>;
+  selected: string;
+  allLabel: string;
+  onSelect: (id: string) => void;
+}) {
+  const pillClass = (active: boolean) =>
+    `rounded-full px-2.5 py-0.5 font-mono text-[10px] transition-all ${
+      active
+        ? "bg-terminal-dark text-terminal-cream"
+        : "bg-terminal-cream/60 text-terminal-muted hover:text-terminal-dark"
+    }`;
+  return (
+    <div className="flex flex-wrap gap-1">
+      <button type="button" onClick={() => onSelect("all")} className={pillClass(selected === "all")}>
+        {allLabel}
+      </button>
+      {categories.map((cat) => (
+        <button key={cat.id} type="button" onClick={() => onSelect(cat.id)} className={pillClass(selected === cat.id)}>
+          {cat.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function NoneOptionButton({
+  isActive,
+  label,
+  onClick,
+}: {
+  isActive: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative flex h-16 items-center justify-center rounded-lg border transition-all ${
+        isActive
+          ? "border-terminal-green bg-terminal-green/10"
+          : "border-terminal-border hover:border-terminal-green/40"
+      }`}
+    >
+      <span className="font-mono text-[10px] text-terminal-muted">{label}</span>
+      {isActive && (
+        <div className="absolute -right-1 -top-1">
+          <div className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-terminal-green text-white">
+            <Check className="h-2 w-2" />
+          </div>
+        </div>
+      )}
+    </button>
+  );
+}
+
 export function PreferencesSection({ formState, updateField }: PreferencesSectionProps) {
   const t = useTranslations("settings");
   const currentLocale = useLocale() as Locale;
@@ -236,55 +298,21 @@ export function PreferencesSection({ formState, updateField }: PreferencesSectio
         {bgMediaType === "images" ? (
           <>
             {/* Image category filter */}
-            <div className="flex flex-wrap gap-1">
-              <button
-                type="button"
-                onClick={() => setWallpaperCategory("all")}
-                className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] transition-all ${
-                  wallpaperCategory === "all"
-                    ? "bg-terminal-dark text-terminal-cream"
-                    : "bg-terminal-cream/60 text-terminal-muted hover:text-terminal-dark"
-                }`}
-              >
-                {t("preferences.backgrounds.all")}
-              </button>
-              {WALLPAPER_CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setWallpaperCategory(cat.id)}
-                  className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] transition-all ${
-                    wallpaperCategory === cat.id
-                      ? "bg-terminal-dark text-terminal-cream"
-                      : "bg-terminal-cream/60 text-terminal-muted hover:text-terminal-dark"
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
+            <CategoryFilterBar
+              categories={WALLPAPER_CATEGORIES}
+              selected={wallpaperCategory}
+              allLabel={t("preferences.backgrounds.all")}
+              onSelect={setWallpaperCategory}
+            />
 
             {/* Wallpaper grid */}
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
               {/* None option */}
-              <button
-                type="button"
+              <NoneOptionButton
+                isActive={activeBg.type === "none"}
+                label={t("preferences.backgrounds.none")}
                 onClick={handleClearBackground}
-                className={`relative flex h-16 items-center justify-center rounded-lg border transition-all ${
-                  activeBg.type === "none"
-                    ? "border-terminal-green bg-terminal-green/10"
-                    : "border-terminal-border hover:border-terminal-green/40"
-                }`}
-              >
-                <span className="font-mono text-[10px] text-terminal-muted">{t("preferences.backgrounds.none")}</span>
-                {activeBg.type === "none" && (
-                  <div className="absolute -right-1 -top-1">
-                    <div className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-terminal-green text-white">
-                      <Check className="h-2 w-2" />
-                    </div>
-                  </div>
-                )}
-              </button>
+              />
               {filteredWallpapers.map((wp) => (
                 <button
                   key={wp.id}
@@ -317,55 +345,21 @@ export function PreferencesSection({ formState, updateField }: PreferencesSectio
         ) : (
           <>
             {/* Video category filter */}
-            <div className="flex flex-wrap gap-1">
-              <button
-                type="button"
-                onClick={() => setVideoCategory("all")}
-                className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] transition-all ${
-                  videoCategory === "all"
-                    ? "bg-terminal-dark text-terminal-cream"
-                    : "bg-terminal-cream/60 text-terminal-muted hover:text-terminal-dark"
-                }`}
-              >
-                {t("preferences.backgrounds.all")}
-              </button>
-              {VIDEO_WALLPAPER_CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setVideoCategory(cat.id)}
-                  className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] transition-all ${
-                    videoCategory === cat.id
-                      ? "bg-terminal-dark text-terminal-cream"
-                      : "bg-terminal-cream/60 text-terminal-muted hover:text-terminal-dark"
-                  }`}
-                >
-                  {cat.label}
-                </button>
-              ))}
-            </div>
+            <CategoryFilterBar
+              categories={VIDEO_WALLPAPER_CATEGORIES}
+              selected={videoCategory}
+              allLabel={t("preferences.backgrounds.all")}
+              onSelect={setVideoCategory}
+            />
 
             {/* Video wallpaper grid */}
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
               {/* None option */}
-              <button
-                type="button"
+              <NoneOptionButton
+                isActive={activeBg.type === "none"}
+                label={t("preferences.backgrounds.none")}
                 onClick={handleClearBackground}
-                className={`relative flex h-16 items-center justify-center rounded-lg border transition-all ${
-                  activeBg.type === "none"
-                    ? "border-terminal-green bg-terminal-green/10"
-                    : "border-terminal-border hover:border-terminal-green/40"
-                }`}
-              >
-                <span className="font-mono text-[10px] text-terminal-muted">{t("preferences.backgrounds.none")}</span>
-                {activeBg.type === "none" && (
-                  <div className="absolute -right-1 -top-1">
-                    <div className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-terminal-green text-white">
-                      <Check className="h-2 w-2" />
-                    </div>
-                  </div>
-                )}
-              </button>
+              />
               {filteredVideos.map((vid) => (
                 <button
                   key={vid.id}

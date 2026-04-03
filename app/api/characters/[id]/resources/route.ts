@@ -6,13 +6,9 @@ import { getCharacter, getCharacterStats } from "@/lib/characters/queries";
 import { getAvailablePluginsForAgent } from "@/lib/plugins/registry";
 import { getWorkflowByAgentId } from "@/lib/agents/workflows";
 import { getWorkflowResources } from "@/lib/agents/workflow-resource-context";
+import { toStringArray } from "@/lib/utils/array-utils";
 
 type RouteParams = { params: Promise<{ id: string }> };
-
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
-}
 
 function countHookHandlers(value: unknown): number {
   if (!value || typeof value !== "object" || Array.isArray(value)) return 0;

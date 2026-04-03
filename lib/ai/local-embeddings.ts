@@ -1,23 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { EmbeddingModelV2, EmbeddingModelV2Embedding } from "@ai-sdk/provider";
+import {
+  type TransformerDevice,
+  resolvePreferredDevice as resolvePreferredDeviceShared,
+  isRecoverableGpuRuntimeError,
+} from "@/lib/ai/transformer-device";
 
 export const DEFAULT_LOCAL_EMBEDDING_MODEL = "Xenova/bge-large-en-v1.5";
 const DEFAULT_QUERY_PREFIX = "Represent this code for search:";
 const DEFAULT_QUERY_MAX_CHARS = 512;
 const DEFAULT_MAX_BATCH = 64;
-type TransformerDevice =
-  | "auto"
-  | "gpu"
-  | "cpu"
-  | "wasm"
-  | "webgpu"
-  | "cuda"
-  | "dml"
-  | "webnn"
-  | "webnn-npu"
-  | "webnn-gpu"
-  | "webnn-cpu";
 
 // Define a type that matches the actual pipeline return value
 type FeatureExtractionPipeline = (
@@ -39,47 +32,13 @@ let cachedPipelinePromise: Promise<FeatureExtractionPipeline> | null = null;
 let embeddingLock: Promise<void> = Promise.resolve();
 let runtimeFallbackDevice: TransformerDevice | null = null;
 
-function isTransformerDevice(value: string): value is TransformerDevice {
-  return [
-    "auto",
-    "gpu",
-    "cpu",
-    "wasm",
-    "webgpu",
-    "cuda",
-    "dml",
-    "webnn",
-    "webnn-npu",
-    "webnn-gpu",
-    "webnn-cpu",
-  ].includes(value);
-}
-
 function resolvePreferredDevice(): TransformerDevice {
-  if (runtimeFallbackDevice) return runtimeFallbackDevice;
-
-  const configured = process.env.LOCAL_EMBEDDING_DEVICE?.trim().toLowerCase();
-  if (configured && isTransformerDevice(configured)) return configured;
-
-  if (process.platform === "win32") return "dml";
-  if (process.platform === "linux" && process.arch === "x64") return "cuda";
-  return "cpu";
+  return resolvePreferredDeviceShared(runtimeFallbackDevice);
 }
 
 function resetPipelineCache(): void {
   cachedPipelineKey = null;
   cachedPipelinePromise = null;
-}
-
-function isRecoverableGpuRuntimeError(error: unknown): boolean {
-  const message = String(error ?? "").toLowerCase();
-  return (
-    message.includes("device instance has been suspended") ||
-    message.includes("getdeviceremovedreason") ||
-    message.includes("dxgi_error_device_removed") ||
-    message.includes("dxgi_error_device_hung") ||
-    message.includes("887a0005")
-  );
 }
 
 function resolveCacheDir(override?: string): string {

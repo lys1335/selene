@@ -8,11 +8,7 @@ import {
   setPluginEnabledForAgent,
 } from "@/lib/plugins/registry";
 import { z } from "zod";
-
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is string => typeof item === "string");
-}
+import { toStringArray } from "@/lib/utils/array-utils";
 
 function sameStringArray(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((value, index) => value === b[index]);

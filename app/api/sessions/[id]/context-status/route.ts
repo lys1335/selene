@@ -29,31 +29,39 @@ import { ContextWindowManager } from "@/lib/context-window";
 import { getSession } from "@/lib/db/queries";
 import { requireAuth } from "@/lib/auth/local-auth";
 import { getSessionModelIdForSession, getSessionProviderForSession } from "@/lib/ai/session-model-resolver";
+import type { LLMProvider } from "@/lib/ai/provider-types";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
 };
+
+async function resolveSessionModel(
+  request: NextRequest,
+  params: Promise<{ id: string }>
+): Promise<{ sessionId: string; modelId: string; provider: LLMProvider } | NextResponse> {
+  await requireAuth(request);
+  const { id: sessionId } = await params;
+
+  const session = await getSession(sessionId);
+  if (!session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  const sessionMetadata = (session.metadata as Record<string, unknown>) || {};
+  const modelId = await getSessionModelIdForSession(sessionMetadata);
+  const provider = await getSessionProviderForSession(sessionMetadata);
+
+  return { sessionId, modelId, provider };
+}
 
 export async function GET(
   request: NextRequest,
   { params }: RouteParams
 ) {
   try {
-    await requireAuth(request);
-    const { id: sessionId } = await params;
-
-    const session = await getSession(sessionId);
-    if (!session) {
-      return NextResponse.json(
-        { error: "Session not found" },
-        { status: 404 }
-      );
-    }
-
-    // Get model info from session metadata (async to load agent defaults from DB)
-    const sessionMetadata = (session.metadata as Record<string, unknown>) || {};
-    const modelId = await getSessionModelIdForSession(sessionMetadata);
-    const provider = await getSessionProviderForSession(sessionMetadata);
+    const resolved = await resolveSessionModel(request, params);
+    if (resolved instanceof NextResponse) return resolved;
+    const { sessionId, modelId, provider } = resolved;
 
     // Estimate system prompt length (approximate)
     const estimatedSystemPromptLength = 5000;
@@ -100,21 +108,9 @@ export async function POST(
   { params }: RouteParams
 ) {
   try {
-    await requireAuth(request);
-    const { id: sessionId } = await params;
-
-    const session = await getSession(sessionId);
-    if (!session) {
-      return NextResponse.json(
-        { error: "Session not found" },
-        { status: 404 }
-      );
-    }
-
-    // Get model info from session metadata (async to load agent defaults from DB)
-    const sessionMetadata = (session.metadata as Record<string, unknown>) || {};
-    const modelId = await getSessionModelIdForSession(sessionMetadata);
-    const provider = await getSessionProviderForSession(sessionMetadata);
+    const resolved = await resolveSessionModel(request, params);
+    if (resolved instanceof NextResponse) return resolved;
+    const { sessionId, modelId, provider } = resolved;
 
     // Estimate system prompt length
     const estimatedSystemPromptLength = 5000;

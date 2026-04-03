@@ -2,23 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   getSessionWithMessages,
   updateSession,
-  getSession,
   getOrCreateLocalUser,
 } from "@/lib/db/queries";
 import { requireAuth } from "@/lib/auth/local-auth";
 import { loadSettings } from "@/lib/settings/settings-manager";
-
-// Helper to validate session ownership
-async function validateSessionOwnership(sessionId: string, userId: string) {
-  const session = await getSession(sessionId);
-  if (!session) {
-    return { error: "Session not found", status: 404 };
-  }
-  if (session.userId !== userId) {
-    return { error: "Forbidden", status: 403 };
-  }
-  return { session };
-}
+import { validateSessionOwnership } from "@/lib/session/session-ownership";
 
 export async function GET(
   req: NextRequest,

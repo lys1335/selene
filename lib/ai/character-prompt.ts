@@ -45,6 +45,28 @@ export function getCharacterAvatarUrl(character: CharacterFull): string | null {
   return character.images[0]?.url || null;
 }
 
+function buildAgentProfileSection(
+  character: CharacterFull,
+  metadata: Record<string, any>
+): string {
+  const profileParts: string[] = [`## Agent Profile\n`];
+  profileParts.push(`**Name:** ${character.name}`);
+  if (character.displayName) {
+    profileParts.push(`**Also Known As:** ${character.displayName}`);
+  }
+
+  const avatarUrl = getCharacterAvatarUrl(character);
+  if (avatarUrl) {
+    profileParts.push(`**Your Avatar Image URL:** ${avatarUrl}`);
+  }
+
+  if (metadata.purpose) {
+    profileParts.push(`**Your Purpose:** ${metadata.purpose}`);
+  }
+
+  return profileParts.join("\n");
+}
+
 function getSkillSummariesFromMetadata(metadata: Record<string, any>): Array<{
   id: string;
   name: string;
@@ -97,27 +119,7 @@ export function buildCharacterSystemPrompt(
     sections.push(character.tagline);
   }
 
-  // Build agent profile section
-  const profileParts: string[] = [];
-
-  profileParts.push(`## Agent Profile\n`);
-  profileParts.push(`**Name:** ${character.name}`);
-  if (character.displayName) {
-    profileParts.push(`**Also Known As:** ${character.displayName}`);
-  }
-
-  // Include avatar URL so the character knows what they look like
-  const avatarUrl = getCharacterAvatarUrl(character);
-  if (avatarUrl) {
-    profileParts.push(`**Your Avatar Image URL:** ${avatarUrl}`);
-  }
-
-  // Add metadata/purpose if available
-  if (metadata.purpose) {
-    profileParts.push(`**Your Purpose:** ${metadata.purpose}`);
-  }
-
-  sections.push(profileParts.join("\n"));
+  sections.push(buildAgentProfileSection(character, metadata));
 
   // Agent Memory - learned preferences and patterns
   const { markdown: memoryMarkdown, tokenEstimate, memoryCount } = formatMemoriesForPrompt(character.id);
@@ -233,25 +235,7 @@ export function buildCacheableCharacterPrompt(
     identityParts.push(character.tagline);
   }
 
-  // Build agent profile section
-  const profileParts: string[] = [`## Agent Profile\n`];
-  profileParts.push(`**Name:** ${character.name}`);
-  if (character.displayName) {
-    profileParts.push(`**Also Known As:** ${character.displayName}`);
-  }
-
-  // Include avatar URL so the character knows what they look like
-  const avatarUrl = getCharacterAvatarUrl(character);
-  if (avatarUrl) {
-    profileParts.push(`**Your Avatar Image URL:** ${avatarUrl}`);
-  }
-
-  // Add metadata/purpose if available (metadata already declared at top)
-  if (metadata.purpose) {
-    profileParts.push(`**Your Purpose:** ${metadata.purpose}`);
-  }
-
-  identityParts.push(profileParts.join("\n"));
+  identityParts.push(buildAgentProfileSection(character, metadata));
 
   blocks.push({
     role: "system",

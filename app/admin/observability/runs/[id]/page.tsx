@@ -19,19 +19,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import type { AgentRun, AgentRunEvent, AgentRunStatus } from "@/lib/db/sqlite-schema";
-
-interface RunDetailResponse {
-  run: AgentRun;
-  events: AgentRunEvent[];
-}
-
-const STATUS_COLORS: Record<AgentRunStatus, string> = {
-  running: "bg-yellow-500",
-  succeeded: "bg-green-500",
-  failed: "bg-red-500",
-  cancelled: "bg-gray-500",
-};
+import {
+  type RunDetailResponse,
+  STATUS_COLORS,
+  formatDuration,
+  formatDate,
+  formatTime,
+} from "@/app/admin/_shared/run-detail-utils";
 
 const EVENT_CONFIG: Record<string, { icon: React.ReactNode; color: string; bgColor: string }> = {
   tool_started: {
@@ -83,15 +77,6 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
     loadRun();
   }, [id, t]);
 
-  const formatDuration = (ms: number | null) => {
-    if (!ms) return "-";
-    if (ms < 1000) return `${ms}ms`;
-    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-    return `${(ms / 60000).toFixed(1)}m`;
-  };
-
-  const formatDate = (dateStr: string) => new Date(dateStr).toLocaleString();
-  const formatTime = (dateStr: string) => new Date(dateStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
   const exportAsJson = () => {
     if (!data) return;

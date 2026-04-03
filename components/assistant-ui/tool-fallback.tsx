@@ -9,6 +9,7 @@ import { getCanonicalToolName, humanizeToolName, loadToolNameCache } from "./too
 import { useToolExpansion } from "./tool-expansion-context";
 import { stripXmlStatusTags } from "./claude-code-tools/parse-text-result";
 import { DiffStyledPre } from "./diff-styled-pre";
+import { parseNestedJsonString, findTextContentItem } from "@/lib/utils/parse-nested-json";
 // Define the tool call component type manually since it's no longer exported
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -75,24 +76,9 @@ interface ToolResult {
   iterationPerformed?: boolean;
 }
 
-function parseNestedJsonValue(text: string, maxDepth: number = 3): unknown | undefined {
-  let current: unknown = text;
-  for (let i = 0; i < maxDepth; i += 1) {
-    if (typeof current !== "string") return current;
-    const trimmed = current.trim();
-    if (!trimmed) return undefined;
-    try {
-      current = JSON.parse(trimmed);
-    } catch {
-      return i === 0 ? undefined : current;
-    }
-  }
-  return current;
-}
-
 function unwrapMcpTextWrappedResult(result: ToolResult | string): ToolResult {
   if (typeof result === "string") {
-    const parsed = parseNestedJsonValue(result);
+    const parsed = parseNestedJsonString(result);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as ToolResult;
     }
@@ -104,7 +90,7 @@ function unwrapMcpTextWrappedResult(result: ToolResult | string): ToolResult {
 
   const content = (result as ToolResult & { content?: unknown }).content;
   if (typeof content === "string") {
-    const parsed = parseNestedJsonValue(content);
+    const parsed = parseNestedJsonString(content);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       const parsedObj = parsed as Record<string, unknown>;
       return {
@@ -124,16 +110,10 @@ function unwrapMcpTextWrappedResult(result: ToolResult | string): ToolResult {
 
   if (!Array.isArray(content)) return result;
 
-  const textItem = content.find(
-    (item): item is { type?: string; text?: string } =>
-      !!item &&
-      typeof item === "object" &&
-      (item as { type?: unknown }).type === "text" &&
-      typeof (item as { text?: unknown }).text === "string"
-  );
+  const textItem = findTextContentItem(content);
 
   if (!textItem?.text) return result;
-  const parsed = parseNestedJsonValue(textItem.text);
+  const parsed = parseNestedJsonString(textItem.text);
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     const parsedObj = parsed as Record<string, unknown>;
     return {

@@ -2,7 +2,7 @@
 
 import { FC, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { parseNestedJsonString } from "@/lib/utils/parse-nested-json";
+import { parseNestedJsonString, findTextContentItem } from "@/lib/utils/parse-nested-json";
 import { Calculator, Copy, Check, AlertCircle, Hash, Pi, Sigma, ChevronDown, ChevronUp } from "lucide-react";
 import { useTranslations } from "next-intl";
 
@@ -107,13 +107,7 @@ function normalizeCalculatorResult(
 
     const content = Array.isArray(direct.content) ? direct.content : undefined;
     if (content && content.length > 0) {
-        const textItem = content.find(
-            (item): item is { type?: string; text?: string } =>
-                !!item &&
-                typeof item === "object" &&
-                (item as { type?: unknown }).type === "text" &&
-                typeof (item as { text?: unknown }).text === "string",
-        );
+        const textItem = findTextContentItem(content);
 
         if (textItem?.text) {
             const parsed = parseNestedJsonString(textItem.text);

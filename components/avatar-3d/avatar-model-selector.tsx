@@ -1,13 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { AvatarDialogShell } from "@/components/avatar-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { Loader2, Upload, Check, Trash2, Volume2, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -223,31 +217,16 @@ export function Avatar3DModelSelector({
   const currentVoice = findEdgeTTSVoice(edgeTtsVoice);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-terminal-cream border-terminal-border">
-        <DialogHeader>
-          <DialogTitle className="font-mono text-terminal-dark">
-            {t("dialog.title", { name: characterName })}
-          </DialogTitle>
-          <DialogDescription className="font-mono text-terminal-muted">
-            {t("dialog.subtitle")}
-          </DialogDescription>
-        </DialogHeader>
-
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          accept=".glb"
-          className="hidden"
-        />
-
-        {error && (
-          <div className="p-3 bg-red-100 rounded-lg">
-            <p className="text-sm font-mono text-red-700">{error}</p>
-          </div>
-        )}
-
+    <AvatarDialogShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t("dialog.title", { name: characterName })}
+      subtitle={t("dialog.subtitle")}
+      fileInputRef={fileInputRef}
+      onFileChange={handleFileSelect}
+      accept=".glb"
+      error={error}
+    >
         <div className="space-y-2">
           {PRESET_AVATARS.map((preset) => {
             const isSelected = currentPresetId === preset.id;
@@ -403,7 +382,6 @@ export function Avatar3DModelSelector({
             ))}
           </select>
         </div>
-      </DialogContent>
-    </Dialog>
+    </AvatarDialogShell>
   );
 }

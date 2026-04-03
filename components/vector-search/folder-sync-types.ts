@@ -54,6 +54,63 @@ export interface FolderSyncManagerProps {
   compact?: boolean;
 }
 
+import type { SyncMode as _SyncMode, ChunkPreset as _ChunkPreset, ReindexPolicy as _ReindexPolicy } from "@/lib/vectordb/sync-mode-resolver";
+
+/**
+ * All mutable form state for the add-folder form.
+ * Passed as a single `formState` prop to FolderSyncAddForm to avoid
+ * duplicating the 30+ individual state+setter pairs at every usage site.
+ */
+export interface FolderFormState {
+  newFolderPath: string;
+  newDisplayName: string;
+  newRecursive: boolean;
+  newExtensions: string;
+  newExcludePatterns: string;
+  newFolderMode: "simple" | "advanced";
+  newIndexingMode: IndexingMode;
+  newSyncMode: _SyncMode;
+  newSyncCadenceMinutes: string;
+  newFileTypeFilters: string;
+  newMaxFileSizeMB: string;
+  newChunkPreset: _ChunkPreset;
+  newChunkSizeOverride: string;
+  newChunkOverlapOverride: string;
+  newReindexPolicy: _ReindexPolicy;
+  useRecommendedExcludes: boolean;
+  showAdvancedOptions: boolean;
+  isAdding: boolean;
+  isAnalyzing: boolean;
+  folderAnalysis: FolderAnalysis | null;
+  analysisError: string | null;
+}
+
+/**
+ * Setters and action callbacks for the add-folder form.
+ */
+export interface FolderFormActions {
+  setNewFolderPath: (v: string) => void;
+  setNewDisplayName: (v: string) => void;
+  setNewRecursive: (v: boolean) => void;
+  setNewExtensions: (v: string) => void;
+  setNewExcludePatterns: (v: string) => void;
+  setNewFolderMode: (v: "simple" | "advanced") => void;
+  setNewIndexingMode: (v: IndexingMode) => void;
+  setNewSyncMode: (v: _SyncMode) => void;
+  setNewSyncCadenceMinutes: (v: string) => void;
+  setNewFileTypeFilters: (v: string) => void;
+  setNewMaxFileSizeMB: (v: string) => void;
+  setNewChunkPreset: (v: _ChunkPreset) => void;
+  setNewChunkSizeOverride: (v: string) => void;
+  setNewChunkOverlapOverride: (v: string) => void;
+  setNewReindexPolicy: (v: _ReindexPolicy) => void;
+  onToggleRecommendedExcludes: (checked: boolean) => void;
+  setShowAdvancedOptions: (v: boolean) => void;
+  onAddFolder: () => void;
+  onCancel: () => void;
+  onOpenFolderPicker: () => void;
+}
+
 export const RECOMMENDED_EXCLUDES = [
   "node_modules",
   ".git",

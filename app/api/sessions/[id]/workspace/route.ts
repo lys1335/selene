@@ -19,6 +19,7 @@ import { isEBADFError, spawnWithFileCapture } from "@/lib/spawn-utils";
 import { GitService } from "@/lib/workspace/git-service";
 import { getSyncFolders } from "@/lib/vectordb/sync-folder-crud";
 import { runGitCommand } from "@/lib/workspace/git-runner";
+import { validateSessionOwnership } from "@/lib/session/session-ownership";
 import type {
   WorkspaceInfo,
   WorkspaceStatus,
@@ -461,17 +462,6 @@ async function buildWorkspaceStatus(workspaceInfo: WorkspaceInfo): Promise<Works
   }
 
   return workspaceStatus;
-}
-
-async function validateSessionOwnership(sessionId: string, userId: string) {
-  const session = await getSession(sessionId);
-  if (!session) {
-    return { error: "Session not found", status: 404 };
-  }
-  if (session.userId !== userId) {
-    return { error: "Forbidden", status: 403 };
-  }
-  return { session };
 }
 
 async function isGitRepo(folderPath: string): Promise<boolean> {

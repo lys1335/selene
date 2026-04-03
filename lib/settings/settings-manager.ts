@@ -11,6 +11,7 @@ import {
   DEFAULT_CHAT_WORKSPACE_MODE,
   type ChatWorkspaceMode,
 } from "@/lib/chat/workspace-mode";
+import type { VoiceSettingsFields } from "@/lib/settings/voice-settings-fields";
 
 export type PostEditHooksPreset = "off" | "fast" | "strict";
 
@@ -209,55 +210,53 @@ export interface AppSettings {
     // Settings UI preferences
     settingsExpandedSections?: string[]; // Remember which sections are expanded
 
-    // TTS (Text-to-Speech) settings
-    ttsEnabled?: boolean;
-    ttsProvider?: "elevenlabs" | "openai" | "edge";
-    ttsAutoMode?: "off" | "always" | "channels-only";
-    elevenLabsApiKey?: string;
-    elevenLabsVoiceId?: string;
-    openaiTtsVoice?: string;
-    openaiTtsModel?: string;
-    edgeTtsVoice?: string;         // Edge TTS voice ID (e.g. "en-US-AriaNeural")
-    ttsSummarizeThreshold?: number; // Chars above which to summarize before TTS
-    ttsReadCodeBlocks?: boolean;    // Include code block content in TTS output (default: false)
-    ttsSpeakCodeSymbols?: boolean;  // Expand code punctuation into spoken tokens inside code blocks
-
-    // Audio Transcription (STT) settings
-    sttEnabled?: boolean;
-    sttProvider?: "openai" | "local" | "parakeet";
-    sttLocalModel?: string;          // Selected whisper.cpp model ID (default: "ggml-tiny.en")
-    whisperCppPath?: string;         // Custom path to whisper-cli binary (auto-detected if empty)
-    voicePostProcessing?: boolean;
-    voiceAgentName?: string;
-    voiceAudioCues?: boolean;
-    voiceAutoLearn?: boolean;
-    voiceActivationMode?: "tap" | "push";
-    parakeetModel?: string;
-    parakeetAutoStart?: boolean;
-    parakeetServerPort?: number;
-    voiceHotkey?: string;
-    screenCaptureEnabled?: boolean;
-    screenCaptureShortcut?: string;
-    quickCaptureEnabled?: boolean;
-    quickCaptureHotkey?: string;
-    quickCaptureAutoSend?: boolean;
-    quickCaptureAutoSendDelay?: number;
-    screenCaptureExcludedApps?: string;
-    screenCaptureRetention?: "session" | "day" | "week" | "forever";
-    screenCapturePreviewBeforeSend?: boolean;
-    screenCaptureOnboardingSeen?: boolean;
-    customDictionary?: string[];
-    voiceHistoryEnabled?: boolean;
-    voiceHistoryLimit?: number;
-    voiceHistoryRetentionDays?: number;
-    voiceHistoryPreviewLength?: number;
-    voiceActionsEnabled?: boolean;
-    voiceActionDefaultLanguage?: string;
-    voiceActionPreserveStyle?: boolean;
-    voiceActionConfirmDestructive?: boolean;
-    voiceActionFormalTone?: "auto" | "business" | "casual";
-    voiceActionTranslationStyle?: "natural" | "literal";
-    voiceActionSummarizeLength?: "short" | "medium" | "long";
+    // Voice, TTS, STT, and screen capture settings (shared field definitions — see voice-settings-fields.ts)
+    ttsEnabled?: VoiceSettingsFields["ttsEnabled"];
+    ttsProvider?: VoiceSettingsFields["ttsProvider"];
+    ttsAutoMode?: VoiceSettingsFields["ttsAutoMode"];
+    elevenLabsApiKey?: VoiceSettingsFields["elevenLabsApiKey"];
+    elevenLabsVoiceId?: VoiceSettingsFields["elevenLabsVoiceId"];
+    openaiTtsVoice?: VoiceSettingsFields["openaiTtsVoice"];
+    openaiTtsModel?: string;         // Extended: TTS model (OpenAI-specific, not in FormState)
+    edgeTtsVoice?: VoiceSettingsFields["edgeTtsVoice"];
+    ttsSummarizeThreshold?: VoiceSettingsFields["ttsSummarizeThreshold"];
+    ttsReadCodeBlocks?: VoiceSettingsFields["ttsReadCodeBlocks"];
+    ttsSpeakCodeSymbols?: VoiceSettingsFields["ttsSpeakCodeSymbols"];
+    sttEnabled?: VoiceSettingsFields["sttEnabled"];
+    sttProvider?: VoiceSettingsFields["sttProvider"];
+    sttLocalModel?: VoiceSettingsFields["sttLocalModel"];
+    whisperCppPath?: string;         // Extended: custom path to whisper-cli binary (auto-detected if empty)
+    voicePostProcessing?: VoiceSettingsFields["voicePostProcessing"];
+    voiceAgentName?: VoiceSettingsFields["voiceAgentName"];
+    voiceAudioCues?: VoiceSettingsFields["voiceAudioCues"];
+    voiceAutoLearn?: VoiceSettingsFields["voiceAutoLearn"];
+    voiceActivationMode?: VoiceSettingsFields["voiceActivationMode"];
+    parakeetModel?: VoiceSettingsFields["parakeetModel"];
+    parakeetAutoStart?: VoiceSettingsFields["parakeetAutoStart"];
+    parakeetServerPort?: VoiceSettingsFields["parakeetServerPort"];
+    voiceHotkey?: VoiceSettingsFields["voiceHotkey"];
+    screenCaptureEnabled?: VoiceSettingsFields["screenCaptureEnabled"];
+    screenCaptureShortcut?: VoiceSettingsFields["screenCaptureShortcut"];
+    quickCaptureEnabled?: VoiceSettingsFields["quickCaptureEnabled"];
+    quickCaptureHotkey?: VoiceSettingsFields["quickCaptureHotkey"];
+    quickCaptureAutoSend?: VoiceSettingsFields["quickCaptureAutoSend"];
+    quickCaptureAutoSendDelay?: VoiceSettingsFields["quickCaptureAutoSendDelay"];
+    screenCaptureExcludedApps?: VoiceSettingsFields["screenCaptureExcludedApps"];
+    screenCaptureRetention?: VoiceSettingsFields["screenCaptureRetention"];
+    screenCapturePreviewBeforeSend?: VoiceSettingsFields["screenCapturePreviewBeforeSend"];
+    screenCaptureOnboardingSeen?: VoiceSettingsFields["screenCaptureOnboardingSeen"];
+    customDictionary?: VoiceSettingsFields["customDictionary"];
+    voiceHistoryEnabled?: VoiceSettingsFields["voiceHistoryEnabled"];
+    voiceHistoryLimit?: VoiceSettingsFields["voiceHistoryLimit"];
+    voiceHistoryRetentionDays?: VoiceSettingsFields["voiceHistoryRetentionDays"];
+    voiceHistoryPreviewLength?: VoiceSettingsFields["voiceHistoryPreviewLength"];
+    voiceActionsEnabled?: VoiceSettingsFields["voiceActionsEnabled"];
+    voiceActionDefaultLanguage?: VoiceSettingsFields["voiceActionDefaultLanguage"];
+    voiceActionPreserveStyle?: VoiceSettingsFields["voiceActionPreserveStyle"];
+    voiceActionConfirmDestructive?: VoiceSettingsFields["voiceActionConfirmDestructive"];
+    voiceActionFormalTone?: VoiceSettingsFields["voiceActionFormalTone"];
+    voiceActionTranslationStyle?: VoiceSettingsFields["voiceActionTranslationStyle"];
+    voiceActionSummarizeLength?: VoiceSettingsFields["voiceActionSummarizeLength"];
 
     // Memory settings
     memoryAutoApprove?: boolean;     // Auto-approve background-extracted memories (default: false)
