@@ -98,6 +98,18 @@ function logSkillsInjection(characterName: string, skillCount: number, tokenEsti
   console.log(`[Character Prompt] Injected ${skillCount} skills (~${tokenEstimate} tokens) for ${characterName}${suffix}`);
 }
 
+function buildSkillMatchingGuidanceBlock(): string {
+  return [
+    "## Skill Matching Guidance",
+    "- If the user asks for a workflow, campaign, template, playbook, or other reusable task, check for related skills first.",
+    `- Use \`runSkill\` action="list" to discover available skills when needed.`,
+    `- Use \`runSkill\` action="run" when a user request clearly matches a skill trigger example.`,
+    "- Use `updateSkill` for create/patch/replace/metadata/copy/archive operations.",
+    "- If multiple skills match, ask a brief clarification before running.",
+    "- If confidence is low, ask for confirmation instead of auto-running.",
+  ].join("\n");
+}
+
 /**
  * Builds a dynamic system prompt from character data
  * Used for user-created agents on Styly Agents
@@ -141,17 +153,7 @@ export function buildCharacterSystemPrompt(
     const skillBlock = formatSkillsForPromptFromSummary(skillSummaries);
     if (skillBlock.markdown) {
       sections.push(skillBlock.markdown);
-      sections.push(
-        [
-          "## Skill Matching Guidance",
-          "- If the user asks for a workflow, campaign, template, playbook, or other reusable task, check for related skills first.",
-          "- Use `runSkill` action=\"list\" to discover available skills when needed.",
-          "- Use `runSkill` action=\"run\" when a user request clearly matches a skill trigger example.",
-          "- Use `updateSkill` for create/patch/replace/metadata/copy/archive operations.",
-          "- If multiple skills match, ask a brief clarification before running.",
-          "- If confidence is low, ask for confirmation instead of auto-running.",
-        ].join("\n")
-      );
+      sections.push(buildSkillMatchingGuidanceBlock());
       logSkillsInjection(character.name, skillBlock.skillCount, skillBlock.tokenEstimate);
     }
   }
@@ -287,14 +289,7 @@ export function buildCacheableCharacterPrompt(
       });
       blocks.push({
         role: "system",
-        content: [
-          "## Skill Matching Guidance",
-          "- Use `runSkill` action=\"list\" to discover available skills when needed.",
-          "- Use `runSkill` action=\"run\" when a user request clearly matches a skill trigger example.",
-          "- Use `updateSkill` for create/patch/replace/metadata/copy/archive operations.",
-          "- If multiple skills match, ask a brief clarification before running.",
-          "- If confidence is low, ask for confirmation instead of auto-running.",
-        ].join("\n"),
+        content: buildSkillMatchingGuidanceBlock(),
       });
       logSkillsInjection(character.name, skillBlock.skillCount, skillBlock.tokenEstimate, " (cacheable)");
     }

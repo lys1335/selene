@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { AvatarDialogShell } from "@/components/avatar-dialog-shell";
-import { Button } from "@/components/ui/button";
+import { AvatarDialogShell, AvatarUploadButton } from "@/components/avatar-dialog-shell";
 import { Loader2, Upload, Check, Trash2, Volume2, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resilientPatch } from "@/lib/utils/resilient-fetch";
@@ -306,24 +305,13 @@ export function Avatar3DModelSelector({
             </div>
           )}
 
-          <Button
-            onClick={() => fileInputRef.current?.click()}
+          <AvatarUploadButton
+            fileInputRef={fileInputRef}
+            uploading={uploading}
             disabled={busy}
-            variant="outline"
-            className="w-full font-mono border-terminal-border hover:bg-terminal-dark/5"
-          >
-            {uploading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {t("custom.uploading")}
-              </>
-            ) : (
-              <>
-                <Upload className="w-4 h-4 mr-2" />
-                {t("custom.upload")}
-              </>
-            )}
-          </Button>
+            uploadLabel={t("custom.upload")}
+            uploadingLabel={t("custom.uploading")}
+          />
         </div>
 
         <div className="space-y-2 pt-2 border-t border-terminal-border/40">

@@ -9,37 +9,15 @@ import {
   mergeCharacterToolCatalog,
   type CharacterToolCatalogItem,
 } from "@/lib/characters/tool-catalog";
+import {
+  DEFAULT_DEPENDENCY_STATUS,
+  areDependenciesMet as checkDependenciesMet,
+  getDependencyWarning as buildDependencyWarning,
+  type DependencyStatus,
+} from "@/lib/characters/tool-dependency-helpers";
 import type { CharacterSummary } from "@/components/character-picker-types";
 
 type ToolDefinition = CharacterToolCatalogItem;
-
-type DependencyStatus = {
-  syncedFolders: boolean;
-  embeddings: boolean;
-  vectorDbEnabled: boolean;
-  webScraper: boolean;
-  openrouterKey: boolean;
-  comfyuiEnabled: boolean;
-  localGrepEnabled: boolean;
-  devWorkspaceEnabled: boolean;
-  screenCaptureEnabled: boolean;
-  runwayApiSecret: boolean;
-  vertexAIProjectId: boolean;
-};
-
-const DEFAULT_DEPENDENCY_STATUS: DependencyStatus = {
-  syncedFolders: false,
-  embeddings: false,
-  vectorDbEnabled: false,
-  webScraper: false,
-  openrouterKey: false,
-  comfyuiEnabled: false,
-  localGrepEnabled: true,
-  devWorkspaceEnabled: false,
-  screenCaptureEnabled: true,
-  runwayApiSecret: false,
-  vertexAIProjectId: false,
-};
 
 export function useToolEditor(
   t: ReturnType<typeof useTranslations>,
@@ -176,20 +154,11 @@ export function useToolEditor(
     };
   }, [toolEditorOpen, editingCharacter]);
 
-  const areDependenciesMet = (tool: ToolDefinition): boolean => {
-    if (!tool.dependencies || tool.dependencies.length === 0) return true;
-    return tool.dependencies.every((dep) => dependencyStatus[dep]);
-  };
+  const areDependenciesMet = (tool: ToolDefinition): boolean =>
+    checkDependenciesMet(tool, dependencyStatus);
 
-  const getDependencyWarning = (tool: ToolDefinition): string | null => {
-    if (!tool.dependencies || tool.dependencies.length === 0) return null;
-    const unmet = tool.dependencies.filter((dep) => !dependencyStatus[dep]);
-    if (unmet.length === 0) return null;
-    if (unmet.length === 2 && unmet.includes("syncedFolders") && unmet.includes("embeddings")) {
-      return tDeps("both");
-    }
-    return unmet.map((dep) => tDeps(dep)).join(" + ");
-  };
+  const getDependencyWarning = (tool: ToolDefinition): string | null =>
+    buildDependencyWarning(tool, dependencyStatus, tDeps);
 
   const toggleCategory = (category: string) => {
     setCollapsedCategories((prev) => {

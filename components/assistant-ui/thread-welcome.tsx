@@ -1,13 +1,11 @@
 "use client";
 
 import type { FC } from "react";
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef } from "react";
 import { ThreadPrimitive } from "@assistant-ui/react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { GradientBackground } from "@/components/ui/noisy-gradient-backgrounds";
-import type { GradientColor } from "@/components/ui/noisy-gradient-backgrounds";
-import { getAgentAccentColor, buildAgentGradientColors } from "@/lib/personalization/accent-colors";
+import { AgentAvatarFallback } from "@/components/ui/agent-avatar-fallback";
 import { useCharacter, DEFAULT_CHARACTER } from "./character-context";
 import { animate } from "animejs";
 import { useReducedMotion } from "@/lib/animations/hooks";
@@ -21,16 +19,6 @@ export const ThreadWelcome: FC = () => {
   const avatarRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
   const t = useTranslations("assistantUi");
-
-  const accentColor = useMemo(
-    () => getAgentAccentColor(displayChar.id),
-    [displayChar.id]
-  );
-
-  const gradientColors = useMemo(
-    (): GradientColor[] => buildAgentGradientColors(accentColor.hex) as GradientColor[],
-    [accentColor.hex]
-  );
 
   // Extract short labels for suggestion buttons (first 2-3 words or truncate)
   const getSuggestionLabel = (prompt: string): string => {
@@ -83,18 +71,7 @@ export const ThreadWelcome: FC = () => {
                 alt={displayChar.name}
               />
             ) : null}
-            <AvatarFallback className="relative overflow-hidden">
-              <GradientBackground
-                colors={gradientColors}
-                gradientOrigin="bottom-middle"
-                gradientSize="150% 150%"
-                noiseIntensity={0.9}
-                noisePatternAlpha={45}
-                noisePatternSize={60}
-                noisePatternRefreshInterval={7}
-                className="rounded-full"
-              />
-            </AvatarFallback>
+            <AgentAvatarFallback characterId={displayChar.id} />
           </Avatar>
         </div>
 

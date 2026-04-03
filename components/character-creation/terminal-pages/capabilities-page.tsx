@@ -14,6 +14,12 @@ import {
   mergeCharacterToolCatalog,
   type CharacterToolCatalogItem,
 } from "@/lib/characters/tool-catalog";
+import {
+  DEFAULT_DEPENDENCY_STATUS,
+  areDependenciesMet as checkDependenciesMet,
+  getDependencyWarning as buildDependencyWarning,
+  type DependencyStatus,
+} from "@/lib/characters/tool-dependency-helpers";
 
 /** Tool capability definition for the wizard */
 interface ToolCapability extends CharacterToolCatalogItem {}
@@ -126,33 +132,7 @@ export function CapabilitiesPage({
   }, [t]);
 
   // Dependency status - tracks what's configured
-  const [dependencyStatus, setDependencyStatus] = useState<{
-    syncedFolders: boolean;
-    embeddings: boolean;
-    vectorDbEnabled: boolean;
-    webScraper: boolean;
-    openrouterKey: boolean;
-    comfyuiEnabled: boolean;
-    localGrepEnabled: boolean;
-    devWorkspaceEnabled: boolean;
-    screenCaptureEnabled: boolean;
-    runwayApiSecret: boolean;
-    vertexAIProjectId: boolean;
-  }>({
-    syncedFolders: false,
-    embeddings: false,
-    vectorDbEnabled: false,
-    webScraper: false,
-    openrouterKey: false,
-    comfyuiEnabled: false,
-    localGrepEnabled: true,
-    devWorkspaceEnabled: false,
-    screenCaptureEnabled: true,
-    runwayApiSecret: false,
-    vertexAIProjectId: false,
-  });
-
-  type CapabilityDependencyKey = keyof typeof dependencyStatus;
+  const [dependencyStatus, setDependencyStatus] = useState<DependencyStatus>(DEFAULT_DEPENDENCY_STATUS);
 
   // Check dependencies on mount
   useEffect(() => {
@@ -260,21 +240,12 @@ export function CapabilitiesPage({
   }, [onBack, isDirty]);
 
   // Helper to check if tool dependencies are met
-  const areDependenciesMet = (tool: ToolCapability): boolean => {
-    if (!tool.dependencies || tool.dependencies.length === 0) return true;
-    return tool.dependencies.every((dep) => dependencyStatus[dep]);
-  };
+  const areDependenciesMet = (tool: ToolCapability): boolean =>
+    checkDependenciesMet(tool, dependencyStatus);
 
   // Get dependency warning message
-  const getDependencyWarning = (tool: ToolCapability): string | null => {
-    if (!tool.dependencies || tool.dependencies.length === 0) return null;
-    const unmet = tool.dependencies.filter((dep) => !dependencyStatus[dep]);
-    if (unmet.length === 0) return null;
-    if (unmet.length === 2 && unmet.includes("syncedFolders") && unmet.includes("embeddings")) {
-      return tDeps("both");
-    }
-    return unmet.map((dep) => tDeps(dep)).join(" + ");
-  };
+  const getDependencyWarning = (tool: ToolCapability): string | null =>
+    buildDependencyWarning(tool, dependencyStatus, tDeps);
 
   const toggleTool = (toolId: string) => {
     setEnabledTools((prev) => {

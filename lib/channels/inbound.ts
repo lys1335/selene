@@ -483,35 +483,7 @@ async function processInboundMessage(message: ChannelInboundMessage): Promise<vo
           // Persist the message in DB with livePromptInjected flag so it
           // doesn't count as a visible conversation turn and won't trigger
           // another AI response when messages reload.
-          const orderingIndex = await nextOrderingIndex(sessionId);
-          const createdMessage = await createMessage({
-            sessionId,
-            role: "user",
-            content: contentParts,
-            orderingIndex,
-            metadata: {
-              livePromptInjected: true,
-              channel: {
-                connectionId: message.connectionId,
-                channelType: message.channelType,
-                peerId: message.peerId,
-                threadId: message.threadId,
-                externalMessageId: message.messageId,
-                fromSelf: message.fromSelf ?? false,
-              },
-            },
-          });
-
-          if (createdMessage?.id) {
-            await createChannelMessage({
-              connectionId: message.connectionId,
-              channelType: message.channelType,
-              externalMessageId: message.messageId,
-              sessionId,
-              messageId: createdMessage.id,
-              direction: "inbound",
-            });
-          }
+          await persistInboundMessage(sessionId, message, contentParts, { livePromptInjected: true });
 
           console.log("[Channels] Message injected into active stream via live prompt queue");
           taskRegistry.updateStatus(runId, "succeeded", {
@@ -522,37 +494,7 @@ async function processInboundMessage(message: ChannelInboundMessage): Promise<vo
       }
 
       // ── Normal path: no active stream, fire a new chat API call ──────────
-
-      // Allocate ordering index for bullet-proof message ordering
-      const userMessageIndex = await nextOrderingIndex(sessionId);
-
-      const createdMessage = await createMessage({
-        sessionId,
-        role: "user",
-        content: contentParts,
-        orderingIndex: userMessageIndex,
-        metadata: {
-          channel: {
-            connectionId: message.connectionId,
-            channelType: message.channelType,
-            peerId: message.peerId,
-            threadId: message.threadId,
-            externalMessageId: message.messageId,
-            fromSelf: message.fromSelf ?? false,
-          },
-        },
-      });
-
-      if (createdMessage?.id) {
-        await createChannelMessage({
-          connectionId: message.connectionId,
-          channelType: message.channelType,
-          externalMessageId: message.messageId,
-          sessionId,
-          messageId: createdMessage.id,
-          direction: "inbound",
-        });
-      }
+      await persistInboundMessage(sessionId, message, contentParts);
 
       const dbMessages = await getMessages(sessionId);
       const uiMessages = convertDBMessagesToUIMessages(dbMessages);
@@ -625,6 +567,43 @@ async function buildMessageContent(sessionId: string, message: ChannelInboundMes
   }
 
   return parts;
+}
+
+async function persistInboundMessage(
+  sessionId: string,
+  message: ChannelInboundMessage,
+  contentParts: Array<{ type: string; text?: string; image?: string }>,
+  extraMetadata?: Record<string, unknown>,
+): Promise<void> {
+  const orderingIndex = await nextOrderingIndex(sessionId);
+  const createdMessage = await createMessage({
+    sessionId,
+    role: "user",
+    content: contentParts,
+    orderingIndex,
+    metadata: {
+      ...extraMetadata,
+      channel: {
+        connectionId: message.connectionId,
+        channelType: message.channelType,
+        peerId: message.peerId,
+        threadId: message.threadId,
+        externalMessageId: message.messageId,
+        fromSelf: message.fromSelf ?? false,
+      },
+    },
+  });
+
+  if (createdMessage?.id) {
+    await createChannelMessage({
+      connectionId: message.connectionId,
+      channelType: message.channelType,
+      externalMessageId: message.messageId,
+      sessionId,
+      messageId: createdMessage.id,
+      direction: "inbound",
+    });
+  }
 }
 
 function buildConversationTitle(channelType: string, peerName?: string | null, peerId?: string | null) {

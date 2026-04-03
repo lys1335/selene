@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Camera, Cpu, FolderPlus, Plug, MoreHorizontal, Copy, Puzzle, Sparkles } from "lucide-react";
 import {
   Wrench,
@@ -12,7 +12,7 @@ import {
   Pencil,
 } from "@phosphor-icons/react";
 import { useTranslations } from "next-intl";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,9 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { GradientBackground } from "@/components/ui/noisy-gradient-backgrounds";
-import type { GradientColor } from "@/components/ui/noisy-gradient-backgrounds";
-import { getAgentAccentColor, buildAgentGradientColors } from "@/lib/personalization/accent-colors";
+import { AgentAvatarFallback } from "@/components/ui/agent-avatar-fallback";
 import { CHANNEL_TYPE_ICONS } from "./constants";
 import type { SessionChannelType } from "./types";
 
@@ -93,16 +91,6 @@ export function SidebarCharacterProfile({
     setMounted(true);
   }, []);
 
-  const accentColor = useMemo(
-    () => getAgentAccentColor(character.id),
-    [character.id]
-  );
-
-  const gradientColors = useMemo(
-    (): GradientColor[] => buildAgentGradientColors(accentColor.hex) as GradientColor[],
-    [accentColor.hex]
-  );
-
   const connectedCount = channelConnections.filter(
     (connection) => connection.status === "connected",
   ).length;
@@ -121,18 +109,7 @@ export function SidebarCharacterProfile({
               {avatarUrl ? (
                 <AvatarImage src={avatarUrl} alt={character.name} />
               ) : null}
-              <AvatarFallback className="relative overflow-hidden">
-                <GradientBackground
-                  colors={gradientColors}
-                  gradientOrigin="bottom-middle"
-                  gradientSize="150% 150%"
-                  noiseIntensity={0.9}
-                  noisePatternAlpha={45}
-                  noisePatternSize={60}
-                  noisePatternRefreshInterval={7}
-                  className="rounded-full"
-                />
-              </AvatarFallback>
+              <AgentAvatarFallback characterId={character.id} />
             </Avatar>
             <div className="absolute inset-0 rounded-full bg-terminal-dark/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
               <Camera className="h-3.5 w-3.5 text-terminal-cream" />

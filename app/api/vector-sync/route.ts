@@ -46,6 +46,91 @@ function normalizePositiveInt(value: unknown): number | undefined {
   return normalized;
 }
 
+function validateFolderSettingsEnums(body: {
+  indexingMode?: unknown;
+  syncMode?: unknown;
+  chunkPreset?: unknown;
+  reindexPolicy?: unknown;
+}): NextResponse | null {
+  if (body.indexingMode !== undefined && !isValidEnum(body.indexingMode, VALID_INDEXING_MODES)) {
+    return NextResponse.json({ error: "Invalid indexingMode" }, { status: 400 });
+  }
+  if (body.syncMode !== undefined && !isValidEnum(body.syncMode, VALID_SYNC_MODES)) {
+    return NextResponse.json({ error: "Invalid syncMode" }, { status: 400 });
+  }
+  if (body.chunkPreset !== undefined && !isValidEnum(body.chunkPreset, VALID_CHUNK_PRESETS)) {
+    return NextResponse.json({ error: "Invalid chunkPreset" }, { status: 400 });
+  }
+  if (body.reindexPolicy !== undefined && !isValidEnum(body.reindexPolicy, VALID_REINDEX_POLICIES)) {
+    return NextResponse.json({ error: "Invalid reindexPolicy" }, { status: 400 });
+  }
+  return null;
+}
+
+type NormalizedFolderSettings = {
+  normalizedCadence: number | undefined;
+  normalizedMaxFileSize: number | undefined;
+  normalizedChunkSize: number | undefined;
+  normalizedChunkOverlap: number | undefined;
+  normalizedIncludeExtensions: string[] | undefined;
+  normalizedExcludePatterns: string[] | undefined;
+  normalizedFileTypeFilters: string[] | undefined;
+};
+
+function normalizeFolderSettings(body: {
+  syncCadenceMinutes?: unknown;
+  maxFileSizeBytes?: unknown;
+  chunkSizeOverride?: unknown;
+  chunkOverlapOverride?: unknown;
+  chunkPreset?: unknown;
+  includeExtensions?: unknown;
+  excludePatterns?: unknown;
+  fileTypeFilters?: unknown;
+}): { error: NextResponse } | { settings: NormalizedFolderSettings } {
+  const normalizedCadence = normalizePositiveInt(body.syncCadenceMinutes);
+  if (body.syncCadenceMinutes !== undefined && normalizedCadence === undefined) {
+    return { error: NextResponse.json({ error: "syncCadenceMinutes must be a positive number" }, { status: 400 }) };
+  }
+  const normalizedMaxFileSize = normalizePositiveInt(body.maxFileSizeBytes);
+  if (body.maxFileSizeBytes !== undefined && normalizedMaxFileSize === undefined) {
+    return { error: NextResponse.json({ error: "maxFileSizeBytes must be a positive number" }, { status: 400 }) };
+  }
+  const normalizedChunkSize = normalizePositiveInt(body.chunkSizeOverride);
+  if (body.chunkSizeOverride !== undefined && body.chunkSizeOverride !== null && normalizedChunkSize === undefined) {
+    return { error: NextResponse.json({ error: "chunkSizeOverride must be a positive number" }, { status: 400 }) };
+  }
+  const normalizedChunkOverlap = normalizePositiveInt(body.chunkOverlapOverride);
+  if (body.chunkOverlapOverride !== undefined && body.chunkOverlapOverride !== null && normalizedChunkOverlap === undefined) {
+    return { error: NextResponse.json({ error: "chunkOverlapOverride must be a positive number" }, { status: 400 }) };
+  }
+  if (body.chunkPreset === "custom" && (!normalizedChunkSize || normalizedChunkOverlap === undefined)) {
+    return { error: NextResponse.json({ error: "custom chunkPreset requires chunkSizeOverride and chunkOverlapOverride" }, { status: 400 }) };
+  }
+  const normalizedIncludeExtensions = normalizeOptionalStringArray(body.includeExtensions);
+  if (body.includeExtensions !== undefined && !normalizedIncludeExtensions) {
+    return { error: NextResponse.json({ error: "includeExtensions must be an array of strings" }, { status: 400 }) };
+  }
+  const normalizedExcludePatterns = normalizeOptionalStringArray(body.excludePatterns);
+  if (body.excludePatterns !== undefined && !normalizedExcludePatterns) {
+    return { error: NextResponse.json({ error: "excludePatterns must be an array of strings" }, { status: 400 }) };
+  }
+  const normalizedFileTypeFilters = normalizeOptionalStringArray(body.fileTypeFilters);
+  if (body.fileTypeFilters !== undefined && !normalizedFileTypeFilters) {
+    return { error: NextResponse.json({ error: "fileTypeFilters must be an array of strings" }, { status: 400 }) };
+  }
+  return {
+    settings: {
+      normalizedCadence,
+      normalizedMaxFileSize,
+      normalizedChunkSize,
+      normalizedChunkOverlap,
+      normalizedIncludeExtensions,
+      normalizedExcludePatterns,
+      normalizedFileTypeFilters,
+    },
+  };
+}
+
 /**
  * GET /api/vector-sync?characterId=xxx
  * Get all sync folders for an agent
@@ -119,51 +204,18 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (indexingMode !== undefined && !isValidEnum(indexingMode, VALID_INDEXING_MODES)) {
-        return NextResponse.json({ error: "Invalid indexingMode" }, { status: 400 });
-      }
-      if (syncMode !== undefined && !isValidEnum(syncMode, VALID_SYNC_MODES)) {
-        return NextResponse.json({ error: "Invalid syncMode" }, { status: 400 });
-      }
-      if (chunkPreset !== undefined && !isValidEnum(chunkPreset, VALID_CHUNK_PRESETS)) {
-        return NextResponse.json({ error: "Invalid chunkPreset" }, { status: 400 });
-      }
-      if (reindexPolicy !== undefined && !isValidEnum(reindexPolicy, VALID_REINDEX_POLICIES)) {
-        return NextResponse.json({ error: "Invalid reindexPolicy" }, { status: 400 });
-      }
+      const enumError = validateFolderSettingsEnums({ indexingMode, syncMode, chunkPreset, reindexPolicy });
+      if (enumError) return enumError;
 
-      const normalizedCadence = normalizePositiveInt(syncCadenceMinutes);
-      if (syncCadenceMinutes !== undefined && normalizedCadence === undefined) {
-        return NextResponse.json({ error: "syncCadenceMinutes must be a positive number" }, { status: 400 });
-      }
-      const normalizedMaxFileSize = normalizePositiveInt(maxFileSizeBytes);
-      if (maxFileSizeBytes !== undefined && normalizedMaxFileSize === undefined) {
-        return NextResponse.json({ error: "maxFileSizeBytes must be a positive number" }, { status: 400 });
-      }
-      const normalizedChunkSize = normalizePositiveInt(chunkSizeOverride);
-      if (chunkSizeOverride !== undefined && chunkSizeOverride !== null && normalizedChunkSize === undefined) {
-        return NextResponse.json({ error: "chunkSizeOverride must be a positive number" }, { status: 400 });
-      }
-      const normalizedChunkOverlap = normalizePositiveInt(chunkOverlapOverride);
-      if (chunkOverlapOverride !== undefined && chunkOverlapOverride !== null && normalizedChunkOverlap === undefined) {
-        return NextResponse.json({ error: "chunkOverlapOverride must be a positive number" }, { status: 400 });
-      }
-      if (chunkPreset === "custom" && (!normalizedChunkSize || normalizedChunkOverlap === undefined)) {
-        return NextResponse.json({ error: "custom chunkPreset requires chunkSizeOverride and chunkOverlapOverride" }, { status: 400 });
-      }
-
-      const normalizedIncludeExtensions = normalizeOptionalStringArray(includeExtensions);
-      if (includeExtensions !== undefined && !normalizedIncludeExtensions) {
-        return NextResponse.json({ error: "includeExtensions must be an array of strings" }, { status: 400 });
-      }
-      const normalizedExcludePatterns = normalizeOptionalStringArray(excludePatterns);
-      if (excludePatterns !== undefined && !normalizedExcludePatterns) {
-        return NextResponse.json({ error: "excludePatterns must be an array of strings" }, { status: 400 });
-      }
-      const normalizedFileTypeFilters = normalizeOptionalStringArray(fileTypeFilters);
-      if (fileTypeFilters !== undefined && !normalizedFileTypeFilters) {
-        return NextResponse.json({ error: "fileTypeFilters must be an array of strings" }, { status: 400 });
-      }
+      const normalizedResult = normalizeFolderSettings({
+        syncCadenceMinutes, maxFileSizeBytes, chunkSizeOverride, chunkOverlapOverride, chunkPreset,
+        includeExtensions, excludePatterns, fileTypeFilters,
+      });
+      if ("error" in normalizedResult) return normalizedResult.error;
+      const {
+        normalizedCadence, normalizedMaxFileSize, normalizedChunkSize, normalizedChunkOverlap,
+        normalizedIncludeExtensions, normalizedExcludePatterns, normalizedFileTypeFilters,
+      } = normalizedResult.settings;
 
       const effectiveSyncMode = syncMode ?? "auto";
 
@@ -354,51 +406,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "folderId is required" }, { status: 400 });
       }
 
-      if (indexingMode !== undefined && !isValidEnum(indexingMode, VALID_INDEXING_MODES)) {
-        return NextResponse.json({ error: "Invalid indexingMode" }, { status: 400 });
-      }
-      if (syncMode !== undefined && !isValidEnum(syncMode, VALID_SYNC_MODES)) {
-        return NextResponse.json({ error: "Invalid syncMode" }, { status: 400 });
-      }
-      if (chunkPreset !== undefined && !isValidEnum(chunkPreset, VALID_CHUNK_PRESETS)) {
-        return NextResponse.json({ error: "Invalid chunkPreset" }, { status: 400 });
-      }
-      if (reindexPolicy !== undefined && !isValidEnum(reindexPolicy, VALID_REINDEX_POLICIES)) {
-        return NextResponse.json({ error: "Invalid reindexPolicy" }, { status: 400 });
-      }
+      const enumError = validateFolderSettingsEnums({ indexingMode, syncMode, chunkPreset, reindexPolicy });
+      if (enumError) return enumError;
 
-      const normalizedIncludeExtensions = normalizeOptionalStringArray(includeExtensions);
-      if (includeExtensions !== undefined && !normalizedIncludeExtensions) {
-        return NextResponse.json({ error: "includeExtensions must be an array of strings" }, { status: 400 });
-      }
-      const normalizedExcludePatterns = normalizeOptionalStringArray(excludePatterns);
-      if (excludePatterns !== undefined && !normalizedExcludePatterns) {
-        return NextResponse.json({ error: "excludePatterns must be an array of strings" }, { status: 400 });
-      }
-      const normalizedFileTypeFilters = normalizeOptionalStringArray(fileTypeFilters);
-      if (fileTypeFilters !== undefined && !normalizedFileTypeFilters) {
-        return NextResponse.json({ error: "fileTypeFilters must be an array of strings" }, { status: 400 });
-      }
-
-      const normalizedCadence = normalizePositiveInt(syncCadenceMinutes);
-      if (syncCadenceMinutes !== undefined && normalizedCadence === undefined) {
-        return NextResponse.json({ error: "syncCadenceMinutes must be a positive number" }, { status: 400 });
-      }
-      const normalizedMaxFileSize = normalizePositiveInt(maxFileSizeBytes);
-      if (maxFileSizeBytes !== undefined && normalizedMaxFileSize === undefined) {
-        return NextResponse.json({ error: "maxFileSizeBytes must be a positive number" }, { status: 400 });
-      }
-      const normalizedChunkSize = normalizePositiveInt(chunkSizeOverride);
-      if (chunkSizeOverride !== undefined && chunkSizeOverride !== null && normalizedChunkSize === undefined) {
-        return NextResponse.json({ error: "chunkSizeOverride must be a positive number" }, { status: 400 });
-      }
-      const normalizedChunkOverlap = normalizePositiveInt(chunkOverlapOverride);
-      if (chunkOverlapOverride !== undefined && chunkOverlapOverride !== null && normalizedChunkOverlap === undefined) {
-        return NextResponse.json({ error: "chunkOverlapOverride must be a positive number" }, { status: 400 });
-      }
-      if (chunkPreset === "custom" && (!normalizedChunkSize || normalizedChunkOverlap === undefined)) {
-        return NextResponse.json({ error: "custom chunkPreset requires chunkSizeOverride and chunkOverlapOverride" }, { status: 400 });
-      }
+      const normalizedResult = normalizeFolderSettings({
+        syncCadenceMinutes, maxFileSizeBytes, chunkSizeOverride, chunkOverlapOverride, chunkPreset,
+        includeExtensions, excludePatterns, fileTypeFilters,
+      });
+      if ("error" in normalizedResult) return normalizedResult.error;
+      const {
+        normalizedCadence, normalizedMaxFileSize, normalizedChunkSize, normalizedChunkOverlap,
+        normalizedIncludeExtensions, normalizedExcludePatterns, normalizedFileTypeFilters,
+      } = normalizedResult.settings;
 
       if (dryRun === true) {
         return NextResponse.json({ success: true, dryRun: true });

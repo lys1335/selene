@@ -375,6 +375,33 @@ async function extractAttachmentContextText(
   }
 }
 
+async function appendAttachmentByType(
+  contentParts: ModelContentPart[],
+  attachmentLookup: Map<string, AttachmentPathMetadata>,
+  seenAttachmentUrls: Set<string>,
+  attachment: AttachmentPathMetadata,
+  includeUrlHelpers: boolean,
+  convertUserImagesToBase64: boolean,
+  isUserMessage: boolean,
+  sessionId?: string,
+): Promise<void> {
+  if (!attachment.url) return;
+  if (attachment.contentType?.startsWith("image/")) {
+    await appendImagePart(
+      contentParts,
+      attachmentLookup,
+      seenAttachmentUrls,
+      attachment.url,
+      attachment.name || "uploaded image",
+      includeUrlHelpers,
+      convertUserImagesToBase64,
+      isUserMessage,
+    );
+  } else {
+    await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
+  }
+}
+
 function appendTextPartIfPresent(
   contentParts: ModelContentPart[],
   text: string | null | undefined,
@@ -704,42 +731,14 @@ export async function extractContent(
 
     if (msg.experimental_attachments && Array.isArray(msg.experimental_attachments)) {
       for (const attachment of msg.experimental_attachments) {
-        if (!attachment.url) continue;
-        if (attachment.contentType?.startsWith("image/")) {
-          await appendImagePart(
-            contentParts,
-            attachmentLookup,
-            seenAttachmentUrls,
-            attachment.url,
-            attachment.name || "uploaded image",
-            includeUrlHelpers,
-            convertUserImagesToBase64,
-            isUserMessage,
-          );
-        } else {
-          await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
-        }
+        await appendAttachmentByType(contentParts, attachmentLookup, seenAttachmentUrls, attachment, includeUrlHelpers, convertUserImagesToBase64, isUserMessage, sessionId);
       }
     }
 
     const metadataAttachments = msg.metadata?.custom?.attachments;
     if (metadataAttachments && Array.isArray(metadataAttachments)) {
       for (const attachment of metadataAttachments) {
-        if (!attachment.url) continue;
-        if (attachment.contentType?.startsWith("image/")) {
-          await appendImagePart(
-            contentParts,
-            attachmentLookup,
-            seenAttachmentUrls,
-            attachment.url,
-            attachment.name || "uploaded image",
-            includeUrlHelpers,
-            convertUserImagesToBase64,
-            isUserMessage,
-          );
-        } else {
-          await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
-        }
+        await appendAttachmentByType(contentParts, attachmentLookup, seenAttachmentUrls, attachment, includeUrlHelpers, convertUserImagesToBase64, isUserMessage, sessionId);
       }
     }
 

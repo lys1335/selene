@@ -8,6 +8,47 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Loader2, Upload } from "lucide-react";
+
+/**
+ * Upload button shared between avatar dialogs. Triggers the hidden file input
+ * and shows a spinner while uploading is in progress.
+ */
+export function AvatarUploadButton({
+  fileInputRef,
+  uploading,
+  disabled,
+  uploadLabel,
+  uploadingLabel,
+}: {
+  fileInputRef: RefObject<HTMLInputElement | null>;
+  uploading: boolean;
+  disabled?: boolean;
+  uploadLabel: string;
+  uploadingLabel: string;
+}) {
+  return (
+    <Button
+      onClick={() => fileInputRef.current?.click()}
+      disabled={disabled ?? uploading}
+      variant="outline"
+      className="w-full font-mono border-terminal-border hover:bg-terminal-dark/5"
+    >
+      {uploading ? (
+        <>
+          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          {uploadingLabel}
+        </>
+      ) : (
+        <>
+          <Upload className="w-4 h-4 mr-2" />
+          {uploadLabel}
+        </>
+      )}
+    </Button>
+  );
+}
 
 interface AvatarDialogShellProps {
   open: boolean;

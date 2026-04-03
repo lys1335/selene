@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Search, Volume2, Loader2, Square } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import {
   findEdgeTTSVoice,
 } from "@/lib/tts/edge-tts-voices";
 import { SettingsField } from "@/components/settings/settings-form-layout";
+import { useEdgeTtsPreview } from "@/hooks/use-edge-tts-preview";
 
 interface EdgeTTSVoiceSelectorProps {
   value: string;
@@ -19,10 +20,8 @@ interface EdgeTTSVoiceSelectorProps {
 export function EdgeTTSVoiceSelector({ value, onChange }: EdgeTTSVoiceSelectorProps) {
   const t = useTranslations("settings");
   const [search, setSearch] = useState("");
-  const [previewing, setPreviewing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const blobUrlRef = useRef<string | null>(null);
+  const { previewing, audioRef, stopPreview, playPreview } = useEdgeTtsPreview({ voiceId: value });
 
   const grouped = useMemo(() => getEdgeTTSVoicesGrouped(), []);
 
@@ -46,43 +45,6 @@ export function EdgeTTSVoiceSelector({ value, onChange }: EdgeTTSVoiceSelectorPr
   }, [grouped, search]);
 
   const currentVoice = findEdgeTTSVoice(value);
-
-  const stopPreview = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-    if (blobUrlRef.current) {
-      URL.revokeObjectURL(blobUrlRef.current);
-      blobUrlRef.current = null;
-    }
-    setPreviewing(false);
-  }, []);
-
-  const playPreview = useCallback(async () => {
-    if (previewing) {
-      stopPreview();
-      return;
-    }
-
-    setPreviewing(true);
-    try {
-      const res = await fetch(`/api/tts/preview?voice=${encodeURIComponent(value)}`);
-      if (!res.ok) throw new Error("Preview failed");
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      blobUrlRef.current = url;
-
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = stopPreview;
-      audio.onerror = stopPreview;
-      await audio.play();
-    } catch {
-      stopPreview();
-    }
-  }, [value, previewing, stopPreview]);
 
   const handleSelectChange = useCallback(
     async (nextVoiceId: string) => {

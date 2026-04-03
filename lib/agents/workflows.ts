@@ -102,6 +102,40 @@ function refreshWorkflowSharedResources(workflowId: string, initiatorId: string)
   return _refreshWorkflowSharedResources(workflowId, initiatorId, getWorkflowById);
 }
 
+// ── Helper: sync shared folders for new members then refresh shared resources ──
+async function syncFoldersForNewMembers(params: {
+  userId: string;
+  initiatorId: string;
+  workflowId: string;
+  subAgentIds: string[];
+  /** For each subagent, returns the other member IDs to sync its own folders to */
+  getOtherMembersFor?: (subAgentId: string) => string[];
+}): Promise<void> {
+  const { syncSharedFoldersToSubAgents, syncOwnFoldersToWorkflowMembers } = await loadWorkflowFolderSharing();
+  await syncSharedFoldersToSubAgents({
+    userId: params.userId,
+    initiatorId: params.initiatorId,
+    subAgentIds: params.subAgentIds,
+    workflowId: params.workflowId,
+  });
+
+  if (params.getOtherMembersFor) {
+    for (const subAgentId of params.subAgentIds) {
+      const otherMembers = params.getOtherMembersFor(subAgentId);
+      if (otherMembers.length > 0) {
+        await syncOwnFoldersToWorkflowMembers({
+          userId: params.userId,
+          sourceAgentId: subAgentId,
+          targetAgentIds: otherMembers,
+          workflowId: params.workflowId,
+        });
+      }
+    }
+  }
+
+  await refreshWorkflowSharedResources(params.workflowId, params.initiatorId);
+}
+
 // ── Public CRUD ────────────────────────────────────────────────────────────────
 
 export async function addWorkflowMembers(input: AddWorkflowMembersInput): Promise<AgentWorkflowMember[]> {
@@ -263,28 +297,13 @@ export async function createManualWorkflow(
   });
 
   if (uniqueSubAgentIds.length > 0) {
-    const { syncSharedFoldersToSubAgents, syncOwnFoldersToWorkflowMembers } = await loadWorkflowFolderSharing();
-    // Sync initiator's folders → all subagents
-    await syncSharedFoldersToSubAgents({
+    await syncFoldersForNewMembers({
       userId: input.userId,
       initiatorId: input.initiatorId,
-      subAgentIds: uniqueSubAgentIds,
       workflowId: workflowRow.id,
+      subAgentIds: uniqueSubAgentIds,
+      getOtherMembersFor: (subAgentId) => [input.initiatorId, ...uniqueSubAgentIds.filter((id) => id !== subAgentId)],
     });
-
-    // Sync each subagent's own folders → initiator + other subagents
-    for (const subAgentId of uniqueSubAgentIds) {
-      const otherMembers = [input.initiatorId, ...uniqueSubAgentIds.filter((id) => id !== subAgentId)];
-      await syncOwnFoldersToWorkflowMembers({
-        userId: input.userId,
-        sourceAgentId: subAgentId,
-        targetAgentIds: otherMembers,
-        workflowId: workflowRow.id,
-      });
-    }
-
-    // Refresh shared resources to reflect all members' folders
-    await refreshWorkflowSharedResources(workflowRow.id, input.initiatorId);
   }
 
   return mapWorkflowRow(workflowRow);
@@ -336,32 +355,18 @@ export async function addSubagentToWorkflow(
   }
 
   if (input.syncFolders !== false) {
-    const { syncSharedFoldersToSubAgents, syncOwnFoldersToWorkflowMembers } = await loadWorkflowFolderSharing();
-    // Sync all existing members' folders → new subagent
-    await syncSharedFoldersToSubAgents({
-      userId: input.userId,
-      initiatorId: workflow.initiatorId,
-      subAgentIds: [input.agentId],
-      workflowId: input.workflowId,
-    });
-
-    // Sync the new subagent's own folders → all other existing members
+    // Sync all existing members' folders → new subagent, and vice versa
     const existingMembers = await getWorkflowMembers(input.workflowId);
     const otherMemberIds = existingMembers
       .map((m) => m.agentId)
       .filter((id) => id !== input.agentId);
-
-    if (otherMemberIds.length > 0) {
-      await syncOwnFoldersToWorkflowMembers({
-        userId: input.userId,
-        sourceAgentId: input.agentId,
-        targetAgentIds: otherMemberIds,
-        workflowId: input.workflowId,
-      });
-    }
-
-    // Refresh shared resources to reflect the new member's folders
-    await refreshWorkflowSharedResources(input.workflowId, workflow.initiatorId);
+    await syncFoldersForNewMembers({
+      userId: input.userId,
+      initiatorId: workflow.initiatorId,
+      workflowId: input.workflowId,
+      subAgentIds: [input.agentId],
+      getOtherMembersFor: () => otherMemberIds,
+    });
   } else {
     await touchWorkflow(input.workflowId);
   }
@@ -647,14 +652,12 @@ export async function createSystemAgentWorkflow(input: {
   });
 
   if (uniqueSubAgentIds.length > 0) {
-    const { syncSharedFoldersToSubAgents } = await loadWorkflowFolderSharing();
-    await syncSharedFoldersToSubAgents({
+    await syncFoldersForNewMembers({
       userId: input.userId,
       initiatorId: input.initiatorId,
-      subAgentIds: uniqueSubAgentIds,
       workflowId: workflowRow.id,
+      subAgentIds: uniqueSubAgentIds,
     });
-    await refreshWorkflowSharedResources(workflowRow.id, input.initiatorId);
   }
 
   return mapWorkflowRow(workflowRow);

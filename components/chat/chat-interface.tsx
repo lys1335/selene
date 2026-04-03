@@ -520,6 +520,13 @@ export default function ChatInterface({
         });
     }, [bg.clearTrackedRunState, clearScheduledBanner]);
 
+    const startBackgroundRun = useCallback((runId: string) => {
+        bg.setIsProcessingInBackground(true);
+        bg.setProcessingRunId(runId);
+        bg.setIsZombieRun(false);
+        bg.startPollingForCompletion(runId);
+    }, [bg.setIsProcessingInBackground, bg.setProcessingRunId, bg.setIsZombieRun, bg.startPollingForCompletion]);
+
     // ── Session CRUD & list management ──
     const sm = useSessionManager({
         character,
@@ -1058,10 +1065,7 @@ export default function ChatInterface({
 
             if (activeDelegationTaskForSession?.runId) {
                 const delegationRunId = activeDelegationTaskForSession.runId;
-                bg.setIsProcessingInBackground(true);
-                bg.setProcessingRunId(delegationRunId);
-                bg.setIsZombieRun(false);
-                bg.startPollingForCompletion(delegationRunId);
+                startBackgroundRun(delegationRunId);
                 void reloadSessionMessages(targetSessionId, { force: true });
                 return;
             }
@@ -1196,10 +1200,7 @@ export default function ChatInterface({
 
             console.log("[Background Processing] Detected active task from store:", stillActive.runId);
             if (isDelegationTask(stillActive)) {
-                bg.setIsProcessingInBackground(true);
-                bg.setProcessingRunId(stillActive.runId);
-                bg.setIsZombieRun(false);
-                bg.startPollingForCompletion(stillActive.runId);
+                startBackgroundRun(stillActive.runId);
                 void reloadSessionMessages(sessionId, { force: true });
                 return;
             }
@@ -1215,8 +1216,8 @@ export default function ChatInterface({
             }
         };
     // bg.processingRunId is the only reactive bg value used in the guard.
-    // Setters & startPollingForCompletion are identity-stable.
-    }, [activeTasks, bg.processingRunId, reloadSessionMessages, sessionId]);
+    // startBackgroundRun, setters & startPollingForCompletion are identity-stable.
+    }, [activeTasks, bg.processingRunId, reloadSessionMessages, sessionId, startBackgroundRun]);
 
     useEffect(() => {
         if (activeScheduledTaskForSession?.type === "scheduled") {
@@ -1269,14 +1270,11 @@ export default function ChatInterface({
             return;
         }
 
-        bg.setIsProcessingInBackground(true);
-        bg.setProcessingRunId(activeDelegationTaskForSession.runId);
-        bg.setIsZombieRun(false);
-        bg.startPollingForCompletion(activeDelegationTaskForSession.runId);
+        startBackgroundRun(activeDelegationTaskForSession.runId);
     // Use specific deps — bg.processingRunId for the guard check,
-    // activeDelegationTaskForSession for the trigger.  Setters, refs,
-    // and startPollingForCompletion are identity-stable.
-    }, [activeDelegationTaskForSession, bg.processingRunId]);
+    // activeDelegationTaskForSession for the trigger.  startBackgroundRun,
+    // setters, refs, and startPollingForCompletion are identity-stable.
+    }, [activeDelegationTaskForSession, bg.processingRunId, startBackgroundRun]);
 
     const handleCancelRun = useCallback(async () => {
         if (!activeRun || !sessionId) return;
@@ -1342,10 +1340,7 @@ export default function ChatInterface({
                 }
 
                 if (isDelegationTask(detail.task)) {
-                    bg.setIsProcessingInBackground(true);
-                    bg.setProcessingRunId(detail.task.runId);
-                    bg.setIsZombieRun(false);
-                    bg.startPollingForCompletion(detail.task.runId);
+                    startBackgroundRun(detail.task.runId);
                 }
 
                 void reloadSessionMessages(sessionId, { force: true });
@@ -1383,6 +1378,7 @@ export default function ChatInterface({
         reloadSessionMessages,
         sessionId,
         sm.userLoadedMoreRef,
+        startBackgroundRun,
     ]);
 
     useEffect(() => {

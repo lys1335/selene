@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { AvatarDialogShell } from "@/components/avatar-dialog-shell";
+import { AvatarDialogShell, AvatarUploadButton } from "@/components/avatar-dialog-shell";
 import { Button } from "@/components/ui/button";
-import { Loader2, Upload, Check, Trash2, ImagePlus } from "lucide-react";
+import { Loader2, Check, Trash2, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resilientFetch, resilientPost, resilientPatch, resilientDelete } from "@/lib/utils/resilient-fetch";
 import type { CharacterImage } from "@/lib/db/sqlite-character-schema";
@@ -196,24 +196,12 @@ export function AvatarSelectionDialog({
             </div>
           )}
 
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            variant="outline"
-            className="w-full font-mono border-terminal-border hover:bg-terminal-dark/5"
-          >
-            {uploading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {t("actions.uploading")}
-              </>
-            ) : (
-              <>
-                <Upload className="w-4 h-4 mr-2" />
-                {t("actions.upload")}
-              </>
-            )}
-          </Button>
+          <AvatarUploadButton
+            fileInputRef={fileInputRef}
+            uploading={uploading}
+            uploadLabel={t("actions.upload")}
+            uploadingLabel={t("actions.uploading")}
+          />
           <p className="text-xs font-mono text-terminal-muted text-center">
             {t("note")}
           </p>

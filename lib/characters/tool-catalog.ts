@@ -1,4 +1,4 @@
-type ToolDependency =
+export type ToolDependency =
   | "syncedFolders"
   | "embeddings"
   | "vectorDbEnabled"

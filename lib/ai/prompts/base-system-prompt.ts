@@ -41,6 +41,17 @@ export interface BaseSystemPromptOptions {
   enableCaching?: boolean;
 }
 
+function buildCoreIdentity(options: Pick<BaseSystemPromptOptions, "agentName" | "agentRole" | "agentVibe" | "personalityTraits">): string {
+  const identityParts: string[] = [`You are ${options.agentName}, ${options.agentRole}.`];
+  if (options.agentVibe) {
+    identityParts.push(`**Vibe:** ${options.agentVibe}`);
+  }
+  if (options.personalityTraits && options.personalityTraits.length > 0) {
+    identityParts.push(`**Personality:** ${options.personalityTraits.join(", ")}`);
+  }
+  return identityParts.join("\n");
+}
+
 /**
  * Build a minimal, efficient base system prompt.
  *
@@ -54,27 +65,12 @@ export interface BaseSystemPromptOptions {
  */
 function buildBaseSystemPrompt(options: BaseSystemPromptOptions): string {
   const {
-    agentName,
-    agentRole,
-    agentVibe,
-    personalityTraits,
     includeToolDiscovery = true,
     toolLoadingMode = "deferred",
     additionalContext,
   } = options;
 
-  // Build core identity section
-  const identityParts: string[] = [`You are ${agentName}, ${agentRole}.`];
-
-  if (agentVibe) {
-    identityParts.push(`**Vibe:** ${agentVibe}`);
-  }
-
-  if (personalityTraits && personalityTraits.length > 0) {
-    identityParts.push(`**Personality:** ${personalityTraits.join(", ")}`);
-  }
-
-  const coreIdentity = identityParts.join("\n");
+  const coreIdentity = buildCoreIdentity(options);
 
   // Assemble the prompt
   const sections = [
@@ -156,10 +152,6 @@ function buildCacheableSystemPrompt(
   options: BaseSystemPromptOptions
 ): CacheableSystemBlock[] {
   const {
-    agentName,
-    agentRole,
-    agentVibe,
-    personalityTraits,
     includeToolDiscovery = true,
     toolLoadingMode = "deferred",
     additionalContext,
@@ -168,18 +160,7 @@ function buildCacheableSystemPrompt(
 
   const blocks: CacheableSystemBlock[] = [];
 
-  // Build core identity section
-  const identityParts: string[] = [`You are ${agentName}, ${agentRole}.`];
-
-  if (agentVibe) {
-    identityParts.push(`**Vibe:** ${agentVibe}`);
-  }
-
-  if (personalityTraits && personalityTraits.length > 0) {
-    identityParts.push(`**Personality:** ${personalityTraits.join(", ")}`);
-  }
-
-  const coreIdentity = identityParts.join("\n");
+  const coreIdentity = buildCoreIdentity(options);
 
   // Block 1: Temporal context (changes daily, not cached)
   blocks.push({

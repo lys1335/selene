@@ -103,6 +103,33 @@ function getEffectiveExpectedVersion(input: UpdateSkillInput): number | undefine
   return input.expectedVersionRef ?? input.expectedVersion;
 }
 
+type SkillUpdateResult = {
+  skill: unknown;
+  stale?: boolean;
+  staleVersion?: number;
+  warnings?: unknown;
+};
+
+function checkUpdateResult(
+  result: SkillUpdateResult,
+  action: UpdateSkillAction,
+): { success: false; action: UpdateSkillAction; error: string; stale?: boolean; staleVersion?: number; warnings?: unknown } | null {
+  if (!result.skill) {
+    return { success: false, action, error: "Skill not found." };
+  }
+  if (result.stale) {
+    return {
+      success: false,
+      action,
+      stale: true,
+      staleVersion: result.staleVersion,
+      error: "Skill was updated elsewhere. Refresh and retry.",
+      warnings: result.warnings,
+    };
+  }
+  return null;
+}
+
 function toEdits(input: UpdateSkillInput): FileEdit[] {
   if (Array.isArray(input.edits) && input.edits.length > 0) {
     return input.edits;
@@ -251,19 +278,8 @@ export function createUpdateSkillTool(options: UpdateSkillToolOptions) {
           changeReason: input.changeReason || "archived via updateSkill",
         });
 
-        if (!archived.skill) {
-          return { success: false, action, error: "Skill not found." };
-        }
-        if (archived.stale) {
-          return {
-            success: false,
-            action,
-            stale: true,
-            staleVersion: archived.staleVersion,
-            error: "Skill was updated elsewhere. Refresh and retry.",
-            warnings: archived.warnings,
-          };
-        }
+        const archiveError = checkUpdateResult(archived, action);
+        if (archiveError) return archiveError;
 
         return {
           success: true,
@@ -271,7 +287,7 @@ export function createUpdateSkillTool(options: UpdateSkillToolOptions) {
           skill: archived.skill,
           changedFields: archived.changedFields,
           warnings: archived.warnings,
-          message: `Archived skill "${archived.skill.name}".`,
+          message: `Archived skill "${(archived.skill as { name: string }).name}".`,
         };
       }
 
@@ -299,19 +315,8 @@ export function createUpdateSkillTool(options: UpdateSkillToolOptions) {
           skipVersionBump: input.skipVersionBump,
         });
 
-        if (!updated.skill) {
-          return { success: false, action, error: "Skill not found." };
-        }
-        if (updated.stale) {
-          return {
-            success: false,
-            action,
-            stale: true,
-            staleVersion: updated.staleVersion,
-            error: "Skill was updated elsewhere. Refresh and retry.",
-            warnings: updated.warnings,
-          };
-        }
+        const metadataError = checkUpdateResult(updated, action);
+        if (metadataError) return metadataError;
 
         return {
           success: true,
@@ -359,19 +364,8 @@ export function createUpdateSkillTool(options: UpdateSkillToolOptions) {
             skipVersionBump: input.skipVersionBump,
           });
 
-          if (!updated.skill) {
-            return { success: false, action, error: "Skill not found." };
-          }
-          if (updated.stale) {
-            return {
-              success: false,
-              action,
-              stale: true,
-              staleVersion: updated.staleVersion,
-              error: "Skill was updated elsewhere. Refresh and retry.",
-              warnings: updated.warnings,
-            };
-          }
+          const replaceError = checkUpdateResult(updated, action);
+          if (replaceError) return replaceError;
 
           const diff = generateBeforeAfterDiff(
             `${skill.displayName}.skill.md`,
@@ -386,7 +380,7 @@ export function createUpdateSkillTool(options: UpdateSkillToolOptions) {
             changedFields: updated.changedFields,
             warnings: updated.warnings,
             diff,
-            message: `Replaced content for "${updated.skill.name}".`,
+            message: `Replaced content for "${(updated.skill as { name: string }).name}".`,
           };
         }
 
@@ -472,19 +466,8 @@ export function createUpdateSkillTool(options: UpdateSkillToolOptions) {
             skipVersionBump: input.skipVersionBump,
           });
 
-          if (!updated.skill) {
-            return { success: false, action, error: "Skill not found." };
-          }
-          if (updated.stale) {
-            return {
-              success: false,
-              action,
-              stale: true,
-              staleVersion: updated.staleVersion,
-              error: "Skill was updated elsewhere. Refresh and retry.",
-              warnings: updated.warnings,
-            };
-          }
+          const patchError = checkUpdateResult(updated, action);
+          if (patchError) return patchError;
 
           return {
             success: true,
@@ -494,7 +477,7 @@ export function createUpdateSkillTool(options: UpdateSkillToolOptions) {
             warnings: updated.warnings,
             diff,
             linesChanged: patchResult.linesChanged,
-            message: `Patched "${updated.skill.name}".`,
+            message: `Patched "${(updated.skill as { name: string }).name}".`,
           };
         }
 
