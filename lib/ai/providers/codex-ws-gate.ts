@@ -89,20 +89,20 @@ export function releaseWs(ticket: WsTicket): void {
 /**
  * Get the number of active WS connections (for diagnostics).
  */
-function getActiveWsCount(): number {
+export function getActiveWsCount(): number {
   return activeTickets.size;
 }
 
 /**
  * Get details of all active WS tickets (for diagnostics).
  */
-function getActiveWsTickets(): WsTicket[] {
+export function getActiveWsTickets(): WsTicket[] {
   return [...activeTickets.values()];
 }
 
 /**
  * Force-release all tickets (for testing / emergency recovery).
  */
-function releaseAllWs(): void {
+export function releaseAllWs(): void {
   activeTickets.clear();
 }
