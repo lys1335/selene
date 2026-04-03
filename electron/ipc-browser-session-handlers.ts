@@ -5,7 +5,7 @@ import { debugLog, debugError } from "./debug-logger";
 import type { IpcHandlerContext } from "./ipc-context";
 import {
   getWindowBackgroundColor,
-  currentThemePreference,
+  currentElectronThemePreference,
   resolveWindowsWindowIconPath,
 } from "./window-manager";
 
@@ -50,7 +50,7 @@ export function registerBrowserSessionHandlers(ctx: IpcHandlerContext): void {
         minWidth: 800,
         minHeight: 500,
         title: `Browser Session`,
-        backgroundColor: getWindowBackgroundColor(currentThemePreference),
+        backgroundColor: getWindowBackgroundColor(currentElectronThemePreference),
         autoHideMenuBar: true,
         ...(windowsIconPath ? { icon: windowsIconPath } : {}),
         webPreferences: {

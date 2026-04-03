@@ -36,7 +36,7 @@ function appendBlock(
 
 // ─── Public interface ─────────────────────────────────────────────────────────
 
-export interface SystemPromptBuildArgs {
+interface SystemPromptBuildArgs {
   characterId: string | null;
   userId: string;
   sessionId: string;
@@ -50,7 +50,7 @@ export interface SystemPromptBuildArgs {
   rawMode?: boolean;
 }
 
-export interface SystemPromptBuildResult {
+interface SystemPromptBuildResult {
   systemPromptValue: string | CacheableSystemBlock[];
   characterAvatarUrl: string | null;
   characterAppearanceDescription: string | null;

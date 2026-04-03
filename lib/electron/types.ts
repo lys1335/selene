@@ -160,7 +160,7 @@ interface ElectronVoiceHotkeyAPI {
   clear: () => Promise<{ success: boolean }>;
 }
 
-type PermissionStatus =
+export type PermissionStatus =
   | "granted"
   | "denied"
   | "not-determined"

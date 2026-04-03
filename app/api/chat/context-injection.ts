@@ -26,7 +26,7 @@ export interface ContextInjectionTrackingMetadata {
  * Persists tools discovered via searchTools across requests so the model
  * can continue using them in subsequent turns.
  */
-export interface DiscoveredToolsMetadata {
+interface DiscoveredToolsMetadata {
   /** Tool names discovered via searchTools */
   toolNames: string[];
   /** When the tools were last discovered */

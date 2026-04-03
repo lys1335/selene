@@ -233,7 +233,7 @@ function sanitizeAssistantProgressParts(parts: DBContentPart[]): DBContentPart[]
 const DISABLE_PROGRESS_CONTENT_LIMITER =
   process.env.DISABLE_PROGRESS_CONTENT_LIMITER === "true";
 
-export interface SyncStreamingMessageContext {
+interface SyncStreamingMessageContext {
   sessionId: string;
   userId: string;
   eventCharacterId: string;

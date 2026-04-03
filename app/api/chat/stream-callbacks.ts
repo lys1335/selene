@@ -57,7 +57,7 @@ function handleUndrainedQueueMessages(runId: string, sessionId: string): void {
 
 // ─── Context interface ────────────────────────────────────────────────────────
 
-export interface StreamCallbackContext {
+interface StreamCallbackContext {
   sessionId: string;
   characterId: string | null;
   sessionMetadata: Record<string, unknown>;

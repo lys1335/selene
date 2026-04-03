@@ -65,7 +65,7 @@ const SDK_PASSTHROUGH_LARGE_INPUT_BYTES = (() => {
 
 // ─── Public interfaces ────────────────────────────────────────────────────────
 
-export interface ToolsBuildContext {
+interface ToolsBuildContext {
   sessionId: string;
   userId: string;
   characterId: string | null;
@@ -88,7 +88,7 @@ export interface ToolsBuildContext {
   provider?: string;
 }
 
-export interface ToolsBuildResult {
+interface ToolsBuildResult {
   allToolsWithMCP: Record<string, Tool>;
   initialActiveToolNames: string[];
   hasStopHooks: boolean;

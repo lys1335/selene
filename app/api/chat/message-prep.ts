@@ -31,7 +31,7 @@ import { MAX_TOOL_REFETCH } from "./content-sanitizer";
 
 // ─── Public interface ─────────────────────────────────────────────────────────
 
-export interface MessagePrepArgs {
+interface MessagePrepArgs {
   messages: FrontendMessage[];
   sessionId: string;
   userId: string;
@@ -42,7 +42,7 @@ export interface MessagePrepArgs {
   sessionSummary?: string | null;
 }
 
-export interface MessagePrepResult {
+interface MessagePrepResult {
   coreMessages: ModelMessage[];
   enhancedMessages: FrontendMessage[];
 }

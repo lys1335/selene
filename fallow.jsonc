@@ -123,6 +123,23 @@
     {
       "file": "lib/plugins/mcp-integration.ts",
       "exports": ["disconnectPluginMCPServers", "loadAllPluginMCPServers"]
+    },
+    // Workflow/vectordb barrel chain — imported via barrel files fallow doesn't trace
+    {
+      "file": "lib/agents/workflow-folder-sharing.ts",
+      "exports": ["syncOwnFoldersToWorkflowMembers", "cleanupInheritedFoldersOnRemoval"]
+    },
+    {
+      "file": "lib/vectordb/shared-folder-registry.ts",
+      "exports": ["resolveRegistryPath", "isRegistered"]
+    },
+    {
+      "file": "lib/vectordb/sync-scheduler.ts",
+      "exports": ["isSyncingPath", "cancelSyncByPath"]
+    },
+    {
+      "file": "lib/voice/voice-utils.ts",
+      "exports": ["buildWhisperPromptFromDictionary"]
     }
   ]
 }

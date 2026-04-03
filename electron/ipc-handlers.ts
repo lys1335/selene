@@ -19,6 +19,7 @@ import { registerPermissionHandlers } from "./permission-manager";
 import { registerMiniOverlayHandlers } from "./mini-overlay-ipc-handlers";
 import { registerOverlaySessionHandlers } from "./ipc-overlay-session-handlers";
 import { registerGhostOsHandlers } from "./ipc-ghost-os-handlers";
+import type { IpcHandlerContext } from "./ipc-context";
 export type { IpcHandlerContext } from "./ipc-context";
 
 // ---------------------------------------------------------------------------
