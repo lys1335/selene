@@ -252,5 +252,4 @@ export async function openExternalUrl(url: string): Promise<void> {
   }
 }
 
-// Note: Window.electronAPI is declared in electron/preload.ts
-// This file only provides type definitions for use in the renderer process
+// This file provides type definitions for use in the renderer process
