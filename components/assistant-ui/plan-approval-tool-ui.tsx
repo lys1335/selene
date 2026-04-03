@@ -5,6 +5,7 @@ import { CheckCircle, CircleNotch, NotePencil, MapTrifold } from "@phosphor-icon
 import { cn } from "@/lib/utils";
 import { parseNestedJsonString } from "@/lib/utils/parse-nested-json";
 import { useChatSessionId } from "@/components/chat-provider";
+import { submitToolAnswersToServer } from "./tool-result-submit";
 
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -47,25 +48,6 @@ function normalizeArgs(raw: Record<string, unknown> | string | undefined): PlanA
   return raw as PlanApprovalArgs;
 }
 
-async function submitAnswersToServer(
-  sessionId: string,
-  toolCallId: string,
-  answers: Record<string, string>,
-): Promise<boolean> {
-  try {
-    const res = await fetch("/api/chat/tool-result", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, toolUseId: toolCallId, answers }),
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    return data.resolved === true;
-  } catch {
-    return false;
-  }
-}
-
 export const PlanApprovalToolUI: ToolCallContentPartComponent = ({
   toolCallId,
   args: rawArgs,
@@ -96,7 +78,7 @@ export const PlanApprovalToolUI: ToolCallContentPartComponent = ({
       setSubmitting(true);
       try {
         if (sessionId && toolCallId) {
-          const ok = await submitAnswersToServer(sessionId, toolCallId, answers);
+          const ok = await submitToolAnswersToServer(sessionId, toolCallId, answers);
           if (!ok) return;
         }
         addResult?.({

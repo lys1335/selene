@@ -14,6 +14,7 @@ import { scheduledTaskRuns } from "@/lib/db/sqlite-schedule-schema";
 import { eq } from "drizzle-orm";
 import { getScheduler, startScheduler } from "@/lib/scheduler/scheduler-service";
 import { nowISO } from "@/lib/utils/timestamp";
+import { getRunForUser } from "@/lib/scheduler/run-lookup";
 
 export async function POST(
   req: NextRequest,
@@ -26,16 +27,11 @@ export async function POST(
 
     const { runId } = await params;
 
-    // Get run with task to verify ownership
-    const run = await db.query.scheduledTaskRuns.findFirst({
-      where: eq(scheduledTaskRuns.id, runId),
-      with: { task: true },
-    });
-
-    const task = Array.isArray(run?.task) ? run.task[0] : run?.task;
-    if (!run || !task || task.userId !== dbUser.id) {
+    const runResult = await getRunForUser(runId, dbUser.id);
+    if (!runResult) {
       return NextResponse.json({ error: "Run not found" }, { status: 404 });
     }
+    const { run } = runResult;
 
     // Check if run can be cancelled
     if (!["pending", "queued", "running"].includes(run.status)) {

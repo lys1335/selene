@@ -94,6 +94,36 @@ function isShellRetryEligibleCommand(command: string): boolean {
     return !/[\s|&;<>$`(){}\n\r]/.test(trimmed);
 }
 
+interface ResolvedCommandRuntime {
+    finalCommand: string;
+    finalArgs: string[];
+    finalEnv: NodeJS.ProcessEnv;
+    wrapped: ReturnType<typeof wrapWithRTK>;
+    resolution: ReturnType<typeof resolveBundledNodeCommand>["resolution"] | null;
+    runtime: ReturnType<typeof getBundledRuntimeInfo>;
+}
+
+function resolveCommandRuntime(
+    command: string,
+    args: string[],
+    baseEnv: NodeJS.ProcessEnv,
+    options?: Parameters<typeof wrapWithRTK>[3]
+): ResolvedCommandRuntime {
+    const runtime = getBundledRuntimeInfo();
+    const wrapped = wrapWithRTK(command, args, baseEnv, options);
+    const resolved = wrapped.usingRTK
+        ? { command: wrapped.command, args: wrapped.args, env: wrapped.env, resolution: null }
+        : resolveBundledNodeCommand(wrapped.command, wrapped.args, wrapped.env, runtime);
+    return {
+        finalCommand: resolved.command,
+        finalArgs: normalizeArgs(resolved.args),
+        finalEnv: resolved.env as NodeJS.ProcessEnv,
+        wrapped,
+        resolution: resolved.resolution,
+        runtime,
+    };
+}
+
 function buildShellRetryOptions(options: ExecuteOptions, resolvedCommandLine?: string): ExecuteOptions {
     const commandLine = resolvedCommandLine || options.rawCommandLine || buildShellCommandLine(options.command, options.args);
     return {
@@ -144,21 +174,10 @@ export async function startBackgroundProcess(
     const resolvedCwd = cwdValidation.resolvedPath ?? cwd;
 
     initializeCommandExecutionProcessEnv();
-    const runtime = getBundledRuntimeInfo();
-    const baseEnv = buildSafeEnvironment(runtime) as NodeJS.ProcessEnv;
+    const baseEnv = buildSafeEnvironment(getBundledRuntimeInfo()) as NodeJS.ProcessEnv;
 
     // Wrap with RTK if enabled, otherwise resolve bundled Node/npm/npx in packaged builds.
-    const wrapped = wrapWithRTK(command, args, baseEnv);
-    const resolved = wrapped.usingRTK
-        ? { command: wrapped.command, args: wrapped.args, env: wrapped.env, resolution: null }
-        : resolveBundledNodeCommand(wrapped.command, wrapped.args, wrapped.env, runtime);
-
-    const {
-        command: finalCommand,
-        args: rawFinalArgs,
-        env: finalEnv,
-    } = resolved;
-    const finalArgs = normalizeArgs(rawFinalArgs);
+    const { finalCommand, finalArgs, finalEnv } = resolveCommandRuntime(command, args, baseEnv);
 
     const id = nextBgId();
 
@@ -565,19 +584,10 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
         };
 
         initializeCommandExecutionProcessEnv();
-        const runtime = getBundledRuntimeInfo();
-        const baseEnv = buildSafeEnvironment(runtime) as NodeJS.ProcessEnv;
-        const wrapped = wrapWithRTK(command, args, baseEnv, { forceDirect: forceDirectExecution });
-        const resolved = wrapped.usingRTK
-            ? { command: wrapped.command, args: wrapped.args, env: wrapped.env, resolution: null }
-            : resolveBundledNodeCommand(wrapped.command, wrapped.args, wrapped.env, runtime);
-
-        const {
-            command: finalCommand,
-            args: rawFinalArgs,
-            env: finalEnv,
-        } = resolved;
-        const finalArgs = normalizeArgs(rawFinalArgs);
+        const baseEnv = buildSafeEnvironment(getBundledRuntimeInfo()) as NodeJS.ProcessEnv;
+        const { finalCommand, finalArgs, finalEnv, wrapped, resolution, runtime } = resolveCommandRuntime(
+            command, args, baseEnv, { forceDirect: forceDirectExecution }
+        );
         const searchMetadata = buildExecuteSearchMetadata({
             originalCommand: command,
             finalCommand,
@@ -737,11 +747,11 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                 }
 
                 if (error.message.includes("ENOENT") || error.message.includes("spawn") && error.message.includes("not found")) {
-                    const diagnostic = buildNotFoundDiagnostic(command, runtime, finalEnv, resolved.resolution);
+                    const diagnostic = buildNotFoundDiagnostic(command, runtime, finalEnv, resolution);
                     const attemptedCommand = wrapped.usingRTK
                         ? `${finalCommand} (RTK wrapper for ${command})`
                         : finalCommand;
-                    const commandHint = resolved.resolution
+                    const commandHint = resolution
                         ? "Tip: bundled Node tools keep priority, but other commands still rely on your system PATH."
                         : "Tip: verify the executable is installed and available in the PATH Selene inherited from your OS.";
                     errorMessage = `Command execution failed: requested='${command}', attempted='${attemptedCommand}'. ${error.message}

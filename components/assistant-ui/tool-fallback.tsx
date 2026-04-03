@@ -76,6 +76,21 @@ interface ToolResult {
   iterationPerformed?: boolean;
 }
 
+function applyParsedToResult(result: ToolResult, parsed: unknown): ToolResult {
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const parsedObj = parsed as Record<string, unknown>;
+    return {
+      ...result,
+      ...parsedObj,
+      status: typeof parsedObj.status === "string" ? (parsedObj.status as ToolResult["status"]) : result.status,
+    };
+  }
+  if (typeof parsed === "string" && parsed.trim().length > 0) {
+    return { ...result, text: parsed };
+  }
+  return result;
+}
+
 function unwrapMcpTextWrappedResult(result: ToolResult | string): ToolResult {
   if (typeof result === "string") {
     const parsed = parseNestedJsonString(result);
@@ -90,22 +105,7 @@ function unwrapMcpTextWrappedResult(result: ToolResult | string): ToolResult {
 
   const content = (result as ToolResult & { content?: unknown }).content;
   if (typeof content === "string") {
-    const parsed = parseNestedJsonString(content);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      const parsedObj = parsed as Record<string, unknown>;
-      return {
-        ...result,
-        ...parsedObj,
-        status: typeof parsedObj.status === "string" ? (parsedObj.status as ToolResult["status"]) : result.status,
-      };
-    }
-    if (typeof parsed === "string" && parsed.trim().length > 0) {
-      return {
-        ...result,
-        text: parsed,
-      };
-    }
-    return result;
+    return applyParsedToResult(result, parseNestedJsonString(content));
   }
 
   if (!Array.isArray(content)) return result;
@@ -113,24 +113,7 @@ function unwrapMcpTextWrappedResult(result: ToolResult | string): ToolResult {
   const textItem = findTextContentItem(content);
 
   if (!textItem?.text) return result;
-  const parsed = parseNestedJsonString(textItem.text);
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    const parsedObj = parsed as Record<string, unknown>;
-    return {
-      ...result,
-      ...parsedObj,
-      status: typeof parsedObj.status === "string" ? (parsedObj.status as ToolResult["status"]) : result.status,
-    };
-  }
-
-  if (typeof parsed === "string" && parsed.trim().length > 0) {
-    return {
-      ...result,
-      text: parsed,
-    };
-  }
-
-  return result;
+  return applyParsedToResult(result, parseNestedJsonString(textItem.text));
 }
 
 function hasVisualMedia(result?: unknown): boolean {

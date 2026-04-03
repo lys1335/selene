@@ -220,89 +220,50 @@ const libSrc = path.join(rootDir, 'lib');
 const libDest = path.join(standaloneDir, 'lib');
 copyRecursive(libSrc, libDest);
 
+/**
+ * Copy a list of node_modules packages from rootDir into the standalone build.
+ * Each entry: { name, src, dest } where src/dest are relative to node_modules.
+ */
+function copyNodeDependencies(deps) {
+    for (const dep of deps) {
+        console.log(`Copying ${dep.name} folder...`);
+        const depSrc = path.join(rootDir, 'node_modules', dep.src);
+        const depDest = path.join(standaloneDir, 'node_modules', dep.dest);
+        if (fs.existsSync(depSrc)) {
+            ensureDir(path.dirname(depDest));
+            if (fs.existsSync(depDest)) {
+                fs.rmSync(depDest, { recursive: true, force: true });
+            }
+            copyRecursive(depSrc, depDest);
+        } else {
+            console.log(`Skipping ${dep.name} folder (not found)`);
+        }
+    }
+}
+
 // 5. Copy pdf-parse and its dependencies for PDF parsing support
 // pdf-parse requires: pdfjs-dist (PDF.js library) and @napi-rs/canvas (native canvas bindings)
-const pdfDependencies = [
+copyNodeDependencies([
     { name: 'pdf-parse', src: 'pdf-parse', dest: 'pdf-parse' },
     { name: 'pdfjs-dist', src: 'pdfjs-dist', dest: 'pdfjs-dist' },
     { name: '@napi-rs/canvas', src: '@napi-rs', dest: '@napi-rs' },
-];
-
-for (const dep of pdfDependencies) {
-    console.log(`Copying ${dep.name} folder...`);
-    const depSrc = path.join(rootDir, 'node_modules', dep.src);
-    const depDest = path.join(standaloneDir, 'node_modules', dep.dest);
-    if (fs.existsSync(depSrc)) {
-        ensureDir(path.dirname(depDest));
-        if (fs.existsSync(depDest)) {
-            fs.rmSync(depDest, { recursive: true, force: true });
-        }
-        copyRecursive(depSrc, depDest);
-    } else {
-        console.log(`Skipping ${dep.name} folder (not found)`);
-    }
-}
+]);
 
 // 7. Copy Puppeteer and bundled Chromium for local web scraping
-const browserDependencies = [
+copyNodeDependencies([
     { name: 'puppeteer', src: 'puppeteer', dest: 'puppeteer' },
-];
-
-for (const dep of browserDependencies) {
-    console.log(`Copying ${dep.name} folder...`);
-    const depSrc = path.join(rootDir, 'node_modules', dep.src);
-    const depDest = path.join(standaloneDir, 'node_modules', dep.dest);
-    if (fs.existsSync(depSrc)) {
-        ensureDir(path.dirname(depDest));
-        if (fs.existsSync(depDest)) {
-            fs.rmSync(depDest, { recursive: true, force: true });
-        }
-        copyRecursive(depSrc, depDest);
-    } else {
-        console.log(`Skipping ${dep.name} folder (not found)`);
-    }
-}
+]);
 
 // 8. Copy npm CLI for bundled npx/npm support in production
-const npmDependencies = [
+copyNodeDependencies([
     { name: 'npm', src: 'npm', dest: 'npm' },
-];
-
-for (const dep of npmDependencies) {
-    console.log(`Copying ${dep.name} folder...`);
-    const depSrc = path.join(rootDir, 'node_modules', dep.src);
-    const depDest = path.join(standaloneDir, 'node_modules', dep.dest);
-    if (fs.existsSync(depSrc)) {
-        ensureDir(path.dirname(depDest));
-        if (fs.existsSync(depDest)) {
-            fs.rmSync(depDest, { recursive: true, force: true });
-        }
-        copyRecursive(depSrc, depDest);
-    } else {
-        console.log(`Skipping ${dep.name} folder (not found)`);
-    }
-}
+]);
 
 // 9. Copy local embedding dependencies for offline Transformers.js support
-const embeddingDependencies = [
+copyNodeDependencies([
     { name: '@huggingface/transformers', src: '@huggingface/transformers', dest: '@huggingface/transformers' },
     { name: 'onnxruntime-node', src: 'onnxruntime-node', dest: 'onnxruntime-node' },
-];
-
-for (const dep of embeddingDependencies) {
-    console.log(`Copying ${dep.name} folder...`);
-    const depSrc = path.join(rootDir, 'node_modules', dep.src);
-    const depDest = path.join(standaloneDir, 'node_modules', dep.dest);
-    if (fs.existsSync(depSrc)) {
-        ensureDir(path.dirname(depDest));
-        if (fs.existsSync(depDest)) {
-            fs.rmSync(depDest, { recursive: true, force: true });
-        }
-        copyRecursive(depSrc, depDest);
-    } else {
-        console.log(`Skipping ${dep.name} folder (not found)`);
-    }
-}
+]);
 
 // 10. Copy rebuilt native modules from root node_modules to standalone
 // This is critical because Next.js standalone doesn't include build files (binding.gyp, src/, deps/)

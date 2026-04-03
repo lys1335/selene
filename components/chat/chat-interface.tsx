@@ -1714,6 +1714,32 @@ export default function ChatInterface({
         />
     );
 
+    /** Shared ChatProvider shell + bridges, with variable container style and inner layout. */
+    const renderChatCore = (containerStyle: React.CSSProperties, innerContent: React.ReactNode) => (
+        <CharacterProvider character={characterDisplay}>
+            <div style={containerStyle}>
+                <ChatProvider
+                    key={chatProviderKey}
+                    sessionId={sessionId}
+                    characterId={character.id}
+                    initialMessages={messages}
+                >
+                    <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
+                    <OverlaySyncBridge
+                        characterId={character.id}
+                        onOverlaySessionUpdated={handleOverlaySessionUpdated}
+                    />
+                    <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
+                    <ForegroundStreamingBridge
+                        isForegroundStreamingRef={isForegroundStreamingRef}
+                        onForegroundRunFinished={handleForegroundRunFinished}
+                    />
+                    {innerContent}
+                </ChatProvider>
+            </div>
+        </CharacterProvider>
+    );
+
     // ── Browser-tabs mode: persistent top-tab workspace ──
     const currentSessionTitle = sm.sessions.find((s) => s.id === sessionId)?.title ?? null;
     const librarySessions = sm.sessions.filter((session) => !session.metadata?.pinned);
@@ -1746,41 +1772,17 @@ export default function ChatInterface({
                     onRestoreArchivedSession={handleBrowserArchivedRestore}
                     onDeleteSessionFromLibrary={handleBrowserTabDeleteSession}
                 >
-                    <CharacterProvider character={characterDisplay}>
-                        <div
-                            style={{
-                                height: "100%",
-                                display: "flex",
-                                flexDirection: "column",
-                            }}
-                        >
-                            <ChatProvider
-                                key={chatProviderKey}
-                                sessionId={sessionId}
-                                characterId={character.id}
-                                initialMessages={messages}
-                            >
-                                <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
-                                <OverlaySyncBridge
-                                    characterId={character.id}
-                                    onOverlaySessionUpdated={handleOverlaySessionUpdated}
-                                />
-                                <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
-                                <ForegroundStreamingBridge
-                                    isForegroundStreamingRef={isForegroundStreamingRef}
-                                    onForegroundRunFinished={handleForegroundRunFinished}
-                                />
-                                <div className="flex h-full min-h-0 flex-col">
-                                    {renderGitWorkspaceHeader(false, "flex")}
-                                    {renderActiveRunBanner()}
-                                    {renderAvatarBlock()}
-                                    <div className="min-h-0 flex-1">
-                                        {renderThread()}
-                                    </div>
-                                </div>
-                            </ChatProvider>
+                    {renderChatCore(
+                        { height: "100%", display: "flex", flexDirection: "column" },
+                        <div className="flex h-full min-h-0 flex-col">
+                            {renderGitWorkspaceHeader(false, "flex")}
+                            {renderActiveRunBanner()}
+                            {renderAvatarBlock()}
+                            <div className="min-h-0 flex-1">
+                                {renderThread()}
+                            </div>
                         </div>
-                    </CharacterProvider>
+                    )}
                 </BrowserChatWorkspace>
                 {currentWorkspaceInfo && (
                     <DiffReviewPanel
@@ -1831,41 +1833,21 @@ export default function ChatInterface({
                 />
             }
         >
-            <CharacterProvider character={characterDisplay}>
-                <div
-                    style={{
-                        opacity: bg.isChatFading ? 0 : 1,
-                        transition: "opacity 150ms ease-in-out",
-                        height: "100%",
-                        display: "flex",
-                        flexDirection: "column",
-                    }}
-                >
-                    <ChatProvider
-                        key={chatProviderKey}
-                        sessionId={sessionId}
-                        characterId={character.id}
-                        initialMessages={messages}
-                    >
-                        <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
-                        <OverlaySyncBridge
-                            characterId={character.id}
-                            onOverlaySessionUpdated={handleOverlaySessionUpdated}
-                        />
-                        <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
-                        <ForegroundStreamingBridge
-                            isForegroundStreamingRef={isForegroundStreamingRef}
-                            onForegroundRunFinished={handleForegroundRunFinished}
-                        />
-                        <div className="flex h-full min-h-0 flex-col gap-3">
-                            {renderGitWorkspaceHeader(true, "flex flex-shrink-0")}
-                            {renderActiveRunBanner()}
-                            {renderAvatarBlock()}
-                            {renderThread()}
-                        </div>
-                    </ChatProvider>
+            {renderChatCore(
+                {
+                    opacity: bg.isChatFading ? 0 : 1,
+                    transition: "opacity 150ms ease-in-out",
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                },
+                <div className="flex h-full min-h-0 flex-col gap-3">
+                    {renderGitWorkspaceHeader(true, "flex flex-shrink-0")}
+                    {renderActiveRunBanner()}
+                    {renderAvatarBlock()}
+                    {renderThread()}
                 </div>
-            </CharacterProvider>
+            )}
             {currentWorkspaceInfo && (
                 <DiffReviewPanel
                     sessionId={sessionId}

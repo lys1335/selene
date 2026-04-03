@@ -374,6 +374,39 @@ export async function addSubagentToWorkflow(
   return member;
 }
 
+async function promoteWorkflowInitiator(
+  workflowId: string,
+  newInitiatorId: string
+): Promise<void> {
+  await db
+    .update(agentWorkflowMembers)
+    .set({ role: "subagent", updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(agentWorkflowMembers.workflowId, workflowId),
+        eq(agentWorkflowMembers.role, "initiator")
+      )
+    );
+
+  await db
+    .update(agentWorkflowMembers)
+    .set({ role: "initiator", updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(agentWorkflowMembers.workflowId, workflowId),
+        eq(agentWorkflowMembers.agentId, newInitiatorId)
+      )
+    );
+
+  await db
+    .update(agentWorkflows)
+    .set({
+      initiatorId: newInitiatorId,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(agentWorkflows.id, workflowId));
+}
+
 export async function setWorkflowInitiator(
   input: SetWorkflowInitiatorInput
 ): Promise<AgentWorkflow> {
@@ -399,33 +432,7 @@ export async function setWorkflowInitiator(
     return workflow;
   }
 
-  await db
-    .update(agentWorkflowMembers)
-    .set({ role: "subagent", updatedAt: new Date().toISOString() })
-    .where(
-      and(
-        eq(agentWorkflowMembers.workflowId, input.workflowId),
-        eq(agentWorkflowMembers.role, "initiator")
-      )
-    );
-
-  await db
-    .update(agentWorkflowMembers)
-    .set({ role: "initiator", updatedAt: new Date().toISOString() })
-    .where(
-      and(
-        eq(agentWorkflowMembers.workflowId, input.workflowId),
-        eq(agentWorkflowMembers.agentId, input.initiatorId)
-      )
-    );
-
-  await db
-    .update(agentWorkflows)
-    .set({
-      initiatorId: input.initiatorId,
-      updatedAt: new Date().toISOString(),
-    })
-    .where(eq(agentWorkflows.id, input.workflowId));
+  await promoteWorkflowInitiator(input.workflowId, input.initiatorId);
 
   await refreshWorkflowSharedResources(input.workflowId, input.initiatorId);
 
@@ -465,33 +472,7 @@ export async function removeWorkflowMember(
       return { workflowDeleted: true };
     }
 
-    await db
-      .update(agentWorkflowMembers)
-      .set({ role: "subagent", updatedAt: new Date().toISOString() })
-      .where(
-        and(
-          eq(agentWorkflowMembers.workflowId, input.workflowId),
-          eq(agentWorkflowMembers.role, "initiator")
-        )
-      );
-
-    await db
-      .update(agentWorkflowMembers)
-      .set({ role: "initiator", updatedAt: new Date().toISOString() })
-      .where(
-        and(
-          eq(agentWorkflowMembers.workflowId, input.workflowId),
-          eq(agentWorkflowMembers.agentId, replacement.agentId)
-        )
-      );
-
-    await db
-      .update(agentWorkflows)
-      .set({
-        initiatorId: replacement.agentId,
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(agentWorkflows.id, input.workflowId));
+    await promoteWorkflowInitiator(input.workflowId, replacement.agentId);
 
     nextInitiatorId = replacement.agentId;
   }

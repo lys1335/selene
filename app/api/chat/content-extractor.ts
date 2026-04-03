@@ -479,6 +479,39 @@ function getStringContent(content: unknown, sessionId?: string): string {
   return reinsertPasteBlocks(sanitized, pasteBlocks);
 }
 
+function pushToolCallAndResult(
+  contentParts: ModelContentPart[],
+  toolName: string,
+  toolCallId: string | undefined,
+  input: unknown,
+  output: unknown,
+  normalizedInput: Record<string, unknown> | null,
+): void {
+  if (toolCallId && normalizedInput) {
+    contentParts.push({
+      type: "tool-call",
+      toolCallId,
+      toolName,
+      input: normalizedInput,
+    });
+  }
+
+  if (toolCallId && output !== undefined) {
+    const normalizedOutput = normalizeToolResultOutput(
+      toolName,
+      output,
+      normalizedInput,
+      { mode: "projection" },
+    ).output;
+    contentParts.push({
+      type: "tool-result",
+      toolCallId,
+      toolName,
+      output: toModelToolResultOutput(normalizedOutput),
+    });
+  }
+}
+
 export async function extractContent(
   msg: MessageInput,
   includeUrlHelpers = false,
@@ -579,29 +612,7 @@ export async function extractContent(
           ? normalizeToolCallInput(part.input, toolName, toolCallId) ?? {}
           : null;
 
-        if (toolCallId && normalizedInput) {
-          contentParts.push({
-            type: "tool-call",
-            toolCallId,
-            toolName,
-            input: normalizedInput,
-          });
-        }
-
-        if (toolCallId && output !== undefined) {
-          const normalizedOutput = normalizeToolResultOutput(
-            toolName,
-            output,
-            normalizedInput,
-            { mode: "projection" },
-          ).output;
-          contentParts.push({
-            type: "tool-result",
-            toolCallId,
-            toolName,
-            output: toModelToolResultOutput(normalizedOutput),
-          });
-        }
+        pushToolCallAndResult(contentParts, toolName, toolCallId, part.input, output, normalizedInput);
 
         if (output?.images && output.images.length > 0) {
           const urlList = output.images
@@ -690,30 +701,8 @@ export async function extractContent(
         const normalizedInput = toolCallId
           ? normalizeToolCallInput(part.input, toolName, toolCallId) ?? {}
           : null;
-        if (toolCallId && normalizedInput) {
-          contentParts.push({
-            type: "tool-call",
-            toolCallId,
-            toolName,
-            input: normalizedInput,
-          });
-        }
-
         const toolOutput = part.output ?? part.result;
-        if (toolCallId && toolOutput !== undefined) {
-          const normalizedOutput = normalizeToolResultOutput(
-            toolName,
-            toolOutput,
-            normalizedInput,
-            { mode: "projection" },
-          ).output;
-          contentParts.push({
-            type: "tool-result",
-            toolCallId,
-            toolName,
-            output: toModelToolResultOutput(normalizedOutput),
-          });
-        }
+        pushToolCallAndResult(contentParts, toolName, toolCallId, part.input, toolOutput, normalizedInput);
       }
     }
 

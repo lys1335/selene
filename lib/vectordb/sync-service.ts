@@ -148,6 +148,19 @@ export async function removeSyncFolder(folderId: string): Promise<void> {
   }
 }
 
+async function maybeUpdateNormalizedFolderPath(
+  folderId: string,
+  normalizedPath: string,
+  existingPath: string
+): Promise<void> {
+  if (normalizedPath !== existingPath) {
+    await db
+      .update(agentSyncFolders)
+      .set({ folderPath: normalizedPath, updatedAt: new Date().toISOString() })
+      .where(eq(agentSyncFolders.id, folderId));
+  }
+}
+
 /**
  * Sync a folder — index new/changed files, remove deleted files.
  * Supports parallel processing for faster indexing of large file sets.
@@ -196,13 +209,8 @@ export async function syncFolder(
     return result;
   }
 
-  let folderPath = normalizedPath;
-  if (folderPath !== folder.folderPath) {
-    await db
-      .update(agentSyncFolders)
-      .set({ folderPath, updatedAt: new Date().toISOString() })
-      .where(eq(agentSyncFolders.id, folderId));
-  }
+  const folderPath = normalizedPath;
+  await maybeUpdateNormalizedFolderPath(folderId, normalizedPath, folder.folderPath);
 
   const behavior = resolveFolderSyncBehavior({
     indexingMode: folder.indexingMode,
@@ -643,12 +651,7 @@ export async function resumeSyncFolder(folderId: string): Promise<void> {
   }
 
   const folderPath = normalizedPath;
-  if (folderPath !== folder.folderPath) {
-    await db
-      .update(agentSyncFolders)
-      .set({ folderPath, updatedAt: new Date().toISOString() })
-      .where(eq(agentSyncFolders.id, folderId));
-  }
+  await maybeUpdateNormalizedFolderPath(folderId, normalizedPath, folder.folderPath);
 
   // Restore to synced (or pending if never synced)
   const newStatus = (folder.fileCount ?? 0) > 0 ? "synced" : "pending";

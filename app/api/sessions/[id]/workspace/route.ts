@@ -6,10 +6,7 @@ import { promisify } from "util";
 import {
   getSession,
   updateSession,
-  getOrCreateLocalUser,
 } from "@/lib/db/queries";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { loadSettings } from "@/lib/settings/settings-manager";
 import { resolveSessionAuth } from "@/lib/api/shared-handlers";
 import {
   getSessionProviderTemperatureForSession,
@@ -20,7 +17,6 @@ import { isEBADFError, spawnWithFileCapture } from "@/lib/spawn-utils";
 import { GitService } from "@/lib/workspace/git-service";
 import { getSyncFolders } from "@/lib/vectordb/sync-folder-crud";
 import { runGitCommand } from "@/lib/workspace/git-runner";
-import { validateSessionOwnership } from "@/lib/session/session-ownership";
 import type {
   WorkspaceInfo,
   WorkspaceStatus,
@@ -579,21 +575,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-
     const { id } = await params;
+    const authResult = await resolveSessionAuth(req, id);
+    if ("errorResponse" in authResult) return authResult.errorResponse;
 
-    const ownershipResult = await validateSessionOwnership(id, dbUser.id);
-    if ("error" in ownershipResult) {
-      return NextResponse.json(
-        { error: ownershipResult.error },
-        { status: ownershipResult.status }
-      );
-    }
-
-    const { session } = ownershipResult;
+    const { session } = authResult;
     const metadata = session.metadata as Record<string, unknown> | null;
     const workspaceInfo = getWorkspaceInfo(metadata);
     const url = new URL(req.url);
@@ -721,21 +707,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-
     const { id } = await params;
+    const authResult = await resolveSessionAuth(req, id);
+    if ("errorResponse" in authResult) return authResult.errorResponse;
 
-    const ownershipResult = await validateSessionOwnership(id, dbUser.id);
-    if ("error" in ownershipResult) {
-      return NextResponse.json(
-        { error: ownershipResult.error },
-        { status: ownershipResult.status }
-      );
-    }
-
-    const { session } = ownershipResult;
+    const { session } = authResult;
     const metadata = (session.metadata as Record<string, unknown>) || {};
     const body = (await req.json()) as WorkspaceActionBody;
     const { action } = body;
