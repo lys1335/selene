@@ -13,7 +13,6 @@ export {
   isWorktreePath,
   isOtherWorktreePath,
   resolveSyncedPath,
-  type ResolveSyncedPathResult,
 } from "./path-utils";
 
 export {

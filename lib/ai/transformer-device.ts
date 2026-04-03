@@ -30,7 +30,7 @@ const TRANSFORMER_DEVICES: readonly string[] = [
   "webnn-cpu",
 ];
 
-export function isTransformerDevice(value: string): value is TransformerDevice {
+function isTransformerDevice(value: string): value is TransformerDevice {
   return TRANSFORMER_DEVICES.includes(value);
 }
 

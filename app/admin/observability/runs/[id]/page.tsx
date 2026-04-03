@@ -22,10 +22,10 @@ import Link from "next/link";
 import {
   type RunDetailResponse,
   STATUS_COLORS,
-  formatDuration,
   formatDate,
   formatTime,
 } from "@/app/admin/_shared/run-detail-utils";
+import { formatDuration } from "@/lib/utils/timestamp";
 
 const EVENT_CONFIG: Record<string, { icon: React.ReactNode; color: string; bgColor: string }> = {
   tool_started: {
@@ -182,7 +182,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-terminal-muted">{t("duration")}</dt>
-                    <dd className="text-terminal-dark">{formatDuration(run.durationMs)}</dd>
+                    <dd className="text-terminal-dark">{run.durationMs != null ? formatDuration(run.durationMs) : "-"}</dd>
                   </div>
                   <div className="flex justify-between">
                     <dt className="text-terminal-muted">{t("trigger")}</dt>

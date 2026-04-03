@@ -10,10 +10,10 @@ import Link from "next/link";
 import {
   type RunDetailResponse,
   STATUS_COLORS,
-  formatDuration,
   formatDate,
   formatTime,
 } from "@/app/admin/_shared/run-detail-utils";
+import { formatDuration } from "@/lib/utils/timestamp";
 const EVENT_ICONS: Record<string, React.ReactNode> = {
   step_started: <ClockIcon className="size-4 text-blue-500" />, step_completed: <CheckCircleIcon className="size-4 text-green-500" />,
   tool_call_started: <WrenchIcon className="size-4 text-purple-500" />, tool_call_completed: <WrenchIcon className="size-4 text-purple-600" />,
@@ -70,7 +70,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
                 <dl className="space-y-2 font-mono text-sm">
                   <div className="flex justify-between"><dt className="text-terminal-muted">{t("started")}</dt><dd className="text-terminal-dark">{formatDate(run.startedAt)}</dd></div>
                   <div className="flex justify-between"><dt className="text-terminal-muted">{t("completed")}</dt><dd className="text-terminal-dark">{run.completedAt ? formatDate(run.completedAt) : "-"}</dd></div>
-                  <div className="flex justify-between"><dt className="text-terminal-muted">{t("duration")}</dt><dd className="text-terminal-dark">{formatDuration(run.durationMs)}</dd></div>
+                  <div className="flex justify-between"><dt className="text-terminal-muted">{t("duration")}</dt><dd className="text-terminal-dark">{run.durationMs != null ? formatDuration(run.durationMs) : "-"}</dd></div>
                   <div className="flex justify-between"><dt className="text-terminal-muted">{t("trigger")}</dt><dd className="text-terminal-dark">{run.triggerType}</dd></div>
                   <div className="flex justify-between"><dt className="text-terminal-muted">{t("session")}</dt><dd className="text-terminal-dark text-xs">{run.sessionId.slice(0, 12)}...</dd></div>
                 </dl>

@@ -204,7 +204,7 @@ export async function resolveWorkspaceAwarePaths(
  * `filePath` is within one of them.  Returns a discriminated result so callers
  * can turn it into the appropriate tool error without duplicating the logic.
  */
-export type ResolveSyncedPathResult =
+type ResolveSyncedPathResult =
   | { ok: true; validPath: string; syncedFolders: string[] }
   | { ok: false; status: "no_folders" | "error"; error: string };
 

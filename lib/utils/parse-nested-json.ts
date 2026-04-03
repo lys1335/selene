@@ -1,5 +1,5 @@
 /** Type for a content array item that carries text. */
-export interface TextContentItem {
+interface TextContentItem {
   type?: string;
   text?: string;
 }
