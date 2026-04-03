@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import type { SkillFormValues } from "@/components/skills/skill-form-fields";
 
-export { type SkillFormValues };
 
 export function splitLines(value: string): string[] {
   return value
