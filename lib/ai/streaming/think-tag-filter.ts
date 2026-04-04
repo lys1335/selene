@@ -326,12 +326,11 @@ export function shouldFilterThinkTags(
     return false;
   }
 
-  // For Ollama, only filter models known to emit think tags.
-  // Non-thinking models (e.g. llama3, functiongemma) should not be filtered.
+  // For providers that might route to thinking models:
+  // OpenRouter, Ollama, Antigravity, Kimi, BlackBox AI
   if (providerId === "ollama") {
-    if (!modelId) return false;
-    const lowerModel = modelId.toLowerCase();
-    return THINK_TAG_MODEL_PATTERNS.some((pattern) => lowerModel.includes(pattern));
+    // Ollama frequently runs local thinking models — always filter.
+    return true;
   }
 
   // BlackBox AI routes to Qwen and DeepSeek models that emit think tags — always filter.
