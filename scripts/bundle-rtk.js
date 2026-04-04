@@ -1,5 +1,5 @@
-// fallow-ignore-file unused-file
 #!/usr/bin/env node
+// fallow-ignore-file unused-file
 
 /**
  * Bundle RTK binary into binaries/rtk/<platform>/ for Electron packaging.
