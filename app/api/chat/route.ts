@@ -1003,7 +1003,7 @@ export async function POST(req: Request) {
                 settings: appSettings,
               });
 
-          if (hasThinkTags(provider)) {
+          if (hasThinkTags(provider, currentModelId)) {
             // Cast needed: resolvers return LanguageModel (union), wrapLanguageModel expects LanguageModelV3.
             // Safe because resolvers always return actual model objects, never string IDs.
             resolvedModel = wrapLanguageModel({
