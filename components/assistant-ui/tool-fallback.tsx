@@ -9,7 +9,6 @@ import { getCanonicalToolName, humanizeToolName, loadToolNameCache } from "./too
 import { useToolExpansion } from "./tool-expansion-context";
 import { stripXmlStatusTags } from "./claude-code-tools/parse-text-result";
 import { DiffStyledPre } from "./diff-styled-pre";
-import { parseNestedJsonString, findTextContentItem } from "@/lib/utils/parse-nested-json";
 // Define the tool call component type manually since it's no longer exported
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -76,24 +75,24 @@ interface ToolResult {
   iterationPerformed?: boolean;
 }
 
-function applyParsedToResult(result: ToolResult, parsed: unknown): ToolResult {
-  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-    const parsedObj = parsed as Record<string, unknown>;
-    return {
-      ...result,
-      ...parsedObj,
-      status: typeof parsedObj.status === "string" ? (parsedObj.status as ToolResult["status"]) : result.status,
-    };
+function parseNestedJsonValue(text: string, maxDepth: number = 3): unknown | undefined {
+  let current: unknown = text;
+  for (let i = 0; i < maxDepth; i += 1) {
+    if (typeof current !== "string") return current;
+    const trimmed = current.trim();
+    if (!trimmed) return undefined;
+    try {
+      current = JSON.parse(trimmed);
+    } catch {
+      return i === 0 ? undefined : current;
+    }
   }
-  if (typeof parsed === "string" && parsed.trim().length > 0) {
-    return { ...result, text: parsed };
-  }
-  return result;
+  return current;
 }
 
 function unwrapMcpTextWrappedResult(result: ToolResult | string): ToolResult {
   if (typeof result === "string") {
-    const parsed = parseNestedJsonString(result);
+    const parsed = parseNestedJsonValue(result);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return parsed as ToolResult;
     }
@@ -105,15 +104,53 @@ function unwrapMcpTextWrappedResult(result: ToolResult | string): ToolResult {
 
   const content = (result as ToolResult & { content?: unknown }).content;
   if (typeof content === "string") {
-    return applyParsedToResult(result, parseNestedJsonString(content));
+    const parsed = parseNestedJsonValue(content);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const parsedObj = parsed as Record<string, unknown>;
+      return {
+        ...result,
+        ...parsedObj,
+        status: typeof parsedObj.status === "string" ? (parsedObj.status as ToolResult["status"]) : result.status,
+      };
+    }
+    if (typeof parsed === "string" && parsed.trim().length > 0) {
+      return {
+        ...result,
+        text: parsed,
+      };
+    }
+    return result;
   }
 
   if (!Array.isArray(content)) return result;
 
-  const textItem = findTextContentItem(content);
+  const textItem = content.find(
+    (item): item is { type?: string; text?: string } =>
+      !!item &&
+      typeof item === "object" &&
+      (item as { type?: unknown }).type === "text" &&
+      typeof (item as { text?: unknown }).text === "string"
+  );
 
   if (!textItem?.text) return result;
-  return applyParsedToResult(result, parseNestedJsonString(textItem.text));
+  const parsed = parseNestedJsonValue(textItem.text);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const parsedObj = parsed as Record<string, unknown>;
+    return {
+      ...result,
+      ...parsedObj,
+      status: typeof parsedObj.status === "string" ? (parsedObj.status as ToolResult["status"]) : result.status,
+    };
+  }
+
+  if (typeof parsed === "string" && parsed.trim().length > 0) {
+    return {
+      ...result,
+      text: parsed,
+    };
+  }
+
+  return result;
 }
 
 function hasVisualMedia(result?: unknown): boolean {
@@ -295,6 +332,15 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
     );
   }
 
+  // Handle listAllTools results
+  if (canonicalToolName === "listAllTools") {
+    return (
+      <div className={TOOL_RESULT_TEXT_CLASS}>
+        {normalizedResult.message || tResults("toolsListedSuccessfully")}
+      </div>
+    );
+  }
+
   // Handle webSearch results
   if (canonicalToolName === "webSearch") {
     const action = typeof (normalizedResult as { action?: unknown }).action === "string"
@@ -347,7 +393,7 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
                 </a>
                 {typeof page.contentLength === "number" && (
                   <p className="text-xs text-terminal-muted mt-0.5">
-                    {Math.round(page.contentLength / 1024)}KB fetched
+                    {tResults("kbFetched", { size: Math.round(page.contentLength / 1024) })}
                   </p>
                 )}
               </div>
@@ -463,17 +509,17 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
       ? ` (Knowledge Base${readResult.documentTitle ? `: ${readResult.documentTitle}` : ""})`
       : "";
     const lineInfo = readResult.lineRange
-      ? `Lines ${readResult.lineRange}${readResult.totalLines ? ` of ${readResult.totalLines}` : ""}`
+      ? tResults("lineRange", { range: readResult.lineRange }) + (readResult.totalLines ? ` ${tResults("ofTotalLines", { total: readResult.totalLines })}` : "")
       : readResult.totalLines
-        ? `${readResult.totalLines} lines`
+        ? tResults("totalLines", { count: readResult.totalLines })
         : "";
-    const truncatedLabel = readResult.truncated ? " (truncated)" : "";
+    const truncatedLabel = readResult.truncated ? ` (${tResults("truncated")})` : "";
 
     // For readFile, allow a much larger display limit since users explicitly requested this content
     const content = readResult.content || "";
     const READ_FILE_DISPLAY_LIMIT = 20_000;
     const displayContent = content.length > READ_FILE_DISPLAY_LIMIT
-      ? content.substring(0, READ_FILE_DISPLAY_LIMIT) + `\n\n... [${(content.length - READ_FILE_DISPLAY_LIMIT).toLocaleString()} more characters — full content available to AI]`
+      ? content.substring(0, READ_FILE_DISPLAY_LIMIT) + `\n\n... [${tResults("moreCharsFullContent", { count: (content.length - READ_FILE_DISPLAY_LIMIT).toLocaleString() })}]`
       : content;
 
     return (
@@ -576,7 +622,7 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
                 className="w-full max-w-lg h-auto rounded-lg shadow-sm"
                 preload="metadata"
               >
-                Your browser does not support the video tag.
+                {tResults("videoNotSupported")}
               </video>
               <div className="mt-1 flex items-center gap-2 text-xs text-terminal-muted font-mono">
                 {video.duration && <span>{video.duration}s</span>}
@@ -587,7 +633,7 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
                   rel="noopener noreferrer"
                   className="ml-auto hover:text-terminal-green"
                 >
-                  Open in new tab ↗
+                  {tResults("openInNewTab")}
                 </a>
               </div>
             </div>
@@ -595,7 +641,7 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
         </div>
         {normalizedResult.timeTaken && (
           <p className="mt-2 text-xs text-terminal-muted font-mono">
-            Generated in {normalizedResult.timeTaken.toFixed(1)}s
+            {tResults("generatedIn", { seconds: normalizedResult.timeTaken.toFixed(1) })}
           </p>
         )}
       </div>
@@ -617,7 +663,7 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
             >
               <img
                 src={img.url}
-                alt={`Generated image ${idx + 1}`}
+                alt={tResults("generatedImageAlt", { number: idx + 1 })}
                 width={img.width || undefined}
                 height={img.height || undefined}
                 className="w-full h-auto rounded-lg shadow-sm hover:shadow-md transition-shadow"
@@ -658,12 +704,12 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
           <div key={idx} className="pt-4 first:pt-0">
             {item.prompt && (
               <p className="text-xs text-terminal-muted mb-2 font-mono">
-                Variation {idx + 1}: {item.prompt.slice(0, 50)}...
+                {tResults("variationWithPrompt", { number: idx + 1, prompt: item.prompt.slice(0, 50) })}
               </p>
             )}
             {!item.prompt && (
               <p className="text-xs text-terminal-muted mb-2 font-mono">
-                Variation {idx + 1}
+                {tResults("variation", { number: idx + 1 })}
               </p>
             )}
             {item.status === "completed" && item.images && (
@@ -678,7 +724,7 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
                   >
                     <img
                       src={img.url}
-                      alt={`Variation ${idx + 1} - ${imgIdx + 1}`}
+                      alt={tResults("variationImageAlt", { variation: idx + 1, image: imgIdx + 1 })}
                       width={img.width || undefined}
                       height={img.height || undefined}
                       className="w-full h-auto rounded-lg shadow-sm hover:shadow-md transition-shadow"
@@ -714,7 +760,7 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
     const { cleanText: textContent } = stripXmlStatusTags(rawTextContent);
     // Truncate very long results for display (full result is still available to AI)
     const displayText = textContent.length > 2000
-      ? textContent.substring(0, 2000) + `\n\n... [${textContent.length - 2000} more characters]`
+      ? textContent.substring(0, 2000) + `\n\n... [${tResults("moreChars", { count: textContent.length - 2000 })}]`
       : textContent;
 
     // Detect diff content: if >30% of lines are +/- prefixed, render with diff styling
@@ -864,14 +910,14 @@ export const ToolFallback: ToolCallContentPartComponent = memo(({
           }}
         >
           <summary className="cursor-pointer hover:text-terminal-dark">
-            View parameters{isRunning ? " (live preview)" : ""}
+            {t("viewParameters")}{isRunning ? t("livePreview") : ""}
           </summary>
           <pre className={cn("mt-2 max-h-48 overflow-y-auto", TOOL_RESULT_PRE_CLASS)}>
             {formattedArgs}
           </pre>
           {isRunning && typeof argsText === "string" && argsText.length > TOOL_ARGS_PREVIEW_MAX_CHARS && (
             <p className="mt-1 text-[11px] text-terminal-muted">
-              Full parameters will be available after the tool completes.
+              {t("fullParamsAfterComplete")}
             </p>
           )}
         </details>
@@ -890,7 +936,7 @@ export const ToolFallback: ToolCallContentPartComponent = memo(({
             }}
           >
             <summary className="cursor-pointer hover:text-terminal-dark">
-              View output
+              {t("viewOutput")}
             </summary>
             <ToolResultDisplay toolName={toolName} result={parsedResult} />
           </details>

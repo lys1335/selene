@@ -76,12 +76,11 @@ describe("resolveSeleneTemplateTools", () => {
         "calculator",
         "compactSession",
         "memorize",
-        "runSkill",
         "scheduleTask",
         "sendMessageToChannel",
         "showProductImages",
+        "skill",
         "updatePlan",
-        "updateSkill",
         "delegateToSubagent",
       ];
       for (const tool of utilityTools) {
@@ -284,9 +283,9 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 10 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace = 19 base
-      // + 1 ghostOs on macOS = 20
-      const expectedMin = 19 + GHOST_OS_TOOL_COUNT;
+      // 6 core + 9 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace = 18 base
+      // + 1 ghostOs on macOS = 19
+      const expectedMin = 18 + GHOST_OS_TOOL_COUNT;
       expect(result.enabledTools.length).toBeGreaterThanOrEqual(expectedMin);
       expect(result.enabledTools).not.toContain("vectorSearch");
       expect(result.enabledTools).toContain("webSearch");
@@ -305,9 +304,9 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 10 utility + 1 workspace + 1 vectorSearch + 1 webSearch + 1 chromiumWorkspace = 20 base
-      // + 1 ghostOs on macOS = 21
-      const expected = 20 + GHOST_OS_TOOL_COUNT;
+      // 6 core + 9 utility + 1 workspace + 1 vectorSearch + 1 webSearch + 1 chromiumWorkspace = 19 base
+      // + 1 ghostOs on macOS = 20
+      const expected = 19 + GHOST_OS_TOOL_COUNT;
       expect(result.enabledTools).toHaveLength(expected);
       expect(result.enabledTools).toContain("workspace");
       if (isMacOS) {
@@ -326,9 +325,9 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 10 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace = 19 base
-      // + 1 ghostOs on macOS = 20
-      const expected = 19 + GHOST_OS_TOOL_COUNT;
+      // 6 core + 9 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace = 18 base
+      // + 1 ghostOs on macOS = 19
+      const expected = 18 + GHOST_OS_TOOL_COUNT;
       expect(result.enabledTools).toHaveLength(expected);
     });
   });

@@ -1533,6 +1533,12 @@ export default function ChatInterface({
         void reloadSessionMessages(sessionId, { force: true }).catch(() => {});
         sm.notifySessionUpdate(sessionId, { messageCount: liveThreadMessagesRef.current.length });
         sm.refreshSessionTimestamp(sessionId, { includeActivity: true });
+
+        // The foreground stream may have closed prematurely (e.g. TCP timeout,
+        // proxy disconnect) while the agent continues running in the background.
+        // Check for an active backend task and transition to background polling
+        // so the UI doesn't freeze in a stale state.
+        void checkActiveRunRef.current();
     }, [sessionId, reloadSessionMessages, sm.notifySessionUpdate, sm.refreshSessionTimestamp]);
 
     const handleThemeChooserClose = useCallback(() => {

@@ -6,8 +6,7 @@ import { createEditFileTool } from "../tools/edit-file-tool";
 import { createWriteFileTool } from "../tools/write-file-tool";
 import { createPatchFileTool } from "../tools/patch-file-tool";
 import { createScheduleTaskTool } from "../tools/schedule-task-tool";
-import { createRunSkillTool } from "../tools/run-skill-tool";
-import { createUpdateSkillTool } from "../tools/update-skill-tool";
+import { createSkillTool } from "../tools/skill-tool";
 import { createMemorizeTool } from "../tools/memorize-tool";
 import { createCalculatorTool } from "../tools/calculator-tool";
 import { createUpdatePlanTool } from "../tools/update-plan-tool";
@@ -298,38 +297,24 @@ Schedule future tasks (cron/interval/once). Task runs with agent's full context 
       })
   );
 
-  // Skills runtime: unified discovery/inspect/run for DB + plugin skills
+  // Skills: unified list/inspect/run + create/patch/replace/metadata/copy/archive
   registry.register(
-    "runSkill",
+    "skill",
     {
-      displayName: "Run Skill",
+      displayName: "Skill",
       category: "utility",
-      keywords: ["run skill", "inspect skill", "list skills", "execute skill", "skill by id", "skill by name"],
-      shortDescription: "Unified skill runtime: list, inspect full content, and run DB/plugin skills",
+      keywords: [
+        "skill", "run skill", "inspect skill", "list skills", "execute skill",
+        "create skill", "update skill", "patch skill", "replace skill",
+        "copy skill", "archive skill", "skill by id", "skill by name",
+      ],
+      shortDescription: "Unified skill tool: list, inspect, run, create, patch, replace, metadata, copy, archive",
       loading: { deferLoading: true },
       requiresSession: true,
     } satisfies ToolMetadata,
     ({ sessionId, userId, characterId }) =>
-      createRunSkillTool({
+      createSkillTool({
         sessionId: sessionId || "UNSCOPED",
-        userId: userId || "UNSCOPED",
-        characterId: characterId || "UNSCOPED",
-      })
-  );
-
-  // Skills runtime: unified create/patch/replace/metadata/copy/archive mutations
-  registry.register(
-    "updateSkill",
-    {
-      displayName: "Update Skill",
-      category: "utility",
-      keywords: ["update skill", "create skill", "patch skill", "replace skill", "copy skill", "archive skill", "skill feedback"],
-      shortDescription: "Unified skill mutation tool with patch-first editing and version checks",
-      loading: { deferLoading: true },
-      requiresSession: false,
-    } satisfies ToolMetadata,
-    ({ userId, characterId }) =>
-      createUpdateSkillTool({
         userId: userId || "UNSCOPED",
         characterId: characterId || "UNSCOPED",
       })

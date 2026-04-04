@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { AvatarDialogShell, AvatarUploadButton } from "@/components/avatar-dialog-shell";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 import { Loader2, Upload, Check, Trash2, Volume2, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resilientPatch } from "@/lib/utils/resilient-fetch";
@@ -216,16 +223,31 @@ export function Avatar3DModelSelector({
   const currentVoice = findEdgeTTSVoice(edgeTtsVoice);
 
   return (
-    <AvatarDialogShell
-      open={open}
-      onOpenChange={onOpenChange}
-      title={t("dialog.title", { name: characterName })}
-      subtitle={t("dialog.subtitle")}
-      fileInputRef={fileInputRef}
-      onFileChange={handleFileSelect}
-      accept=".glb"
-      error={error}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md bg-terminal-cream border-terminal-border">
+        <DialogHeader>
+          <DialogTitle className="font-mono text-terminal-dark">
+            {t("dialog.title", { name: characterName })}
+          </DialogTitle>
+          <DialogDescription className="font-mono text-terminal-muted">
+            {t("dialog.subtitle")}
+          </DialogDescription>
+        </DialogHeader>
+
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          accept=".glb"
+          className="hidden"
+        />
+
+        {error && (
+          <div className="p-3 bg-red-100 rounded-lg">
+            <p className="text-sm font-mono text-red-700">{error}</p>
+          </div>
+        )}
+
         <div className="space-y-2">
           {PRESET_AVATARS.map((preset) => {
             const isSelected = currentPresetId === preset.id;
@@ -258,7 +280,7 @@ export function Avatar3DModelSelector({
                     {t(`presets.${preset.id}`)}
                   </p>
                   <p className="font-mono text-[11px] text-terminal-muted">
-                    {preset.bodyType === "F" ? "Female" : "Male"} body
+                    {preset.bodyType === "F" ? t("bodyFemale") : t("bodyMale")}
                   </p>
                 </div>
 
@@ -285,7 +307,7 @@ export function Avatar3DModelSelector({
                   <p className="font-mono text-sm font-semibold text-terminal-dark">
                     {t("custom.current")}
                   </p>
-                  <p className="font-mono text-[11px] text-terminal-muted">Custom GLB</p>
+                  <p className="font-mono text-[11px] text-terminal-muted">{t("customGlb")}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -305,13 +327,24 @@ export function Avatar3DModelSelector({
             </div>
           )}
 
-          <AvatarUploadButton
-            fileInputRef={fileInputRef}
-            uploading={uploading}
+          <Button
+            onClick={() => fileInputRef.current?.click()}
             disabled={busy}
-            uploadLabel={t("custom.upload")}
-            uploadingLabel={t("custom.uploading")}
-          />
+            variant="outline"
+            className="w-full font-mono border-terminal-border hover:bg-terminal-dark/5"
+          >
+            {uploading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                {t("custom.uploading")}
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4 mr-2" />
+                {t("custom.upload")}
+              </>
+            )}
+          </Button>
         </div>
 
         <div className="space-y-2 pt-2 border-t border-terminal-border/40">
@@ -370,6 +403,7 @@ export function Avatar3DModelSelector({
             ))}
           </select>
         </div>
-    </AvatarDialogShell>
+      </DialogContent>
+    </Dialog>
   );
 }

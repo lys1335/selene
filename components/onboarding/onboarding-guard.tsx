@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Loader2Icon } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
 
 interface OnboardingGuardProps {
@@ -18,6 +19,7 @@ export function OnboardingGuard({ children }: OnboardingGuardProps) {
     const [shouldRedirect, setShouldRedirect] = useState(false);
     const router = useRouter();
     const pathname = usePathname();
+    const t = useTranslations("common");
 
     useEffect(() => {
         // Skip check for onboarding, API routes, settings, and auth pages
@@ -52,7 +54,7 @@ export function OnboardingGuard({ children }: OnboardingGuardProps) {
                 <div className="flex flex-col items-center gap-4">
                     <Loader2Icon className="size-8 animate-spin text-terminal-green" />
                     <p className="animate-pulse font-mono text-terminal-muted">
-                        Loading...
+                        {t("loading")}
                     </p>
                 </div>
             </div>

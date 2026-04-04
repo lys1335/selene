@@ -154,7 +154,7 @@ export function WorkspaceIndicator({
                     <>
                       <span className="opacity-50">&middot;</span>
                       <span>
-                        {workspaceInfo.changedFiles} file{workspaceInfo.changedFiles !== 1 ? "s" : ""}
+                        {t("fileCount", { count: workspaceInfo.changedFiles })}
                       </span>
                     </>
                   )}

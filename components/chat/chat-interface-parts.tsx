@@ -14,6 +14,7 @@ export function ChatSidebarHeader({
     onBack: () => void;
     onOpenThemeChooser?: () => void;
 }) {
+    const t = useTranslations("chat");
     return (
         <div className="flex items-center justify-between w-full">
             <Button
@@ -31,7 +32,7 @@ export function ChatSidebarHeader({
                     size="sm"
                     onClick={onOpenThemeChooser}
                     className="text-terminal-muted hover:text-terminal-dark hover:bg-terminal-dark/8 transition-all duration-200"
-                    title="Appearance & workspace style"
+                    title={t("sidebar.appearanceStyle")}
                 >
                     <Palette className="h-4 w-4" />
                 </Button>

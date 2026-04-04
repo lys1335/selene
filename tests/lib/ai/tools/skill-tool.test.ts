@@ -46,15 +46,15 @@ vi.mock("@/lib/scheduler/scheduler-service", () => ({
 }));
 
 async function loadTool() {
-  const mod = await import("@/lib/ai/tools/run-skill-tool");
-  return mod.createRunSkillTool({
+  const mod = await import("@/lib/ai/tools/skill-tool");
+  return mod.createSkillTool({
     sessionId: "sess-1",
     userId: "user-1",
     characterId: "char-1",
   });
 }
 
-describe("createRunSkillTool list action", () => {
+describe("createSkillTool list action", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();

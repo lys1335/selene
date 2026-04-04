@@ -63,7 +63,15 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
     allowHTTP1: true,
     // Increase max concurrent streams — Chromium defaults to 100, match that.
     settings: { maxConcurrentStreams: 128 },
+    // Disable HTTP/2 session idle timeout — SSE and chat streams can run for hours.
+    peerMaxConcurrentStreams: 128,
   });
+
+  // Disable all server-level timeouts to support long-lived SSE/streaming
+  // connections (agent SDK sub-agents can run 1-3 hours).
+  server.setTimeout(0);
+  // @ts-expect-error — requestTimeout exists on Http2Server in Node 18+
+  if (typeof server.requestTimeout === "number") server.requestTimeout = 0;
 
   server.on("request", (req: http2.Http2ServerRequest, res: http2.Http2ServerResponse) => {
     // Build upstream headers: strip HTTP/2 pseudo-headers, override host.
@@ -83,6 +91,8 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
         method: req.method,
         path: req.url,
         headers: upstreamHeaders,
+        // Disable socket timeout — SSE/streaming connections can run for hours.
+        timeout: 0,
       },
       (proxyRes: http.IncomingMessage) => {
         const statusCode = proxyRes.statusCode ?? 502;
@@ -200,7 +210,28 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
 
   server.on("session", (session) => {
     activeSessions.add(session);
+    // Disable session-level timeout — long-lived SSE streams must survive.
+    session.setTimeout(0);
+    // Send HTTP/2 PING frames every 60s to keep the session alive and detect
+    // dead connections. Without this, macOS can silently close idle TCP sockets.
+    const pingTimer = setInterval(() => {
+      if (session.closed || session.destroyed) {
+        clearInterval(pingTimer);
+        return;
+      }
+      try {
+        session.ping(Buffer.alloc(8), (err) => {
+          if (err) {
+            debugError("[H2Proxy] Session ping failed:", err.message);
+            clearInterval(pingTimer);
+          }
+        });
+      } catch {
+        clearInterval(pingTimer);
+      }
+    }, 60_000);
     session.once("close", () => {
+      clearInterval(pingTimer);
       activeSessions.delete(session);
     });
   });

@@ -26,7 +26,7 @@ describe("mapSeleneToolsToSdk", () => {
 
   it("returns undefined when no tools have an SDK mapping", () => {
     // Custom Selene tools with no SDK equivalent
-    const result = mapSeleneToolsToSdk(["vectorSearch", "memorize", "runSkill", "scheduleTask"]);
+    const result = mapSeleneToolsToSdk(["vectorSearch", "memorize", "skill", "scheduleTask"]);
     expect(result).toBeUndefined();
   });
 

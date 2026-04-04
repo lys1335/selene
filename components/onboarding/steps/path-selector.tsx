@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Check, Volume2, Loader2, Square } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -8,10 +8,10 @@ import { cn } from "@/lib/utils";
 import { GradientBackground } from "@/components/ui/noisy-gradient-backgrounds";
 import type { GradientColor } from "@/components/ui/noisy-gradient-backgrounds";
 import {
+  EDGE_TTS_VOICES,
   getEdgeTTSVoicesGrouped,
   DEFAULT_EDGE_TTS_VOICE,
 } from "@/lib/tts/edge-tts-voices";
-import { useEdgeTtsPreview } from "@/hooks/use-edge-tts-preview";
 
 /* ─── Types ─── */
 
@@ -59,7 +59,7 @@ interface PathSelectorProps {
 interface PathCardDef {
     id: "dev" | "fun" | "work";
     brandIcons: string[];
-    features: string[];
+    featureKeys: string[];
     comingSoon?: boolean;
     gradient: {
         colors: GradientColor[];
@@ -74,7 +74,7 @@ const PATH_CARDS: PathCardDef[] = [
     {
         id: "dev",
         brandIcons: ["anthropic.svg", "openai.svg", "puppeteer.svg", "mcp.svg"],
-        features: ["Git", "Diffs", "PRs", "Browser", "MCP", "Worktrees"],
+        featureKeys: ["git", "diffs", "prs", "browser", "mcp", "worktrees"],
         gradient: {
             colors: [
                 { color: "rgba(8,15,25,1)", stop: "0%" },
@@ -91,7 +91,7 @@ const PATH_CARDS: PathCardDef[] = [
     {
         id: "fun",
         brandIcons: ["elevenlabs.svg", "openai.svg", "telegram.svg", "discord.svg"],
-        features: ["Voice", "Avatar", "Emotions", "Lip sync", "Cloning", "Channels"],
+        featureKeys: ["voice", "avatar", "emotions", "lipSync", "cloning", "channels"],
         gradient: {
             colors: [
                 { color: "rgba(20,8,30,1)", stop: "0%" },
@@ -109,7 +109,7 @@ const PATH_CARDS: PathCardDef[] = [
     {
         id: "work",
         brandIcons: ["slack.svg", "discord.svg", "mcp.svg", "google.svg"],
-        features: ["Coming soon"],
+        featureKeys: ["comingSoon"],
         comingSoon: true,
         gradient: {
             colors: [
@@ -293,7 +293,43 @@ function FunConfigPanel({
     onChange: (u: Partial<PathConfigState>) => void;
     t: ReturnType<typeof useTranslations>;
 }) {
-    const { previewing, audioRef, stopPreview, playPreview } = useEdgeTtsPreview({ voiceId: config.edgeTtsVoice });
+    const [previewing, setPreviewing] = useState(false);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const blobUrlRef = useRef<string | null>(null);
+
+    const stopPreview = useCallback(() => {
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
+        }
+        if (blobUrlRef.current) {
+            URL.revokeObjectURL(blobUrlRef.current);
+            blobUrlRef.current = null;
+        }
+        setPreviewing(false);
+    }, []);
+
+    const playPreview = useCallback(async () => {
+        if (previewing) {
+            stopPreview();
+            return;
+        }
+        setPreviewing(true);
+        try {
+            const res = await fetch(`/api/tts/preview?voice=${encodeURIComponent(config.edgeTtsVoice)}`);
+            if (!res.ok) throw new Error("Preview failed");
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            blobUrlRef.current = url;
+            const audio = new Audio(url);
+            audioRef.current = audio;
+            audio.onended = stopPreview;
+            audio.onerror = stopPreview;
+            await audio.play();
+        } catch {
+            stopPreview();
+        }
+    }, [config.edgeTtsVoice, previewing, stopPreview]);
 
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -646,12 +682,12 @@ export function PathSelector({
 
                                     {/* Feature chips */}
                                     <div className="flex flex-wrap gap-1.5">
-                                        {card.features.map((feat) => (
+                                        {card.featureKeys.map((key) => (
                                             <span
-                                                key={feat}
+                                                key={key}
                                                 className="inline-block px-2 py-0.5 rounded-full font-mono text-[10px] bg-white/[0.06] text-white/50"
                                             >
-                                                {feat}
+                                                {t(`features.${key}`)}
                                             </span>
                                         ))}
                                     </div>

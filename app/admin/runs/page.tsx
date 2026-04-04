@@ -34,10 +34,10 @@ export default function AdminRunsPage() {
       if (pipelineFilter) params.set("pipelineName", pipelineFilter);
       if (statusFilter) params.set("status", statusFilter);
       const res = await fetch(`/api/admin/runs?${params}`);
-      if (!res.ok) throw new Error("Failed to load runs");
+      if (!res.ok) throw new Error(t("loadFailed"));
       const data = (await res.json()) as RunsResponse;
       setRuns(data.runs); setPagination(data.pagination);
-    } catch (err) { setError(err instanceof Error ? err.message : "Failed to load runs"); } finally { setLoading(false); }
+    } catch (err) { setError(err instanceof Error ? err.message : t("loadFailed")); } finally { setLoading(false); }
   }, [pipelineFilter, statusFilter]);
 
   useEffect(() => { loadRuns(); }, [loadRuns]);

@@ -62,7 +62,9 @@
           "title": "Moonshot Kimi",
           "desc": "Use Moonshot's Kimi K2.5 with 256K context and vision"
         }
-      }
+      },
+      "back": "Back",
+      "continue": "Continue"
     },
     "embedding": {
       "title": "Enable Vector Search",
@@ -122,7 +124,18 @@
       "saving": "Saving...",
       "saveApiKey": "Save API Key",
       "back": "Back",
-      "continue": "Continue"
+      "continue": "Continue",
+      "errors": {
+        "authFailed": "Authentication failed",
+        "claudeCodeNotAuth": "Claude Agent SDK is not authenticated yet",
+        "codeExchangeFailed": "Code exchange failed",
+        "enterApiKey": "Please enter an API key",
+        "invalidProvider": "Invalid provider for API key",
+        "failedSaveApiKey": "Failed to save API key",
+        "failedSaveProvider": "Failed to save provider selection",
+        "manualLoginPre": "If the browser does not open automatically, visit",
+        "manualLoginPost": "and paste the code below."
+      }
     },
     "features": {
       "title": "Choose Your Path",
@@ -244,6 +257,21 @@
         "postEditStrict": "Strict — type-check + ESLint (all)",
         "rtk": "RTK (token optimizer)",
         "rtkDesc": "Compress command output to save context tokens"
+      },
+      "features": {
+        "git": "Git",
+        "diffs": "Diffs",
+        "prs": "PRs",
+        "browser": "Browser",
+        "mcp": "MCP",
+        "worktrees": "Worktrees",
+        "voice": "Voice",
+        "avatar": "Avatar",
+        "emotions": "Emotions",
+        "lipSync": "Lip Sync",
+        "cloning": "Cloning",
+        "channels": "Channels",
+        "comingSoon": "Coming Soon"
       }
     },
     "complete": {
@@ -415,7 +443,8 @@
       "duplicate": "Duplicate",
       "delete": "Delete",
       "avatar3d": "3D Avatar",
-      "manageSkills": "Skills"
+      "manageSkills": "Skills",
+      "agentOptionsFor": "Agent options for {name}"
     },
     "mcpToolsTitle": "Configure MCP Tools",
     "plugins": {
@@ -871,8 +900,13 @@
       "referenceImageFlux2Klein9B": {
         "name": "Reference (FLUX.2 Klein 9B)",
         "description": "Reference-guided generation with FLUX.2 Klein 9B (requires Docker)"
+      },
+      "generateImageZImage": {
+        "name": "Generate (Z-Image Local)",
+        "description": "Local image generation via ComfyUI (requires Docker)"
       }
-    }
+    },
+    "systemBadge": "System"
   },
   "avatar": {
     "dialog": {
@@ -969,7 +1003,13 @@
         "medium": "Focused build",
         "large": "Large scope",
         "epic": "Epic scope"
-      }
+      },
+      "ariaTranscribing": "Transcribing audio",
+      "ariaStopRecording": "Stop voice recording",
+      "ariaStartRecording": "Start voice recording",
+      "pastedTextChip": "Pasted text",
+      "removePastedText": "Remove pasted text",
+      "textPasted": "Text pasted"
     },
     "queue": {
       "messagesQueued": "{count} message{count, plural, one {} other {s}} queued",
@@ -1034,7 +1074,8 @@
         "finalizing": "Finalizing",
         "complete": "Complete",
         "error": "Error"
-      }
+      },
+      "researchPlanningFailed": "Research planning failed"
     },
     "tools": {
       "searchTools": "Tool Search",
@@ -1106,7 +1147,13 @@
       "hide": "Hide",
       "details": "Details",
       "expandAll": "Expand all tools",
-      "collapseAll": "Collapse all tools"
+      "collapseAll": "Collapse all tools",
+      "listAllTools": "List Tools",
+      "generateImageZImage": "Generate (Z-Image Local)",
+      "viewParameters": "View parameters",
+      "livePreview": " (live preview)",
+      "fullParamsAfterComplete": "Full parameters will be available after the tool completes.",
+      "viewOutput": "View output"
     },
     "patchFile": {
       "patchLabel": "Patch",
@@ -1209,7 +1256,21 @@
       "searchCompleted": "Search completed",
       "webSearchSummary": "Summary",
       "sourcesFound": "{count, plural, one {# source found:} other {# sources found:}}",
-      "matchesFound": "{count, plural, one {Found # match for \"{pattern}\"} other {Found # matches for \"{pattern}\"}}"
+      "matchesFound": "{count, plural, one {Found # match for \"{pattern}\"} other {Found # matches for \"{pattern}\"}}",
+      "kbFetched": "{size}KB fetched",
+      "lineRange": "Lines {range}",
+      "ofTotalLines": "of {total}",
+      "totalLines": "{count} lines",
+      "truncated": "truncated",
+      "moreCharsFullContent": "{count} more characters — full content available to AI",
+      "videoNotSupported": "Your browser does not support the video tag.",
+      "openInNewTab": "Open in new tab ↗",
+      "generatedIn": "Generated in {seconds}s",
+      "generatedImageAlt": "Generated image {number}",
+      "variationWithPrompt": "Variation {number}: {prompt}...",
+      "variation": "Variation {number}",
+      "variationImageAlt": "Variation {variation} - {image}",
+      "moreChars": "{count} more characters"
     },
     "toolStatus": {
       "processing": "Processing...",
@@ -1251,7 +1312,11 @@
       "checkingTranscription": "Checking transcription…",
       "transcriptionFailed": "Transcription check failed",
       "playFailed": "Failed to play audio",
-      "playbackBlocked": "Audio playback blocked by browser"
+      "playbackBlocked": "Audio playback blocked by browser",
+      "sttAvailable": "available",
+      "sttNotConfigured": "not configured",
+      "sizeUnit": "KB",
+      "charsUnit": "chars"
     },
     "planTool": {
       "updating": "Updating plan…",
@@ -1291,7 +1356,11 @@
       "searchPlaceholder": "Search skills, categories, and descriptions",
       "searchAriaLabel": "Search skills",
       "noSkillsYet": "No skills available yet - drop a .md skill file or visit Settings → Plugins.",
-      "noMatch": "No skills match \"{query}\""
+      "noMatch": "No skills match \"{query}\"",
+      "spotlightLabel": "Spotlight",
+      "skillsLabel": "Skills",
+      "spotlightHint": "{shortcut} open",
+      "slashHint": "Type / to search"
     },
     "skillsPage": {
       "title": "Skills",
@@ -1342,6 +1411,196 @@
       "phaseError": "Error",
       "pagesLoaded": "{count, plural, one {# page loaded} other {# pages loaded}}",
       "errorPrefix": "Error: {message}"
+    },
+    "planApproval": {
+      "reviewPrompt": "Review the plan and choose how to continue.",
+      "approveLabel": "Approve & Continue",
+      "approveDescription": "Approve this plan and start implementation.",
+      "rejectLabel": "Reject / Edit",
+      "rejectDescription": "Send feedback and keep the agent in planning mode.",
+      "preparing": "Preparing plan review...",
+      "title": "Plan Approval",
+      "approved": "Approved. The agent can continue implementing.",
+      "feedbackSent": "Feedback sent",
+      "noPlanContent": "No plan content was captured.",
+      "optionalFeedback": "Optional feedback for plan changes",
+      "feedbackPlaceholder": "Tell the agent what to revise before implementation starts.",
+      "sending": "Sending...",
+      "sendFeedback": "Send feedback"
+    },
+    "askQuestion": {
+      "preparing": "Preparing question...",
+      "selectMultiple": "Select multiple",
+      "answered": "Answered",
+      "submitting": "Submitting...",
+      "submit": "Submit"
+    },
+    "promptLibrary": {
+      "title": "Prompt Library",
+      "copyPrompt": "Copy prompt",
+      "less": "Less",
+      "more": "More",
+      "source": "Source",
+      "error": "Error",
+      "queryFailed": "Failed to query prompt library",
+      "noPromptsFound": "No prompts found",
+      "actions": {
+        "get": "Prompt Details",
+        "search": "Search Results",
+        "trending": "Trending Prompts",
+        "random": "Random Picks",
+        "categories": "Categories"
+      }
+    },
+    "autoSend": {
+      "sendingIn": "Sending in {seconds}s...",
+      "cancel": "Cancel",
+      "send": "Send"
+    },
+    "captureOverlay": {
+      "ariaLabel": "Screen capture and voice recording session",
+      "capturing": "Capturing screen...",
+      "capturedScreenAlt": "Captured screen",
+      "removeScreenshot": "Remove screenshot",
+      "transcribing": "Transcribing...",
+      "cancel": "Cancel",
+      "stopAndSend": "Stop & Send"
+    },
+    "codeBlock": {
+      "copyCode": "Copy code"
+    },
+    "claudeTools": {
+      "agent": {
+        "running": "Running agent...",
+        "failed": "Agent failed",
+        "done": "Agent",
+        "working": "Agent working...",
+        "prompt": "Prompt",
+        "steps": "Steps",
+        "result": "Result"
+      },
+      "edit": {
+        "creating": "Creating...",
+        "editing": "Editing...",
+        "createFailed": "Create failed",
+        "editFailed": "Edit failed",
+        "created": "Created",
+        "edited": "Edited",
+        "resultFailed": "Edit failed",
+        "resultApplied": "Edit applied",
+        "processing": "Processing...",
+        "showLess": "▲ Show less",
+        "showAll": "▼ Show all ({count} lines)"
+      },
+      "write": {
+        "running": "Writing...",
+        "failed": "Write failed",
+        "done": "Wrote",
+        "resultFailed": "Write failed",
+        "resultWritten": "File written",
+        "writing": "Writing file...",
+        "showLess": "▲ Show less",
+        "showAll": "▼ Show all ({count} lines)"
+      },
+      "read": {
+        "running": "Reading...",
+        "failed": "Read failed",
+        "done": "Read",
+        "reading": "Reading file..."
+      },
+      "glob": {
+        "running": "Finding...",
+        "failed": "Find failed",
+        "done": "Find",
+        "searching": "Searching files...",
+        "andMoreFiles": "... and {count} more files"
+      },
+      "grep": {
+        "running": "Searching...",
+        "failed": "Search failed",
+        "done": "Search",
+        "noMatches": "No matches found",
+        "searching": "Searching...",
+        "andMoreResults": "... and {count} more results"
+      },
+      "webfetch": {
+        "running": "Fetching...",
+        "failed": "Fetch failed",
+        "done": "Fetched",
+        "fetching": "Fetching URL..."
+      },
+      "websearch": {
+        "running": "Searching...",
+        "failed": "Search failed",
+        "done": "Searched",
+        "searching": "Searching the web..."
+      },
+      "notebook": {
+        "insertCell": "Insert cell",
+        "deleteCell": "Delete cell",
+        "editCell": "Edit cell",
+        "resultFailed": "Edit failed",
+        "resultUpdated": "Cell updated",
+        "editing": "Editing notebook..."
+      },
+      "todoWrite": {
+        "running": "Updating tasks...",
+        "failed": "Task update failed",
+        "done": "Updated tasks"
+      },
+      "planMode": {
+        "entering": "Entering plan mode...",
+        "failed": "Plan mode failed",
+        "done": "Plan mode"
+      },
+      "exitPlanMode": {
+        "awaiting": "Awaiting plan approval...",
+        "rejected": "Plan rejected",
+        "approved": "Plan approved"
+      },
+      "worktree": {
+        "creating": "Creating worktree...",
+        "failed": "Worktree failed",
+        "created": "Worktree created"
+      },
+      "askUser": {
+        "asking": "Asking...",
+        "failed": "Question failed",
+        "asked": "Asked"
+      },
+      "skill": {
+        "running": "Running skill...",
+        "failed": "Skill failed",
+        "done": "Skill"
+      },
+      "taskOutput": {
+        "reading": "Reading task...",
+        "timedOut": "Task timed out",
+        "failed": "Task read failed",
+        "done": "Task output"
+      },
+      "taskStop": {
+        "stopping": "Stopping task...",
+        "failed": "Stop failed",
+        "done": "Task stopped"
+      },
+      "delegation": {
+        "delegating": "Delegating to {agent}...",
+        "failed": "{agent} failed",
+        "done": "{agent}",
+        "task": "Task",
+        "result": "Result",
+        "allResponses": "All Responses ({count})",
+        "error": "Error",
+        "unknownError": "Unknown error",
+        "subagentWorking": "Sub-agent working..."
+      }
+    },
+    "reasoning": {
+      "thinking": "Thinking...",
+      "thoughtFor": "Thought for {seconds}s",
+      "thought": "Thought",
+      "reasoning": "Reasoning..."
     }
   },
   "workspace": {
@@ -1388,7 +1647,30 @@
         "pushingBaseBranch": "Pushing...",
         "baseBranchPushed": "Base branch pushed to remote",
         "pushBaseBranchFailed": "Failed to push base branch to remote"
-      }
+      },
+      "binaryFile": "Binary file — diff not available",
+      "noDiffContent": "No diff content",
+      "stageFileFailed": "Failed to stage file",
+      "unstageFileFailed": "Failed to unstage file",
+      "stageAllFailed": "Failed to stage all files",
+      "unstageAllFailed": "Failed to unstage all files",
+      "commitMessageRequired": "Commit message is required",
+      "changesCommitted": "Changes committed",
+      "commitFailed": "Commit failed",
+      "changesIn": "Changes in",
+      "fileCount": "{count, plural, one {# file} other {# files}}",
+      "tabUnstaged": "Unstaged",
+      "tabStaged": "Staged",
+      "tabBranch": "Branch",
+      "stageAll": "Stage All",
+      "unstageAll": "Unstage All",
+      "noStagedChanges": "No staged changes",
+      "noUnstagedChanges": "No unstaged changes",
+      "selectFileToViewDiff": "Select a file to view diff",
+      "commitMessagePlaceholder": "Commit message...",
+      "committing": "Committing...",
+      "commit": "Commit",
+      "stagedFileCount": "{count, plural, one {# staged file} other {# staged files}}"
     },
     "dashboard": {
       "activeWorkspaces": "Active Workspaces",
@@ -1413,7 +1695,8 @@
       "confirmCleanupDesc": "Branch \"{branch}\" may have uncommitted changes that will be permanently lost.",
       "confirmCancel": "Cancel",
       "confirmRemove": "Remove",
-      "cleanAll": "Clean up {count}"
+      "cleanAll": "Clean up {count}",
+      "agentFallback": "Agent"
     },
     "onboarding": {
       "step1": {
@@ -1433,7 +1716,8 @@
       },
       "skip": "Skip",
       "gotIt": "Got it",
-      "next": "Next"
+      "next": "Next",
+      "srTitle": "Workspace onboarding"
     },
     "indicator": {
       "refreshFailed": "Failed to refresh workspace status",
@@ -1450,7 +1734,8 @@
       "cleanupDescriptionLocal": "This will disable Git Mode for branch <strong>{branch}</strong> in this session. Your repository and files stay exactly where they are.",
       "cancel": "Cancel",
       "cleaningUp": "Cleaning up...",
-      "cleanup": "Cleanup"
+      "cleanup": "Cleanup",
+      "fileCount": "{count, plural, one {# file} other {# files}}"
     }
   },
   "folderSync": {
@@ -1589,7 +1874,10 @@
     "removeStaleFoldersTitle": "Remove folders with missing paths?",
     "removeStaleFoldersDescription": "This will remove {count} folder(s) whose path no longer exists on disk. Indexed data for these folders will also be cleaned up.",
     "confirmRemoveStaleFolders": "Remove missing folders",
-    "errorRemoveStaleFolders": "Removed some stale folders, but {failed} of {total} failed."
+    "errorRemoveStaleFolders": "Removed some stale folders, but {failed} of {total} failed.",
+    "model": "Model:",
+    "couldNotVerifyFolder": "Could not verify folder",
+    "couldNotConnectToVerify": "Could not connect to server to verify folder"
   },
   "vectorSearchPhase": {
     "idle": "Ready",
@@ -1835,7 +2123,11 @@
         "editImageFlux2Klein9B": "Edit (FLUX.2 Klein 9B)",
         "editImageFlux2Klein9BDesc": "Edit images locally with FLUX.2 Klein 9B (requires Docker)",
         "referenceImageFlux2Klein9B": "Reference (FLUX.2 Klein 9B)",
-        "referenceImageFlux2Klein9BDesc": "Reference-guided generation with FLUX.2 Klein 9B (requires Docker)"
+        "referenceImageFlux2Klein9BDesc": "Reference-guided generation with FLUX.2 Klein 9B (requires Docker)",
+        "generateImageZImage": "Generate (Z-Image Local)",
+        "generateImageZImageDesc": "Local image generation via ComfyUI (requires Docker)",
+        "askUserQuestion": "Ask User Question",
+        "askFollowupQuestion": "Ask Followup Question"
       },
       "dependencyWarnings": {
         "syncedFolders": "Requires synced folders",
@@ -1855,7 +2147,14 @@
         "vertexAIProjectId": "Requires Vertex AI Project ID"
       },
       "back": "Back",
-      "continue": "Continue →"
+      "continue": "Continue →",
+      "resolutionWarningSingular": "1 tool has a missing dependency",
+      "resolutionWarningPlural": "{count} tools have missing dependencies",
+      "configureNow": "Configure Now →",
+      "toolsSummary": "{enabled} of {total} tools enabled",
+      "unsavedChanges": "Unsaved changes...",
+      "deselectAll": "Deselect all",
+      "selectAll": "Select all"
     },
     "embeddingSetup": {
       "question": "Choose an embedding provider and model.",
@@ -1878,7 +2177,10 @@
       "downloading": "Downloading...",
       "back": "Back",
       "skip": "Skip",
-      "continue": "Continue"
+      "continue": "Continue",
+      "explanation": "Embeddings convert text into numbers so the agent can find related content quickly. Choose a provider below.",
+      "apiKeyConfigured": "API key configured",
+      "change": "Change"
     },
     "mcpTools": {
       "loading": "Loading MCP tools...",
@@ -1944,7 +2246,8 @@
       "description": "Add folders for {agentName} to search",
       "back": "Back",
       "skip": "Skip",
-      "continue": "Continue"
+      "continue": "Continue",
+      "detailedDescription": "Add folders that contain files you want this agent to search through. The agent will index these files and use semantic search to find relevant content when answering questions."
     },
     "preview": {
       "purpose": "Purpose",
@@ -2001,7 +2304,12 @@
       "createDraftFailed": "Failed to create draft agent",
       "createFailed": "Failed to create agent",
       "createFromTemplateFailed": "Failed to create from template",
-      "creationFailed": "Creation failed"
+      "creationFailed": "Creation failed",
+      "expandFailed": "Failed to generate agent profile from concept",
+      "expandAgentFailed": "Failed to expand agent"
+    },
+    "wizardProgress": {
+      "goBackTo": "Go back to {step}"
     }
   },
   "errors": {
@@ -2092,7 +2400,10 @@
         "authCodeLabel": "Authorization Code",
         "authSuccess": "Authentication Successful!",
         "authSuccessDesc": "Your Claude Code connection is now active and ready to use.",
-        "done": "Done"
+        "done": "Done",
+        "diagnosticDetails": "Diagnostic details",
+        "manualLoginBefore": "Could not open the authentication page automatically. Run ",
+        "manualLoginAfter": " in your terminal, then paste the authorization code below."
       },
       "fields": {
         "anthropic": {
@@ -2203,7 +2514,10 @@
           "helper": "Needed for OpenAI speech-to-text and text-to-speech."
         }
       },
-      "readyStatus": "Ready"
+      "readyStatus": "Ready",
+      "codexLabel": "Codex",
+      "claudeCodeLabel": "Claude Code",
+      "antigravityLabel": "Antigravity"
     },
     "mcp": {
       "serverEnabled": "Server enabled",
@@ -2377,7 +2691,38 @@
         "install": "Install & Connect",
         "cancel": "Cancel",
         "missingValues": "Fill in all required values to continue.",
-        "allFilled": "Ready to install."
+        "allFilled": "Ready to install.",
+        "installFailed": "Installation failed. Please try again."
+      },
+      "title": "Tool servers (MCP)",
+      "description": "Connect external tool servers so your agent can use more tools.",
+      "stdio": "Stdio",
+      "sse": "SSE",
+      "commandPlaceholder": "npx",
+      "urlPlaceholder": "https://api.example.com/sse",
+      "bearerToken": "Bearer Token",
+      "apiKey": "API Key",
+      "basicAuth": "Basic Auth",
+      "pathVariablesUse": "Use",
+      "pluginUrlPlaceholder": "https://api.example.com/sse",
+      "pluginServerUrlFor": "Server URL for {name}",
+      "pluginSaveUrlFor": "Save URL for {name}",
+      "envKeyPlaceholder": "KEY_NAME",
+      "envLabels": {
+        "codaApiKey": "Coda API Key",
+        "githubPat": "GitHub Personal Access Token",
+        "composioApiKey": "Composio API Key",
+        "composioConnectionId": "Composio Connection ID",
+        "supabaseProjectRef": "Supabase Project Ref",
+        "supabaseAccessToken": "Supabase Access Token"
+      },
+      "envPlaceholders": {
+        "codaApiKeyPlaceholder": "Paste your Coda API key",
+        "githubPatPlaceholder": "ghp_xxxx...",
+        "composioApiKeyPlaceholder": "Paste your Composio API key",
+        "composioConnectionIdPlaceholder": "Your connection ID",
+        "supabaseProjectRefPlaceholder": "abcdefghijklmnop",
+        "supabaseAccessTokenPlaceholder": "sbp_xxxx..."
       }
     },
     "models": {
@@ -2440,7 +2785,15 @@
       "tip": {
         "title": "Tip:",
         "body": "Use a faster model for background tasks and a stronger model for research-heavy work."
-      }
+      },
+      "jobDescription": "Choose which model handles each job, like chat, research, and image understanding.",
+      "manualModelId": "Manual model ID",
+      "blackboxAdvancedLabel": "Advanced BlackBox model ID",
+      "blackboxAdvancedPlaceholder": "Enter any BlackBox AI model ID, even before the catalog is updated.",
+      "vectorDimensions": "Vector dimensions: {dims}",
+      "downloadApiUnavailable": "Download API not available",
+      "downloadFailed": "Download failed",
+      "unknownModel": "Unknown model: {modelId}"
     },
     "vector": {
       "title": "Search your synced files",
@@ -2746,7 +3099,10 @@
         "parakeetAutoStartDesc": "Starts the local websocket server at app launch when possible.",
         "parakeetDownload": "Download",
         "parakeetDownloaded": "Downloaded",
-        "parakeetAutoDownloadHint": "Model will be downloaded automatically on first use."
+        "parakeetAutoDownloadHint": "Model will be downloaded automatically on first use.",
+        "downloadApiUnavailable": "Download API not available",
+        "downloadFailed": "Download failed",
+        "unknownModel": "Unknown model: {modelId}"
       },
       "controls": {
         "title": "Dictation controls",
@@ -2766,7 +3122,10 @@
         "activationPushDesc": "Hold the hotkey while speaking. Release to transcribe.",
         "hotkeyLabel": "Global dictation hotkey",
         "hotkeyDesc": "Works app-wide in Electron builds.",
-        "hotkeyPlaceholder": "CommandOrControl+Shift+Space"
+        "hotkeyPlaceholder": "CommandOrControl+Shift+Space",
+        "heading": "Controls",
+        "hotkeyHelper": "Keyboard shortcut to toggle voice",
+        "agentNameHelper": "Name the agent responds to for wake word"
       },
       "screen": {
         "title": "Screen capture",
@@ -2865,7 +3224,9 @@
         "summaryLengthLabel": "Summary length",
         "summaryShort": "Short",
         "summaryMedium": "Medium",
-        "summaryLong": "Long"
+        "summaryLong": "Long",
+        "targetLanguageLabel": "Target Language",
+        "confirmDangerLabel": "Confirm Dangerous Actions"
       },
       "historyCopied": "Copied to clipboard",
       "historyCopyFailed": "Failed to copy",
@@ -2880,7 +3241,15 @@
       "dictionaryAutoLearnHint": "Auto-learns from your corrections",
       "dictionaryEmpty": "No custom words yet",
       "dictionaryCount": "{count} words",
-      "actionComplete": "Action completed"
+      "actionComplete": "Action completed",
+      "parakeet": {
+        "modelLabel": "Parakeet Model",
+        "modelHelper": "Select the Parakeet STT model to use",
+        "autoStartLabel": "Auto-start Parakeet",
+        "autoStartDesc": "Automatically start the Parakeet server on launch",
+        "portLabel": "Parakeet Port",
+        "portHelper": "Port number for the Parakeet server"
+      }
     },
     "localGrep": {
       "heading": "Local grep (exact code search)",
@@ -2905,6 +3274,54 @@
       "primaryFlowDesc": "Import ComfyUI workflows directly in chat. We analyze the graph, suggest names, and attach tools automatically.",
       "advancedSetupTitle": "Advanced setup",
       "advancedSetupDesc": "Manual backend toggles and workflow schema tuning for power users."
+    },
+    "ghostOs": {
+      "statusCheckFailed": "Failed to check status (HTTP {code})",
+      "visionModelDownloaded": "Vision model downloaded",
+      "visionDownloadFailed": "Vision model download failed: {error}",
+      "setupCompleted": "Ghost OS setup completed",
+      "setupFailed": "Setup failed: {error}",
+      "setupFailedGeneric": "Setup failed",
+      "visionRequiresDesktop": "Vision model download requires the desktop app",
+      "downloadFailed": "Download failed",
+      "downloadFailedWithError": "Download failed: {error}",
+      "checkingStatus": "Checking Ghost OS status...",
+      "heading": "Ghost OS",
+      "subtitle": "macOS Desktop Automation",
+      "refreshAriaLabel": "Refresh Ghost OS status",
+      "statusCheckFailedLabel": "Status check failed",
+      "retry": "Retry",
+      "installation": "Installation",
+      "installViaHomebrew": "Install via Homebrew",
+      "accessibility": "Accessibility",
+      "screenRecording": "Screen Recording",
+      "inputMonitoring": "Input Monitoring",
+      "inputMonitoringHint": "(required for learning mode)",
+      "visionModel": "ShowUI-2B Vision Model",
+      "visionModelSize": "(~3 GB)",
+      "download": "Download",
+      "runSetup": "Run Setup",
+      "description": "Ghost OS enables AI agents to control any macOS application using the accessibility tree. Install it to let agents automate desktop workflows."
+    },
+    "permissions": {
+      "screen": "Screen",
+      "mic": "Mic",
+      "shortcuts": "Shortcuts",
+      "grantAccess": "Grant access",
+      "checking": "Checking permissions…",
+      "unavailable": "Permission status unavailable",
+      "checkingBtn": "Checking…",
+      "checkBtn": "Check permissions",
+      "clearFailed": "Failed to clear screenshots"
+    },
+    "folderResyncFallback": "Search index settings changed. If results look outdated, refresh synced folders in Agent Settings.",
+    "shortcutRecorder": {
+      "placeholder": "Click to record shortcut",
+      "ariaRecording": "Recording shortcut, press keys or Escape to cancel",
+      "ariaShortcut": "Shortcut: {value}. Click to record.",
+      "pressShortcut": "Press shortcut...",
+      "clearShortcut": "Clear shortcut",
+      "none": "none"
     }
   },
   "modelBag": {
@@ -2950,7 +3367,8 @@
     "providerSwitched": "Switched to {name}",
     "manualUse": "Use",
     "manualSessionHint": "Enter a provider model ID and apply it as this session's chat model.",
-    "manualBlackboxHint": "Enter any BlackBox AI model ID."
+    "manualBlackboxHint": "Enter any BlackBox AI model ID.",
+    "filterAll": "All"
   },
   "comfyui": {
     "workflows": {
@@ -3031,7 +3449,13 @@
       "analysisFailed": "Workflow analysis failed",
       "formatFailed": "Failed to format JSON",
       "saveFailed": "Workflow save failed",
-      "deleteFailed": "Workflow delete failed"
+      "deleteFailed": "Workflow delete failed",
+      "errors": {
+        "emptyJson": "Workflow JSON is empty.",
+        "analyzeFailed": "Failed to analyze workflow",
+        "nameRequired": "Workflow name is required.",
+        "saveFailed": "Failed to save workflow"
+      }
     },
     "localModels": {
       "title": "Local Image Generation",
@@ -3061,10 +3485,39 @@
       "advanced": "Advanced",
       "backendPathLabel": "Backend Path",
       "backendPathPlaceholder": "Auto-detected path"
+    },
+    "installer": {
+      "title": "Local Image Generation (Z-Image Turbo FP8)",
+      "titleSimple": "Local Image Generation (Z-Image)",
+      "description": "Generate images locally using ComfyUI with the Z-Image Turbo FP8 model. Requires Docker and an NVIDIA GPU with ~12GB VRAM.",
+      "webOnlyNote": "Local ComfyUI backend is only available in the desktop app.",
+      "enableLabel": "Enable Local Image Generation",
+      "enableDesc": "Use local ComfyUI instead of cloud APIs",
+      "dockerInstalled": "Docker Installed",
+      "imageBuilt": "Docker Image Built",
+      "modelsDownloaded": "Models Downloaded",
+      "containerRunning": "Container Running",
+      "apiHealthy": "API Healthy",
+      "refreshStatus": "Refresh Status",
+      "setupButton": "Setup ComfyUI (Build + Download ~12GB Models)",
+      "dockerRequired": "Docker is required. Please install Docker Desktop first.",
+      "stopComfyUI": "Stop ComfyUI",
+      "startComfyUI": "Start ComfyUI",
+      "setupWillTitle": "One-click setup will:",
+      "setupStep1": "Build Docker images (~10-20 min first time)",
+      "setupStep2": "Download z-image-turbo-fp8-aio.safetensors (~11GB)",
+      "setupStep3": "Download z-image-detailer.safetensors (~1.2GB)",
+      "setupStep4": "Start ComfyUI containers",
+      "advancedSettings": "Advanced Settings",
+      "backendPath": "ComfyUI Backend Path",
+      "backendPathPlaceholder": "Auto-detected path or custom location",
+      "backendPathDesc": "Override the default location for ComfyUI backend files and models."
     }
   },
   "vectorSearch": {
-    "indexMismatch": "Search index mismatch detected. If results seem off, refresh synced folders in Agent Settings."
+    "indexMismatch": "Search index mismatch detected. If results seem off, refresh synced folders in Agent Settings.",
+    "folderSyncPaused": "Folder sync paused to protect app stability",
+    "folderSyncPausedDescription": "{folderName} hit the file descriptor limit. Exclude .venv, venv, env, __pycache__, site-packages, node_modules, and large image/font folders, or sync a smaller subfolder, then resume sync."
   },
   "about": {
     "title": "About",
@@ -3148,20 +3601,9 @@
       "cancel": "Cancel",
       "dashboardShort": "Dashboard",
       "libraryShort": "Library",
-      "skillsShort": "Skills"
-    },
-    "browserWorkspace": {
-      "home": "Home",
-      "sidebarMode": "Sidebar Mode",
-      "settings": "Settings",
-      "library": "Library",
-      "reopen": "Reopen",
-      "newChatWith": "New chat with"
-    },
-    "session": {
-      "untitled": "Untitled chat",
-      "invalid": "Invalid date",
-      "yesterday": "Yesterday"
+      "skillsShort": "Skills",
+      "appearanceStyle": "Appearance & workspace style",
+      "agentOptionsFor": "Agent options for {name}"
     },
     "browserWorkspace": {
       "ready": "Ready",
@@ -3181,7 +3623,28 @@
       "openNew": "New chat",
       "openLibrary": "Browse history",
       "libraryTitle": "Chat Library",
-      "libraryDescription": "Browse and open your chat sessions"
+      "libraryDescription": "Browse and open your chat sessions",
+      "agentMenuAriaLabel": "Agent menu",
+      "minimize": "Minimize",
+      "maximize": "Maximize",
+      "close": "Close",
+      "shortcuts": {
+        "keyboardShortcuts": "Keyboard shortcuts",
+        "heading": "Shortcuts",
+        "newTab": "New tab",
+        "closeTab": "Close tab",
+        "reopenTab": "Reopen tab",
+        "nextTab": "Next tab",
+        "prevTab": "Prev tab",
+        "tab19": "Tab 1–9",
+        "focusComposer": "Focus composer",
+        "library": "Library"
+      }
+    },
+    "session": {
+      "untitled": "Untitled chat",
+      "invalid": "Invalid date",
+      "yesterday": "Yesterday"
     },
     "channelSession": {
       "deleteTitle": "Delete channel session?",
@@ -3235,9 +3698,29 @@
           "tryCompact": "Try compacting",
           "newSession": "Start new session",
           "switchModel": "Switch to larger model"
-        }
+        },
+        "manualCompactSuccess": "Compaction succeeded — try sending your message again.",
+        "dismiss": "Dismiss"
       }
-    }
+    },
+    "contextBubble": {
+      "contextLimitReached": "Context limit reached",
+      "percentUsed": "{percentage}% used",
+      "contextNearlyFull": "Context nearly full",
+      "contextClimbing": "Context climbing",
+      "sessionStatus": "Session status",
+      "hint": "hint",
+      "hintLabel": "Hint",
+      "updated": "Updated"
+    },
+    "error": {
+      "title": "Something went wrong",
+      "description": "The chat encountered an error. Your conversation and any background processes are safe.",
+      "goHome": "Go home",
+      "retry": "Retry"
+    },
+    "fallbackTitle": "Chat — Selene",
+    "sessionTitle": "Chat with {name}"
   },
   "channels": {
     "title": "Channel inbox for {name}",
@@ -3311,6 +3794,13 @@
       "deleted": "Connection removed.",
       "slackScopesHint": "Slack app needs these bot scopes for full functionality: messages:read, messages:write, channels:read, files:read. Check your app at api.slack.com if images aren't coming through.",
       "discordSetupHint": "Discord connected. If guild messages do not appear, verify Message Content Intent and channel permissions in Discord Developer Portal."
+    },
+    "telegram": {
+      "helpTitle": "Get your bot token:",
+      "helpStep1": "Open <code>@BotFather</code> on Telegram",
+      "helpStep2": "Send <code>/newbot</code> and follow the prompts",
+      "helpStep3": "Copy the API token BotFather gives you",
+      "helpWarning": "⚠️ Keep your token private - never share it!"
     }
   },
   "usage": {
@@ -3527,7 +4017,8 @@
         },
         "viewDetails": "View Details",
         "showing": "Showing {count} of {total} runs",
-        "page": "Page {current} of {total}"
+        "page": "Page {current} of {total}",
+        "loadFailed": "Failed to load runs"
       },
       "analytics": {
         "period": "Period",
@@ -3818,8 +4309,16 @@
         "active": "Active",
         "disabled": "Disabled",
         "uninstall": "Uninstall"
-      }
-    }
+      },
+      "loadCatalogFailed": "Failed to load catalog",
+      "loadFailed": "Failed to load",
+      "updateFailed": "Failed to update skill",
+      "uninstallError": "Failed to uninstall skill"
+    },
+    "searchPlaceholder": "Search skills...",
+    "toggleSkill": "Toggle {name}",
+    "deleteSkill": "Delete {name}",
+    "installSkill": "Install {name}"
   },
   "schedules": {
     "title": "Scheduled Tasks",
@@ -4247,7 +4746,8 @@
       "noSources": "No marketplace sources configured",
       "noSourcesHint": "Add a marketplace source to browse available plugins",
       "noResults": "No plugins match your search",
-      "installGuidance": "To install \"{name}\", download the .zip from the source and upload it via the Install Plugin button."
+      "installGuidance": "To install \"{name}\", download the .zip from the source and upload it via the Install Plugin button.",
+      "from": "from {name}"
     },
     "status": {
       "active": "Active",
@@ -4358,7 +4858,10 @@
       "invalidType": "Only .glb files",
       "upload": "Upload failed",
       "save": "Save failed"
-    }
+    },
+    "bodyFemale": "Female body",
+    "bodyMale": "Male body",
+    "customGlb": "Custom GLB"
   },
   "themeChooser": {
     "title": "Pick your look",
@@ -4381,5 +4884,149 @@
     },
     "moreOptions": "Wallpapers & more in Settings",
     "done": "Done"
+  },
+  "quickCapture": {
+    "onboarding": {
+      "stepOf": "Step {current} of {total}",
+      "checking": "Checking...",
+      "grant": "Grant",
+      "toastScreenError": "Could not open System Settings. Please grant Screen Recording permission manually.",
+      "toastMicError": "Could not request microphone permission.",
+      "toastAccessibilityError": "Could not open Accessibility settings.",
+      "grantPermissions": "Grant Permissions",
+      "grantPermissionsDesc": "Screen capture and microphone access are needed for Quick Capture.",
+      "screenRecording": "Screen Recording",
+      "microphone": "Microphone",
+      "accessibility": "Accessibility (for shortcuts)",
+      "desktopAppRequired": "Screen capture requires the desktop app.",
+      "configureShortcuts": "Configure Shortcuts",
+      "configureShortcutsDesc": "Set keyboard shortcuts for capturing and combined voice+screen.",
+      "screenCaptureOnly": "Screen capture only",
+      "screenCaptureOnlyDesc": "Press this to capture your screen and attach it to the current chat.",
+      "quickCaptureVoiceScreen": "Quick Capture (voice + screen)",
+      "recommended": "Recommended",
+      "quickCaptureVoiceScreenDesc": "Press to capture your screen and immediately start speaking your question.",
+      "privacyDefaults": "Privacy Defaults",
+      "privacyDefaultsDesc": "Control which apps can be captured and how captures are handled.",
+      "excludedApps": "Excluded apps",
+      "excludedAppsDesc": "Selene will not capture when these apps are focused (comma-separated).",
+      "autoSendAfterVoice": "Auto-send after voice",
+      "autoSendAfterVoiceDesc": "Automatically send after a 3-second countdown when you stop speaking.",
+      "dataNotice": "Data notice:",
+      "dataNoticeText": "Screen captures are sent to your configured AI provider for analysis. They are processed according to that provider's data policies.",
+      "readyTitle": "Quick Capture is ready!",
+      "readyDesc": "Press {shortcut} from any app to speak and share your screen with Selene.",
+      "checklistCaptures": "Screen captures will be attached to the active chat",
+      "checklistShortcut": "Shortcut works from any application",
+      "checklistAutoSend": "Auto-send countdown enabled (3 seconds)",
+      "checklistExcluded": "Excluded apps: {apps}",
+      "checklistExcludedMore": " + more",
+      "setupTitle": "Quick Capture Setup",
+      "setupDesc": "Configure screen capture and shortcuts",
+      "back": "Back",
+      "skipSetup": "Skip setup",
+      "waitingForPermissions": "Waiting for permissions",
+      "continue": "Continue",
+      "doneEnable": "Done — Enable Quick Capture"
+    }
+  },
+  "miniOverlay": {
+    "agentPicker": {
+      "justNow": "just now",
+      "minutesAgo": "{count}m ago",
+      "hoursAgo": "{count}h ago",
+      "daysAgo": "{count}d ago",
+      "agentFallback": "Agent",
+      "selectAgent": "Select agent",
+      "lastChat": "Last chat: {time}",
+      "noRecentChats": "No recent chats"
+    },
+    "modeToggle": {
+      "direct": "Direct",
+      "compose": "Compose",
+      "directHint": "Send now and speak back",
+      "composeHint": "Refine, then open in Selene"
+    },
+    "recordingPill": {
+      "copied": "Copied",
+      "copy": "Copy",
+      "listening": "Listening...",
+      "send": "Send",
+      "transcribing": "Transcribing...",
+      "refining": "Refining...",
+      "thinking": "Thinking...",
+      "speaking": "Speaking",
+      "stopAudio": "Stop audio",
+      "openingComposer": "Opening composer...",
+      "openInSelene": "Open in Selene",
+      "cancel": "Cancel",
+      "done": "Done",
+      "close": "Close",
+      "errorDefault": "An error occurred",
+      "ready": "Ready",
+      "viewFullScreenshot": "Click to view full screenshot",
+      "addScreenshot": "add screenshot"
+    }
+  },
+  "voice": {
+    "actions": {
+      "fixGrammar": "Fix Grammar",
+      "fixGrammarDesc": "Clean up grammar and punctuation",
+      "professional": "Professional",
+      "professionalDesc": "Rewrite in professional tone",
+      "summarize": "Summarize",
+      "summarizeDesc": "Condense into key points",
+      "translate": "Translate",
+      "translateDesc": "Translate to another language",
+      "actionFailed": "Action failed"
+    },
+    "waveform": {
+      "recordingInProgress": "Recording in progress"
+    },
+    "actionComplete": "Action completed"
+  },
+  "avatar3d": {
+    "loadingAria": "Loading 3D avatar",
+    "loadingModel": "Loading model...",
+    "unavailable": "3D unavailable",
+    "pip": {
+      "unmute": "Unmute avatar",
+      "mute": "Mute avatar",
+      "minimize": "Minimize avatar",
+      "show": "Show avatar",
+      "avatar": "Avatar"
+    }
+  },
+  "mcpReload": {
+    "initIssues": "Tool Initialization Issues",
+    "initializing": "Initializing Tools",
+    "serversReady": "{completed}/{total} servers ready"
+  },
+  "browserSession": {
+    "title": "Browser Session",
+    "pageTitle": "Browser Session — Selene",
+    "noSessionId": "No session ID provided",
+    "replaying": "REPLAYING",
+    "backToLive": "Back to live",
+    "live": "LIVE",
+    "connecting": "CONNECTING",
+    "urlPlaceholder": "Enter URL and press Enter...",
+    "startingReplay": "Starting replay...",
+    "waitingForFrames": "Waiting for frames...",
+    "interactive": "INTERACTIVE",
+    "agentActive": "Agent active",
+    "actionTimeline": "Action Timeline",
+    "actionsCount": "{count} actions",
+    "replayStarting": "Replay starting...",
+    "noActionsYet": "No actions yet",
+    "interactiveMode": "Interactive",
+    "interact": "Interact",
+    "hideActions": "Hide Actions",
+    "showActions": "Show Actions",
+    "stop": "Stop",
+    "record": "Record",
+    "download": "Download",
+    "replayingAction": "Replaying...",
+    "replay": "Replay"
   }
 }

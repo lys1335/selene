@@ -12,8 +12,9 @@ import { ToolBadge, getTopTools } from "@/components/ui/tool-badge";
 import { useTranslations } from "next-intl";
 import { getCharacterInitials } from "@/components/assistant-ui/character-context";
 import { AgentOverflowMenu } from "@/components/character-picker-agent-overflow-menu";
-import { getAgentAccentColor, buildAgentGradientColors } from "@/lib/personalization/accent-colors";
+import { getAgentAccentColor } from "@/lib/personalization/accent-colors";
 import { GradientBackground } from "@/components/ui/noisy-gradient-backgrounds";
+import type { GradientColor } from "@/components/ui/noisy-gradient-backgrounds";
 import type { CharacterSummary } from "@/components/character-picker-types";
 
 export function AgentCardInWorkflow({
@@ -83,7 +84,20 @@ export function AgentCardInWorkflow({
   );
 
   // Generate noisy gradient colors for avatar (same look as onboarding path cards)
-  const avatarGradientColors = useMemo(() => buildAgentGradientColors(accentColor.hex), [accentColor.hex]);
+  const avatarGradientColors = useMemo((): GradientColor[] => {
+    const hex = accentColor.hex;
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    const dr = Math.max(0, Math.round(r * 0.3));
+    const dg = Math.max(0, Math.round(g * 0.3));
+    const db = Math.max(0, Math.round(b * 0.3));
+    return [
+      { color: `rgba(${dr},${dg},${db},1)`, stop: "0%" },
+      { color: `rgba(${r},${g},${b},1)`, stop: "60%" },
+      { color: `rgba(${Math.min(255, r + 30)},${Math.min(255, g + 30)},${Math.min(255, b + 30)},1)`, stop: "100%" },
+    ];
+  }, [accentColor.hex]);
 
   return (
     <AnimatedCard
@@ -176,7 +190,7 @@ export function AgentCardInWorkflow({
               </p>
               {isSystemAgent && (
                 <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-medium text-slate-400">
-                  System
+                  {t("systemBadge")}
                 </span>
               )}
               {role && (

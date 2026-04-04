@@ -1,6 +1,7 @@
 "use client";
 
 import type { FC } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SendHorizontalIcon } from "lucide-react";
@@ -26,6 +27,7 @@ export const AutoSendCountdown: FC<AutoSendCountdownProps> = ({
   onSendNow,
   className,
 }) => {
+  const t = useTranslations("assistantUi.autoSend");
   if (remaining <= 0 || total <= 0) return null;
 
   const progress = ((total - remaining) / total) * 100;
@@ -45,7 +47,7 @@ export const AutoSendCountdown: FC<AutoSendCountdownProps> = ({
         />
       </div>
       <span className="text-xs font-mono text-terminal-muted tabular-nums whitespace-nowrap">
-        Sending in {remaining}s...
+        {t("sendingIn", { seconds: remaining })}
       </span>
       <Button
         variant="ghost"
@@ -53,7 +55,7 @@ export const AutoSendCountdown: FC<AutoSendCountdownProps> = ({
         onClick={onCancel}
         className="h-6 px-2 text-xs font-mono text-terminal-muted hover:text-terminal-dark"
       >
-        Cancel
+        {t("cancel")}
       </Button>
       <Button
         variant="default"
@@ -62,7 +64,7 @@ export const AutoSendCountdown: FC<AutoSendCountdownProps> = ({
         className="h-6 px-2 text-xs font-mono"
       >
         <SendHorizontalIcon className="size-3 mr-1" />
-        Send
+        {t("send")}
       </Button>
     </div>
   );

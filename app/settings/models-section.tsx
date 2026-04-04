@@ -172,15 +172,15 @@ function ModelSelect({
             className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
           >
             {renderModelOptions(BLACKBOX_MODELS)}
-            <option value="__manual__">Manual model ID</option>
+            <option value="__manual__">{t("models.manualModelId" as Parameters<typeof t>[0])}</option>
           </select>
           {isBlackBoxManual && (
             <BlackBoxManualInput
               value={formState[fieldKey] ?? ""}
               onChange={(value) => updateField(fieldKey, value)}
-              label="Advanced BlackBox model ID"
+              label={t("models.blackboxAdvancedLabel" as Parameters<typeof t>[0])}
               placeholder={blackboxaiDefault}
-              helper="Enter any BlackBox AI model ID, even before the catalog is updated."
+              helper={t("models.blackboxAdvancedPlaceholder" as Parameters<typeof t>[0])}
             />
           )}
 
@@ -252,7 +252,7 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           {t("models.subtitle")}
         </p>
         <p className="font-mono text-xs text-terminal-muted">
-          Choose which model handles each job, like chat, research, and image understanding.
+          {t("models.jobDescription")}
         </p>
       </div>
 

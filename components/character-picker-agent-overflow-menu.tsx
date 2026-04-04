@@ -26,7 +26,7 @@ const Plug = PhosphorPlug;
 const BarChart2 = ChartBar;
 const Trash2 = Trash;
 
-type AgentOverflowMenuProps = {
+export type AgentOverflowMenuProps = {
   character: CharacterSummary;
   onEditIdentity: (c: CharacterSummary) => void;
   onEditModelDefaults: (c: CharacterSummary) => void;
@@ -81,7 +81,7 @@ export function AgentOverflowMenu({
       <button
         type="button"
         className="absolute top-2 right-2 rounded-md p-1 opacity-40 transition-opacity group-hover:opacity-100"
-        aria-label={`Agent options for ${character.displayName || character.name}`}
+        aria-label={t("menu.agentOptionsFor", { name: character.displayName || character.name })}
         disabled
       >
         <MoreHorizontal className="w-4 h-4 text-terminal-muted" />
@@ -96,7 +96,7 @@ export function AgentOverflowMenu({
           type="button"
           className="absolute top-2 right-2 rounded-md p-1 opacity-40 transition-opacity hover:bg-terminal-dark/10 hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-terminal-green focus-visible:ring-offset-1 focus-visible:ring-offset-terminal-cream group-hover:opacity-100"
           onClick={(event) => event.stopPropagation()}
-          aria-label={`Agent options for ${character.displayName || character.name}`}
+          aria-label={t("menu.agentOptionsFor", { name: character.displayName || character.name })}
         >
           <MoreHorizontal className="w-4 h-4 text-terminal-muted" />
         </button>

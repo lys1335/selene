@@ -47,12 +47,11 @@ export const UTILITY_TOOLS = [
   "calculator",
   "compactSession",
   "memorize",
-  "runSkill",
   "scheduleTask",
   "sendMessageToChannel",
   "showProductImages",
+  "skill",
   "updatePlan",
-  "updateSkill",
   "delegateToSubagent",
 ] as const;
 

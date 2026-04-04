@@ -98,7 +98,7 @@ export function SkillCatalogPage({
       ]);
 
       if (!catalogRes.ok) {
-        throw new Error("Failed to load catalog");
+        throw new Error(t("loadCatalogFailed"));
       }
 
       const catalogData = await catalogRes.json();
@@ -118,7 +118,7 @@ export function SkillCatalogPage({
         setActiveCharacterId(charList[0].id);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load");
+      setError(err instanceof Error ? err.message : t("loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -259,7 +259,7 @@ export function SkillCatalogPage({
       });
 
       if (!res.ok) {
-        throw new Error("Failed to update skill");
+        throw new Error(t("updateFailed"));
       }
 
       setCatalog((prev) =>
@@ -286,7 +286,7 @@ export function SkillCatalogPage({
     try {
       const res = await fetch(`/api/skills/${installedSkillId}`, { method: "DELETE" });
       if (!res.ok) {
-        throw new Error("Failed to uninstall skill");
+        throw new Error(t("uninstallError"));
       }
 
       setCatalog((prev) =>

@@ -124,7 +124,7 @@ export const SpeakAloudToolUI: ToolCallContentPartComponent = ({
           </>
         )}
         <span className="text-terminal-muted">
-          {sizeKb} KB · {result.textLength ?? "?"} chars
+          {sizeKb} {t("sizeUnit")} · {result.textLength ?? "?"} {t("charsUnit")}
         </span>
       </button>
     </div>
@@ -193,7 +193,7 @@ export const TranscribeToolUI: TranscribeToolCallComponent = ({ result }) => {
       />
       <span className="text-terminal-dark font-semibold">STT</span>
       <span className={available ? "text-terminal-green" : "text-terminal-muted"}>
-        {available ? "available" : "not configured"}
+        {available ? t("sttAvailable") : t("sttNotConfigured")}
       </span>
       {result.provider && result.provider !== "none" && (
         <>

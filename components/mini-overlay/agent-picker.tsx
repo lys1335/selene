@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -37,19 +38,20 @@ function AgentAvatar({ agent, size = 20 }: { agent: OverlayAgent; size?: number 
   );
 }
 
-function formatTimeAgo(dateStr: string | undefined): string {
+function formatTimeAgo(dateStr: string | undefined, t: (key: string, values?: Record<string, string | number | Date>) => string): string {
   if (!dateStr) return "";
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const diffMin = Math.floor(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 1) return t("justNow");
+  if (diffMin < 60) return t("minutesAgo", { count: diffMin });
   const diffH = Math.floor(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
+  if (diffH < 24) return t("hoursAgo", { count: diffH });
   const diffD = Math.floor(diffH / 24);
-  return `${diffD}d ago`;
+  return t("daysAgo", { count: diffD });
 }
 
 export function AgentPicker({ agents, selectedAgent, onSelectAgent }: AgentPickerProps) {
+  const t = useTranslations("miniOverlay.agentPicker");
   const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -103,7 +105,7 @@ export function AgentPicker({ agents, selectedAgent, onSelectAgent }: AgentPicke
       >
         {selectedAgent && <AgentAvatar agent={selectedAgent} size={18} />}
         <span className="font-medium truncate max-w-[180px]">
-          {selectedAgent?.name ?? "Agent"}
+          {selectedAgent?.name ?? t("agentFallback")}
         </span>
       </div>
     );
@@ -121,7 +123,7 @@ export function AgentPicker({ agents, selectedAgent, onSelectAgent }: AgentPicke
           >
             {selectedAgent && <AgentAvatar agent={selectedAgent} size={18} />}
             <span className="font-medium truncate max-w-[180px]">
-              {selectedAgent?.name ?? "Select agent"}
+              {selectedAgent?.name ?? t("selectAgent")}
             </span>
             <ChevronDown
               className={`h-3 w-3 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
@@ -138,7 +140,7 @@ export function AgentPicker({ agents, selectedAgent, onSelectAgent }: AgentPicke
           collisionPadding={8}
         >
           <ScrollArea className="max-h-40">
-            <div role="listbox" aria-label="Select agent">
+            <div role="listbox" aria-label={t("selectAgent")}>
               {agents.map((agent, idx) => {
                 const isSelected = agent.id === selectedAgent?.id;
                 return (
@@ -168,11 +170,11 @@ export function AgentPicker({ agents, selectedAgent, onSelectAgent }: AgentPicke
                       </span>
                       {agent.lastSessionUpdatedAt ? (
                         <span className="text-[10px] text-muted-foreground truncate leading-tight">
-                          Last chat: {formatTimeAgo(agent.lastSessionUpdatedAt)}
+                          {t("lastChat", { time: formatTimeAgo(agent.lastSessionUpdatedAt, t) })}
                         </span>
                       ) : (
                         <span className="text-[10px] text-muted-foreground leading-tight">
-                          No recent chats
+                          {t("noRecentChats")}
                         </span>
                       )}
                     </div>

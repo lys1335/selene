@@ -32,8 +32,7 @@ import { createWriteFileTool } from "@/lib/ai/tools/write-file-tool";
 import { createPatchFileTool } from "@/lib/ai/tools/patch-file-tool";
 import { createUpdatePlanTool } from "@/lib/ai/tools/update-plan-tool";
 import { createSendMessageToChannelTool } from "@/lib/ai/tools/channel-tools";
-import { createRunSkillTool } from "@/lib/ai/tools/run-skill-tool";
-import { createUpdateSkillTool } from "@/lib/ai/tools/update-skill-tool";
+import { createSkillTool } from "@/lib/ai/tools/skill-tool";
 import { createCompactSessionTool } from "@/lib/ai/tools/compact-session-tool";
 import { createWorkspaceTool } from "@/lib/ai/tools/workspace-tool";
 import {
@@ -132,8 +131,16 @@ export async function buildToolsForRequest(
 
   // Create tools via the centralized Tool Registry.
   // CRITICAL: Create agentEnabledTools Set for strict filtering.
+  // Migration aliases: remap old tool names to their merged successors so
+  // agents created before the merge still resolve correctly.
+  const TOOL_ALIASES: Record<string, string> = {
+    runSkill: "skill",
+    updateSkill: "skill",
+  };
   const agentEnabledTools = enabledTools
-    ? new Set(Array.from(new Set(enabledTools))) // Dedupe before creating Set
+    ? new Set(
+        Array.from(new Set(enabledTools)).map((t) => TOOL_ALIASES[t] ?? t),
+      )
     : undefined;
 
   const registry = ToolRegistry.getInstance();
@@ -265,15 +272,9 @@ export async function buildToolsForRequest(
     ...(allTools.updatePlan && {
       updatePlan: createUpdatePlanTool({ sessionId }),
     }),
-    ...(allTools.runSkill && {
-      runSkill: createRunSkillTool({
+    ...(allTools.skill && {
+      skill: createSkillTool({
         sessionId,
-        userId,
-        characterId: characterId || "",
-      }),
-    }),
-    ...(allTools.updateSkill && {
-      updateSkill: createUpdateSkillTool({
         userId,
         characterId: characterId || "",
       }),

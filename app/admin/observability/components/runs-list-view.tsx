@@ -62,12 +62,12 @@ export function RunsListView() {
       if (dateTo) params.set("endDate", dateTo);
 
       const res = await fetch(`/api/admin/runs?${params}`);
-      if (!res.ok) throw new Error("Failed to load runs");
+      if (!res.ok) throw new Error(tr("loadFailed"));
       const data = (await res.json()) as RunsResponse;
       setRuns(data.runs);
       setPagination(data.pagination);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load runs");
+      setError(err instanceof Error ? err.message : tr("loadFailed"));
     } finally {
       setLoading(false);
     }

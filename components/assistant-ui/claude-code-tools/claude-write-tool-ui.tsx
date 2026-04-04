@@ -1,9 +1,10 @@
 "use client";
 
-import { type FC, useState } from "react";
-import { PlusIcon } from "lucide-react";
+import { type FC, useEffect, useRef, useState } from "react";
+import { CheckCircleIcon, XCircleIcon, PlusIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ClaudeToolCard, toolStatusColor } from "./claude-tool-card";
+import { useToolExpansion } from "../tool-expansion-context";
+import { useTranslations } from "next-intl";
 import { DiffStyledPre } from "../diff-styled-pre";
 import { parseTextResult } from "./parse-text-result";
 
@@ -35,7 +36,18 @@ function isErrorResult(result: unknown): boolean {
  * Shows file name, content preview, and line count.
  */
 export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.write");
+  const [expanded, setExpanded] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
+
+  const expansionCtx = useToolExpansion();
+  const lastSignalRef = useRef(0);
+  useEffect(() => {
+    if (!expansionCtx || expansionCtx.signal.counter === 0) return;
+    if (expansionCtx.signal.counter === lastSignalRef.current) return;
+    lastSignalRef.current = expansionCtx.signal.counter;
+    setExpanded(expansionCtx.signal.mode === "expand");
+  }, [expansionCtx?.signal]);
 
   const filePath = args?.file_path || "";
   const fileName = filePath.split("/").pop() || filePath;
@@ -44,7 +56,12 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
   const isRunning = result === undefined;
   const hasError = isErrorResult(result);
 
-  const statusColor = toolStatusColor(isRunning, hasError);
+  const StatusIcon = isRunning ? null : hasError ? XCircleIcon : CheckCircleIcon;
+  const statusColor = isRunning
+    ? "text-terminal-muted"
+    : hasError
+      ? "text-red-600 dark:text-red-400"
+      : "text-emerald-600 dark:text-emerald-400";
 
   const maxContentLines = 100;
   const contentLines = fileContent.split("\n");
@@ -54,60 +71,69 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
     : fileContent;
 
   return (
-    <ClaudeToolCard
-      isRunning={isRunning}
-      hasError={hasError}
-      headerContent={
-        <>
-          <PlusIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
-          <span className="text-terminal-muted">
-            {isRunning ? "Writing..." : hasError ? "Write failed" : "Wrote"}
-          </span>
-          <span
-            className="font-medium text-terminal-dark truncate min-w-0 flex-1"
-            title={filePath || fileName}
-          >
-            {fileName}
-          </span>
-          {lineCount > 0 && (
-            <span className="text-terminal-muted ml-auto shrink-0">
-              <span className="text-emerald-600 dark:text-emerald-400">+{lineCount}</span>
-            </span>
-          )}
-        </>
-      }
-    >
-      <div className="text-terminal-muted truncate" title={filePath}>
-        {filePath}
-      </div>
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent/30 transition-colors text-left"
+      >
+        {StatusIcon && <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", statusColor)} />}
+        {!StatusIcon && <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-terminal-muted animate-pulse" />}
+        <PlusIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
+        <span className="text-terminal-muted">
+          {isRunning ? t("running") : hasError ? t("failed") : t("done")}
+        </span>
+        <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={filePath || fileName}>{fileName}</span>
 
-      {fileContent && (
-        <div className="space-y-2">
-          <DiffStyledPre
-            lines={visibleContent.split("\n").map(line => `+ ${line}`)}
-            className="max-h-96 overflow-y-auto"
-          />
-          {isContentTruncated && (
-            <button
-              type="button"
-              onClick={() => setShowFullContent(!showFullContent)}
-              className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
-            >
-              {showFullContent ? "▲ Show less" : `▼ Show all (${contentLines.length} lines)`}
-            </button>
+        {lineCount > 0 && (
+          <span className="text-terminal-muted ml-auto shrink-0">
+            <span className="text-emerald-600 dark:text-emerald-400">+{lineCount}</span>
+          </span>
+        )}
+
+        {expanded ? (
+          <ChevronDownIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
+        ) : (
+          <ChevronRightIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border px-3 py-2 space-y-2">
+          <div className="text-terminal-muted truncate" title={filePath}>
+            {filePath}
+          </div>
+
+          {fileContent && (
+            <div className="space-y-2">
+              <DiffStyledPre
+                lines={visibleContent.split("\n").map(line => `+ ${line}`)}
+                className="max-h-96 overflow-y-auto"
+              />
+
+              {isContentTruncated && (
+                <button
+                  type="button"
+                  onClick={() => setShowFullContent(!showFullContent)}
+                  className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
+                >
+                  {showFullContent ? t("showLess") : t("showAll", { count: contentLines.length })}
+                </button>
+              )}
+            </div>
+          )}
+
+          {result !== undefined && (
+            <div className={cn("text-[11px]", statusColor)}>
+              {parseTextResult(result) || (hasError ? t("resultFailed") : t("resultWritten"))}
+            </div>
+          )}
+
+          {isRunning && (
+            <div className="text-terminal-muted animate-pulse">{t("writing")}</div>
           )}
         </div>
       )}
-
-      {result !== undefined && (
-        <div className={cn("text-[11px]", statusColor)}>
-          {parseTextResult(result) || (hasError ? "Write failed" : "File written")}
-        </div>
-      )}
-
-      {isRunning && (
-        <div className="text-terminal-muted animate-pulse">Writing file...</div>
-      )}
-    </ClaudeToolCard>
+    </div>
   );
 };

@@ -102,9 +102,9 @@ function buildSkillMatchingGuidanceBlock(): string {
   return [
     "## Skill Matching Guidance",
     "- If the user asks for a workflow, campaign, template, playbook, or other reusable task, check for related skills first.",
-    `- Use \`runSkill\` action="list" to discover available skills when needed.`,
-    `- Use \`runSkill\` action="run" when a user request clearly matches a skill trigger example.`,
-    "- Use `updateSkill` for create/patch/replace/metadata/copy/archive operations.",
+    `- Use \`skill\` action="list" to discover available skills when needed.`,
+    `- Use \`skill\` action="run" when a user request clearly matches a skill trigger example.`,
+    "- Use `skill` for create/patch/replace/metadata/copy/archive operations.",
     "- If multiple skills match, ask a brief clarification before running.",
     "- If confidence is low, ask for confirmation instead of auto-running.",
   ].join("\n");

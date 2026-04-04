@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2Icon, WrenchIcon, AlertCircleIcon } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useMCPReloadStatus } from "@/hooks/use-mcp-reload-status";
 
@@ -11,6 +12,7 @@ import { useMCPReloadStatus } from "@/hooks/use-mcp-reload-status";
  */
 export function MCPReloadIndicator() {
     const { status } = useMCPReloadStatus();
+    const t = useTranslations("mcpReload");
 
     if (!status.isReloading) return null;
 
@@ -35,10 +37,10 @@ export function MCPReloadIndicator() {
 
             <div className="flex flex-col gap-0.5">
                 <div className="font-semibold">
-                    {hasErrors ? "Tool Initialization Issues" : "Initializing Tools"}
+                    {hasErrors ? t("initIssues") : t("initializing")}
                 </div>
                 <div className="text-[10px] opacity-80">
-                    {status.completedServers} / {status.totalServers} servers ready
+                    {t("serversReady", { completed: status.completedServers, total: status.totalServers })}
                     {status.estimatedTimeRemaining > 0 && (
                         <> · ~{Math.ceil(status.estimatedTimeRemaining / 1000)}s</>
                     )}

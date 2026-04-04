@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -35,7 +36,7 @@ import {
 // "checking" is a UI-only state, not part of the Electron PermissionStatus enum
 type LocalPermissionStatus = "granted" | "denied" | "not-determined" | "restricted" | "unavailable" | "checking";
 
-interface OnboardingDialogProps {
+export interface OnboardingDialogProps {
   open: boolean;
   /** Called when user completes or dismisses onboarding. Receives final shortcut values. */
   onComplete: (result: {
@@ -55,7 +56,7 @@ type Step = 1 | 2 | 3 | 4;
 // Step indicator
 // ---------------------------------------------------------------------------
 
-function StepIndicator({ current, total }: { current: Step; total: number }) {
+function StepIndicator({ current, total, stepLabel }: { current: Step; total: number; stepLabel: string }) {
   return (
     <div className="flex items-center gap-2 mb-6">
       {Array.from({ length: total }, (_, i) => i + 1).map((step) => (
@@ -73,7 +74,7 @@ function StepIndicator({ current, total }: { current: Step; total: number }) {
         </div>
       ))}
       <span className="text-xs text-muted-foreground ml-1">
-        Step {current} of {total}
+        {stepLabel}
       </span>
     </div>
   );
@@ -88,11 +89,15 @@ function PermissionRow({
   label,
   status,
   onRequest,
+  checkingLabel,
+  grantLabel,
 }: {
   icon: typeof Monitor;
   label: string;
   status: LocalPermissionStatus;
   onRequest?: () => void;
+  checkingLabel: string;
+  grantLabel: string;
 }) {
   const isGranted = status === "granted" || status === "unavailable";
   const isDenied = status === "denied" || status === "restricted";
@@ -117,7 +122,7 @@ function PermissionRow({
         <div>
           <p className="text-sm font-medium">{label}</p>
           <p className="text-xs text-muted-foreground capitalize">
-            {isChecking ? "Checking..." : status.replace("-", " ")}
+            {isChecking ? checkingLabel : status.replace("-", " ")}
           </p>
         </div>
       </div>
@@ -127,7 +132,7 @@ function PermissionRow({
         {isDenied && !isChecking && <XCircle className="h-4 w-4 text-red-500" />}
         {isPending && !isChecking && (
           <Button size="sm" variant="outline" onClick={onRequest}>
-            Grant
+            {grantLabel}
           </Button>
         )}
       </div>
@@ -145,6 +150,7 @@ export function OnboardingDialog({
   initialScreenShortcut = "CommandOrControl+Shift+S",
   initialUnifiedShortcut = "CommandOrControl+Shift+A",
 }: OnboardingDialogProps) {
+  const t = useTranslations("quickCapture.onboarding");
   const [step, setStep] = useState<Step>(1);
   const [permissions, setPermissions] = useState<
     Record<"screen" | "microphone" | "accessibility", LocalPermissionStatus>
@@ -202,7 +208,7 @@ export function OnboardingDialog({
       await electronAPI?.permissions?.requestScreen();
     } catch (err) {
       console.warn("[Onboarding] requestScreen failed:", err);
-      toast.error("Could not open System Settings. Please grant Screen Recording permission manually.");
+      toast.error(t("toastScreenError"));
     }
     // Cancel any existing poll before starting a new one
     stopScreenPoll();
@@ -229,7 +235,7 @@ export function OnboardingDialog({
       }
     } catch (err) {
       console.warn("[Onboarding] requestMic failed:", err);
-      toast.error("Could not request microphone permission.");
+      toast.error(t("toastMicError"));
     }
   }, [electronAPI]);
 
@@ -238,7 +244,7 @@ export function OnboardingDialog({
       await electronAPI?.permissions?.requestAccessibility();
     } catch (err) {
       console.warn("[Onboarding] requestAccessibility failed:", err);
-      toast.error("Could not open Accessibility settings.");
+      toast.error(t("toastAccessibilityError"));
     }
     setTimeout(checkPermissions, 1000);
   }, [electronAPI, checkPermissions]);
@@ -270,9 +276,9 @@ export function OnboardingDialog({
                 <Shield className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <DialogTitle>Grant Permissions</DialogTitle>
+                <DialogTitle>{t("grantPermissions")}</DialogTitle>
                 <DialogDescription>
-                  Screen capture and microphone access are needed for Quick Capture.
+                  {t("grantPermissionsDesc")}
                 </DialogDescription>
               </div>
             </div>
@@ -280,28 +286,34 @@ export function OnboardingDialog({
             <div className="rounded-lg border border-border bg-muted/30 px-4 py-1 mb-4">
               <PermissionRow
                 icon={Monitor}
-                label="Screen Recording"
+                label={t("screenRecording")}
                 status={permissions.screen}
                 onRequest={requestScreen}
+                checkingLabel={t("checking")}
+                grantLabel={t("grant")}
               />
               <PermissionRow
                 icon={Mic}
-                label="Microphone"
+                label={t("microphone")}
                 status={permissions.microphone}
                 onRequest={requestMic}
+                checkingLabel={t("checking")}
+                grantLabel={t("grant")}
               />
               <PermissionRow
                 icon={Shield}
-                label="Accessibility (for shortcuts)"
+                label={t("accessibility")}
                 status={permissions.accessibility}
                 onRequest={requestAccessibility}
+                checkingLabel={t("checking")}
+                grantLabel={t("grant")}
               />
             </div>
 
             {!isElectron && (
               <div className="flex items-center gap-2 text-xs text-muted-foreground bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 mb-4">
                 <AlertCircle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
-                Screen capture requires the desktop app.
+                {t("desktopAppRequired")}
               </div>
             )}
           </div>
@@ -315,9 +327,9 @@ export function OnboardingDialog({
                 <Keyboard className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <DialogTitle>Configure Shortcuts</DialogTitle>
+                <DialogTitle>{t("configureShortcuts")}</DialogTitle>
                 <DialogDescription>
-                  Set keyboard shortcuts for capturing and combined voice+screen.
+                  {t("configureShortcutsDesc")}
                 </DialogDescription>
               </div>
             </div>
@@ -325,22 +337,22 @@ export function OnboardingDialog({
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium block mb-1.5">
-                  Screen capture only
+                  {t("screenCaptureOnly")}
                 </label>
                 <ShortcutRecorder value={screenShortcut} onChange={setScreenShortcut} />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Press this to capture your screen and attach it to the current chat.
+                  {t("screenCaptureOnlyDesc")}
                 </p>
               </div>
 
               <div>
                 <label className="text-sm font-medium block mb-1.5">
-                  Quick Capture (voice + screen)
-                  <Badge variant="secondary" className="ml-2 text-xs">Recommended</Badge>
+                  {t("quickCaptureVoiceScreen")}
+                  <Badge variant="secondary" className="ml-2 text-xs">{t("recommended")}</Badge>
                 </label>
                 <ShortcutRecorder value={unifiedShortcut} onChange={setUnifiedShortcut} />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Press to capture your screen and immediately start speaking your question.
+                  {t("quickCaptureVoiceScreenDesc")}
                 </p>
               </div>
             </div>
@@ -355,9 +367,9 @@ export function OnboardingDialog({
                 <Lock className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <DialogTitle>Privacy Defaults</DialogTitle>
+                <DialogTitle>{t("privacyDefaults")}</DialogTitle>
                 <DialogDescription>
-                  Control which apps can be captured and how captures are handled.
+                  {t("privacyDefaultsDesc")}
                 </DialogDescription>
               </div>
             </div>
@@ -365,7 +377,7 @@ export function OnboardingDialog({
             <div className="space-y-4">
               <div>
                 <label className="text-sm font-medium block mb-1.5">
-                  Excluded apps
+                  {t("excludedApps")}
                 </label>
                 <textarea
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px] resize-none focus:outline-none focus:ring-2 focus:ring-ring"
@@ -374,7 +386,7 @@ export function OnboardingDialog({
                   placeholder="1Password, Keychain Access..."
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Selene will not capture when these apps are focused (comma-separated).
+                  {t("excludedAppsDesc")}
                 </p>
               </div>
 
@@ -387,16 +399,15 @@ export function OnboardingDialog({
                   className="mt-0.5"
                 />
                 <label htmlFor="autoSendOnboarding" className="text-sm cursor-pointer">
-                  <span className="font-medium">Auto-send after voice</span>
+                  <span className="font-medium">{t("autoSendAfterVoice")}</span>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Automatically send after a 3-second countdown when you stop speaking.
+                    {t("autoSendAfterVoiceDesc")}
                   </p>
                 </label>
               </div>
 
               <div className="text-xs text-muted-foreground bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-                <strong>Data notice:</strong> Screen captures are sent to your configured AI provider
-                for analysis. They are processed according to that provider&apos;s data policies.
+                <strong>{t("dataNotice")}</strong> {t("dataNoticeText")}
               </div>
             </div>
           </div>
@@ -408,20 +419,18 @@ export function OnboardingDialog({
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-500/10 mb-4">
               <CheckCircle2 className="h-8 w-8 text-green-500" />
             </div>
-            <DialogTitle className="mb-2">Quick Capture is ready!</DialogTitle>
+            <DialogTitle className="mb-2">{t("readyTitle")}</DialogTitle>
             <DialogDescription className="mb-6">
-              Press{" "}
-              <kbd className="bg-muted rounded px-1.5 py-0.5 text-xs font-mono">
-                {unifiedShortcut.replace("CommandOrControl", "⌘").replace("Shift", "⇧").replaceAll("+", " ")}
-              </kbd>{" "}
-              from any app to speak and share your screen with Selene.
+              {t.rich("readyDesc", {
+                shortcut: unifiedShortcut.replace("CommandOrControl", "⌘").replace("Shift", "⇧").replaceAll("+", " "),
+              })}
             </DialogDescription>
 
             <div className="text-left bg-muted/30 rounded-lg border border-border p-4 space-y-2 text-sm text-muted-foreground">
-              <p>✓ Screen captures will be attached to the active chat</p>
-              <p>✓ Shortcut works from any application</p>
-              {autoSend && <p>✓ Auto-send countdown enabled (3 seconds)</p>}
-              <p>✓ Excluded apps: {excludedApps.split(",")[0].trim()}{excludedApps.split(",").length > 1 ? " + more" : ""}</p>
+              <p>✓ {t("checklistCaptures")}</p>
+              <p>✓ {t("checklistShortcut")}</p>
+              {autoSend && <p>✓ {t("checklistAutoSend")}</p>}
+              <p>✓ {t("checklistExcluded", { apps: excludedApps.split(",")[0].trim() })}{excludedApps.split(",").length > 1 ? t("checklistExcludedMore") : ""}</p>
             </div>
           </div>
         );
@@ -432,22 +441,22 @@ export function OnboardingDialog({
     <Dialog open={open} onOpenChange={(o) => !o && handleComplete()}>
       <DialogContent className="max-w-md">
         <DialogHeader className="sr-only">
-          <DialogTitle>Quick Capture Setup</DialogTitle>
-          <DialogDescription>Configure screen capture and shortcuts</DialogDescription>
+          <DialogTitle>{t("setupTitle")}</DialogTitle>
+          <DialogDescription>{t("setupDesc")}</DialogDescription>
         </DialogHeader>
 
-        <StepIndicator current={step} total={4} />
+        <StepIndicator current={step} total={4} stepLabel={t("stepOf", { current: step, total: 4 })} />
 
         {renderStep()}
 
         <div className="flex justify-between mt-6">
           {step > 1 ? (
             <Button variant="ghost" size="sm" onClick={() => setStep((s) => (s - 1) as Step)}>
-              Back
+              {t("back")}
             </Button>
           ) : (
             <Button variant="ghost" size="sm" onClick={handleComplete}>
-              Skip setup
+              {t("skipSetup")}
             </Button>
           )}
 
@@ -458,16 +467,16 @@ export function OnboardingDialog({
               disabled={step === 1 && !allCritical && isElectron}
             >
               {step === 1 && !allCritical ? (
-                <>Waiting for permissions</>
+                <>{t("waitingForPermissions")}</>
               ) : (
                 <>
-                  Continue <ChevronRight className="h-3.5 w-3.5 ml-1" />
+                  {t("continue")} <ChevronRight className="h-3.5 w-3.5 ml-1" />
                 </>
               )}
             </Button>
           ) : (
             <Button size="sm" onClick={handleComplete}>
-              Done — Enable Quick Capture
+              {t("doneEnable")}
             </Button>
           )}
         </div>

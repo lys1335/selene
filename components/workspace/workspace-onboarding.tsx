@@ -161,7 +161,7 @@ export function WorkspaceOnboarding({ open, onComplete }: WorkspaceOnboardingPro
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleSkip()}>
       <DialogContent className="sm:max-w-[440px] p-0 overflow-hidden border-terminal-border bg-terminal-cream">
         <DialogTitle className="sr-only">
-          Workspace onboarding
+          {t("srTitle")}
         </DialogTitle>
         {/* Progress dots */}
         <div className="flex items-center justify-center gap-1.5 pt-5">

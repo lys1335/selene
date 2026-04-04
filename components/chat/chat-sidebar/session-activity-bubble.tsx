@@ -13,6 +13,7 @@ import {
   Wrench,
   XCircle,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import type {
   SessionActivityIndicator,
@@ -117,15 +118,18 @@ function indicatorPriority(indicator: SessionActivityIndicator, isRunning: boole
   return 100;
 }
 
-function buildContextIndicator(contextStatus?: SessionContextStatusState): SessionActivityIndicator | null {
+function buildContextIndicator(
+  contextStatus: SessionContextStatusState | undefined,
+  t: (key: string, values?: Record<string, string | number | Date>) => string,
+): SessionActivityIndicator | null {
   if (!contextStatus) return null;
 
   if (contextStatus.status === "exceeded") {
     return {
       key: "context-limit-reached",
       kind: "context",
-      label: "Context limit reached",
-      detail: `${Math.round(contextStatus.percentage)}% used`,
+      label: t("contextLimitReached"),
+      detail: t("percentUsed", { percentage: Math.round(contextStatus.percentage) }),
       tone: "critical",
     };
   }
@@ -134,8 +138,8 @@ function buildContextIndicator(contextStatus?: SessionContextStatusState): Sessi
     return {
       key: "context-near-limit",
       kind: "context",
-      label: "Context nearly full",
-      detail: `${Math.round(contextStatus.percentage)}% used`,
+      label: t("contextNearlyFull"),
+      detail: t("percentUsed", { percentage: Math.round(contextStatus.percentage) }),
       tone: "warning",
     };
   }
@@ -143,8 +147,8 @@ function buildContextIndicator(contextStatus?: SessionContextStatusState): Sessi
   return {
     key: "context-warning",
     kind: "context",
-    label: "Context climbing",
-    detail: `${Math.round(contextStatus.percentage)}% used`,
+    label: t("contextClimbing"),
+    detail: t("percentUsed", { percentage: Math.round(contextStatus.percentage) }),
     tone: "info",
   };
 }
@@ -152,9 +156,10 @@ function buildContextIndicator(contextStatus?: SessionContextStatusState): Sessi
 function resolveIncomingModel(
   activity: SessionActivityState | undefined,
   contextStatus: SessionContextStatusState | undefined,
-  hasActiveRun: boolean
+  hasActiveRun: boolean,
+  t: (key: string, values?: Record<string, string | number | Date>) => string,
 ): ResolvedBubbleModel | null {
-  const contextIndicator = buildContextIndicator(contextStatus);
+  const contextIndicator = buildContextIndicator(contextStatus, t);
   const rawIndicators: SessionActivityIndicator[] = [];
 
   if (activity?.indicators?.length) {
@@ -202,23 +207,29 @@ function resolveIncomingModel(
   };
 }
 
-function formatAccessibilityLabel(model: VisualBubbleModel): string {
-  const secondaryText = model.secondary ? `, hint ${model.secondary.label}` : "";
+function formatAccessibilityLabel(
+  model: VisualBubbleModel,
+  t: (key: string, values?: Record<string, string | number | Date>) => string,
+): string {
+  const secondaryText = model.secondary ? `, ${t("hint")} ${model.secondary.label}` : "";
   const detailText = model.primary.detail ? `, ${model.primary.detail}` : "";
-  return `Session status: ${model.primary.label}${detailText}${secondaryText}`;
+  return `${t("sessionStatus")}: ${model.primary.label}${detailText}${secondaryText}`;
 }
 
-function formatTitle(model: VisualBubbleModel): string {
+function formatTitle(
+  model: VisualBubbleModel,
+  t: (key: string, values?: Record<string, string | number | Date>) => string,
+): string {
   const parts = [model.primary.label];
   if (model.primary.detail) {
     parts.push(model.primary.detail);
   }
   if (model.secondary) {
-    parts.push(`Hint: ${model.secondary.label}`);
+    parts.push(`${t("hintLabel")}: ${model.secondary.label}`);
   }
   if (model.updatedAt) {
     parts.push(
-      `Updated ${new Date(model.updatedAt).toLocaleTimeString([], {
+      `${t("updated")} ${new Date(model.updatedAt).toLocaleTimeString([], {
         hour: "2-digit",
         minute: "2-digit",
       })}`
@@ -236,6 +247,7 @@ export function SessionActivityBubble({
   hidden = false,
   onDismissed,
 }: SessionActivityBubbleProps) {
+  const t = useTranslations("chat.contextBubble");
   const swapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const archiveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -264,8 +276,8 @@ export function SessionActivityBubble({
   }, [hasActiveRun]);
 
   const incoming = useMemo(
-    () => resolveIncomingModel(activity, contextStatus, hasActiveRun || graceActive),
-    [activity, contextStatus, hasActiveRun, graceActive]
+    () => resolveIncomingModel(activity, contextStatus, hasActiveRun || graceActive, t),
+    [activity, contextStatus, hasActiveRun, graceActive, t]
   );
 
   const [visualModel, setVisualModel] = useState<VisualBubbleModel | null>(null);
@@ -513,8 +525,8 @@ export function SessionActivityBubble({
     >
       <div
         role="status"
-        aria-label={formatAccessibilityLabel(visualModel)}
-        title={formatTitle(visualModel)}
+        aria-label={formatAccessibilityLabel(visualModel, t)}
+        title={formatTitle(visualModel, t)}
         className={cn(
           // Flat RPG speech bubble
           "relative inline-flex items-center gap-1.5 pointer-events-auto",

@@ -116,7 +116,7 @@ import {
 initializeToolEventHandler();
 
 // Maximum request duration in seconds
-export const maxDuration = 3600;
+export const maxDuration = 36000; // 10 hours
 
 // Ensure settings are loaded (syncs provider selection to process.env)
 loadSettings();

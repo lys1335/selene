@@ -6,10 +6,9 @@ import { Loader2Icon, CheckIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { LOCAL_EMBEDDING_MODELS as SHARED_LOCAL_EMBEDDING_MODELS, formatDimensionLabel } from "@/lib/config/embedding-models";
 import type { FormState } from "./settings-types";
-import { useModelDownload } from "./use-model-download";
 
 // Derive local embedding model list from shared registry (single source of truth)
-const LOCAL_EMBEDDING_MODELS = SHARED_LOCAL_EMBEDDING_MODELS.map((m) => ({
+export const LOCAL_EMBEDDING_MODELS = SHARED_LOCAL_EMBEDDING_MODELS.map((m) => ({
   id: m.id,
   name: `${m.name} (${m.dimensions} dims${m.size ? `, ~${m.size}` : ""})`,
   size: m.size || "",
@@ -22,17 +21,10 @@ interface LocalEmbeddingModelSelectorProps {
 }
 
 export function LocalEmbeddingModelSelector({ formState, updateField, t }: LocalEmbeddingModelSelectorProps) {
-  const {
-    modelStatus,
-    setModelStatus,
-    downloading,
-    setDownloading,
-    downloadProgress,
-    setDownloadProgress,
-    downloadError,
-    setDownloadError,
-    attachProgressListener,
-  } = useModelDownload();
+  const [modelStatus, setModelStatus] = useState<Record<string, boolean>>({});
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isElectronEnv, setIsElectronEnv] = useState(false);
 
   // Check if running in Electron and model existence on mount
@@ -77,31 +69,40 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
 
     // Safety check - API might not be fully exposed
     if (!electronAPI?.model?.download) {
-      setDownloadError(t("vector.advanced.reranking.downloadApiUnavailable"));
+      setDownloadError(t("models.downloadApiUnavailable"));
       setDownloading(null);
       return;
     }
 
     // Set up progress listener (if available)
-    let cleanup: (() => void) | undefined;
     if (electronAPI.model.onProgress) {
-      cleanup = attachProgressListener(
-        electronAPI.model.onProgress,
-        electronAPI.model.removeProgressListener,
-        modelId,
-      );
+      electronAPI.model.onProgress((data) => {
+        if (data.modelId === modelId) {
+          if (data.progress !== undefined) {
+            setDownloadProgress(data.progress);
+          }
+          if (data.status === "completed") {
+            setDownloading(null);
+            setModelStatus((prev) => ({ ...prev, [modelId]: true }));
+          }
+          if (data.status === "error") {
+            setDownloading(null);
+            setDownloadError(data.error || t("models.downloadFailed"));
+          }
+        }
+      });
     }
 
     try {
       const result = await electronAPI.model.download(modelId);
       if (!result.success) {
-        setDownloadError(result.error || "Download failed");
+        setDownloadError(result.error || t("models.downloadFailed"));
       }
     } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : "Download failed");
+      setDownloadError(err instanceof Error ? err.message : t("models.downloadFailed"));
     } finally {
       setDownloading(null);
-      cleanup?.();
+      electronAPI.model.removeProgressListener?.();
     }
   };
 
@@ -178,7 +179,7 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
       </p>
       {formState.embeddingModel && (
         <p className="mt-1 font-mono text-xs text-terminal-green">
-          Vector dimensions: {formatDimensionLabel(formState.embeddingModel)}
+          {t("models.vectorDimensions", { dims: formatDimensionLabel(formState.embeddingModel) })}
         </p>
       )}
     </div>

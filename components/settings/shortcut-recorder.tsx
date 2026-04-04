@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from "react";
 import { X, Keyboard } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad|iPod/.test(navigator.platform);
@@ -20,7 +21,7 @@ const KEY_DISPLAY: Record<string, string> = {
   Escape: "Esc",
 };
 
-function acceleratorToDisplayKeys(accelerator: string): string[] {
+export function acceleratorToDisplayKeys(accelerator: string): string[] {
   if (!accelerator) return [];
   return accelerator.split("+").map((part) => {
     if (MODIFIER_MAP[part]) return MODIFIER_MAP[part];
@@ -29,7 +30,7 @@ function acceleratorToDisplayKeys(accelerator: string): string[] {
   });
 }
 
-function keysToAccelerator(e: KeyboardEvent): string | null {
+export function keysToAccelerator(e: KeyboardEvent): string | null {
   const modifierKeys = new Set(["Control", "Meta", "Alt", "Shift"]);
   if (modifierKeys.has(e.key) || e.key === "Escape") return null;
 
@@ -74,10 +75,12 @@ export function ShortcutRecorder({
   id,
   value,
   onChange,
-  placeholder = "Click to record shortcut",
+  placeholder,
   disabled = false,
   className,
 }: ShortcutRecorderProps) {
+  const t = useTranslations("settings.shortcutRecorder");
+  const resolvedPlaceholder = placeholder ?? t("placeholder");
   const [recording, setRecording] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -119,7 +122,7 @@ export function ShortcutRecorder({
       id={id}
       role="button"
       tabIndex={disabled ? -1 : 0}
-      aria-label={recording ? "Recording shortcut, press keys or Escape to cancel" : `Shortcut: ${value || "none"}. Click to record.`}
+      aria-label={recording ? t("ariaRecording") : t("ariaShortcut", { value: value || t("none") })}
       aria-pressed={recording}
       onClick={() => !disabled && setRecording(true)}
       onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !disabled) setRecording(true); }}
@@ -133,7 +136,7 @@ export function ShortcutRecorder({
       )}
     >
       {recording ? (
-        <span className="text-muted-foreground text-xs italic flex-1">Press shortcut...</span>
+        <span className="text-muted-foreground text-xs italic flex-1">{t("pressShortcut")}</span>
       ) : displayKeys.length > 0 ? (
         <span className="flex flex-1 flex-wrap items-center gap-1">
           {displayKeys.map((key, i) => (
@@ -145,14 +148,14 @@ export function ShortcutRecorder({
       ) : (
         <span className="flex flex-1 items-center gap-1.5 text-muted-foreground text-xs">
           <Keyboard className="h-3.5 w-3.5 shrink-0" />
-          {placeholder}
+          {resolvedPlaceholder}
         </span>
       )}
 
       {value && !recording && !disabled && (
         <button
           type="button"
-          aria-label="Clear shortcut"
+          aria-label={t("clearShortcut")}
           onClick={(e) => { e.stopPropagation(); onChange(""); }}
           className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
         >

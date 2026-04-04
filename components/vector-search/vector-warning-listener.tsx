@@ -101,12 +101,9 @@ export function VectorWarningListener() {
       lastWatcherIssueByFolderRef.current.set(folder.id, lastError);
       const folderName = folder.displayName || folder.folderPath.split(/[/\\]/).pop() || folder.folderPath;
 
-      toast.warning("Folder sync paused to protect app stability", {
+      toast.warning(t("folderSyncPaused"), {
         duration: 12000,
-        description:
-          `${folderName} hit the file descriptor limit. ` +
-          `Exclude .venv, venv, env, __pycache__, site-packages, node_modules, and large image/font folders, ` +
-          `or sync a smaller subfolder, then resume sync.`,
+        description: t("folderSyncPausedDescription", { folderName }),
       });
     }
 

@@ -271,7 +271,7 @@ export function ScheduleFormFullPage({
             try {
                 const response = await fetch(`/api/channels/conversations?characterId=${characterId}`);
                 if (!response.ok) {
-                    throw new Error("Failed to load channel targets");
+                    throw new Error(t("delivery.loadError"));
                 }
                 const data = await response.json();
                 const allTargets = (data.conversations || []) as ChannelConversationOption[];

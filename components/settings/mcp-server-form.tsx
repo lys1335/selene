@@ -247,7 +247,7 @@ export function MCPServerForm({
                             )}
                         </div>
                         <div className="text-[10px] text-terminal-muted pt-2 border-t">
-                            <strong>{t("pathVariables")}</strong> Use{" "}
+                            <strong>{t("pathVariables")}</strong> {t("pathVariablesUse")}{" "}
                             <code className="text-terminal-green">
                                 ${"{SYNCED_FOLDER}"}
                             </code>
@@ -271,7 +271,7 @@ export function MCPServerForm({
                     <Input
                         value={serverName}
                         onChange={(e) => setServerName(e.target.value)}
-                        placeholder="e.g. my-server"
+                        placeholder={t("serverNamePlaceholder")}
                         className="font-mono"
                         disabled={!!initialName}
                     />
@@ -288,7 +288,7 @@ export function MCPServerForm({
                                     : "hover:bg-gray-100"
                             )}
                         >
-                            <Terminal className="h-3 w-3" /> Stdio
+                            <Terminal className="h-3 w-3" /> {t("stdio")}
                         </button>
                         <button
                             onClick={() => setServerType("sse")}
@@ -299,7 +299,7 @@ export function MCPServerForm({
                                     : "hover:bg-gray-100"
                             )}
                         >
-                            <Globe className="h-3 w-3" /> SSE
+                            <Globe className="h-3 w-3" /> {t("sse")}
                         </button>
                     </div>
                 </div>
@@ -313,7 +313,7 @@ export function MCPServerForm({
                         <Input
                             value={command}
                             onChange={(e) => setCommand(e.target.value)}
-                            placeholder="npx"
+                            placeholder={t("commandPlaceholder")}
                             className="font-mono"
                         />
                     </div>
@@ -470,7 +470,7 @@ export function MCPServerForm({
                         <Input
                             value={url}
                             onChange={(e) => setUrl(e.target.value)}
-                            placeholder="https://api.example.com/sse"
+                            placeholder={t("urlPlaceholder")}
                             className="font-mono text-xs"
                         />
                         {url && url.includes("${") && (
@@ -539,7 +539,7 @@ export function MCPServerForm({
                                     onClick={() => upsertQuickHeader("Authorization", "Bearer ${YOUR_API_KEY}")}
                                 >
                                     <Shield className="h-3 w-3 mr-1" />
-                                    Bearer Token
+                                    {t("bearerToken")}
                                 </Button>
                                 <Button
                                     size="sm"
@@ -548,7 +548,7 @@ export function MCPServerForm({
                                     onClick={() => upsertQuickHeader("X-API-Key", "${YOUR_API_KEY}")}
                                 >
                                     <Key className="h-3 w-3 mr-1" />
-                                    API Key
+                                    {t("apiKey")}
                                 </Button>
                                 <Button
                                     size="sm"
@@ -557,7 +557,7 @@ export function MCPServerForm({
                                     onClick={() => upsertQuickHeader("Authorization", "Basic dXNlcm5hbWU6cGFzc3dvcmQ=")}
                                 >
                                     <Lock className="h-3 w-3 mr-1" />
-                                    Basic Auth
+                                    {t("basicAuth")}
                                 </Button>
                             </div>
                         )}

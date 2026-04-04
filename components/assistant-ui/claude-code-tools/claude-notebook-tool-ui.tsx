@@ -1,9 +1,10 @@
 "use client";
 
-import { type FC } from "react";
-import { BookOpenIcon } from "lucide-react";
+import { type FC, useEffect, useRef, useState } from "react";
+import { CheckCircleIcon, XCircleIcon, BookOpenIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ClaudeToolCard, isToolErrorResult, toolStatusColor } from "./claude-tool-card";
+import { useToolExpansion } from "../tool-expansion-context";
+import { useTranslations } from "next-intl";
 import { parseTextResult } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
@@ -19,75 +20,116 @@ type ToolCallContentPartComponent = FC<{
   result?: unknown;
 }>;
 
+function isErrorResult(result: unknown): boolean {
+  if (!result) return false;
+  if (typeof result === "object") {
+    const r = result as Record<string, unknown>;
+    if (r.isError === true) return true;
+  }
+  const text = parseTextResult(result);
+  if (text && /^(error|failed)/im.test(text.slice(0, 200))) return true;
+  return false;
+}
+
 /**
  * Custom UI for Claude Code's `NotebookEdit` tool.
  * Shows notebook file name, cell edit info, and source preview.
  */
 export const ClaudeNotebookEditToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.notebook");
+  const [expanded, setExpanded] = useState(false);
+
+  const expansionCtx = useToolExpansion();
+  const lastSignalRef = useRef(0);
+  useEffect(() => {
+    if (!expansionCtx || expansionCtx.signal.counter === 0) return;
+    if (expansionCtx.signal.counter === lastSignalRef.current) return;
+    lastSignalRef.current = expansionCtx.signal.counter;
+    setExpanded(expansionCtx.signal.mode === "expand");
+  }, [expansionCtx?.signal]);
+
   const filePath = args?.notebook_path || "";
   const fileName = filePath.split("/").pop() || filePath;
   const editMode = args?.edit_mode || "replace";
   const cellType = args?.cell_type;
   const isRunning = result === undefined;
-  const hasError = isToolErrorResult(result, /^(error|failed)/im);
+  const hasError = isErrorResult(result);
 
   const actionLabel = editMode === "insert"
-    ? "Insert cell"
+    ? t("insertCell")
     : editMode === "delete"
-      ? "Delete cell"
-      : "Edit cell";
+      ? t("deleteCell")
+      : t("editCell");
 
-  const statusColor = toolStatusColor(isRunning, hasError);
+  const StatusIcon = isRunning ? null : hasError ? XCircleIcon : CheckCircleIcon;
+  const statusColor = isRunning
+    ? "text-terminal-muted"
+    : hasError
+      ? "text-red-600 dark:text-red-400"
+      : "text-emerald-600 dark:text-emerald-400";
+
   const newSource = args?.new_source || "";
   const lineCount = newSource ? newSource.split("\n").length : 0;
 
   return (
-    <ClaudeToolCard
-      isRunning={isRunning}
-      hasError={hasError}
-      headerContent={
-        <>
-          <BookOpenIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
-          <span className="text-terminal-muted">
-            {isRunning ? `${actionLabel}...` : hasError ? `${actionLabel} failed` : actionLabel}
-          </span>
-          <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={fileName}>
-            {fileName}
-          </span>
-          {cellType && (
-            <span className="text-[10px] text-terminal-muted shrink-0 bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] rounded px-1 py-0.5">
-              {cellType}
-            </span>
-          )}
-          {lineCount > 0 && editMode !== "delete" && (
-            <span className="text-terminal-muted ml-auto shrink-0">
-              <span className="text-emerald-600 dark:text-emerald-400">+{lineCount}</span>
-            </span>
-          )}
-        </>
-      }
-    >
-      <div className="text-terminal-muted truncate" title={filePath}>
-        {filePath}
-      </div>
+    <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-accent/30 transition-colors text-left"
+      >
+        {StatusIcon && <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", statusColor)} />}
+        {!StatusIcon && <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-terminal-muted animate-pulse" />}
+        <BookOpenIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
+        <span className="text-terminal-muted">
+          {isRunning ? `${actionLabel}...` : hasError ? `${actionLabel} failed` : actionLabel}
+        </span>
+        <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={fileName}>{fileName}</span>
 
-      {newSource && (
-        <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-64 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
-          {newSource.length > 5000
-            ? newSource.substring(0, 5000) + `\n\n... [${(newSource.length - 5000).toLocaleString()} more characters]`
-            : newSource}
-        </pre>
-      )}
+        {cellType && (
+          <span className="text-[10px] text-terminal-muted shrink-0 bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] rounded px-1 py-0.5">
+            {cellType}
+          </span>
+        )}
 
-      {result !== undefined && (
-        <div className={cn("text-[11px]", statusColor)}>
-          {parseTextResult(result) || (hasError ? "Edit failed" : "Cell updated")}
+        {lineCount > 0 && editMode !== "delete" && (
+          <span className="text-terminal-muted ml-auto shrink-0">
+            <span className="text-emerald-600 dark:text-emerald-400">+{lineCount}</span>
+          </span>
+        )}
+
+        {expanded ? (
+          <ChevronDownIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
+        ) : (
+          <ChevronRightIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border px-3 py-2 space-y-2">
+          <div className="text-terminal-muted truncate" title={filePath}>
+            {filePath}
+          </div>
+
+          {newSource && (
+            <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-64 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
+              {newSource.length > 5000
+                ? newSource.substring(0, 5000) + `\n\n... [${(newSource.length - 5000).toLocaleString()} more characters]`
+                : newSource}
+            </pre>
+          )}
+
+          {result !== undefined && (
+            <div className={cn("text-[11px]", statusColor)}>
+              {parseTextResult(result) || (hasError ? t("resultFailed") : t("resultUpdated"))}
+            </div>
+          )}
+
+          {isRunning && (
+            <div className="text-terminal-muted animate-pulse">{t("editing")}</div>
+          )}
         </div>
       )}
-
-      {isRunning && (
-        <div className="text-terminal-muted animate-pulse">Editing notebook...</div>
-      )}
-    </ClaudeToolCard>
+    </div>
   );
 };

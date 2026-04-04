@@ -109,7 +109,7 @@ export const ContextWindowBlockedBanner: FC<ContextWindowBlockedBannerProps> = (
                 )}
               >
                 {compactResult.success
-                  ? "Compaction succeeded — try sending your message again."
+                  ? t("manualCompactSuccess")
                   : t("compactFailed")}
               </div>
             )}
@@ -159,7 +159,7 @@ export const ContextWindowBlockedBanner: FC<ContextWindowBlockedBannerProps> = (
               className="h-7 px-3 text-xs font-mono text-red-500/60 hover:text-red-700"
               onClick={onDismiss}
             >
-              Dismiss
+              {t("dismiss")}
             </Button>
           )}
         </div>

@@ -12,12 +12,18 @@
 import { useEffect, useRef, useState, useCallback, type FC } from "react";
 import {
   Globe,
+  CursorClick,
+  TextT,
+  TreeStructure,
+  Code,
+  Eye,
+  X,
+  Play,
+  ArrowRight,
   CheckCircle,
   XCircle,
   CircleNotch,
   Clock,
-  Eye,
-  Play,
   Record as RecordIcon,
   Stop,
   DownloadSimple,
@@ -25,27 +31,86 @@ import {
   Hand,
   User,
 } from "@phosphor-icons/react";
-import {
-  getActionIcon,
-  getActionLabel,
-  truncateUrl,
-} from "./browser-action-helpers";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 import { useScreencastRecorder } from "./use-screencast-recorder";
 import { useBrowserInteraction } from "./use-browser-interaction";
 import { useActionIndicators, type ActionSSEData } from "./use-action-indicators";
 import { ActionIndicators } from "./action-indicators";
-import {
-  type ActionRecord,
-  type SessionHistory,
-} from "@/lib/browser/action-history";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface ActionRecord {
+  seq: number;
+  timestamp: string;
+  action: string;
+  input: Record<string, unknown>;
+  output: unknown;
+  success: boolean;
+  durationMs: number;
+  pageUrl?: string;
+  pageTitle?: string;
+  domSnapshot?: string;
+  error?: string;
+  source?: "agent" | "user";
+}
+
+interface SessionHistory {
+  sessionId: string;
+  agentId?: string;
+  startedAt: string;
+  endedAt?: string;
+  totalDurationMs?: number;
+  actions: ActionRecord[];
+}
 
 // ─── Action helpers ───────────────────────────────────────────────────────────
-// Imported from browser-action-helpers.ts
+
+const ACTION_ICONS: Record<string, typeof Globe> = {
+  open: Globe,
+  navigate: ArrowRight,
+  click: CursorClick,
+  type: TextT,
+  snapshot: TreeStructure,
+  extract: Eye,
+  replay: Play,
+  evaluate: Code,
+  close: X,
+};
+
+function getActionIcon(action: string) {
+  return ACTION_ICONS[action] ?? Globe;
+}
+
+function getActionLabel(action: string): string {
+  const labels: Record<string, string> = {
+    open: "Open",
+    navigate: "Navigate",
+    click: "Click",
+    type: "Type",
+    snapshot: "Snapshot",
+    extract: "Extract",
+    evaluate: "Evaluate",
+    close: "Close",
+    replay: "Replay",
+  };
+  return labels[action] ?? action;
+}
+
+function truncateUrl(url: string, maxLen: number): string {
+  try {
+    const u = new URL(url);
+    const display = u.hostname + u.pathname;
+    return display.length > maxLen ? display.slice(0, maxLen) + "..." : display;
+  } catch {
+    return url.slice(0, maxLen);
+  }
+}
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) => {
+  const t = useTranslations("browserSession");
   const imgRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -324,7 +389,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
       <div className="flex items-center gap-3 px-4 py-2 bg-black/80 border-b border-white/10 shrink-0">
         <Globe className="size-4 text-white/60" weight="bold" />
         <span className="text-sm font-mono text-white/80 truncate">
-          {pageTitle || "Browser Session"}
+          {pageTitle || t("title")}
         </span>
         {pageUrl && (
           <span className="text-xs font-mono text-white/40 truncate ml-auto">
@@ -335,24 +400,24 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
           {isReplaySession ? (
             <>
               <ArrowClockwise className="size-3 text-blue-400 animate-spin" weight="bold" />
-              <span className="text-[10px] font-medium text-blue-400/80">REPLAYING</span>
+              <span className="text-[10px] font-medium text-blue-400/80">{t("replaying")}</span>
               <button
                 type="button"
                 onClick={handleBackToLive}
                 className="ml-2 text-[10px] font-mono text-white/50 hover:text-white/80 underline"
               >
-                Back to live
+                {t("backToLive")}
               </button>
             </>
           ) : isConnected ? (
             <>
               <div className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
-              <span className="text-[10px] font-medium text-green-400/80">LIVE</span>
+              <span className="text-[10px] font-medium text-green-400/80">{t("live")}</span>
             </>
           ) : (
             <>
               <div className="h-1.5 w-1.5 rounded-full bg-yellow-500" />
-              <span className="text-[10px] font-medium text-yellow-500/80">CONNECTING</span>
+              <span className="text-[10px] font-medium text-yellow-500/80">{t("connecting")}</span>
             </>
           )}
         </div>
@@ -382,7 +447,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
                     setUrlBarValue("");
                   }
                 }}
-                placeholder="Enter URL and press Enter..."
+                placeholder={t("urlPlaceholder")}
                 className="flex-1 bg-transparent text-xs font-mono text-white/80 placeholder:text-white/30 outline-none"
               />
               {isSending && (
@@ -424,7 +489,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
                 <div className="flex flex-col items-center gap-3 text-white/30">
                   <CircleNotch className="size-8 animate-spin" weight="bold" />
                   <span className="text-sm font-mono">
-                    {isReplaying ? "Starting replay..." : "Waiting for frames..."}
+                    {isReplaying ? t("startingReplay") : t("waitingForFrames")}
                   </span>
                 </div>
               </div>
@@ -435,7 +500,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
               <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-md bg-blue-500/20 px-2 py-1 backdrop-blur-sm">
                 <Hand className="size-3 text-blue-400" weight="fill" />
                 <span className="text-[10px] font-mono text-blue-400/90 font-medium">
-                  INTERACTIVE
+                  {t("interactive")}
                 </span>
               </div>
             )}
@@ -449,7 +514,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
               return (
                 <div className="absolute bottom-3 left-40 flex items-center gap-1.5 rounded-md bg-amber-500/20 px-2 py-1 backdrop-blur-sm">
                   <span className="text-[10px] font-mono text-amber-400/90 font-medium">
-                    Agent active
+                    {t("agentActive")}
                   </span>
                 </div>
               );
@@ -464,11 +529,11 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
             <div className="px-3 py-2 border-b border-white/10 flex items-center gap-2">
               <Play className="size-3.5 text-white/60" weight="fill" />
               <span className="text-xs font-mono font-medium text-white/80">
-                Action Timeline
+                {t("actionTimeline")}
               </span>
               {history && (
                 <span className="text-[10px] text-white/40 ml-auto font-mono">
-                  {history.actions.length} actions
+                  {t("actionsCount", { count: history.actions.length })}
                 </span>
               )}
             </div>
@@ -518,7 +583,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
 
               {(!history || history.actions.length === 0) && (
                 <div className="px-3 py-8 text-center text-xs text-white/20 font-mono">
-                  {isReplaying ? "Replay starting..." : "No actions yet"}
+                  {isReplaying ? t("replayStarting") : t("noActionsYet")}
                 </div>
               )}
             </div>
@@ -560,7 +625,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
                 )}
               >
                 <Hand className={cn("size-3.5", isInteractive && "text-blue-400")} weight={isInteractive ? "fill" : "bold"} />
-                {isInteractive ? "Interactive" : "Interact"}
+                {isInteractive ? t("interactiveMode") : t("interact")}
               </button>
 
               {/* Action indicators toggle */}
@@ -573,10 +638,10 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
                     ? "bg-violet-500/20 text-violet-400 hover:bg-violet-500/30"
                     : "bg-white/10 text-white/60 hover:bg-white/20 hover:text-white/80"
                 )}
-                title={showIndicators ? "Hide Actions" : "Show Actions"}
+                title={showIndicators ? t("hideActions") : t("showActions")}
               >
                 <Eye className={cn("size-3.5", showIndicators && "text-violet-400")} weight={showIndicators ? "fill" : "bold"} />
-                {showIndicators ? "Hide Actions" : "Show Actions"}
+                {showIndicators ? t("hideActions") : t("showActions")}
               </button>
 
               {/* Record / Stop */}
@@ -587,7 +652,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
                   className="flex items-center gap-1.5 rounded-md bg-red-500/20 px-3 py-1.5 text-xs font-mono text-red-400 hover:bg-red-500/30 transition-colors"
                 >
                   <Stop className="size-3.5" weight="fill" />
-                  Stop
+                  {t("stop")}
                 </button>
               ) : (
                 <button
@@ -596,7 +661,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
                   className="flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs font-mono text-white/60 hover:bg-white/20 hover:text-white/80 transition-colors"
                 >
                   <RecordIcon className="size-3.5 text-red-400" weight="fill" />
-                  Record
+                  {t("record")}
                 </button>
               )}
 
@@ -608,7 +673,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
                   className="flex items-center gap-1.5 rounded-md bg-white/10 px-3 py-1.5 text-xs font-mono text-white/60 hover:bg-white/20 hover:text-white/80 transition-colors"
                 >
                   <DownloadSimple className="size-3.5" weight="bold" />
-                  Download
+                  {t("download")}
                 </button>
               )}
 
@@ -626,7 +691,7 @@ export const BrowserSessionViewer: FC<{ sessionId: string }> = ({ sessionId }) =
                   )}
                 >
                   <ArrowClockwise className={cn("size-3.5", isReplaying && "animate-spin")} weight="bold" />
-                  {isReplaying ? "Replaying..." : "Replay"}
+                  {isReplaying ? t("replayingAction") : t("replay")}
                 </button>
               )}
             </div>

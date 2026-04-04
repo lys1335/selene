@@ -13,6 +13,7 @@ import {
   AlertTriangleIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { getElectronAPI } from "@/lib/electron/types";
 
 interface GhostOsStatusData {
@@ -32,6 +33,7 @@ interface GhostOsStatusData {
  * vision model state, and setup/download actions.
  */
 export function GhostOsSection() {
+  const t = useTranslations("settings.ghostOs");
   const [status, setStatus] = useState<GhostOsStatusData | null>(null);
   const [loading, setLoading] = useState(true);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -58,7 +60,7 @@ export function GhostOsSection() {
           if (mountedRef.current) setStatus(await response.json());
         } else {
           if (mountedRef.current) {
-            setStatusError("Failed to check status (HTTP " + response.status + ")");
+            setStatusError(t("statusCheckFailed", { code: response.status }));
           }
         }
       }
@@ -93,12 +95,12 @@ export function GhostOsSection() {
       } else if (data.status === "completed") {
         setVisionDownloading(false);
         setVisionProgress(100);
-        toast.success("Vision model downloaded");
+        toast.success(t("visionModelDownloaded"));
         checkStatus();
       } else if (data.status === "error") {
         setVisionDownloading(false);
         setVisionProgress(0);
-        toast.error(`Vision model download failed: ${data.error || "Unknown error"}`);
+        toast.error(t("visionDownloadFailed", { error: data.error || "Unknown error" }));
       }
     };
 
@@ -119,22 +121,22 @@ export function GhostOsSection() {
       if (electronAPI?.ghostOs) {
         const result = await electronAPI.ghostOs.runSetup();
         if (result.success) {
-          toast.success("Ghost OS setup completed");
+          toast.success(t("setupCompleted"));
         } else {
-          toast.error(`Setup failed: ${result.stderr}`);
+          toast.error(t("setupFailed", { error: result.stderr }));
         }
       } else {
         const response = await fetch("/api/ghost-os/setup", { method: "POST" });
         const result = await response.json();
         if (result.success) {
-          toast.success("Ghost OS setup completed");
+          toast.success(t("setupCompleted"));
         } else {
-          toast.error(`Setup failed: ${result.stderr}`);
+          toast.error(t("setupFailed", { error: result.stderr }));
         }
       }
       await checkStatus();
     } catch (error) {
-      toast.error("Setup failed");
+      toast.error(t("setupFailedGeneric"));
       console.error("[GhostOS] Setup error:", error);
     } finally {
       if (mountedRef.current) setSetupRunning(false);
@@ -154,18 +156,18 @@ export function GhostOsSection() {
           // success/error from the streaming path to avoid double-clear flicker.
           if (mountedRef.current) {
             setVisionDownloading(false);
-            toast.error(`Download failed: ${result.error || "Unknown error"}`);
+            toast.error(t("downloadFailedWithError", { error: result.error || "Unknown error" }));
           }
         }
         // Don't reset visionDownloading on success — the progress listener's
         // "completed" event handles that, preventing a flash of the download
         // button between the invoke return and the progress event.
       } else {
-        toast.error("Vision model download requires the desktop app");
+        toast.error(t("visionRequiresDesktop"));
         setVisionDownloading(false);
       }
     } catch (error) {
-      toast.error("Download failed");
+      toast.error(t("downloadFailed"));
       console.error("[GhostOS] Vision download error:", error);
       if (mountedRef.current) setVisionDownloading(false);
     }
@@ -182,7 +184,7 @@ export function GhostOsSection() {
     return (
       <div className="flex items-center gap-2 py-4 text-sm text-terminal-muted">
         <Loader2Icon className="h-4 w-4 animate-spin" />
-        Checking Ghost OS status...
+        {t("checkingStatus")}
       </div>
     );
   }
@@ -192,15 +194,15 @@ export function GhostOsSection() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <MonitorIcon className="h-5 w-5" />
-          <h3 className="font-mono text-sm font-semibold text-terminal-dark">Ghost OS</h3>
-          <span className="text-xs text-terminal-muted">macOS Desktop Automation</span>
+          <h3 className="font-mono text-sm font-semibold text-terminal-dark">{t("heading")}</h3>
+          <span className="text-xs text-terminal-muted">{t("subtitle")}</span>
         </div>
         <Button
           variant="ghost"
           size="sm"
           onClick={checkStatus}
           disabled={loading}
-          aria-label="Refresh Ghost OS status"
+          aria-label={t("refreshAriaLabel")}
         >
           <RefreshCwIcon className="h-3.5 w-3.5" />
         </Button>
@@ -211,11 +213,11 @@ export function GhostOsSection() {
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
           <div className="flex items-center gap-2 text-sm text-amber-600">
             <AlertTriangleIcon className="h-4 w-4" />
-            <span>Status check failed</span>
+            <span>{t("statusCheckFailedLabel")}</span>
           </div>
           <p className="text-xs text-terminal-muted">{statusError}</p>
           <Button variant="outline" size="sm" onClick={checkStatus}>
-            Retry
+            {t("retry")}
           </Button>
         </div>
       )}
@@ -226,7 +228,7 @@ export function GhostOsSection() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm">
               <StatusIcon ok={status?.installed ?? false} />
-              <span>Installation</span>
+              <span>{t("installation")}</span>
             </div>
             {status?.installed ? (
               <span className="text-xs text-terminal-muted">
@@ -239,7 +241,7 @@ export function GhostOsSection() {
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-xs text-blue-500 hover:underline"
               >
-                Install via Homebrew
+                {t("installViaHomebrew")}
                 <ExternalLinkIcon className="h-3 w-3" />
               </a>
             )}
@@ -251,20 +253,20 @@ export function GhostOsSection() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm">
                   <StatusIcon ok={status.permissions.accessibility} />
-                  <span>Accessibility</span>
+                  <span>{t("accessibility")}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm">
                   <StatusIcon ok={status.permissions.screenRecording} />
-                  <span>Screen Recording</span>
+                  <span>{t("screenRecording")}</span>
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-sm">
                   <StatusIcon ok={status.permissions.inputMonitoring} />
-                  <span>Input Monitoring</span>
-                  <span className="text-xs text-terminal-muted">(required for learning mode)</span>
+                  <span>{t("inputMonitoring")}</span>
+                  <span className="text-xs text-terminal-muted">{t("inputMonitoringHint")}</span>
                 </div>
               </div>
             </>
@@ -275,8 +277,8 @@ export function GhostOsSection() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm">
                 <StatusIcon ok={status.visionModelInstalled} />
-                <span>ShowUI-2B Vision Model</span>
-                <span className="text-xs text-terminal-muted">(~3 GB)</span>
+                <span>{t("visionModel")}</span>
+                <span className="text-xs text-terminal-muted">{t("visionModelSize")}</span>
               </div>
               {!status.visionModelInstalled && !visionDownloading && (
                 <Button
@@ -286,7 +288,7 @@ export function GhostOsSection() {
                   disabled={operationInProgress}
                 >
                   <DownloadIcon className="h-3.5 w-3.5 mr-1" />
-                  Download
+                  {t("download")}
                 </Button>
               )}
               {visionDownloading && (
@@ -317,15 +319,14 @@ export function GhostOsSection() {
             {setupRunning ? (
               <Loader2Icon className="h-3.5 w-3.5 mr-1 animate-spin" />
             ) : null}
-            Run Setup
+            {t("runSetup")}
           </Button>
         </div>
       )}
 
       {!status?.installed && !statusError && (
         <p className="text-xs text-terminal-muted">
-          Ghost OS enables AI agents to control any macOS application using the accessibility tree.
-          Install it to let agents automate desktop workflows.
+          {t("description")}
         </p>
       )}
     </div>

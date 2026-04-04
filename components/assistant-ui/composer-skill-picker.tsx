@@ -42,7 +42,7 @@ interface ComposerSkillPickerProps {
   composerInputRef: React.RefObject<HTMLTextAreaElement | null>;
 }
 
-const ComposerSkillPicker: FC<ComposerSkillPickerProps> = ({
+export const ComposerSkillPicker: FC<ComposerSkillPickerProps> = ({
   skills,
   filteredSkills,
   isLoadingSkills,
@@ -101,10 +101,10 @@ const ComposerSkillPicker: FC<ComposerSkillPickerProps> = ({
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <div className="rounded-md border border-terminal-green/30 bg-terminal-green/10 px-1.5 py-0.5 text-[11px] font-mono uppercase tracking-wider text-terminal-green">
-              {skillPickerMode === "spotlight" ? "Spotlight" : "Skills"}
+              {skillPickerMode === "spotlight" ? t("skillPicker.spotlightLabel") : t("skillPicker.skillsLabel")}
             </div>
             <span className="text-xs font-mono text-terminal-muted">
-              {skillPickerMode === "spotlight" ? `${spotlightShortcutHint} open` : "Type / to search"}
+              {skillPickerMode === "spotlight" ? t("skillPicker.spotlightHint", { shortcut: spotlightShortcutHint }) : t("skillPicker.slashHint")}
             </span>
           </div>
           <span className="text-[11px] font-mono text-terminal-muted/80">

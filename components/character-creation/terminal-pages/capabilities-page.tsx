@@ -3,8 +3,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useReducedMotion } from "../hooks/use-reduced-motion";
+import { ComputerGraphic } from "../computer-graphic";
+import { TypewriterText } from "@/components/ui/typewriter-text";
+import { TerminalPrompt } from "@/components/ui/terminal-prompt";
 import { useTranslations } from "next-intl";
-import { TerminalPageHeader } from "./terminal-page-header";
 import { ToolDependencyBadge } from "@/components/ui/tool-dependency-badge";
 import { AlertTriangleIcon, ChevronDownIcon, ChevronRightIcon, LockIcon } from "lucide-react";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
@@ -14,15 +16,9 @@ import {
   mergeCharacterToolCatalog,
   type CharacterToolCatalogItem,
 } from "@/lib/characters/tool-catalog";
-import {
-  DEFAULT_DEPENDENCY_STATUS,
-  areDependenciesMet as checkDependenciesMet,
-  getDependencyWarning as buildDependencyWarning,
-  type DependencyStatus,
-} from "@/lib/characters/tool-dependency-helpers";
 
 /** Tool capability definition for the wizard */
-interface ToolCapability extends CharacterToolCatalogItem {}
+export interface ToolCapability extends CharacterToolCatalogItem {}
 
 
 /** Category display order — matches character-picker's CATEGORY_ICONS */
@@ -132,7 +128,37 @@ export function CapabilitiesPage({
   }, [t]);
 
   // Dependency status - tracks what's configured
-  const [dependencyStatus, setDependencyStatus] = useState<DependencyStatus>(DEFAULT_DEPENDENCY_STATUS);
+  const [dependencyStatus, setDependencyStatus] = useState<{
+    syncedFolders: boolean;
+    embeddings: boolean;
+    vectorDbEnabled: boolean;
+    webScraper: boolean;
+    openrouterKey: boolean;
+    comfyuiEnabled: boolean;
+    flux2Klein4bEnabled: boolean;
+    flux2Klein9bEnabled: boolean;
+    localGrepEnabled: boolean;
+    devWorkspaceEnabled: boolean;
+    screenCaptureEnabled: boolean;
+    runwayApiSecret: boolean;
+    vertexAIProjectId: boolean;
+  }>({
+    syncedFolders: false,
+    embeddings: false,
+    vectorDbEnabled: false,
+    webScraper: false,
+    openrouterKey: false,
+    comfyuiEnabled: false,
+    flux2Klein4bEnabled: false,
+    flux2Klein9bEnabled: false,
+    localGrepEnabled: true,
+    devWorkspaceEnabled: false,
+    screenCaptureEnabled: true,
+    runwayApiSecret: false,
+    vertexAIProjectId: false,
+  });
+
+  type CapabilityDependencyKey = keyof typeof dependencyStatus;
 
   // Check dependencies on mount
   useEffect(() => {
@@ -168,6 +194,8 @@ export function CapabilitiesPage({
           webScraper: webScraperReady,
           openrouterKey: typeof settingsData.openrouterApiKey === "string" && settingsData.openrouterApiKey.trim().length > 0,
           comfyuiEnabled: settingsData.comfyuiEnabled === true,
+          flux2Klein4bEnabled: settingsData.flux2Klein4bEnabled === true,
+          flux2Klein9bEnabled: settingsData.flux2Klein9bEnabled === true,
           localGrepEnabled: settingsData.localGrepEnabled !== false,
           devWorkspaceEnabled: settingsData.devWorkspaceEnabled === true,
           screenCaptureEnabled: settingsData.screenCaptureEnabled !== false,
@@ -240,12 +268,21 @@ export function CapabilitiesPage({
   }, [onBack, isDirty]);
 
   // Helper to check if tool dependencies are met
-  const areDependenciesMet = (tool: ToolCapability): boolean =>
-    checkDependenciesMet(tool, dependencyStatus);
+  const areDependenciesMet = (tool: ToolCapability): boolean => {
+    if (!tool.dependencies || tool.dependencies.length === 0) return true;
+    return tool.dependencies.every((dep) => dependencyStatus[dep]);
+  };
 
   // Get dependency warning message
-  const getDependencyWarning = (tool: ToolCapability): string | null =>
-    buildDependencyWarning(tool, dependencyStatus, tDeps);
+  const getDependencyWarning = (tool: ToolCapability): string | null => {
+    if (!tool.dependencies || tool.dependencies.length === 0) return null;
+    const unmet = tool.dependencies.filter((dep) => !dependencyStatus[dep]);
+    if (unmet.length === 0) return null;
+    if (unmet.length === 2 && unmet.includes("syncedFolders") && unmet.includes("embeddings")) {
+      return tDeps("both");
+    }
+    return unmet.map((dep) => tDeps(dep)).join(" + ");
+  };
 
   const toggleTool = (toolId: string) => {
     setEnabledTools((prev) => {
@@ -304,14 +341,38 @@ export function CapabilitiesPage({
     <div className="flex h-full min-h-full flex-col items-center bg-terminal-cream px-4 py-6 sm:px-8">
       <div className="flex w-full max-w-4xl flex-1 flex-col gap-6 min-h-0">
         {/* Header */}
-        <TerminalPageHeader
-          step="step-2"
-          command={<span className="text-terminal-amber">agent.capabilities({agentName})</span>}
-          question={t("question")}
-          prefersReducedMotion={prefersReducedMotion}
-          hasAnimated={hasAnimated}
-          onAnimationComplete={() => setShowForm(true)}
-        />
+        <div className="flex items-start gap-8">
+          <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: prefersReducedMotion ? 0 : 0.5 }}
+          >
+            <ComputerGraphic size="sm" />
+          </motion.div>
+
+          <div className="flex-1 space-y-4">
+            <TerminalPrompt prefix="step-2" symbol="$" animate={!prefersReducedMotion}>
+              <span className="text-terminal-amber">agent.capabilities({agentName})</span>
+            </TerminalPrompt>
+
+            <div className="font-mono text-lg text-terminal-dark">
+              {!hasAnimated.current ? (
+                <TypewriterText
+                  text={t("question")}
+                  delay={prefersReducedMotion ? 0 : 200}
+                  speed={prefersReducedMotion ? 0 : 25}
+                  onComplete={() => {
+                    hasAnimated.current = true;
+                    setShowForm(true);
+                  }}
+                  showCursor={false}
+                />
+              ) : (
+                <span>{t("question")}</span>
+              )}
+            </div>
+          </div>
+        </div>
 
         {/* Onboarding: Tool resolution warnings for Selene template */}
         {showForm && resolutionWarnings.length > 0 && (
@@ -325,8 +386,8 @@ export function CapabilitiesPage({
               <AlertTriangleIcon className="w-4 h-4 text-terminal-amber mt-0.5 flex-shrink-0" />
               <p className="font-mono text-sm text-terminal-dark">
                 {resolutionWarnings.length === 1
-                  ? "1 tool is disabled due to missing configuration:"
-                  : `${resolutionWarnings.length} tools are disabled due to missing configuration:`}
+                  ? t("resolutionWarningSingular")
+                  : t("resolutionWarningPlural", { count: resolutionWarnings.length })}
               </p>
             </div>
             <div className="ml-6 space-y-1.5">
@@ -344,7 +405,7 @@ export function CapabilitiesPage({
                       window.open("/settings", "_blank");
                     }}
                   >
-                    Configure Now →
+                    {t("configureNow")}
                   </a>
                 </div>
               ))}
@@ -363,11 +424,11 @@ export function CapabilitiesPage({
             {/* Summary count */}
             <div className="flex items-center justify-between border-b border-terminal-border/50 px-5 py-3">
               <span className="font-mono text-sm text-terminal-dark/70">
-                {enabledTools.size} of {availableTools.length} tools enabled
+                {t("toolsSummary", { enabled: enabledTools.size, total: availableTools.length })}
               </span>
               {escapeFlash && (
                 <span className="font-mono text-xs text-terminal-amber animate-pulse">
-                  Unsaved changes — press Back to discard
+                  {t("unsavedChanges")}
                 </span>
               )}
             </div>
@@ -414,12 +475,12 @@ export function CapabilitiesPage({
                           type="button"
                           role="checkbox"
                           aria-checked={selectAllChecked === "mixed" ? "mixed" : selectAllChecked}
-                          aria-label={`${allToggleableEnabled ? "Deselect" : "Select"} all ${categoryLabel} tools`}
+                          aria-label={allToggleableEnabled ? t("deselectAllAria", { category: categoryLabel }) : t("selectAllAria", { category: categoryLabel })}
                           onClick={() => toggleCategorySelectAll(category, tools)}
                           disabled={toggleableTools.length === 0}
                           className="ml-auto font-mono text-xs text-terminal-green hover:text-terminal-green/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          {allToggleableEnabled ? "Deselect all" : "Select all"}
+                          {allToggleableEnabled ? t("deselectAll") : t("selectAll")}
                         </button>
                       </div>
 
