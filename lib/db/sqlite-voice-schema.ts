@@ -6,7 +6,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
-import { users, sessions } from "./sqlite-schema";
+import { users, sessions } from "./sqlite-schema-base";
 
 // ============================================================================
 // VOICE HISTORY TABLE

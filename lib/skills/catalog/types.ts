@@ -1,4 +1,4 @@
-export type BuiltInSkillCategory =
+type BuiltInSkillCategory =
   | "design"
   | "deploy"
   | "dev-tools"
@@ -7,9 +7,9 @@ export type BuiltInSkillCategory =
   | "docs"
   | "security";
 
-export type SkillCategory = BuiltInSkillCategory | string;
+type SkillCategory = BuiltInSkillCategory | string;
 
-export interface CatalogSkillDependency {
+interface CatalogSkillDependency {
   type: "mcp" | "api-key" | "cli";
   value: string;
   description: string;
@@ -53,12 +53,12 @@ export interface CatalogSkill {
   collectionUrl?: string;
 }
 
-export interface CatalogInstallResult {
+interface CatalogInstallResult {
   markdown: string;
   sourceKind: "bundled" | "github";
 }
 
-export interface CatalogInstallSkill {
+interface CatalogInstallSkill {
   id: string;
   displayName: string;
   shortDescription: string;
@@ -72,19 +72,19 @@ export interface CatalogInstallRequest {
   characterId: string;
 }
 
-export interface CatalogInstallResponse {
+interface CatalogInstallResponse {
   installed: boolean;
   skillId: string;
   name: string;
 }
 
-export interface CatalogInstallConflictResponse {
+interface CatalogInstallConflictResponse {
   error: string;
   code: "already_installed";
   existingSkillId: string;
 }
 
-export interface CatalogInstallNotFoundResponse {
+interface CatalogInstallNotFoundResponse {
   error: string;
   code: "not_found";
 }
@@ -95,18 +95,18 @@ export interface CatalogInstallManyRequest {
   catalogSkillIds?: string[];
 }
 
-export interface CatalogInstallManyResultItem {
+interface CatalogInstallManyResultItem {
   catalogSkillId: string;
   skillId: string;
   name: string;
 }
 
-export interface CatalogInstallManySkippedItem {
+interface CatalogInstallManySkippedItem {
   catalogSkillId: string;
   existingSkillId: string;
 }
 
-export interface CatalogInstallManyFailedItem {
+interface CatalogInstallManyFailedItem {
   catalogSkillId: string;
   name: string;
   error: string;
@@ -124,17 +124,17 @@ export interface CatalogUninstallManyRequest {
   catalogSkillIds?: string[];
 }
 
-export interface CatalogUninstallManyRemovedItem {
+interface CatalogUninstallManyRemovedItem {
   catalogSkillId: string;
   skillId: string;
 }
 
-export interface CatalogUninstallManySkippedItem {
+interface CatalogUninstallManySkippedItem {
   catalogSkillId: string;
   reason: "not_installed";
 }
 
-export interface CatalogUninstallManyFailedItem {
+interface CatalogUninstallManyFailedItem {
   catalogSkillId: string;
   skillId: string | null;
   error: string;

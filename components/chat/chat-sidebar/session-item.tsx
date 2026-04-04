@@ -42,7 +42,7 @@ import {
 } from "@/lib/stores/session-sync-store";
 import { CHANNEL_TYPE_ICONS } from "./constants";
 import { SessionActivityBubble } from "./session-activity-bubble";
-import { calendarDaysAgo } from "./sidebar-utils";
+import { calendarDaysAgo, parseAsUTC } from "./sidebar-utils";
 import type { SessionInfo } from "./types";
 
 interface SessionItemProps {
@@ -61,14 +61,6 @@ interface SessionItemProps {
   onResetChannel: () => void;
   isPinned?: boolean;
   onPin?: () => void;
-}
-
-function parseAsUTC(dateStr: string): Date {
-  const normalized =
-    dateStr.includes("Z") || dateStr.includes("+") || dateStr.includes("-", 10)
-      ? dateStr
-      : dateStr.replace(" ", "T") + "Z";
-  return new Date(normalized);
 }
 
 export function SessionItem({

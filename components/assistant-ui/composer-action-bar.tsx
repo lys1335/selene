@@ -169,10 +169,10 @@ export const ComposerActionBar: FC<ComposerActionBarProps> = ({
               disabled={isTranscribingVoice || mcpIsReloading}
               aria-label={
                 isTranscribingVoice
-                  ? "Transcribing audio"
+                  ? t("composer.ariaTranscribing")
                   : isRecordingVoice
-                    ? "Stop voice recording"
-                    : "Start voice recording"
+                    ? t("composer.ariaStopRecording")
+                    : t("composer.ariaStartRecording")
               }
               className={cn(
                 "size-8 select-none",

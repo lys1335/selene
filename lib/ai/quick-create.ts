@@ -5,7 +5,7 @@ import { getUtilityModel } from "@/lib/ai/providers";
 /**
  * Schema for agent expansion output
  */
-export const agentExpansionSchema = z.preprocess(
+const agentExpansionSchema = z.preprocess(
     (val: any) => {
         if (val && typeof val === 'object') {
             const normalized: any = {};
@@ -23,7 +23,7 @@ export const agentExpansionSchema = z.preprocess(
     })
 );
 
-export type AgentExpansion = z.infer<typeof agentExpansionSchema>;
+type AgentExpansion = z.infer<typeof agentExpansionSchema>;
 
 /**
  * Expand a minimal agent concept into a full profile

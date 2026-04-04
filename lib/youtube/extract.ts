@@ -1,22 +1,22 @@
-export interface YouTubeTimestamp {
+interface YouTubeTimestamp {
   label: string;
   seconds: number;
   sourceText: string;
 }
 
-export interface YouTubeUrlReference {
+interface YouTubeUrlReference {
   source: "url";
   videoId: string;
   url: string;
   startSeconds?: number;
 }
 
-export interface YouTubeQueryReference {
+interface YouTubeQueryReference {
   source: "query";
   query: string;
 }
 
-export interface YouTubeReferenceExtraction {
+interface YouTubeReferenceExtraction {
   urls: YouTubeUrlReference[];
   queries: YouTubeQueryReference[];
   timestamps: YouTubeTimestamp[];
@@ -60,7 +60,7 @@ const parseTimeToSeconds = (value: string | null | undefined): number | null => 
   return asNumber;
 };
 
-export const extractTimestamps = (text: string): YouTubeTimestamp[] => {
+const extractTimestamps = (text: string): YouTubeTimestamp[] => {
   const matches = text.matchAll(TIMESTAMP_REGEX);
   const timestamps: YouTubeTimestamp[] = [];
   for (const match of matches) {
@@ -194,6 +194,6 @@ export const extractYouTubeReferences = (
   return { urls, queries, timestamps };
 };
 
-export const parseTimestampToSeconds = (value: string): number | null => {
+const parseTimestampToSeconds = (value: string): number | null => {
   return parseTimeToSeconds(value);
 };

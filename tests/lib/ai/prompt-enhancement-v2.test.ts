@@ -47,14 +47,14 @@ vi.mock("@/lib/vectordb/sync-service", () => ({
 }));
 vi.mock("@/lib/ai/file-tree", () => fileTreeMocks);
 
-import { clearSession } from "@/lib/ai/prompt-enhancement-llm";
+import { clearPromptEnhancementSession } from "@/lib/ai/prompt-enhancement-llm";
 import { enhancePromptWithLLM } from "@/lib/ai/prompt-enhancement-v2";
 
 describe("enhancePromptWithLLM session-scoped memory behavior", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    clearSession("enhance:session-a");
-    clearSession("enhance:session-b");
+    clearPromptEnhancementSession("enhance:session-a");
+    clearPromptEnhancementSession("enhance:session-b");
   });
 
   it("avoids re-injecting unchanged memory in the same session", async () => {

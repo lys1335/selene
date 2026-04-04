@@ -22,7 +22,7 @@ import { LegacyScopeHeuristic } from "./fallback-scope-parser";
 // Types
 // ---------------------------------------------------------------------------
 
-export interface TokenUsage {
+interface TokenUsage {
   /** Tokens used by system prompt */
   systemPromptTokens: number;
   /** Tokens used by user messages */
@@ -39,7 +39,7 @@ export interface TokenUsage {
   totalTokens: number;
 }
 
-export interface TokenBreakdown extends TokenUsage {
+interface TokenBreakdown extends TokenUsage {
   /** Percentage breakdown by category */
   percentages: {
     systemPrompt: number;
@@ -60,7 +60,7 @@ export interface TokenBreakdown extends TokenUsage {
   };
 }
 
-export interface TokenEstimate {
+interface TokenEstimate {
   /** Estimated tokens for the content */
   tokens: number;
   /** Confidence level of the estimate */
@@ -309,7 +309,7 @@ export function getReliableMessageTokenCount(msg: Message): number {
  * @param text - The text to estimate
  * @returns Estimated token count
  */
-export function estimateTextTokens(text: string): number {
+function estimateTextTokens(text: string): number {
   if (!text) return 0;
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
@@ -320,7 +320,7 @@ export function estimateTextTokens(text: string): number {
  * @param content - The content to estimate (will be stringified if not string)
  * @returns Estimated token count
  */
-export function estimateContentTokens(content: unknown): number {
+function estimateContentTokens(content: unknown): number {
   if (!content) return 0;
 
   if (typeof content === "string") {
@@ -467,6 +467,7 @@ export class TokenTracker {
    * @param usage - Token usage from calculateUsage
    * @returns Extended breakdown with percentages and formatting
    */
+  // fallow-ignore-next-line unused-class-member
   static getBreakdown(usage: TokenUsage): TokenBreakdown {
     const total = usage.totalTokens || 1; // Avoid division by zero
 
@@ -517,6 +518,7 @@ export class TokenTracker {
    * @param sessionSummary - Optional session summary
    * @returns Total estimated tokens
    */
+  // fallow-ignore-next-line unused-class-member
   static estimateRequestTokens(
     messages: Array<{ role: string; content: unknown }>,
     systemPromptLength: number,
@@ -542,6 +544,7 @@ export class TokenTracker {
    * @param estimatedSummaryTokens - Estimated tokens for the summary
    * @returns Net tokens that would be freed
    */
+  // fallow-ignore-next-line unused-class-member
   static calculatePotentialSavings(
     messagesToCompact: Message[],
     estimatedSummaryTokens: number = 500
@@ -567,6 +570,7 @@ export class TokenTracker {
    * @param keepRecentCount - Minimum recent messages to keep
    * @returns Index of last message to compact, or -1 if not possible
    */
+  // fallow-ignore-next-line unused-class-member
   static findCompactionBoundary(
     messages: Message[],
     targetTokensToFree: number,
@@ -626,7 +630,7 @@ export function formatTokenCount(tokens: number): string {
  * @param maxTokens - Maximum allowed tokens
  * @returns Percentage (0-100)
  */
-export function calculateUsagePercentage(currentTokens: number, maxTokens: number): number {
+function calculateUsagePercentage(currentTokens: number, maxTokens: number): number {
   if (maxTokens <= 0) return 0;
   return (currentTokens / maxTokens) * 100;
 }

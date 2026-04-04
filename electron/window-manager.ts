@@ -47,11 +47,11 @@ const G = globalThis as typeof globalThis & {
 // Theme helpers
 // ---------------------------------------------------------------------------
 
-export type ThemePreference = "dark" | "light" | "system";
-export let currentThemePreference: ThemePreference = "system";
+export type ElectronThemePreference = "dark" | "light" | "system";
+export let currentElectronThemePreference: ElectronThemePreference = "system";
 let themeListenerRegistered = false;
 
-export function getThemePreferenceFromSettings(dataDir: string): ThemePreference {
+export function getElectronThemePreferenceFromSettings(dataDir: string): ElectronThemePreference {
   try {
     const settingsPath = path.join(dataDir, "settings.json");
     if (!fs.existsSync(settingsPath)) return "system";
@@ -66,21 +66,21 @@ export function getThemePreferenceFromSettings(dataDir: string): ThemePreference
   return "system";
 }
 
-export function resolveThemePreference(theme: ThemePreference): "dark" | "light" {
+export function resolveElectronThemePreference(theme: ElectronThemePreference): "dark" | "light" {
   if (theme === "system") {
     return nativeTheme.shouldUseDarkColors ? "dark" : "light";
   }
   return theme;
 }
 
-export function getWindowBackgroundColor(theme: ThemePreference): string {
-  return resolveThemePreference(theme) === "dark" ? "#1a1a1a" : "#f5e6d3";
+export function getWindowBackgroundColor(theme: ElectronThemePreference): string {
+  return resolveElectronThemePreference(theme) === "dark" ? "#1a1a1a" : "#f5e6d3";
 }
 
 export function registerThemeListener(): void {
   if (themeListenerRegistered) return;
   nativeTheme.on("updated", () => {
-    if (currentThemePreference !== "system") return;
+    if (currentElectronThemePreference !== "system") return;
     mainWindow?.setBackgroundColor(getWindowBackgroundColor("system"));
   });
   themeListenerRegistered = true;
@@ -200,9 +200,9 @@ export async function createWindow(opts: CreateWindowOptions): Promise<void> {
   if (isWindows) {
     debugLog("[Window] Windows icon path:", windowsIconPath ?? "not found");
   }
-  const themePreference = getThemePreferenceFromSettings(opts.dataDir);
+  const themePreference = getElectronThemePreferenceFromSettings(opts.dataDir);
 
-  currentThemePreference = themePreference;
+  currentElectronThemePreference = themePreference;
   nativeTheme.themeSource = themePreference;
   const windowBackgroundColor = getWindowBackgroundColor(themePreference);
 

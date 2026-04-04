@@ -21,6 +21,7 @@ const validatorMocks = vi.hoisted(() => ({
 const fspMocks = vi.hoisted(() => ({
   access: vi.fn(),
   readdir: vi.fn(),
+  readFile: vi.fn(),
 }));
 
 vi.mock("@/lib/vectordb/accessible-sync-folders", () => ({
@@ -36,6 +37,10 @@ vi.mock("@/lib/command-execution", () => ({
   executeCommandWithValidation: commandExecutionMocks.executeCommandWithValidation,
 }));
 
+vi.mock("@/app/api/chat/delegation-waiting", () => ({
+  registerBackgroundTask: vi.fn(),
+}));
+
 vi.mock("@/lib/command-execution/validator", () => ({
   validateExecutionDirectory: validatorMocks.validateExecutionDirectory,
 }));
@@ -48,11 +53,21 @@ vi.mock("fs/promises", async (importOriginal) => {
       ...actual,
       access: fspMocks.access,
       readdir: fspMocks.readdir,
+      readFile: fspMocks.readFile,
     },
     access: fspMocks.access,
     readdir: fspMocks.readdir,
+    readFile: fspMocks.readFile,
   };
 });
+
+const childProcessMocks = vi.hoisted(() => ({
+  execSync: vi.fn(),
+}));
+
+vi.mock("child_process", () => ({
+  execSync: childProcessMocks.execSync,
+}));
 
 import {
   createExecuteCommandTool,
@@ -155,6 +170,162 @@ describe("execute-command-tool normalization", () => {
 
     const call = commandExecutionMocks.executeCommandWithValidation.mock.calls[0]?.[0];
     expect(call.args[1]).toContain("from math import sin;print(sin(0))");
+  });
+
+  it("moves apply_patch payloads into stdin automatically", async () => {
+    const tool = createExecuteCommandTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    await tool.execute(
+      {
+        command: "apply_patch",
+        args: [
+          "*** Begin Patch",
+          "*** Add File: tmp.txt",
+          "+hello",
+          "*** End Patch",
+        ],
+      },
+      createToolContext()
+    );
+
+    expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "apply_patch",
+        args: [],
+        stdin: "*** Begin Patch\n*** Add File: tmp.txt\n+hello\n*** End Patch\n",
+      }),
+      ["C:\\workspace"]
+    );
+  });
+
+  it("returns structured inlineDiff with computed file diffs on successful apply_patch", async () => {
+    commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
+      success: true,
+      stdout: "Done!",
+      stderr: "",
+      exitCode: 0,
+      signal: null,
+      executionTime: 5,
+    });
+
+    // Mock reading the patched file
+    fspMocks.readFile.mockResolvedValue("hello world\n");
+    // Mock git show for before content (throws = new file)
+    childProcessMocks.execSync.mockImplementation(() => {
+      throw new Error("not in git");
+    });
+
+    const tool = createExecuteCommandTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      {
+        command: "apply_patch",
+        args: [
+          "*** Begin Patch",
+          "*** Add File: tmp.txt",
+          "+hello world",
+          "*** End Patch",
+        ],
+      },
+      createToolContext()
+    );
+
+    expect(result.inlineDiff).toBeDefined();
+    expect(typeof result.inlineDiff).toBe("object");
+    const payload = result.inlineDiff as { files: Array<{ path: string; operation: string; diff: string }>; rawPatch: string };
+    expect(payload.files).toHaveLength(1);
+    expect(payload.files[0].path).toBe("tmp.txt");
+    expect(payload.files[0].operation).toBe("add");
+    expect(payload.files[0].diff).toContain("+hello world");
+    expect(payload.rawPatch).toContain("*** Begin Patch");
+  });
+
+  it("falls back to raw patch string when apply_patch fails", async () => {
+    commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
+      success: false,
+      stdout: "",
+      stderr: "patch failed",
+      exitCode: 1,
+      signal: null,
+      executionTime: 3,
+    });
+
+    const tool = createExecuteCommandTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      {
+        command: "apply_patch",
+        args: [
+          "*** Begin Patch",
+          "*** Modify File: foo.ts",
+          "@@ -1,1 +1,1 @@",
+          "-old",
+          "+new",
+          "*** End Patch",
+        ],
+      },
+      createToolContext()
+    );
+
+    // When apply_patch fails, inlineDiff should be the raw string (not structured)
+    expect(typeof result.inlineDiff).toBe("string");
+    expect(result.inlineDiff).toContain("*** Begin Patch");
+  });
+
+  it("returns structured inlineDiff with modify operation showing before/after", async () => {
+    commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
+      success: true,
+      stdout: "Done!",
+      stderr: "",
+      exitCode: 0,
+      signal: null,
+      executionTime: 5,
+    });
+
+    // Mock reading the patched (after) file
+    fspMocks.readFile.mockResolvedValue("line1\nnew line\nline3\n");
+    // Mock git show returning the before content
+    childProcessMocks.execSync.mockReturnValue("line1\nold line\nline3\n");
+
+    const tool = createExecuteCommandTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      {
+        command: "apply_patch",
+        args: [
+          "*** Begin Patch",
+          "*** Modify File: src/foo.ts",
+          "@@ -1,3 +1,3 @@",
+          " line1",
+          "-old line",
+          "+new line",
+          " line3",
+          "*** End Patch",
+        ],
+      },
+      createToolContext()
+    );
+
+    expect(result.inlineDiff).toBeDefined();
+    expect(typeof result.inlineDiff).toBe("object");
+    const payload = result.inlineDiff as { files: Array<{ path: string; operation: string; diff: string }>; rawPatch: string };
+    expect(payload.files).toHaveLength(1);
+    expect(payload.files[0].path).toBe("src/foo.ts");
+    expect(payload.files[0].operation).toBe("modify");
+    expect(payload.files[0].diff).toContain("-old line");
+    expect(payload.files[0].diff).toContain("+new line");
   });
 
   it("resolves ${CLAUDE_PLUGIN_ROOT} command placeholders from local plugin folders", async () => {

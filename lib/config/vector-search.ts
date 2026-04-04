@@ -3,7 +3,7 @@
  * Reference: docs/vector-search-v2-analysis.md Section 3.3
  */
 
-export interface VectorSearchV2Config {
+interface VectorSearchV2Config {
   // Feature flags - all default to false for V1 compatibility
   enableHybridSearch: boolean;
   enableTokenChunking: boolean;
@@ -169,7 +169,7 @@ export function loadConfigFromEnv(): void {
 }
 
 // Rollback capability (Section 6.4)
-export function rollbackToV1(): void {
+function rollbackToV1(): void {
   currentConfig = { ...defaultConfig };
   console.log("[VectorSearch] Rolled back to V1 configuration");
 }

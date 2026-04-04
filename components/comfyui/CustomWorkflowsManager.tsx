@@ -127,29 +127,10 @@ export function CustomWorkflowsManager({
 
   const parseWorkflowJson = () => {
     if (!workflowText.trim()) {
-      throw new Error("Workflow JSON is empty.");
+      throw new Error(t("errors.emptyJson"));
     }
     return JSON.parse(workflowText) as Record<string, unknown>;
   };
-
-  // Resolve effective connection values for ephemeral operations (analyze/validate).
-  // Per-workflow overrides take priority, then unsaved connection settings from props,
-  // so the user's live form state is always used even before global settings are saved.
-  const resolveEphemeralConnection = () => ({
-    comfyuiBaseUrl: comfyuiBaseUrl || connectionBaseUrl || undefined,
-    comfyuiHost: comfyuiHost || connectionHost || undefined,
-    comfyuiPort: comfyuiPort ? Number(comfyuiPort) : connectionPort || undefined,
-    comfyuiUseHttps: connectionUseHttps || undefined,
-  });
-
-  // For save/persist: only include actual per-workflow overrides.
-  // Empty values mean "inherit from global settings" — don't collapse
-  // global settings into workflow-level overrides.
-  const getWorkflowOverrides = () => ({
-    comfyuiBaseUrl: comfyuiBaseUrl || undefined,
-    comfyuiHost: comfyuiHost || undefined,
-    comfyuiPort: comfyuiPort ? Number(comfyuiPort) : undefined,
-  });
 
   const handleAnalyze = async () => {
     try {
@@ -164,10 +145,12 @@ export function CustomWorkflowsManager({
         workflow: workflowJson,
         format,
         validateWithComfyUI,
-        ...resolveEphemeralConnection(),
+        comfyuiBaseUrl: comfyuiBaseUrl || undefined,
+        comfyuiHost: comfyuiHost || undefined,
+        comfyuiPort: comfyuiPort ? Number(comfyuiPort) : undefined,
       });
       if (postError || !data) {
-        throw new Error(data?.error || postError || "Failed to analyze workflow");
+        throw new Error(data?.error || postError || t("errors.analyzeFailed"));
       }
       setFormat(data.format);
       setInputs((prev) => {
@@ -217,7 +200,7 @@ export function CustomWorkflowsManager({
   const handleSave = async () => {
     try {
       if (!name.trim()) {
-        throw new Error("Workflow name is required.");
+        throw new Error(t("errors.nameRequired"));
       }
       const workflowJson = parseWorkflowJson();
       setSaving(true);
@@ -230,7 +213,9 @@ export function CustomWorkflowsManager({
         outputs: normalizeOutputs(outputs),
         enabled,
         loadingMode,
-        ...getWorkflowOverrides(),
+        comfyuiBaseUrl: comfyuiBaseUrl || undefined,
+        comfyuiHost: comfyuiHost || undefined,
+        comfyuiPort: comfyuiPort ? Number(comfyuiPort) : undefined,
         timeoutSeconds: timeoutSeconds ? Number(timeoutSeconds) : undefined,
       };
 
@@ -241,7 +226,7 @@ export function CustomWorkflowsManager({
       const saveHelper = selectedId !== "new" ? resilientPut : resilientPost;
       const { data, error: saveError } = await saveHelper<{ workflow?: { id: string }; error?: string }>(endpoint, payload);
       if (saveError || !data) {
-        throw new Error(data?.error || saveError || "Failed to save workflow");
+        throw new Error(data?.error || saveError || t("errors.saveFailed"));
       }
       toast.success(t("saved"));
       setSelectedId(data.workflow?.id || "new");

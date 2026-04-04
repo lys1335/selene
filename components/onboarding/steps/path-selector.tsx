@@ -59,7 +59,7 @@ interface PathSelectorProps {
 interface PathCardDef {
     id: "dev" | "fun" | "work";
     brandIcons: string[];
-    features: string[];
+    featureKeys: string[];
     comingSoon?: boolean;
     gradient: {
         colors: GradientColor[];
@@ -74,7 +74,7 @@ const PATH_CARDS: PathCardDef[] = [
     {
         id: "dev",
         brandIcons: ["anthropic.svg", "openai.svg", "puppeteer.svg", "mcp.svg"],
-        features: ["Git", "Diffs", "PRs", "Browser", "MCP", "Worktrees"],
+        featureKeys: ["git", "diffs", "prs", "browser", "mcp", "worktrees"],
         gradient: {
             colors: [
                 { color: "rgba(8,15,25,1)", stop: "0%" },
@@ -91,7 +91,7 @@ const PATH_CARDS: PathCardDef[] = [
     {
         id: "fun",
         brandIcons: ["elevenlabs.svg", "openai.svg", "telegram.svg", "discord.svg"],
-        features: ["Voice", "Avatar", "Emotions", "Lip sync", "Cloning", "Channels"],
+        featureKeys: ["voice", "avatar", "emotions", "lipSync", "cloning", "channels"],
         gradient: {
             colors: [
                 { color: "rgba(20,8,30,1)", stop: "0%" },
@@ -109,7 +109,7 @@ const PATH_CARDS: PathCardDef[] = [
     {
         id: "work",
         brandIcons: ["slack.svg", "discord.svg", "mcp.svg", "google.svg"],
-        features: ["Coming soon"],
+        featureKeys: ["comingSoon"],
         comingSoon: true,
         gradient: {
             colors: [
@@ -682,12 +682,12 @@ export function PathSelector({
 
                                     {/* Feature chips */}
                                     <div className="flex flex-wrap gap-1.5">
-                                        {card.features.map((feat) => (
+                                        {card.featureKeys.map((key) => (
                                             <span
-                                                key={feat}
+                                                key={key}
                                                 className="inline-block px-2 py-0.5 rounded-full font-mono text-[10px] bg-white/[0.06] text-white/50"
                                             >
-                                                {feat}
+                                                {t(`features.${key}`)}
                                             </span>
                                         ))}
                                     </div>

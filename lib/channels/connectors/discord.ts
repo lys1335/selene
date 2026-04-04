@@ -29,6 +29,7 @@ type DiscordConnectorOptions = {
 
 export class DiscordConnector implements ChannelConnector {
   connectionId: string;
+  // fallow-ignore-next-line unused-class-member
   channelType: ChannelConnector["channelType"] = "discord";
   status: ChannelConnector["status"] = "disconnected";
 
@@ -57,6 +58,7 @@ export class DiscordConnector implements ChannelConnector {
     });
   }
 
+  // fallow-ignore-next-line unused-class-member
   async connect(): Promise<void> {
     if (this.status === "connected") return;
 
@@ -127,6 +129,7 @@ export class DiscordConnector implements ChannelConnector {
     }
   }
 
+  // fallow-ignore-next-line unused-class-member
   async disconnect(): Promise<void> {
     try {
       this.client.destroy();
@@ -137,6 +140,7 @@ export class DiscordConnector implements ChannelConnector {
     this.onStatus(this.status);
   }
 
+  // fallow-ignore-next-line unused-class-member
   async sendMessage(payload: ChannelSendPayload): Promise<ChannelSendResult> {
     const channel = await this.client.channels.fetch(payload.peerId);
     if (!channel || !("send" in channel)) {
@@ -194,10 +198,12 @@ export class DiscordConnector implements ChannelConnector {
     };
   }
 
+  // fallow-ignore-next-line unused-class-member
   setInteractiveAnswerHandler(handler: (data: InteractiveAnswerData) => void): void {
     this.interactiveAnswerHandler = handler;
   }
 
+  // fallow-ignore-next-line unused-class-member
   async sendInteractiveQuestion(payload: InteractiveQuestionPayload): Promise<ChannelSendResult> {
     const channel = await this.client.channels.fetch(payload.peerId);
     if (!channel || !("send" in channel)) {

@@ -1,3 +1,4 @@
+// fallow-ignore-file circular-dependency
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/lib/db/sqlite-client";
 import {
@@ -6,14 +7,20 @@ import {
 } from "@/lib/db/sqlite-workflows-schema";
 import { agentSyncFolders } from "@/lib/db/sqlite-character-schema";
 import { notifyFolderChange, type FolderChangeEvent } from "@/lib/vectordb/folder-events";
-import { refreshWorkflowSharedResources } from "./workflow-db-helpers";
+import {
+  refreshWorkflowSharedResources,
+  getWorkflowById,
+  getWorkflowByAgentId,
+  getWorkflowMembers,
+} from "./workflow-db-helpers";
 
 function cloneFolderForMember(
   folder: typeof agentSyncFolders.$inferSelect,
   characterId: string,
   sourceAgentId: string,
   workflowId: string,
-  userId: string
+  userId: string,
+  overrides?: { inheritedFromAgentId?: string; inheritedFromFolderId?: string }
 ) {
   return {
     userId,
@@ -44,18 +51,16 @@ function cloneFolderForMember(
     lastRunMetadata: {},
     lastRunTrigger: null,
     inheritedFromWorkflowId: workflowId,
-    inheritedFromAgentId: sourceAgentId,
-    inheritedFromFolderId: folder.id,
+    inheritedFromAgentId: overrides?.inheritedFromAgentId ?? sourceAgentId,
+    inheritedFromFolderId: overrides?.inheritedFromFolderId ?? folder.id,
   };
 }
 
 async function touchWorkflowSharedResources(workflowId: string, initiatorId: string) {
-  const { getWorkflowById } = await import("./workflows");
   await refreshWorkflowSharedResources(workflowId, initiatorId, getWorkflowById);
 }
 
 async function getWorkflowPropagationContext(characterId: string) {
-  const { getWorkflowByAgentId, getWorkflowMembers } = await import("./workflows");
   const membership = await getWorkflowByAgentId(characterId);
   if (!membership || membership.workflow.status === "archived") return null;
   const members = await getWorkflowMembers(membership.workflow.id);
@@ -238,7 +243,7 @@ export async function propagateWorkflowFolderChange(characterId: string, event: 
   if (event.type === "primary_changed") return propagateOwnFolderPrimaryChanged(characterId);
 }
 
-export interface SyncSharedFoldersInput {
+interface SyncSharedFoldersInput {
   userId: string;
   initiatorId: string;
   subAgentIds: string[];
@@ -286,38 +291,9 @@ export async function syncSharedFoldersToSubAgents(
       }
 
       if (!input.dryRun) {
-        const [inserted] = await db.insert(agentSyncFolders).values({
-          userId: input.userId,
-          characterId: subAgentId,
-          folderPath: folder.folderPath,
-          displayName: folder.displayName,
-          isPrimary: false,
-          recursive: folder.recursive,
-          includeExtensions: folder.includeExtensions,
-          excludePatterns: folder.excludePatterns,
-          status: "pending",
-          lastSyncedAt: null,
-          lastError: null,
-          fileCount: 0,
-          chunkCount: 0,
-          embeddingModel: folder.embeddingModel,
-          indexingMode: folder.indexingMode,
-          syncMode: folder.syncMode,
-          syncCadenceMinutes: folder.syncCadenceMinutes,
-          fileTypeFilters: folder.fileTypeFilters,
-          maxFileSizeBytes: folder.maxFileSizeBytes,
-          chunkPreset: folder.chunkPreset,
-          chunkSizeOverride: folder.chunkSizeOverride,
-          chunkOverlapOverride: folder.chunkOverlapOverride,
-          reindexPolicy: folder.reindexPolicy,
-          skippedCount: 0,
-          skipReasons: {},
-          lastRunMetadata: {},
-          lastRunTrigger: null,
-          inheritedFromWorkflowId: input.workflowId,
-          inheritedFromAgentId: input.initiatorId,
-          inheritedFromFolderId: folder.id,
-        }).returning();
+        const [inserted] = await db.insert(agentSyncFolders)
+          .values(cloneFolderForMember(folder, subAgentId, input.initiatorId, input.workflowId, input.userId))
+          .returning();
 
         if (inserted) {
           notifyFolderChange(subAgentId, { type: "added", folderId: inserted.id });
@@ -390,38 +366,9 @@ export async function syncOwnFoldersToWorkflowMembers(input: {
       }
 
       if (!input.dryRun) {
-        const [inserted] = await db.insert(agentSyncFolders).values({
-          userId: input.userId,
-          characterId: targetAgentId,
-          folderPath: folder.folderPath,
-          displayName: folder.displayName,
-          isPrimary: false,
-          recursive: folder.recursive,
-          includeExtensions: folder.includeExtensions,
-          excludePatterns: folder.excludePatterns,
-          status: "pending",
-          lastSyncedAt: null,
-          lastError: null,
-          fileCount: 0,
-          chunkCount: 0,
-          embeddingModel: folder.embeddingModel,
-          indexingMode: folder.indexingMode,
-          syncMode: folder.syncMode,
-          syncCadenceMinutes: folder.syncCadenceMinutes,
-          fileTypeFilters: folder.fileTypeFilters,
-          maxFileSizeBytes: folder.maxFileSizeBytes,
-          chunkPreset: folder.chunkPreset,
-          chunkSizeOverride: folder.chunkSizeOverride,
-          chunkOverlapOverride: folder.chunkOverlapOverride,
-          reindexPolicy: folder.reindexPolicy,
-          skippedCount: 0,
-          skipReasons: {},
-          lastRunMetadata: {},
-          lastRunTrigger: null,
-          inheritedFromWorkflowId: input.workflowId,
-          inheritedFromAgentId: input.sourceAgentId,
-          inheritedFromFolderId: folder.id,
-        }).returning();
+        const [inserted] = await db.insert(agentSyncFolders)
+          .values(cloneFolderForMember(folder, targetAgentId, input.sourceAgentId, input.workflowId, input.userId))
+          .returning();
 
         if (inserted) {
           notifyFolderChange(targetAgentId, { type: "added", folderId: inserted.id });
@@ -548,38 +495,11 @@ export async function shareFolderToWorkflowSubagents(input: {
 
     if (!input.dryRun) {
       const sourceAgentId = folder.inheritedFromAgentId ?? folder.characterId;
-      const [inserted] = await db.insert(agentSyncFolders).values({
-        userId: input.userId,
-        characterId: subAgentId,
-        folderPath: folder.folderPath,
-        displayName: folder.displayName,
-        isPrimary: false,
-        recursive: folder.recursive,
-        includeExtensions: folder.includeExtensions,
-        excludePatterns: folder.excludePatterns,
-        status: "pending",
-        lastSyncedAt: null,
-        lastError: null,
-        fileCount: 0,
-        chunkCount: 0,
-        embeddingModel: folder.embeddingModel,
-        indexingMode: folder.indexingMode,
-        syncMode: folder.syncMode,
-        syncCadenceMinutes: folder.syncCadenceMinutes,
-        fileTypeFilters: folder.fileTypeFilters,
-        maxFileSizeBytes: folder.maxFileSizeBytes,
-        chunkPreset: folder.chunkPreset,
-        chunkSizeOverride: folder.chunkSizeOverride,
-        chunkOverlapOverride: folder.chunkOverlapOverride,
-        reindexPolicy: folder.reindexPolicy,
-        skippedCount: 0,
-        skipReasons: {},
-        lastRunMetadata: {},
-        lastRunTrigger: null,
-        inheritedFromWorkflowId: input.workflowId,
-        inheritedFromAgentId: sourceAgentId,
-        inheritedFromFolderId: folder.inheritedFromFolderId ?? folder.id,
-      }).returning();
+      const [inserted] = await db.insert(agentSyncFolders)
+        .values(cloneFolderForMember(folder, subAgentId, sourceAgentId, input.workflowId, input.userId, {
+          inheritedFromFolderId: folder.inheritedFromFolderId ?? folder.id,
+        }))
+        .returning();
 
       if (inserted) {
         notifyFolderChange(subAgentId, { type: "added", folderId: inserted.id });

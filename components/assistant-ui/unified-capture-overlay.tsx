@@ -1,6 +1,7 @@
 "use client";
 
 import type { FC } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { Loader2Icon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,7 @@ export const UnifiedCaptureOverlay: FC<UnifiedCaptureOverlayProps> = ({
   onStopRecording,
   className,
 }) => {
+  const t = useTranslations("assistantUi.captureOverlay");
   if (phase === "idle" || phase === "sending") return null;
 
   return (
@@ -42,14 +44,14 @@ export const UnifiedCaptureOverlay: FC<UnifiedCaptureOverlayProps> = ({
         className,
       )}
       role="region"
-      aria-label="Screen capture and voice recording session"
+      aria-label={t("ariaLabel")}
       aria-live="assertive"
     >
       {/* Capturing skeleton */}
       {phase === "capturing" && (
         <div className="flex items-center gap-2 rounded-lg bg-terminal-dark/5 px-3 py-4 text-xs font-mono text-terminal-muted">
           <Loader2Icon className="size-3 animate-spin" />
-          <span>Capturing screen...</span>
+          <span>{t("capturing")}</span>
         </div>
       )}
 
@@ -58,13 +60,13 @@ export const UnifiedCaptureOverlay: FC<UnifiedCaptureOverlayProps> = ({
         <div className="relative group">
           <img
             src={screenshotUrl}
-            alt="Captured screen"
+            alt={t("capturedScreenAlt")}
             className="rounded-lg border border-terminal-dark/10 max-h-48 w-full object-contain bg-terminal-dark/5"
           />
           <button
             onClick={onCancel}
             className="absolute top-1.5 right-1.5 size-6 rounded-full bg-terminal-dark/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-            aria-label="Remove screenshot"
+            aria-label={t("removeScreenshot")}
           >
             <XIcon className="size-3.5" />
           </button>
@@ -83,7 +85,7 @@ export const UnifiedCaptureOverlay: FC<UnifiedCaptureOverlayProps> = ({
       {phase === "transcribing" && (
         <div className="flex items-center gap-2 text-xs font-mono text-terminal-muted">
           <Loader2Icon className="size-3 animate-spin" />
-          <span>Transcribing...</span>
+          <span>{t("transcribing")}</span>
         </div>
       )}
 
@@ -96,7 +98,7 @@ export const UnifiedCaptureOverlay: FC<UnifiedCaptureOverlayProps> = ({
             onClick={onCancel}
             className="h-7 px-2 text-xs font-mono text-terminal-muted"
           >
-            Cancel
+            {t("cancel")}
           </Button>
           <Button
             variant="default"
@@ -104,7 +106,7 @@ export const UnifiedCaptureOverlay: FC<UnifiedCaptureOverlayProps> = ({
             onClick={onStopRecording}
             className="h-7 px-2 text-xs font-mono bg-red-600 hover:bg-red-700 text-white"
           >
-            Stop & Send
+            {t("stopAndSend")}
           </Button>
         </div>
       )}

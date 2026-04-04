@@ -8,10 +8,10 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { resilientFetch, resilientPut } from "@/lib/utils/resilient-fetch";
 
-import type { LLMProvider } from "./provider-step";
+import type { OnboardingProvider } from "./provider-step";
 
 interface AuthStepProps {
-    provider: LLMProvider;
+    provider: OnboardingProvider;
     onAuthenticated: () => void;
     onBack: () => void;
     onSkip: () => void;
@@ -76,7 +76,13 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
         }
     };
 
-    const handleAntigravityLogin = async () => {
+    const handleOAuthLogin = async (config: {
+        popupName: string;
+        connectingMessage: string;
+        authorizeEndpoint: string;
+        pollEndpoint: string;
+        logLabel: string;
+    }) => {
         setLoading(true);
         setError(null);
 
@@ -105,17 +111,17 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
 
                 popup = window.open(
                     "about:blank",
-                    "antigravity-auth",
+                    config.popupName,
                     `width=${width},height=${height},left=${left},top=${top}`
                 );
 
                 if (popup) {
-                    popup.document.write(`<p style='font-family:monospace;padding:20px'>${t("connectingGoogle")}</p>`);
+                    popup.document.write(`<p style='font-family:monospace;padding:20px'>${config.connectingMessage}</p>`);
                 }
             }
 
             // Get the OAuth authorization URL
-            const { data: authData, error: authError } = await resilientFetch<{ success: boolean; url: string; error?: string }>("/api/auth/antigravity/authorize", { retries: 1 });
+            const { data: authData, error: authError } = await resilientFetch<{ success: boolean; url: string; error?: string }>(config.authorizeEndpoint, { retries: 1 });
 
             if (authError || !authData?.success || !authData?.url) {
                 popup?.close();
@@ -138,7 +144,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                 if (pollInFlight) return;
                 pollInFlight = true;
                 try {
-                    const response = await fetch(`/api/auth/antigravity?t=${Date.now()}`);
+                    const response = await fetch(`${config.pollEndpoint}?t=${Date.now()}`);
                     if (response.ok) {
                         const data = await response.json();
                         if (data.authenticated) {
@@ -151,7 +157,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
 
                     if (popup?.closed) {
                         await new Promise(resolve => setTimeout(resolve, 500));
-                        const finalCheck = await fetch(`/api/auth/antigravity?t=${Date.now()}`);
+                        const finalCheck = await fetch(`${config.pollEndpoint}?t=${Date.now()}`);
                         if (finalCheck.ok) {
                             const data = await finalCheck.json();
                             if (data.authenticated) {
@@ -172,113 +178,27 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             }, 5 * 60 * 1000);
 
         } catch (err) {
-            console.error("Antigravity login failed:", err);
+            console.error(`${config.logLabel} login failed:`, err);
             setError(err instanceof Error ? err.message : "Authentication failed");
             cleanup();
         }
     };
 
-    const handleCodexLogin = async () => {
-        setLoading(true);
-        setError(null);
+    const handleAntigravityLogin = () => handleOAuthLogin({
+        popupName: "antigravity-auth",
+        connectingMessage: t("connectingGoogle"),
+        authorizeEndpoint: "/api/auth/antigravity/authorize",
+        pollEndpoint: "/api/auth/antigravity",
+        logLabel: "Antigravity",
+    });
 
-        const electronAPI = typeof window !== "undefined" && "electronAPI" in window
-            ? (window as unknown as { electronAPI?: { isElectron?: boolean; shell?: { openExternal: (url: string) => Promise<void> } } }).electronAPI
-            : undefined;
-        const isElectron = !!electronAPI?.isElectron;
-
-        let popup: Window | null = null;
-        let pollInterval: NodeJS.Timeout | null = null;
-        let timeoutId: NodeJS.Timeout | null = null;
-
-        const cleanup = () => {
-            if (pollInterval) clearInterval(pollInterval);
-            if (timeoutId) clearTimeout(timeoutId);
-            setLoading(false);
-        };
-
-        try {
-            // Open a placeholder popup synchronously
-            if (!isElectron) {
-                const width = 500;
-                const height = 700;
-                const left = window.screenX + (window.outerWidth - width) / 2;
-                const top = window.screenY + (window.outerHeight - height) / 2;
-
-                popup = window.open(
-                    "about:blank",
-                    "codex-auth",
-                    `width=${width},height=${height},left=${left},top=${top}`
-                );
-
-                if (popup) {
-                    popup.document.write(`<p style='font-family:monospace;padding:20px'>${t("connectingOpenAI")}</p>`);
-                }
-            }
-
-            // Get the OAuth authorization URL
-            const { data: authData, error: authError } = await resilientFetch<{ success: boolean; url: string; error?: string }>("/api/auth/codex/authorize", { retries: 1 });
-
-            if (authError || !authData?.success || !authData?.url) {
-                popup?.close();
-                throw new Error(authData?.error || authError || "Failed to get authorization URL");
-            }
-
-            if (isElectron && electronAPI?.shell?.openExternal) {
-                await electronAPI.shell.openExternal(authData.url);
-            } else if (popup) {
-                popup.location.href = authData.url;
-            } else {
-                toast.error(t("popupBlocked"));
-                cleanup();
-                return;
-            }
-
-            // Poll for auth completion
-            let pollInFlight = false;
-            pollInterval = setInterval(async () => {
-                if (pollInFlight) return;
-                pollInFlight = true;
-                try {
-                    const response = await fetch(`/api/auth/codex?t=${Date.now()}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.authenticated) {
-                            popup?.close();
-                            setIsAuthenticated(true);
-                            cleanup();
-                            return;
-                        }
-                    }
-
-                    if (popup?.closed) {
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        const finalCheck = await fetch(`/api/auth/codex?t=${Date.now()}`);
-                        if (finalCheck.ok) {
-                            const data = await finalCheck.json();
-                            if (data.authenticated) {
-                                setIsAuthenticated(true);
-                            }
-                        }
-                        cleanup();
-                    }
-                } finally {
-                    pollInFlight = false;
-                }
-            }, 1000);
-
-            // Timeout after 5 minutes
-            timeoutId = setTimeout(() => {
-                popup?.close();
-                cleanup();
-            }, 5 * 60 * 1000);
-
-        } catch (err) {
-            console.error("Codex login failed:", err);
-            setError(err instanceof Error ? err.message : "Authentication failed");
-            cleanup();
-        }
-    };
+    const handleCodexLogin = () => handleOAuthLogin({
+        popupName: "codex-auth",
+        connectingMessage: t("connectingOpenAI"),
+        authorizeEndpoint: "/api/auth/codex/authorize",
+        pollEndpoint: "/api/auth/codex",
+        logLabel: "Codex",
+    });
 
     const handleClaudeCodeLogin = async () => {
         setLoading(true);

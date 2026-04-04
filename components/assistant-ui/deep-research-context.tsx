@@ -78,7 +78,7 @@ export const DeepResearchProvider: FC<DeepResearchProviderProps> = ({ children, 
   );
 };
 
-export function useDeepResearchContext(): DeepResearchContextValue {
+function useDeepResearchContext(): DeepResearchContextValue {
   const context = useContext(DeepResearchContext);
   if (!context) {
     throw new Error("useDeepResearchContext must be used within a DeepResearchProvider");

@@ -1,4 +1,6 @@
-import { saveBase64Video, readLocalFile, fileExists } from "@/lib/storage/local-storage";
+import { saveBase64Video } from "@/lib/storage/local-storage";
+import { throwWan22ApiError, parseWan22AsyncResult } from "@/lib/ai/wan22-utils";
+import { urlToBase64, localPathToBase64, isLocalMediaPath } from "@/lib/ai/media-utils";
 
 // WAN 2.2 Video API configuration
 // Note: These are functions to read env vars at runtime for testability
@@ -52,48 +54,12 @@ export interface Wan22VideoAsyncResult {
   createdAt?: string;
 }
 
-export type Wan22VideoResult = Wan22VideoSyncResult | Wan22VideoAsyncResult;
+type Wan22VideoResult = Wan22VideoSyncResult | Wan22VideoAsyncResult;
 
-export function isAsyncResult(
+export function isVideoAsyncResult(
   result: Wan22VideoResult
 ): result is Wan22VideoAsyncResult {
   return "jobId" in result;
-}
-
-/**
- * Fetch an image from a remote URL and convert it to base64
- */
-async function urlToBase64(imageUrl: string): Promise<string> {
-  const response = await fetch(imageUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch image: ${response.status}`);
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  return buffer.toString("base64");
-}
-
-/**
- * Read a local media file and convert to base64
- * Handles /api/media/... paths by extracting the relative path
- */
-function localPathToBase64(imagePath: string): string {
-  // Extract relative path from /api/media/... format
-  let relativePath = imagePath;
-  if (imagePath.startsWith("/api/media/")) {
-    relativePath = imagePath.replace("/api/media/", "");
-  } else if (imagePath.startsWith("local-media://")) {
-    relativePath = imagePath.replace("local-media://", "").replace(/^\/+/, "");
-  }
-
-  // Check if file exists
-  if (!fileExists(relativePath)) {
-    throw new Error(`Local image file not found: ${relativePath}`);
-  }
-
-  // Read file and convert to base64
-  const buffer = readLocalFile(relativePath);
-  return buffer.toString("base64");
 }
 
 /**
@@ -101,13 +67,6 @@ function localPathToBase64(imagePath: string): string {
  */
 function cleanBase64(base64Data: string): string {
   return base64Data.replace(/^data:image\/\w+;base64,/, "");
-}
-
-/**
- * Check if a path is a local media path
- */
-function isLocalMediaPath(path: string): boolean {
-  return path.startsWith("/api/media/") || path.startsWith("local-media://");
 }
 
 /**
@@ -189,31 +148,14 @@ export async function callWan22Video(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-
-    // Handle specific error codes
-    if (response.status === 401) {
-      throw new Error("WAN 2.2 Video API authentication failed: Invalid API key");
-    } else if (response.status === 422) {
-      throw new Error(`WAN 2.2 Video API validation error: ${errorText}`);
-    } else if (response.status === 503) {
-      throw new Error("WAN 2.2 Video API is temporarily unavailable. Please try again later.");
-    } else {
-      throw new Error(`WAN 2.2 Video API error: ${response.status} - ${errorText}`);
-    }
+    await throwWan22ApiError(response, "WAN 2.2 Video API");
   }
 
   const data = await response.json();
 
   // Handle async response
   if (input.async) {
-    return {
-      jobId: data.job_id,
-      status: data.status,
-      statusUrl: data.status_url,
-      modelName: data.model_name,
-      createdAt: data.created_at,
-    };
+    return parseWan22AsyncResult(data);
   }
 
   // Handle sync response - save base64 result to local storage

@@ -469,7 +469,7 @@ export const useSessionData = (sessionId: string | null | undefined) =>
 /**
  * Get all sessions for a character with reactive updates
  */
-export const useCharacterSessions = (characterId: string | null | undefined) =>
+const useCharacterSessions = (characterId: string | null | undefined) =>
   useSessionSyncStore(
     useShallow((state) => {
       if (!characterId) return [];
@@ -507,7 +507,7 @@ export const useSessionContextStatus = (sessionId: string | null | undefined) =>
 /**
  * Get the last refresh timestamp (useful for triggering re-fetches)
  */
-export const useSessionSyncRefreshTrigger = () =>
+const useSessionSyncRefreshTrigger = () =>
   useSessionSyncStore((state) => state.lastRefreshAt);
 
 /**
@@ -533,7 +533,7 @@ export const useSessionSyncActions = () =>
 // Utility: Convert SessionInfo to SessionSyncData
 // ============================================================================
 
-export function sessionInfoToSyncData(session: SessionInfo): SessionSyncData {
+function sessionInfoToSyncData(session: SessionInfo): SessionSyncData {
   return {
     id: session.id,
     title: session.title,

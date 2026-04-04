@@ -10,7 +10,7 @@ export type CapturePhase =
   | "reviewing"     // Text ready, optional auto-send countdown
   | "sending";      // Brief state while message sends
 
-export type ScreenCaptureMetadata = {
+type CaptureSessionMetadata = {
   activeWindowTitle?: string;
   activeAppName?: string;
   browserUrl?: string;
@@ -39,7 +39,7 @@ export function useCaptureSession(options: {
   const [isUnifiedSession, setIsUnifiedSession] = useState(false);
   const [countdownRemaining, setCountdownRemaining] = useState(0);
   const [sendAfterTranscription, setSendAfterTranscription] = useState(false);
-  const [metadata, setMetadata] = useState<ScreenCaptureMetadata | null>(null);
+  const [metadata, setMetadata] = useState<CaptureSessionMetadata | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stuckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,7 +49,7 @@ export function useCaptureSession(options: {
   onSendRef.current = onSend;
 
   // Start a unified capture session (called from useUnifiedCapture's onSessionStarted)
-  const startSession = useCallback((imageUrl?: string, captureMetadata?: ScreenCaptureMetadata) => {
+  const startSession = useCallback((imageUrl?: string, captureMetadata?: CaptureSessionMetadata) => {
     setIsUnifiedSession(true);
     setScreenshotUrl(imageUrl || null);
     setMetadata(captureMetadata || null);

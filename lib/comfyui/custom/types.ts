@@ -1,4 +1,4 @@
-export type CustomComfyUIInputType =
+type CustomComfyUIInputType =
   | "string"
   | "number"
   | "boolean"
@@ -8,7 +8,7 @@ export type CustomComfyUIInputType =
   | "json"
   | "file";
 
-export type CustomComfyUIOutputType = "image" | "video" | "file";
+type CustomComfyUIOutputType = "image" | "video" | "file";
 
 export interface CustomComfyUIInput {
   id: string;

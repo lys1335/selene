@@ -231,7 +231,7 @@ function writeLocalSnapshot(storageKey: string | null, snapshot: LocalDeepResear
   }
 }
 
-export interface UseDeepResearchOptions {
+interface UseDeepResearchOptions {
   sessionId?: string;
   config?: Partial<DeepResearchConfig>;
   onComplete?: (report: FinalReport) => void;

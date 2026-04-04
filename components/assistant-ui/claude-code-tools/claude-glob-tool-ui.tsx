@@ -4,6 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, SearchIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
+import { useTranslations } from "next-intl";
 import { parseTextResult } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
@@ -32,6 +33,7 @@ function isErrorResult(result: unknown): boolean {
  * Shows pattern, directory scope, and matched file list.
  */
 export const ClaudeGlobToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.glob");
   const [expanded, setExpanded] = useState(false);
 
   const expansionCtx = useToolExpansion();
@@ -70,7 +72,7 @@ export const ClaudeGlobToolUI: ToolCallContentPartComponent = ({ args, result })
         {StatusIcon && <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", statusColor)} />}
         {!StatusIcon && <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-terminal-muted animate-pulse" />}
         <SearchIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
-        <span className="text-terminal-muted">{isRunning ? "Finding..." : hasError ? "Find failed" : "Find"}</span>
+        <span className="text-terminal-muted">{isRunning ? t("running") : hasError ? t("failed") : t("done")}</span>
         <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={pattern}>{pattern}</span>
 
         {!isRunning && !hasError && fileCount > 0 && (
@@ -97,7 +99,7 @@ export const ClaudeGlobToolUI: ToolCallContentPartComponent = ({ args, result })
           {files.length > 0 && (
             <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-64 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
               {files.slice(0, 200).join("\n")}
-              {files.length > 200 && `\n\n... and ${files.length - 200} more files`}
+              {files.length > 200 && `\n\n${t("andMoreFiles", { count: files.length - 200 })}`}
             </pre>
           )}
 
@@ -106,7 +108,7 @@ export const ClaudeGlobToolUI: ToolCallContentPartComponent = ({ args, result })
           )}
 
           {isRunning && (
-            <div className="text-terminal-muted animate-pulse">Searching files...</div>
+            <div className="text-terminal-muted animate-pulse">{t("searching")}</div>
           )}
         </div>
       )}

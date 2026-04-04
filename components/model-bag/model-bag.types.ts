@@ -6,18 +6,7 @@
  * agent defaults, and per-session overrides.
  */
 
-// Re-export the provider type so consumers don't need a second import
-export type LLMProvider =
-  | "anthropic"
-  | "openrouter"
-  | "antigravity"
-  | "codex"
-  | "kimi"
-  | "minimax"
-  | "blackboxai"
-  | "ollama"
-  | "claudecode"
-  | "vllm";
+import type { LLMProvider } from "@/lib/ai/provider-types";
 
 /** The 4 model roles that map to settings-manager.ts fields */
 export type ModelRole = "chat" | "research" | "vision" | "utility";

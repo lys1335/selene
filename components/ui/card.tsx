@@ -2,6 +2,7 @@ import * as React from "react"
 import { motion, type HTMLMotionProps } from "framer-motion"
 import { cn } from "@/lib/utils"
 
+
 // ============================================================================
 // BASE CARD
 // ============================================================================
@@ -22,45 +23,11 @@ const Card = React.forwardRef<
 Card.displayName = "Card"
 
 // ============================================================================
-// ANIMATED CARD WITH HOVER LIFT EFFECT
-// ============================================================================
-
-export interface AnimatedCardProps
-  extends Omit<HTMLMotionProps<"div">, "ref"> {
-  hoverLift?: boolean;
-  hoverGlow?: boolean;
-}
-
-const AnimatedCard = React.forwardRef<HTMLDivElement, AnimatedCardProps>(
-  ({ className, hoverLift = true, hoverGlow = false, children, ...props }, ref) => (
-    <motion.div
-      ref={ref}
-      className={cn(
-        "rounded-xl bg-card text-card-foreground shadow-sm",
-        hoverGlow && "hover:shadow-lg hover:shadow-primary/10",
-        className
-      )}
-      whileHover={hoverLift ? { y: -4, scale: 1.01 } : undefined}
-      whileTap={{ scale: 0.99 }}
-      transition={{
-        type: "spring" as const,
-        stiffness: 400,
-        damping: 25,
-      }}
-      {...props}
-    >
-      {children}
-    </motion.div>
-  )
-)
-AnimatedCard.displayName = "AnimatedCard"
-
-// ============================================================================
 // ANIMATED CARD SPAN - For use inside <p> tags (avoids hydration errors)
 // Uses <span> with display:block instead of <div> to maintain valid HTML nesting
 // ============================================================================
 
-export interface AnimatedCardSpanProps
+interface AnimatedCardSpanProps
   extends Omit<HTMLMotionProps<"span">, "ref"> {
   hoverLift?: boolean;
   hoverGlow?: boolean;
@@ -146,4 +113,4 @@ const CardFooter = React.forwardRef<
 ))
 CardFooter.displayName = "CardFooter"
 
-export { Card, AnimatedCard, AnimatedCardSpan, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
+export { Card, AnimatedCardSpan, CardHeader, CardTitle, CardContent }

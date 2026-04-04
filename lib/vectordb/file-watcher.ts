@@ -24,11 +24,10 @@ import {
   getOpenFileDescriptorCount,
   getWatcherFdBudget,
   getWatcherFdWarnThreshold,
-  parseJsonArray,
-  normalizeExtensions,
   isProjectRootDirectory,
   processWithConcurrency,
 } from "./file-watcher-utils";
+import { parseJsonArray, normalizeExtensions } from "./sync-helpers";
 import {
   registerFolder,
   unregisterFolder,
@@ -118,7 +117,7 @@ let registryListenerInitialized = false;
 const folderTimers = new Map<string, NodeJS.Timeout>();
 const DEBOUNCE_MS = 1000;
 
-export interface WatcherConfig {
+interface WatcherConfig {
   folderId: string;
   characterId: string;
   folderPath: string;
@@ -892,7 +891,7 @@ export async function stopAllWatchers(): Promise<void> {
 /**
  * Get list of currently watched folder IDs (all subscribers, not just owners).
  */
-export function getWatchedFolders(): string[] {
+function getWatchedFolders(): string[] {
   return Array.from(folderSubscribers.keys());
 }
 

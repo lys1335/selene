@@ -5,12 +5,15 @@ import type { TTSOptions, TTSProvider, TTSResult } from "../types";
 import { DEFAULT_EDGE_TTS_VOICE } from "../edge-tts-voices";
 
 export class EdgeTTSProvider implements TTSProvider {
+  // fallow-ignore-next-line unused-class-member
   name = "edge";
 
+  // fallow-ignore-next-line unused-class-member
   isAvailable(): boolean {
     return true; // Edge TTS is always available (free, no API key)
   }
 
+  // fallow-ignore-next-line unused-class-member
   async synthesize(options: TTSOptions): Promise<TTSResult> {
     const { EdgeTTS } = await import("node-edge-tts");
 

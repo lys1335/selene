@@ -36,16 +36,6 @@ import type {
 export type { AgentMetadataSeed } from "./import-parser-components";
 export {
   buildAgentMetadataSeed,
-  safeMatter,
-  resolveComponentPaths,
-  discoverComponents,
-  discoverSkills,
-  discoverAgents,
-  discoverHooks,
-  discoverMCPServers,
-  discoverLSPServers,
-  isAgentMarkdown,
-  inferAgentName,
 } from "./import-parser-components";
 
 import {
@@ -62,7 +52,7 @@ const EXECUTABLE_EXTENSIONS = [".py", ".js", ".sh", ".bash", ".zsh", ".ts"];
 const BLOCKED_EXTENSIONS = [".exe", ".dll", ".so", ".dylib", ".app", ".bat", ".cmd"];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per file
 
-export interface ParsePluginPackageOptions {
+interface ParsePluginPackageOptions {
   /**
    * When true (default), fills missing required manifest fields with safe defaults
    * and emits warnings instead of hard-failing imports.
@@ -72,7 +62,7 @@ export interface ParsePluginPackageOptions {
   sourceLabel?: string;
 }
 
-export interface UploadedPluginFile {
+interface UploadedPluginFile {
   relativePath: string;
   content: Buffer;
 }

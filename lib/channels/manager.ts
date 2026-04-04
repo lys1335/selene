@@ -9,8 +9,16 @@ import { WhatsAppConnector } from "./connectors/whatsapp";
 import { TelegramConnector } from "./connectors/telegram";
 import { SlackConnector } from "./connectors/slack";
 import { DiscordConnector } from "./connectors/discord";
-import { ChannelConnector, ChannelSendPayload, ChannelSendResult, ChannelStatus, InteractiveQuestionPayload } from "./types";
-import { handleInboundMessage } from "./inbound";
+import { ChannelConnector, ChannelSendPayload, ChannelSendResult, ChannelStatus, InteractiveQuestionPayload, type ChannelInboundMessage } from "./types";
+
+// Lazy import to break the inbound ↔ manager circular dependency.
+// inbound.ts needs getChannelManager() at runtime; manager.ts needs
+// handleInboundMessage at runtime. Both are only called after the module
+// graph is fully resolved, so a deferred require is safe here.
+function getHandleInboundMessage(): (msg: ChannelInboundMessage) => Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return (require("./inbound") as { handleInboundMessage: (msg: ChannelInboundMessage) => Promise<void> }).handleInboundMessage;
+}
 
 class ChannelManager {
   private connectors = new Map<string, ChannelConnector>();
@@ -102,13 +110,14 @@ class ChannelManager {
         }
       };
 
+      const handleInbound = getHandleInboundMessage();
       let connector: ChannelConnector;
       if (connection.channelType === "whatsapp") {
         connector = new WhatsAppConnector({
           connectionId,
           characterId: connection.characterId,
           config: { type: "whatsapp", ...(config as any) },
-          onMessage: handleInboundMessage,
+          onMessage: handleInbound,
           onStatus: updateStatus,
           onQr: handleQr,
         });
@@ -117,7 +126,7 @@ class ChannelManager {
           connectionId,
           characterId: connection.characterId,
           config: { type: "telegram", ...(config as any) },
-          onMessage: handleInboundMessage,
+          onMessage: handleInbound,
           onStatus: updateStatus,
         });
       } else if (connection.channelType === "slack") {
@@ -125,7 +134,7 @@ class ChannelManager {
           connectionId,
           characterId: connection.characterId,
           config: { type: "slack", ...(config as any) },
-          onMessage: handleInboundMessage,
+          onMessage: handleInbound,
           onStatus: updateStatus,
         });
       } else if (connection.channelType === "discord") {
@@ -133,7 +142,7 @@ class ChannelManager {
           connectionId,
           characterId: connection.characterId,
           config: { type: "discord", ...(config as any) },
-          onMessage: handleInboundMessage,
+          onMessage: handleInbound,
           onStatus: updateStatus,
         });
       } else {

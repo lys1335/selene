@@ -1,12 +1,12 @@
 import type { ToolMetadata } from "./types";
 import { ToolRegistry } from "./registry";
+import { createBashTool } from "../tools/bash-tool";
 import { createExecuteCommandTool } from "../tools/execute-command-tool";
 import { createEditFileTool } from "../tools/edit-file-tool";
 import { createWriteFileTool } from "../tools/write-file-tool";
 import { createPatchFileTool } from "../tools/patch-file-tool";
 import { createScheduleTaskTool } from "../tools/schedule-task-tool";
-import { createRunSkillTool } from "../tools/run-skill-tool";
-import { createUpdateSkillTool } from "../tools/update-skill-tool";
+import { createSkillTool } from "../tools/skill-tool";
 import { createMemorizeTool } from "../tools/memorize-tool";
 import { createCalculatorTool } from "../tools/calculator-tool";
 import { createUpdatePlanTool } from "../tools/update-plan-tool";
@@ -17,6 +17,57 @@ import { createPromptLibraryTool } from "../tools/prompt-library-tool";
 import { getPromptLibraryRulesSummary, getSceneGuideSummary } from "@/data/prompt-library/optimization-rules";
 
 export function registerCollaborationTools(registry: ToolRegistry): void {
+  registry.register(
+    "bash",
+    {
+      displayName: "Bash",
+      category: "utility",
+      keywords: [
+        "bash",
+        "shell",
+        "terminal",
+        "command",
+        "script",
+        "git",
+        "npm",
+        "pnpm",
+        "python",
+        "run",
+        "background",
+      ],
+      searchHint: "run shell commands in bash",
+      shortDescription:
+        "Run shell commands with a single command string and persistent working directory",
+      fullInstructions: `## Bash
+
+Run shell commands with a single shell string.
+
+**Key behavior:**
+- Working directory persists across calls for the current session
+- Use one command string instead of splitting command + args
+- Supports background execution with \`run_in_background\`
+- Use \`processId\` with \`action: "status"\` or \`action: "kill"\` to manage background commands
+
+**Examples:**
+- \`{ command: "git status" }\`
+- \`{ command: "cd app && npm test" }\`
+- \`{ command: "npm run dev", run_in_background: true }\`
+
+**Safety:**
+- Commands still run only within synced folders/worktrees
+- Removal commands and path traversal are blocked
+- Prefer dedicated file/search tools when they are a better fit`,
+      loading: { deferLoading: true },
+      requiresSession: true,
+    } satisfies ToolMetadata,
+    ({ sessionId, characterId, onExecuteCommandProgress }) =>
+      createBashTool({
+        sessionId: sessionId || "UNSCOPED",
+        characterId: characterId ?? null,
+        onProgress: onExecuteCommandProgress,
+      })
+  );
+
   // Execute Command Tool - Run shell commands safely within synced directories
   registry.register(
     "executeCommand",
@@ -40,6 +91,7 @@ export function registerCollaborationTools(registry: ToolRegistry): void {
         "install",
         "cli",
       ],
+      searchHint: "execute shell commands with explicit command and args",
       shortDescription:
         "Execute shell commands safely within synced directories",
       fullInstructions: `## Execute Command
@@ -245,38 +297,24 @@ Schedule future tasks (cron/interval/once). Task runs with agent's full context 
       })
   );
 
-  // Skills runtime: unified discovery/inspect/run for DB + plugin skills
+  // Skills: unified list/inspect/run + create/patch/replace/metadata/copy/archive
   registry.register(
-    "runSkill",
+    "skill",
     {
-      displayName: "Run Skill",
+      displayName: "Skill",
       category: "utility",
-      keywords: ["run skill", "inspect skill", "list skills", "execute skill", "skill by id", "skill by name"],
-      shortDescription: "Unified skill runtime: list, inspect full content, and run DB/plugin skills",
+      keywords: [
+        "skill", "run skill", "inspect skill", "list skills", "execute skill",
+        "create skill", "update skill", "patch skill", "replace skill",
+        "copy skill", "archive skill", "skill by id", "skill by name",
+      ],
+      shortDescription: "Unified skill tool: list, inspect, run, create, patch, replace, metadata, copy, archive",
       loading: { deferLoading: true },
       requiresSession: true,
     } satisfies ToolMetadata,
     ({ sessionId, userId, characterId }) =>
-      createRunSkillTool({
+      createSkillTool({
         sessionId: sessionId || "UNSCOPED",
-        userId: userId || "UNSCOPED",
-        characterId: characterId || "UNSCOPED",
-      })
-  );
-
-  // Skills runtime: unified create/patch/replace/metadata/copy/archive mutations
-  registry.register(
-    "updateSkill",
-    {
-      displayName: "Update Skill",
-      category: "utility",
-      keywords: ["update skill", "create skill", "patch skill", "replace skill", "copy skill", "archive skill", "skill feedback"],
-      shortDescription: "Unified skill mutation tool with patch-first editing and version checks",
-      loading: { deferLoading: true },
-      requiresSession: false,
-    } satisfies ToolMetadata,
-    ({ userId, characterId }) =>
-      createUpdateSkillTool({
         userId: userId || "UNSCOPED",
         characterId: characterId || "UNSCOPED",
       })

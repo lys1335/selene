@@ -6,7 +6,7 @@ process.env.WAN22_VIDEO_ENDPOINT = "https://example.test/models/wan-2-2-video/pr
 
 import {
   callWan22Video,
-  isAsyncResult,
+  isVideoAsyncResult,
   type Wan22VideoInput,
   type Wan22VideoSyncResult,
   type Wan22VideoAsyncResult,
@@ -38,7 +38,7 @@ describe("WAN 2.2 Video Client", () => {
         status: "processing",
         statusUrl: "https://example.test/jobs/job-123",
       };
-      expect(isAsyncResult(asyncResult)).toBe(true);
+      expect(isVideoAsyncResult(asyncResult)).toBe(true);
     });
 
     it("should return false for sync results", () => {
@@ -46,7 +46,7 @@ describe("WAN 2.2 Video Client", () => {
         videos: [{ url: "https://example.com/video.mp4", format: "mp4", fps: 21, duration: 2 }],
         timeTaken: 30.5,
       };
-      expect(isAsyncResult(syncResult)).toBe(false);
+      expect(isVideoAsyncResult(syncResult)).toBe(false);
     });
   });
 
@@ -91,8 +91,8 @@ describe("WAN 2.2 Video Client", () => {
 
       const result = await callWan22Video(input, "test-session-id");
 
-      expect(isAsyncResult(result)).toBe(false);
-      if (!isAsyncResult(result)) {
+      expect(isVideoAsyncResult(result)).toBe(false);
+      if (!isVideoAsyncResult(result)) {
         expect(result.videos).toHaveLength(1);
         expect(result.videos[0].format).toBe("mp4");
         expect(result.videos[0].fps).toBe(21);
@@ -119,7 +119,7 @@ describe("WAN 2.2 Video Client", () => {
 
       const result = await callWan22Video(input, "test-session-id");
 
-      expect(isAsyncResult(result)).toBe(false);
+      expect(isVideoAsyncResult(result)).toBe(false);
       const fetchCall = mockFetch.mock.calls[0];
       const body = JSON.parse(fetchCall[1].body);
       expect(body.base64_image).toBeDefined();
@@ -163,7 +163,7 @@ describe("WAN 2.2 Video Client", () => {
       const body = JSON.parse(fetchCall[1].body);
       expect(body.fps).toBe(30);
 
-      if (!isAsyncResult(result)) {
+      if (!isVideoAsyncResult(result)) {
         expect(result.videos[0].fps).toBe(30);
       }
     });
@@ -186,7 +186,7 @@ describe("WAN 2.2 Video Client", () => {
       const body = JSON.parse(fetchCall[1].body);
       expect(body.duration).toBe(5);
 
-      if (!isAsyncResult(result)) {
+      if (!isVideoAsyncResult(result)) {
         expect(result.videos[0].duration).toBe(5);
       }
     });
@@ -275,8 +275,8 @@ describe("WAN 2.2 Video Client", () => {
         expect.any(Object)
       );
 
-      expect(isAsyncResult(result)).toBe(true);
-      if (isAsyncResult(result)) {
+      expect(isVideoAsyncResult(result)).toBe(true);
+      if (isVideoAsyncResult(result)) {
         expect(result.jobId).toBe("video-job-789");
         expect(result.status).toBe("processing");
         expect(result.statusUrl).toBe("https://example.test/jobs/video-job-789");

@@ -6,11 +6,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { getOrCreateLocalUser } from "@/lib/db/queries";
-import { getCharacter } from "@/lib/characters/queries";
-import { loadSettings } from "@/lib/settings/settings-manager";
 import { AgentMemoryManager, type MemoryCategory } from "@/lib/agent-memory";
+import { requireCharacterOwnership } from "./_utils";
 import { z } from "zod";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -18,19 +15,9 @@ type RouteParams = { params: Promise<{ id: string }> };
 // GET - List memories
 export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-    const { id: characterId } = await params;
-
-    // Verify character ownership
-    const character = await getCharacter(characterId);
-    if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
-    }
-    if (character.userId !== dbUser.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const auth = await requireCharacterOwnership(req, params);
+    if (auth instanceof NextResponse) return auth;
+    const { characterId } = auth;
 
     const manager = new AgentMemoryManager(characterId);
     const filter = req.nextUrl.searchParams.get("filter") || "all";
@@ -75,19 +62,9 @@ const addMemorySchema = z.object({
 // POST - Add a manual memory
 export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-    const { id: characterId } = await params;
-
-    // Verify character ownership
-    const character = await getCharacter(characterId);
-    if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
-    }
-    if (character.userId !== dbUser.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const auth = await requireCharacterOwnership(req, params);
+    if (auth instanceof NextResponse) return auth;
+    const { characterId } = auth;
 
     const body = await req.json();
     const parseResult = addMemorySchema.safeParse(body);

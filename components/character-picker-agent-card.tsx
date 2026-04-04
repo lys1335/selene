@@ -190,7 +190,7 @@ export function AgentCardInWorkflow({
               </p>
               {isSystemAgent && (
                 <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-medium text-slate-400">
-                  System
+                  {t("systemBadge")}
                 </span>
               )}
               {role && (

@@ -1,18 +1,16 @@
 import { tool, jsonSchema } from "ai";
-import { callImagenEdit, isAsyncResult } from "@/lib/image-edit/client";
+import { callImagenEdit, isImageEditAsyncResult } from "@/lib/image-edit/client";
 import { callFlux2Generate } from "@/lib/ai/flux2-client";
 import {
   callWan22Imagen,
-  isAsyncResult as isWan22ImagenAsyncResult,
+  isImagenAsyncResult,
 } from "@/lib/ai/wan22-imagen-client";
 import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
+import { now, failToolRun, saveGeneratedImages } from "@/lib/ai/tools/tool-run-utils";
 
 // Re-export shared utilities from image-tools-utils
 export { imageToDataUrl, createDescribeImageTool } from "@/lib/ai/tools/image-tools-utils";
-
-// Helper to get current timestamp as ISO string for SQLite
-const now = () => new Date().toISOString();
 
 // ==========================================================================
 // Shared schema definitions
@@ -216,7 +214,7 @@ async function executeImageEdit(
       sessionId
     );
 
-    if (isAsyncResult(result)) {
+    if (isImageEditAsyncResult(result)) {
       await updateToolRun(toolRun.id, {
         status: "pending",
         metadata: { jobId: result.jobId, statusUrl: result.statusUrl },
@@ -257,18 +255,7 @@ async function executeImageEdit(
       timeTaken: result.timeTaken,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 
@@ -293,7 +280,7 @@ export function createImageEditTool(sessionId: string) {
 /**
  * Options for creating the Flux2 generate tool
  */
-export interface Flux2GenerateToolOptions {
+interface Flux2GenerateToolOptions {
   /** The character's avatar URL to use as a reference when generating images of themselves */
   characterAvatarUrl?: string;
   /** Description of the character's appearance */
@@ -371,45 +358,9 @@ async function executeFlux2Generate(
       sessionId
     );
 
-    for (const img of result.images) {
-      await createImage({
-        sessionId,
-        toolRunId: toolRun.id,
-        role: "generated",
-        localPath: img.localPath || img.url,
-        url: img.url,
-        width: img.width,
-        height: img.height,
-        format: img.format,
-        metadata: { prompt, seed: result.seed },
-      });
-    }
-
-    await updateToolRun(toolRun.id, {
-      status: "succeeded",
-      result: { images: result.images, seed: result.seed },
-      completedAt: now(),
-    });
-
-    return {
-      status: "completed",
-      images: result.images,
-      seed: result.seed,
-      timeTaken: result.timeTaken,
-    };
+    return await saveGeneratedImages(sessionId, toolRun.id, result, prompt);
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 
@@ -476,7 +427,7 @@ async function executeWan22Imagen(sessionId: string, args: Wan22ImagenArgs) {
       sessionId
     );
 
-    if (isWan22ImagenAsyncResult(result)) {
+    if (isImagenAsyncResult(result)) {
       await updateToolRun(toolRun.id, {
         status: "pending",
         metadata: { jobId: result.jobId, statusUrl: result.statusUrl },
@@ -515,18 +466,7 @@ async function executeWan22Imagen(sessionId: string, args: Wan22ImagenArgs) {
       timeTaken: result.timeTaken,
     };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 

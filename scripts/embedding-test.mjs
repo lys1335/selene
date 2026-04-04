@@ -1,7 +1,10 @@
-import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
-import { AutoTokenizer, env, pipeline } from "@huggingface/transformers";
+import { env, pipeline } from "@huggingface/transformers";
+import {
+  patchTokenizerMerges,
+  resolveTokenizerPath,
+} from "../lib/ai/local-embeddings.ts";
 
 const DEFAULT_MODEL_ID = "Xenova/bge-large-en-v1.5";
 const modelId = process.env.EMBEDDING_MODEL_ID || DEFAULT_MODEL_ID;
@@ -84,42 +87,14 @@ function withPrefix(text) {
   return `${queryPrefix} ${text}`.trim();
 }
 
-function resolveTokenizerPath() {
-  if (!env.cacheDir) return null;
-  const parts = modelId.split("/");
-  return path.join(env.cacheDir, ...parts, "tokenizer.json");
-}
-
-function patchTokenizerMerges(tokenizerPath) {
-  if (!tokenizerPath || !fs.existsSync(tokenizerPath)) {
-    return false;
-  }
-  const raw = fs.readFileSync(tokenizerPath, "utf8");
-  const data = JSON.parse(raw);
-  const merges = data?.merges ?? data?.model?.merges;
-  if (!Array.isArray(merges) || merges.length === 0) {
-    return false;
-  }
-  if (!Array.isArray(merges[0])) {
-    return false;
-  }
-  const converted = merges.map((pair) => pair.join(" "));
-  if (data.merges) {
-    data.merges = converted;
-  } else if (data.model) {
-    data.model.merges = converted;
-  }
-  fs.writeFileSync(tokenizerPath, JSON.stringify(data));
-  return true;
-}
-
 async function loadTokenizerWithPatch(options) {
+  const { AutoTokenizer } = await import("@huggingface/transformers");
   try {
     return await AutoTokenizer.from_pretrained(modelId, options);
   } catch (error) {
     const message = String(error);
     if (message.includes("x.split is not a function")) {
-      const tokenizerPath = resolveTokenizerPath();
+      const tokenizerPath = resolveTokenizerPath(cacheDir, modelId);
       if (patchTokenizerMerges(tokenizerPath)) {
         console.log(`[Embedding Test] Patched tokenizer merges at ${tokenizerPath}`);
         return await AutoTokenizer.from_pretrained(modelId, options);

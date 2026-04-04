@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { getOrCreateLocalUser } from "@/lib/db/queries";
-import { loadSettings } from "@/lib/settings/settings-manager";
 import { parseSkillPackage, parseSingleSkillMd } from "@/lib/skills/import-parser";
 import { importSkillPackage } from "@/lib/skills/queries";
 import { parsePluginPackage } from "@/lib/plugins/import-parser";
 import { enablePluginForAgent, installPlugin } from "@/lib/plugins/registry";
+import {
+  resolveImportAuthUser,
+  validateSingleImportFile,
+  importErrorResponse,
+} from "@/lib/import/shared-import-utils";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // 1 minute timeout for large files
@@ -15,47 +17,30 @@ export async function POST(request: NextRequest) {
   console.log(`[SkillImport:${requestId}] Request started at ${new Date().toISOString()}`);
 
   try {
-    const authUserId = await requireAuth(request);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(authUserId, settings.localUserEmail);
+    const authResult = await resolveImportAuthUser(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { dbUser } = authResult;
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const characterId = formData.get("characterId") as string | null;
 
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
-
     if (!characterId) {
       return NextResponse.json({ error: "No characterId provided" }, { status: 400 });
     }
 
-    // Validate file type
-    const isZip = file.name.endsWith(".zip");
-    const isMd = file.name.endsWith(".md");
+    const fileError = validateSingleImportFile(file);
+    if (fileError) return fileError;
 
-    if (!isZip && !isMd) {
-      return NextResponse.json(
-        { error: "Only .zip packages or .md files are supported" },
-        { status: 400 }
-      );
-    }
-
-    // Validate file size (max 50MB)
-    const maxSize = 50 * 1024 * 1024;
-    if (file.size > maxSize) {
-      return NextResponse.json(
-        { error: "File size exceeds 50MB limit" },
-        { status: 400 }
-      );
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
+    // file is guaranteed non-null after validation
+    const validFile = file!;
+    const lowerName = validFile.name.toLowerCase();
+    const isMd = lowerName.endsWith(".md");
+    const buffer = Buffer.from(await validFile.arrayBuffer());
 
     // For .md files, use the legacy single-skill parser directly
     if (isMd) {
-      const parsedSkill = await parseSingleSkillMd(buffer, file.name);
+      const parsedSkill = await parseSingleSkillMd(buffer, validFile.name);
       const skill = await importSkillPackage({
         userId: dbUser.id,
         characterId,
@@ -139,22 +124,13 @@ export async function POST(request: NextRequest) {
           filesImported: parsedSkill.files.length,
           scriptsFound: parsedSkill.scripts.length,
         });
-      } catch (skillError) {
+      } catch {
         // Both parsers failed — report the plugin error (more informative)
         throw pluginError;
       }
     }
   } catch (error) {
     console.error(`[SkillImport:${requestId}] Error:`, error);
-
-    if (error instanceof Error &&
-        (error.message === "Unauthorized" || error.message === "Invalid session")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Import failed" },
-      { status: 500 }
-    );
+    return importErrorResponse(error);
   }
 }

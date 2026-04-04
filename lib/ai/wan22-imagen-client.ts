@@ -1,4 +1,5 @@
 import { saveBase64Image } from "@/lib/storage/local-storage";
+import { throwWan22ApiError, parseWan22AsyncResult } from "@/lib/ai/wan22-utils";
 
 // WAN 2.2 Imagen API configuration
 // Note: These are functions to read env vars at runtime for testability
@@ -44,9 +45,9 @@ export interface Wan22ImagenAsyncResult {
   createdAt?: string;
 }
 
-export type Wan22ImagenResult = Wan22ImagenSyncResult | Wan22ImagenAsyncResult;
+type Wan22ImagenResult = Wan22ImagenSyncResult | Wan22ImagenAsyncResult;
 
-export function isAsyncResult(
+export function isImagenAsyncResult(
   result: Wan22ImagenResult
 ): result is Wan22ImagenAsyncResult {
   return "jobId" in result;
@@ -97,31 +98,14 @@ export async function callWan22Imagen(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-
-    // Handle specific error codes
-    if (response.status === 401) {
-      throw new Error("WAN 2.2 Imagen API authentication failed: Invalid API key");
-    } else if (response.status === 422) {
-      throw new Error(`WAN 2.2 Imagen API validation error: ${errorText}`);
-    } else if (response.status === 503) {
-      throw new Error("WAN 2.2 Imagen API is temporarily unavailable. Please try again later.");
-    } else {
-      throw new Error(`WAN 2.2 Imagen API error: ${response.status} - ${errorText}`);
-    }
+    await throwWan22ApiError(response, "WAN 2.2 Imagen API");
   }
 
   const data = await response.json();
 
   // Handle async response
   if (input.async) {
-    return {
-      jobId: data.job_id,
-      status: data.status,
-      statusUrl: data.status_url,
-      modelName: data.model_name,
-      createdAt: data.created_at,
-    };
+    return parseWan22AsyncResult(data);
   }
 
   // Handle sync response - save base64 result to local storage

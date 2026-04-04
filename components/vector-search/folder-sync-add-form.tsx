@@ -15,52 +15,12 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import type { IndexingMode, SyncMode, ChunkPreset, ReindexPolicy, FolderAnalysis } from "./folder-sync-types";
+import type { FolderFormState, FolderFormActions, IndexingMode } from "./folder-sync-types";
+import type { SyncMode, ChunkPreset, ReindexPolicy } from "@/lib/vectordb/sync-mode-resolver";
 import { cn } from "@/lib/utils";
 
-interface FolderSyncAddFormProps {
+interface FolderSyncAddFormProps extends FolderFormState, FolderFormActions {
   isElectron: boolean;
-  newFolderPath: string;
-  setNewFolderPath: (v: string) => void;
-  newDisplayName: string;
-  setNewDisplayName: (v: string) => void;
-  newRecursive: boolean;
-  setNewRecursive: (v: boolean) => void;
-  newExtensions: string;
-  setNewExtensions: (v: string) => void;
-  newExcludePatterns: string;
-  setNewExcludePatterns: (v: string) => void;
-  newFolderMode: "simple" | "advanced";
-  setNewFolderMode: (v: "simple" | "advanced") => void;
-  newIndexingMode: IndexingMode;
-  setNewIndexingMode: (v: IndexingMode) => void;
-  newSyncMode: SyncMode;
-  setNewSyncMode: (v: SyncMode) => void;
-  newSyncCadenceMinutes: string;
-  setNewSyncCadenceMinutes: (v: string) => void;
-  newFileTypeFilters: string;
-  setNewFileTypeFilters: (v: string) => void;
-  newMaxFileSizeMB: string;
-  setNewMaxFileSizeMB: (v: string) => void;
-  newChunkPreset: ChunkPreset;
-  setNewChunkPreset: (v: ChunkPreset) => void;
-  newChunkSizeOverride: string;
-  setNewChunkSizeOverride: (v: string) => void;
-  newChunkOverlapOverride: string;
-  setNewChunkOverlapOverride: (v: string) => void;
-  newReindexPolicy: ReindexPolicy;
-  setNewReindexPolicy: (v: ReindexPolicy) => void;
-  useRecommendedExcludes: boolean;
-  onToggleRecommendedExcludes: (checked: boolean) => void;
-  showAdvancedOptions: boolean;
-  setShowAdvancedOptions: (v: boolean) => void;
-  isAdding: boolean;
-  isAnalyzing: boolean;
-  folderAnalysis: FolderAnalysis | null;
-  analysisError: string | null;
-  onAddFolder: () => void;
-  onCancel: () => void;
-  onOpenFolderPicker: () => void;
 }
 
 export function FolderSyncAddForm({

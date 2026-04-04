@@ -13,6 +13,8 @@ import { startScheduler } from "@/lib/scheduler/scheduler-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// SSE connections are long-lived — keep alive for up to 24 hours.
+export const maxDuration = 86400;
 
 export async function GET(request: NextRequest) {
   // Authenticate user

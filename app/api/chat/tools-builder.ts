@@ -26,19 +26,18 @@ import { createVectorSearchToolV2 } from "@/lib/ai/vector-search";
 import { createReadFileTool } from "@/lib/ai/tools/read-file-tool";
 import { createLocalGrepTool } from "@/lib/ai/ripgrep";
 import { createExecuteCommandTool } from "@/lib/ai/tools/execute-command-tool";
+import { createBashTool } from "@/lib/ai/tools/bash-tool";
 import { createEditFileTool } from "@/lib/ai/tools/edit-file-tool";
 import { createWriteFileTool } from "@/lib/ai/tools/write-file-tool";
 import { createPatchFileTool } from "@/lib/ai/tools/patch-file-tool";
 import { createUpdatePlanTool } from "@/lib/ai/tools/update-plan-tool";
 import { createSendMessageToChannelTool } from "@/lib/ai/tools/channel-tools";
-import { createRunSkillTool } from "@/lib/ai/tools/run-skill-tool";
-import { createUpdateSkillTool } from "@/lib/ai/tools/update-skill-tool";
+import { createSkillTool } from "@/lib/ai/tools/skill-tool";
 import { createCompactSessionTool } from "@/lib/ai/tools/compact-session-tool";
 import { createWorkspaceTool } from "@/lib/ai/tools/workspace-tool";
 import {
   ToolRegistry,
   createToolSearchTool,
-  createListToolsTool,
 } from "@/lib/ai/tool-registry";
 import { getCharacterFull } from "@/lib/characters/queries";
 import { getRegisteredHooks } from "@/lib/plugins/hooks-engine";
@@ -65,7 +64,7 @@ const SDK_PASSTHROUGH_LARGE_INPUT_BYTES = (() => {
 
 // ─── Public interfaces ────────────────────────────────────────────────────────
 
-export interface ToolsBuildContext {
+interface ToolsBuildContext {
   sessionId: string;
   userId: string;
   characterId: string | null;
@@ -88,7 +87,7 @@ export interface ToolsBuildContext {
   provider?: string;
 }
 
-export interface ToolsBuildResult {
+interface ToolsBuildResult {
   allToolsWithMCP: Record<string, Tool>;
   initialActiveToolNames: string[];
   hasStopHooks: boolean;
@@ -132,8 +131,16 @@ export async function buildToolsForRequest(
 
   // Create tools via the centralized Tool Registry.
   // CRITICAL: Create agentEnabledTools Set for strict filtering.
+  // Migration aliases: remap old tool names to their merged successors so
+  // agents created before the merge still resolve correctly.
+  const TOOL_ALIASES: Record<string, string> = {
+    runSkill: "skill",
+    updateSkill: "skill",
+  };
   const agentEnabledTools = enabledTools
-    ? new Set(Array.from(new Set(enabledTools))) // Dedupe before creating Set
+    ? new Set(
+        Array.from(new Set(enabledTools)).map((t) => TOOL_ALIASES[t] ?? t),
+      )
     : undefined;
 
   const registry = ToolRegistry.getInstance();
@@ -192,9 +199,8 @@ export async function buildToolsForRequest(
         sessionMetadata,
       }),
     }),
-    // searchTools and listAllTools ALWAYS override (they're alwaysLoad: true)
+    // searchTools ALWAYS overrides (alwaysLoad: true)
     searchTools: createToolSearchTool(toolSearchContext),
-    listAllTools: createListToolsTool(toolSearchContext),
     // retrieveFullContent ALWAYS overrides (alwaysLoad: true)
     retrieveFullContent: createRetrieveFullContentTool({ sessionId }),
     ...(allTools.docsSearch && {
@@ -238,6 +244,13 @@ export async function buildToolsForRequest(
         onProgress: onExecuteCommandProgress,
       }),
     }),
+    ...(allTools.bash && {
+      bash: createBashTool({
+        sessionId,
+        characterId: characterId || null,
+        onProgress: onExecuteCommandProgress,
+      }),
+    }),
     ...(allTools.editFile && {
       editFile: createEditFileTool({
         sessionId,
@@ -259,15 +272,9 @@ export async function buildToolsForRequest(
     ...(allTools.updatePlan && {
       updatePlan: createUpdatePlanTool({ sessionId }),
     }),
-    ...(allTools.runSkill && {
-      runSkill: createRunSkillTool({
+    ...(allTools.skill && {
+      skill: createSkillTool({
         sessionId,
-        userId,
-        characterId: characterId || "",
-      }),
-    }),
-    ...(allTools.updateSkill && {
-      updateSkill: createUpdateSkillTool({
         userId,
         characterId: characterId || "",
       }),
@@ -590,14 +597,14 @@ export async function buildToolsForRequest(
         }
 
         // executeCommand oversized-output loop guard (pre-execution check)
-        if (toolId === "executeCommand" && execCommandDisabledByLoopGuard) {
+        if ((toolId === "executeCommand" || toolId === "bash") && execCommandDisabledByLoopGuard) {
           console.warn(
-            `[CHAT API] executeCommand disabled for remaining response (${execCommandDisableReason ?? "unknown reason"})`
+            `[CHAT API] ${toolId} disabled for remaining response (${execCommandDisableReason ?? "unknown reason"})`
           );
           return {
             status: "error",
             error:
-              `executeCommand has been temporarily disabled for this response ` +
+              `${toolId} has been temporarily disabled for this response ` +
               `(${execCommandDisableReason}). ` +
               `The previous commands produced output too large for the context window. ` +
               `To recover: run specific test files (e.g., npm test -- path/to/file.test.ts), ` +
@@ -711,16 +718,16 @@ export async function buildToolsForRequest(
             consecutiveZeroResultWebSearches = 0;
           }
 
-          // executeCommand oversized-output loop guard (post-execution tracking)
-          if (toolId === "executeCommand") {
+          // Shell-command oversized-output loop guard (executeCommand + bash)
+          if (toolId === "executeCommand" || toolId === "bash") {
             if (guardedResult.blocked) {
               consecutiveOversizedExecCommands += 1;
               if (consecutiveOversizedExecCommands >= EXEC_COMMAND_OVERSIZED_LIMIT) {
                 execCommandDisableReason =
-                  `${consecutiveOversizedExecCommands} consecutive oversized results`;
+                  `${consecutiveOversizedExecCommands} consecutive oversized shell command results`;
                 execCommandDisabledByLoopGuard = true;
                 console.warn(
-                  `[CHAT API] executeCommand loop guard triggered (${execCommandDisableReason})`
+                  `[CHAT API] ${toolId} loop guard triggered (${execCommandDisableReason})`
                 );
               }
             } else {

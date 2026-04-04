@@ -11,7 +11,7 @@
 
 import { ipcMain } from "electron";
 import { execFile } from "child_process";
-import type { IpcHandlerContext } from "./ipc-handlers";
+import type { IpcHandlerContext } from "./ipc-context";
 import { debugLog, debugError } from "./debug-logger";
 import {
   getGhostOsStatus,

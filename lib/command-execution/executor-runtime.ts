@@ -14,8 +14,6 @@ import {
     sanitizeEnvironment,
 } from "@/lib/process-env/policy";
 
-export { sanitizeEnvironment } from "@/lib/process-env/policy";
-
 /**
  * Explicitly normalize the parent process environment before command execution.
  *
@@ -46,7 +44,7 @@ export type BundledRuntimeInfo = {
     ffmpegDir: string | null;
 };
 
-export function getResourcesPath(): string | null {
+function getResourcesPath(): string | null {
     return (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
         || process.env.ELECTRON_RESOURCES_PATH
         || null;
@@ -113,7 +111,7 @@ function detectFfmpegDir(nodeModulesPath: string): string | null {
     return null;
 }
 
-export function prependBundledPaths(pathValue: string, runtime: BundledRuntimeInfo): string {
+function prependBundledPaths(pathValue: string, runtime: BundledRuntimeInfo): string {
     if (runtime.bundledBinDirs.length === 0) return pathValue;
     const pathSeparator = process.platform === "win32" ? ";" : ":";
     return `${runtime.bundledBinDirs.join(pathSeparator)}${pathSeparator}${pathValue}`;

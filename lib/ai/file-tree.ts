@@ -14,7 +14,7 @@ import { getSyncFolders } from "@/lib/vectordb/sync-service";
 // Types
 // =============================================================================
 
-export interface FileTreeEntry {
+interface FileTreeEntry {
   path: string;
   relativePath: string;
   type: "file" | "directory";
@@ -22,7 +22,7 @@ export interface FileTreeEntry {
   depth: number;
 }
 
-export interface FileTreeResult {
+interface FileTreeResult {
   folderPath: string;
   displayName: string;
   entries: FileTreeEntry[];
@@ -30,7 +30,7 @@ export interface FileTreeResult {
   totalDirectories: number;
 }
 
-export interface FileTreeOptions {
+interface FileTreeOptions {
   /** Maximum depth to traverse (default: 4) */
   maxDepth?: number;
   /** Maximum total entries to return (default: 200) */
@@ -172,7 +172,7 @@ export async function getFileTreeForAgent(
 /**
  * Format file tree as markdown for LLM consumption
  */
-export function formatFileTreeAsMarkdown(
+function formatFileTreeAsMarkdown(
   trees: FileTreeResult[],
   maxLines: number = 100
 ): string {

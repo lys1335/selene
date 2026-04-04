@@ -7,27 +7,14 @@
 
 // Export types
 export type {
-    ExecuteOptions,
     ExecuteResult,
-    ValidationResult,
     ExecuteCommandToolOptions,
     ExecuteCommandInput,
     ExecuteCommandToolResult,
-    CommandLogEntry,
-    BackgroundProcessInfo,
 } from "./types";
-
-// Export validator functions
-export {
-    validateCommand,
-    validateExecutionDirectory,
-    isCommandBlocked,
-    getBlockedCommands,
-} from "./validator";
 
 // Export executor functions
 export {
-    executeCommand,
     executeCommandWithValidation,
     startBackgroundProcess,
     getBackgroundProcess,
@@ -35,13 +22,3 @@ export {
     listBackgroundProcesses,
     cleanupBackgroundProcesses,
 } from "./executor";
-
-// Export log manager
-export {
-    saveTerminalLog,
-    readTerminalLog,
-    truncateOutput,
-} from "./log-manager";
-
-// Export logger
-export { commandLogger } from "./logger";

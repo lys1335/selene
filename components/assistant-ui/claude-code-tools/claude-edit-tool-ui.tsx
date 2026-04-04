@@ -4,6 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, PencilIcon, PlusIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
+import { useTranslations } from "next-intl";
 import { DiffStyledPre } from "../diff-styled-pre";
 import { parseTextResult } from "./parse-text-result";
 
@@ -37,6 +38,7 @@ function isErrorResult(result: unknown): boolean {
  * Shows file name, diff preview (old_string → new_string), and result status.
  */
 export const ClaudeEditToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.edit");
   const [expanded, setExpanded] = useState(false);
   const [showFullDiff, setShowFullDiff] = useState(false);
 
@@ -56,9 +58,9 @@ export const ClaudeEditToolUI: ToolCallContentPartComponent = ({ args, result })
   const hasError = isErrorResult(result);
 
   const getActionLabel = () => {
-    if (isRunning) return isCreating ? "Creating..." : "Editing...";
-    if (hasError) return isCreating ? "Create failed" : "Edit failed";
-    return isCreating ? "Created" : "Edited";
+    if (isRunning) return isCreating ? t("creating") : t("editing");
+    if (hasError) return isCreating ? t("createFailed") : t("editFailed");
+    return isCreating ? t("created") : t("edited");
   };
 
   const ActionIcon = isCreating ? PlusIcon : PencilIcon;
@@ -140,7 +142,7 @@ export const ClaudeEditToolUI: ToolCallContentPartComponent = ({ args, result })
                   onClick={() => setShowFullDiff(!showFullDiff)}
                   className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
                 >
-                  {showFullDiff ? "▲ Show less" : `▼ Show all (${diffLines.length} lines)`}
+                  {showFullDiff ? t("showLess") : t("showAll", { count: diffLines.length })}
                 </button>
               )}
             </div>
@@ -149,12 +151,12 @@ export const ClaudeEditToolUI: ToolCallContentPartComponent = ({ args, result })
           {/* Result message */}
           {result !== undefined && (
             <div className={cn("text-[11px]", statusColor)}>
-              {parseTextResult(result) || (hasError ? "Edit failed" : "Edit applied")}
+              {parseTextResult(result) || (hasError ? t("resultFailed") : t("resultApplied"))}
             </div>
           )}
 
           {isRunning && (
-            <div className="text-terminal-muted animate-pulse">Processing...</div>
+            <div className="text-terminal-muted animate-pulse">{t("processing")}</div>
           )}
         </div>
       )}

@@ -9,7 +9,7 @@ import type { ImportanceFactors } from "../types";
 /**
  * Weight configuration for importance factors
  */
-export const IMPORTANCE_WEIGHTS = {
+const IMPORTANCE_WEIGHTS = {
   repetition: 0.30, // Has this pattern appeared multiple times?
   impact: 0.35, // How much would this affect future interactions?
   specificity: 0.20, // Is this specific enough to be actionable?
@@ -20,7 +20,7 @@ export const IMPORTANCE_WEIGHTS = {
 /**
  * Threshold for storing a memory (memories below this are rejected)
  */
-export const IMPORTANCE_THRESHOLD = 0.80;
+const IMPORTANCE_THRESHOLD = 0.80;
 
 /**
  * Calculate the overall importance score from individual factors
@@ -51,14 +51,14 @@ export function meetsThreshold(factors: ImportanceFactors): boolean {
 /**
  * Check if a score value meets the threshold
  */
-export function scoreAboveThreshold(score: number): boolean {
+function scoreAboveThreshold(score: number): boolean {
   return score >= IMPORTANCE_THRESHOLD;
 }
 
 /**
  * Validate that all factors are within valid range (0-1)
  */
-export function validateFactors(factors: ImportanceFactors): boolean {
+function validateFactors(factors: ImportanceFactors): boolean {
   const keys: (keyof ImportanceFactors)[] = [
     "repetition",
     "impact",
@@ -94,7 +94,7 @@ export function normalizeFactors(factors: Partial<ImportanceFactors>): Importanc
 /**
  * Get a human-readable breakdown of the importance score
  */
-export function explainScore(factors: ImportanceFactors): string {
+function explainScore(factors: ImportanceFactors): string {
   const score = calculateImportance(factors);
   const breakdown = [
     `Repetition:     ${factors.repetition.toFixed(2)} × ${IMPORTANCE_WEIGHTS.repetition} = ${(factors.repetition * IMPORTANCE_WEIGHTS.repetition).toFixed(3)}`,

@@ -24,6 +24,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
 import { parseTextResult, parseTextResultWithStatus } from "./parse-text-result";
+import { useTranslations } from "next-intl";
 
 // Shared type
 type ToolCallContentPartComponent = FC<{
@@ -124,9 +125,10 @@ function CompactToolCard({
  * TodoWrite — Claude Code's task list tool
  */
 export const ClaudeTodoWriteToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.todoWrite");
   const todos = Array.isArray(args?.todos) ? args.todos as Array<{ content?: string; status?: string }> : [];
   const todoCount = todos.length;
-  const completedCount = todos.filter(t => t.status === "completed").length;
+  const completedCount = todos.filter(td => td.status === "completed").length;
   const isRunning = result === undefined;
   const hasError = isErrorResult(result);
 
@@ -137,12 +139,12 @@ export const ClaudeTodoWriteToolUI: ToolCallContentPartComponent = ({ args, resu
   return (
     <CompactToolCard
       icon={ListTodoIcon}
-      label={isRunning ? "Updating tasks..." : hasError ? "Task update failed" : "Updated tasks"}
+      label={isRunning ? t("running") : hasError ? t("failed") : t("done")}
       detail={detail}
       isRunning={isRunning}
       hasError={hasError}
       expandedContent={todos.length > 0
-        ? todos.map(t => `${t.status === "completed" ? "✓" : t.status === "in_progress" ? "●" : "○"} ${t.content || ""}`).join("\n")
+        ? todos.map(td => `${td.status === "completed" ? "✓" : td.status === "in_progress" ? "●" : "○"} ${td.content || ""}`).join("\n")
         : undefined}
     />
   );
@@ -152,13 +154,14 @@ export const ClaudeTodoWriteToolUI: ToolCallContentPartComponent = ({ args, resu
  * EnterPlanMode — Claude Code's planning mode trigger
  */
 export const ClaudeEnterPlanModeToolUI: ToolCallContentPartComponent = ({ result }) => {
+  const t = useTranslations("assistantUi.claudeTools.planMode");
   const isRunning = result === undefined;
   const hasError = isErrorResult(result);
 
   return (
     <CompactToolCard
       icon={MapIcon}
-      label={isRunning ? "Entering plan mode..." : hasError ? "Plan mode failed" : "Plan mode"}
+      label={isRunning ? t("entering") : hasError ? t("failed") : t("done")}
       isRunning={isRunning}
       hasError={hasError}
     />
@@ -169,13 +172,14 @@ export const ClaudeEnterPlanModeToolUI: ToolCallContentPartComponent = ({ result
  * ExitPlanMode — Claude Code's plan approval step
  */
 export const ClaudeExitPlanModeToolUI: ToolCallContentPartComponent = ({ result }) => {
+  const t = useTranslations("assistantUi.claudeTools.exitPlanMode");
   const isRunning = result === undefined;
   const hasError = isErrorResult(result);
 
   return (
     <CompactToolCard
       icon={CheckIcon}
-      label={isRunning ? "Awaiting plan approval..." : hasError ? "Plan rejected" : "Plan approved"}
+      label={isRunning ? t("awaiting") : hasError ? t("rejected") : t("approved")}
       isRunning={isRunning}
       hasError={hasError}
     />
@@ -186,6 +190,7 @@ export const ClaudeExitPlanModeToolUI: ToolCallContentPartComponent = ({ result 
  * EnterWorktree — Claude Code's git worktree creation
  */
 export const ClaudeEnterWorktreeToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.worktree");
   const name = typeof args?.name === "string" ? args.name : undefined;
   const isRunning = result === undefined;
   const hasError = isErrorResult(result);
@@ -193,7 +198,7 @@ export const ClaudeEnterWorktreeToolUI: ToolCallContentPartComponent = ({ args, 
   return (
     <CompactToolCard
       icon={GitBranchIcon}
-      label={isRunning ? "Creating worktree..." : hasError ? "Worktree failed" : "Worktree created"}
+      label={isRunning ? t("creating") : hasError ? t("failed") : t("created")}
       detail={name}
       isRunning={isRunning}
       hasError={hasError}
@@ -205,6 +210,7 @@ export const ClaudeEnterWorktreeToolUI: ToolCallContentPartComponent = ({ args, 
  * AskUserQuestion — Claude Code's interactive question tool
  */
 export const ClaudeAskUserQuestionToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.askUser");
   const questions = Array.isArray(args?.questions) ? args.questions as Array<{ question?: string }> : [];
   const firstQ = questions[0]?.question;
   const detail = firstQ
@@ -216,7 +222,7 @@ export const ClaudeAskUserQuestionToolUI: ToolCallContentPartComponent = ({ args
   return (
     <CompactToolCard
       icon={MessageCircleQuestionIcon}
-      label={isRunning ? "Asking..." : hasError ? "Question failed" : "Asked"}
+      label={isRunning ? t("asking") : hasError ? t("failed") : t("asked")}
       detail={detail}
       isRunning={isRunning}
       hasError={hasError}
@@ -229,6 +235,7 @@ export const ClaudeAskUserQuestionToolUI: ToolCallContentPartComponent = ({ args
  * Skill — Claude Code's skill invocation
  */
 export const ClaudeSkillToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.skill");
   const skill = typeof args?.skill === "string" ? args.skill : undefined;
   const isRunning = result === undefined;
   const hasError = isErrorResult(result);
@@ -236,7 +243,7 @@ export const ClaudeSkillToolUI: ToolCallContentPartComponent = ({ args, result }
   return (
     <CompactToolCard
       icon={ZapIcon}
-      label={isRunning ? "Running skill..." : hasError ? "Skill failed" : "Skill"}
+      label={isRunning ? t("running") : hasError ? t("failed") : t("done")}
       detail={skill}
       isRunning={isRunning}
       hasError={hasError}
@@ -249,6 +256,7 @@ export const ClaudeSkillToolUI: ToolCallContentPartComponent = ({ args, result }
  * TaskOutput — Claude Code's task output reader
  */
 export const ClaudeTaskOutputToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.taskOutput");
   const taskId = typeof args?.task_id === "string" ? args.task_id : undefined;
   const isRunning = result === undefined;
   const baseError = isErrorResult(result);
@@ -258,12 +266,12 @@ export const ClaudeTaskOutputToolUI: ToolCallContentPartComponent = ({ args, res
   const isTimeout = statuses.retrieval_status === "timeout";
   const hasError = baseError || isTimeout;
   const label = isRunning
-    ? "Reading task..."
+    ? t("reading")
     : isTimeout
-      ? "Task timed out"
+      ? t("timedOut")
       : hasError
-        ? "Task read failed"
-        : "Task output";
+        ? t("failed")
+        : t("done");
 
   return (
     <CompactToolCard
@@ -281,6 +289,7 @@ export const ClaudeTaskOutputToolUI: ToolCallContentPartComponent = ({ args, res
  * TaskStop — Claude Code's task stop tool
  */
 export const ClaudeTaskStopToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.taskStop");
   const taskId = typeof args?.task_id === "string" ? args.task_id : undefined;
   const isRunning = result === undefined;
   const hasError = isErrorResult(result);
@@ -288,7 +297,7 @@ export const ClaudeTaskStopToolUI: ToolCallContentPartComponent = ({ args, resul
   return (
     <CompactToolCard
       icon={SquareIcon}
-      label={isRunning ? "Stopping task..." : hasError ? "Stop failed" : "Task stopped"}
+      label={isRunning ? t("stopping") : hasError ? t("failed") : t("done")}
       detail={taskId ? `#${taskId.slice(0, 8)}` : undefined}
       isRunning={isRunning}
       hasError={hasError}

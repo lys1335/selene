@@ -66,7 +66,7 @@ export function getParakeetModel(modelId: string): ParakeetModel | null {
   return PARAKEET_MODELS.find((model) => model.id === modelId) ?? null;
 }
 
-export function getParakeetModels(): ParakeetModel[] {
+function getParakeetModels(): ParakeetModel[] {
   return PARAKEET_MODELS;
 }
 

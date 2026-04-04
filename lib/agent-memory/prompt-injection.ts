@@ -40,7 +40,7 @@ export function formatMemoriesForPrompt(characterId: string): FormattedMemory {
  * Get just the memory count without loading full content
  * Useful for UI badges showing pending memory count
  */
-export async function getPendingMemoryCount(characterId: string): Promise<number> {
+async function getPendingMemoryCount(characterId: string): Promise<number> {
   const manager = new AgentMemoryManager(characterId);
   const metadata = await manager.getMetadata();
   return metadata.pendingCount;
@@ -49,7 +49,7 @@ export async function getPendingMemoryCount(characterId: string): Promise<number
 /**
  * Get approved memory count
  */
-export async function getApprovedMemoryCount(characterId: string): Promise<number> {
+async function getApprovedMemoryCount(characterId: string): Promise<number> {
   const manager = new AgentMemoryManager(characterId);
   const metadata = await manager.getMetadata();
   return metadata.approvedCount;

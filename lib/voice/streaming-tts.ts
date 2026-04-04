@@ -5,13 +5,13 @@
 
 import { stripMarkdown } from "@/lib/utils/strip-markdown";
 import { formatCodeForSpeech } from "@/lib/voice/format-tts-text";
-export { stripMarkdown };
+{ stripMarkdown };
 
 // ---------------------------------------------------------------------------
 // StableStreamingLifecycle
 // ---------------------------------------------------------------------------
 
-export interface StableStreamingLifecycleOptions {
+interface StableStreamingLifecycleOptions {
   onStart: () => void;
   onStableEnd: () => void;
   settleDelayMs?: number;

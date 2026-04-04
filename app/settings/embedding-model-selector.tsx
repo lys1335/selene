@@ -69,7 +69,7 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
 
     // Safety check - API might not be fully exposed
     if (!electronAPI?.model?.download) {
-      setDownloadError(t("vector.advanced.reranking.downloadApiUnavailable"));
+      setDownloadError(t("models.downloadApiUnavailable"));
       setDownloading(null);
       return;
     }
@@ -87,7 +87,7 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
           }
           if (data.status === "error") {
             setDownloading(null);
-            setDownloadError(data.error || "Download failed");
+            setDownloadError(data.error || t("models.downloadFailed"));
           }
         }
       });
@@ -96,10 +96,10 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
     try {
       const result = await electronAPI.model.download(modelId);
       if (!result.success) {
-        setDownloadError(result.error || "Download failed");
+        setDownloadError(result.error || t("models.downloadFailed"));
       }
     } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : "Download failed");
+      setDownloadError(err instanceof Error ? err.message : t("models.downloadFailed"));
     } finally {
       setDownloading(null);
       electronAPI.model.removeProgressListener?.();
@@ -179,7 +179,7 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
       </p>
       {formState.embeddingModel && (
         <p className="mt-1 font-mono text-xs text-terminal-green">
-          Vector dimensions: {formatDimensionLabel(formState.embeddingModel)}
+          {t("models.vectorDimensions", { dims: formatDimensionLabel(formState.embeddingModel) })}
         </p>
       )}
     </div>

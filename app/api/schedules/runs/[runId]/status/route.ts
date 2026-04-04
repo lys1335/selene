@@ -9,9 +9,7 @@ import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/local-auth";
 import { getOrCreateLocalUser } from "@/lib/db/queries";
 import { loadSettings } from "@/lib/settings/settings-manager";
-import { db } from "@/lib/db/sqlite-client";
-import { scheduledTaskRuns } from "@/lib/db/sqlite-schedule-schema";
-import { eq } from "drizzle-orm";
+import { getRunForUser } from "@/lib/scheduler/run-lookup";
 
 export async function GET(
   req: Request,
@@ -24,15 +22,11 @@ export async function GET(
 
     const { runId } = await params;
 
-    const run = await db.query.scheduledTaskRuns.findFirst({
-      where: eq(scheduledTaskRuns.id, runId),
-      with: { task: true },
-    });
-
-    const task = Array.isArray(run?.task) ? run.task[0] : run?.task;
-    if (!run || !task || task.userId !== dbUser.id) {
+    const runResult = await getRunForUser(runId, dbUser.id);
+    if (!runResult) {
       return NextResponse.json({ error: "Run not found" }, { status: 404 });
     }
+    const { run } = runResult;
 
     return NextResponse.json({
       runId: run.id,

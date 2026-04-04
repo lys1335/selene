@@ -45,6 +45,28 @@ export function getCharacterAvatarUrl(character: CharacterFull): string | null {
   return character.images[0]?.url || null;
 }
 
+function buildAgentProfileSection(
+  character: CharacterFull,
+  metadata: Record<string, any>
+): string {
+  const profileParts: string[] = [`## Agent Profile\n`];
+  profileParts.push(`**Name:** ${character.name}`);
+  if (character.displayName) {
+    profileParts.push(`**Also Known As:** ${character.displayName}`);
+  }
+
+  const avatarUrl = getCharacterAvatarUrl(character);
+  if (avatarUrl) {
+    profileParts.push(`**Your Avatar Image URL:** ${avatarUrl}`);
+  }
+
+  if (metadata.purpose) {
+    profileParts.push(`**Your Purpose:** ${metadata.purpose}`);
+  }
+
+  return profileParts.join("\n");
+}
+
 function getSkillSummariesFromMetadata(metadata: Record<string, any>): Array<{
   id: string;
   name: string;
@@ -66,6 +88,26 @@ function getSkillSummariesFromMetadata(metadata: Record<string, any>): Array<{
         : [],
     }))
     .filter((skill) => skill.name.length > 0);
+}
+
+function logMemoryInjection(characterName: string, memoryCount: number, tokenEstimate: number, suffix = ""): void {
+  console.log(`[Character Prompt] Injected ${memoryCount} memories (~${tokenEstimate} tokens) for ${characterName}${suffix}`);
+}
+
+function logSkillsInjection(characterName: string, skillCount: number, tokenEstimate: number, suffix = ""): void {
+  console.log(`[Character Prompt] Injected ${skillCount} skills (~${tokenEstimate} tokens) for ${characterName}${suffix}`);
+}
+
+function buildSkillMatchingGuidanceBlock(): string {
+  return [
+    "## Skill Matching Guidance",
+    "- If the user asks for a workflow, campaign, template, playbook, or other reusable task, check for related skills first.",
+    `- Use \`skill\` action="list" to discover available skills when needed.`,
+    `- Use \`skill\` action="run" when a user request clearly matches a skill trigger example.`,
+    "- Use `skill` for create/patch/replace/metadata/copy/archive operations.",
+    "- If multiple skills match, ask a brief clarification before running.",
+    "- If confidence is low, ask for confirmation instead of auto-running.",
+  ].join("\n");
 }
 
 /**
@@ -97,33 +139,13 @@ export function buildCharacterSystemPrompt(
     sections.push(character.tagline);
   }
 
-  // Build agent profile section
-  const profileParts: string[] = [];
-
-  profileParts.push(`## Agent Profile\n`);
-  profileParts.push(`**Name:** ${character.name}`);
-  if (character.displayName) {
-    profileParts.push(`**Also Known As:** ${character.displayName}`);
-  }
-
-  // Include avatar URL so the character knows what they look like
-  const avatarUrl = getCharacterAvatarUrl(character);
-  if (avatarUrl) {
-    profileParts.push(`**Your Avatar Image URL:** ${avatarUrl}`);
-  }
-
-  // Add metadata/purpose if available
-  if (metadata.purpose) {
-    profileParts.push(`**Your Purpose:** ${metadata.purpose}`);
-  }
-
-  sections.push(profileParts.join("\n"));
+  sections.push(buildAgentProfileSection(character, metadata));
 
   // Agent Memory - learned preferences and patterns
   const { markdown: memoryMarkdown, tokenEstimate, memoryCount } = formatMemoriesForPrompt(character.id);
   if (memoryMarkdown) {
     sections.push(memoryMarkdown);
-    console.log(`[Character Prompt] Injected ${memoryCount} memories (~${tokenEstimate} tokens) for ${character.name}`);
+    logMemoryInjection(character.name, memoryCount, tokenEstimate);
   }
 
   const skillSummaries = options.skillSummaries || getSkillSummariesFromMetadata(metadata);
@@ -131,20 +153,8 @@ export function buildCharacterSystemPrompt(
     const skillBlock = formatSkillsForPromptFromSummary(skillSummaries);
     if (skillBlock.markdown) {
       sections.push(skillBlock.markdown);
-      sections.push(
-        [
-          "## Skill Matching Guidance",
-          "- If the user asks for a workflow, campaign, template, playbook, or other reusable task, check for related skills first.",
-          "- Use `runSkill` action=\"list\" to discover available skills when needed.",
-          "- Use `runSkill` action=\"run\" when a user request clearly matches a skill trigger example.",
-          "- Use `updateSkill` for create/patch/replace/metadata/copy/archive operations.",
-          "- If multiple skills match, ask a brief clarification before running.",
-          "- If confidence is low, ask for confirmation instead of auto-running.",
-        ].join("\n")
-      );
-      console.log(
-        `[Character Prompt] Injected ${skillBlock.skillCount} skills (~${skillBlock.tokenEstimate} tokens) for ${character.name}`
-      );
+      sections.push(buildSkillMatchingGuidanceBlock());
+      logSkillsInjection(character.name, skillBlock.skillCount, skillBlock.tokenEstimate);
     }
   }
 
@@ -233,25 +243,7 @@ export function buildCacheableCharacterPrompt(
     identityParts.push(character.tagline);
   }
 
-  // Build agent profile section
-  const profileParts: string[] = [`## Agent Profile\n`];
-  profileParts.push(`**Name:** ${character.name}`);
-  if (character.displayName) {
-    profileParts.push(`**Also Known As:** ${character.displayName}`);
-  }
-
-  // Include avatar URL so the character knows what they look like
-  const avatarUrl = getCharacterAvatarUrl(character);
-  if (avatarUrl) {
-    profileParts.push(`**Your Avatar Image URL:** ${avatarUrl}`);
-  }
-
-  // Add metadata/purpose if available (metadata already declared at top)
-  if (metadata.purpose) {
-    profileParts.push(`**Your Purpose:** ${metadata.purpose}`);
-  }
-
-  identityParts.push(profileParts.join("\n"));
+  identityParts.push(buildAgentProfileSection(character, metadata));
 
   blocks.push({
     role: "system",
@@ -279,9 +271,7 @@ export function buildCacheableCharacterPrompt(
         },
       }),
     });
-    console.log(
-      `[Character Prompt] Injected ${memoryCount} memories (~${tokenEstimate} tokens) for ${character.name}`
-    );
+    logMemoryInjection(character.name, memoryCount, tokenEstimate);
   }
 
   const skillSummaries = options.skillSummaries || getSkillSummariesFromMetadata(metadata);
@@ -299,18 +289,9 @@ export function buildCacheableCharacterPrompt(
       });
       blocks.push({
         role: "system",
-        content: [
-          "## Skill Matching Guidance",
-          "- Use `runSkill` action=\"list\" to discover available skills when needed.",
-          "- Use `runSkill` action=\"run\" when a user request clearly matches a skill trigger example.",
-          "- Use `updateSkill` for create/patch/replace/metadata/copy/archive operations.",
-          "- If multiple skills match, ask a brief clarification before running.",
-          "- If confidence is low, ask for confirmation instead of auto-running.",
-        ].join("\n"),
+        content: buildSkillMatchingGuidanceBlock(),
       });
-      console.log(
-        `[Character Prompt] Injected ${skillBlock.skillCount} skills (~${skillBlock.tokenEstimate} tokens) for ${character.name} (cacheable)`
-      );
+      logSkillsInjection(character.name, skillBlock.skillCount, skillBlock.tokenEstimate, " (cacheable)");
     }
   }
 
@@ -352,7 +333,7 @@ export function buildCacheableCharacterPrompt(
 /**
  * Combines character prompt with tool-specific instructions
  */
-export interface CharacterPromptOptions {
+interface CharacterPromptOptions {
   character: CharacterFull;
   geminiEnabled?: boolean;
   flux2Enabled?: boolean;
@@ -360,7 +341,7 @@ export interface CharacterPromptOptions {
   toolLoadingMode?: "deferred" | "always";
 }
 
-export function buildFullSystemPrompt(options: CharacterPromptOptions): string {
+function buildFullSystemPrompt(options: CharacterPromptOptions): string {
   const { character, toolInstructions, toolLoadingMode } = options;
 
   let prompt = buildCharacterSystemPrompt(character, { toolLoadingMode });

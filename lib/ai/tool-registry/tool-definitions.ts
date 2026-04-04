@@ -6,13 +6,13 @@
  *
  * LOADING STRATEGY (optimized for token efficiency):
  * - alwaysLoad: true  → Core tools that must always be available:
- *   - searchTools, listAllTools: Required for discovering other tools
+ *   - searchTools: Required for discovering other tools
  *   - compactSession: Explicit agent-controlled context compaction
  *   - describeImage: Essential for virtual try-on workflows
  * - deferLoading: true → All other tools (discovered on-demand via searchTools)
  *
- * CRITICAL: searchTools and listAllTools MUST have alwaysLoad: true.
- * Without them, the AI cannot discover other tools and will output raw
+ * CRITICAL: searchTools MUST have alwaysLoad: true.
+ * Without it, the AI cannot discover other tools and will output raw
  * function call syntax as plain text instead of executing tools.
  *
  * This saves ~2,500 tokens per request by deferring tool descriptions until needed.
@@ -22,7 +22,7 @@
 import { tool, jsonSchema } from "ai";
 import { ToolRegistry } from "./registry";
 import type { ToolMetadata } from "./types";
-import { createToolSearchTool, createListToolsTool } from "./search-tool";
+import { createToolSearchTool } from "./search-tool";
 import {
   createDescribeImageTool,
   createDocsSearchTool,
@@ -73,21 +73,6 @@ export function registerAllTools(): void {
       requiresSession: false,
     } satisfies ToolMetadata,
     () => createToolSearchTool()
-  );
-
-  // List All Tools - Deferred for token efficiency (discover via searchTools)
-  registry.register(
-    "listAllTools",
-    {
-      displayName: "List All Tools",
-      category: "utility",
-      keywords: ["list", "tools", "catalog", "capabilities", "inventory", "all tools", "exploration"],
-      shortDescription:
-        "List all available tools organized by category with availability status",
-      loading: { deferLoading: true }, // Optimized: Discoverable via searchTools
-      requiresSession: false,
-    } satisfies ToolMetadata,
-    () => createListToolsTool()
   );
 
   // Retrieve Full Content - allows AI to access full untruncated content

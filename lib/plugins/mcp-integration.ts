@@ -60,7 +60,7 @@ export async function connectPluginMCPServers(
 /**
  * Disconnect MCP servers for a plugin.
  */
-export async function disconnectPluginMCPServers(
+async function disconnectPluginMCPServers(
   pluginName: string,
   mcpConfig: PluginMCPConfig
 ): Promise<void> {
@@ -83,7 +83,7 @@ export async function disconnectPluginMCPServers(
  * config overrides (e.g. URLs added via Settings) are respected.
  * Call on app startup or when switching agents.
  */
-export async function loadAllPluginMCPServers(
+async function loadAllPluginMCPServers(
   _userId: string,
   characterId?: string
 ): Promise<{ totalConnected: number; totalFailed: number }> {

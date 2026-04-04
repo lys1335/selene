@@ -4,14 +4,7 @@ import {
   getUserByEmail,
   SESSION_COOKIE_NAME,
 } from "@/lib/auth/local-auth";
-
-function isSecureRequest(req: NextRequest): boolean {
-  const forwardedProto = req.headers.get("x-forwarded-proto");
-  if (forwardedProto) {
-    return forwardedProto.split(",")[0].trim() === "https";
-  }
-  return req.nextUrl.protocol === "https:";
-}
+import { isSecureRequest } from "@/lib/auth/request-utils";
 
 export async function POST(req: NextRequest) {
   try {

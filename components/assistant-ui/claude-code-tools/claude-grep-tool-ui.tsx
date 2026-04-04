@@ -4,6 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, SearchIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
+import { useTranslations } from "next-intl";
 import { parseTextResult } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
@@ -36,6 +37,7 @@ function isErrorResult(result: unknown): boolean {
  * Shows search pattern, scope, and match results.
  */
 export const ClaudeGrepToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.grep");
   const [expanded, setExpanded] = useState(false);
 
   const expansionCtx = useToolExpansion();
@@ -82,7 +84,7 @@ export const ClaudeGrepToolUI: ToolCallContentPartComponent = ({ args, result })
         {StatusIcon && <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", statusColor)} />}
         {!StatusIcon && <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-terminal-muted animate-pulse" />}
         <SearchIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
-        <span className="text-terminal-muted">{isRunning ? "Searching..." : hasError ? "Search failed" : "Search"}</span>
+        <span className="text-terminal-muted">{isRunning ? t("running") : hasError ? t("failed") : t("done")}</span>
         <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={`${pattern}${scopeLabel ? ` in ${scopeLabel}` : ""}`}>
           {pattern}
           {scopeLabel && <span className="text-terminal-muted font-normal"> in {scopeLabel}</span>}
@@ -112,12 +114,12 @@ export const ClaudeGrepToolUI: ToolCallContentPartComponent = ({ args, result })
           {resultLines.length > 0 && (
             <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-64 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
               {resultLines.slice(0, 200).join("\n")}
-              {resultLines.length > 200 && `\n\n... and ${resultLines.length - 200} more results`}
+              {resultLines.length > 200 && `\n\n${t("andMoreResults", { count: resultLines.length - 200 })}`}
             </pre>
           )}
 
           {!isRunning && !hasError && matchCount === 0 && (
-            <div className="text-[11px] text-terminal-muted">No matches found</div>
+            <div className="text-[11px] text-terminal-muted">{t("noMatches")}</div>
           )}
 
           {hasError && content && (
@@ -125,7 +127,7 @@ export const ClaudeGrepToolUI: ToolCallContentPartComponent = ({ args, result })
           )}
 
           {isRunning && (
-            <div className="text-terminal-muted animate-pulse">Searching...</div>
+            <div className="text-terminal-muted animate-pulse">{t("searching")}</div>
           )}
         </div>
       )}

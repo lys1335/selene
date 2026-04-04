@@ -16,6 +16,8 @@ import { subscribeToActions } from "@/lib/browser/action-history";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Screencast SSE can run for extended browser sessions.
+export const maxDuration = 86400;
 
 /**
  * HEAD — lightweight probe to check if a screencast is active.

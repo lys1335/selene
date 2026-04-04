@@ -13,8 +13,8 @@ const GIT_TIMEOUT_MS = 30_000;
 const GIT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 const HUNK_HEADER_RE = /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s+@@/;
 
-export type GitDiffType = "unstaged" | "staged" | "branch";
-export type GitStageAction = "stage" | "unstage" | "stage-all" | "unstage-all";
+type GitDiffType = "unstaged" | "staged" | "branch";
+type GitStageAction = "stage" | "unstage" | "stage-all" | "unstage-all";
 
 interface DiffFilter {
   type?: string;
@@ -28,7 +28,7 @@ interface ApplyPatchOptions {
   cached?: boolean;
 }
 
-export interface GitCommitResult {
+interface GitCommitResult {
   commit: string;
   summary: {
     changes: number;
@@ -37,7 +37,7 @@ export interface GitCommitResult {
   };
 }
 
-export interface GitAheadBehindResult {
+interface GitAheadBehindResult {
   ahead: number;
   behind: number;
   hasUpstream: boolean;

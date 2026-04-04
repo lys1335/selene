@@ -465,4 +465,3 @@ export const VectorSearchToolUI: ToolCallContentPartComponent = ({
   );
 };
 
-export default VectorSearchToolUI;

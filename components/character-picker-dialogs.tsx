@@ -567,6 +567,7 @@ export function McpToolEditorDialog({
   onComplete: () => void;
 }) {
   const t = useTranslations("picker");
+  const tc = useTranslations("common");
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -584,7 +585,7 @@ export function McpToolEditorDialog({
           <button
             onClick={() => onOpenChange(false)}
             className="rounded-sm p-1.5 opacity-70 hover:opacity-100 hover:bg-terminal-border/30 transition-all"
-            aria-label="Close"
+            aria-label={tc("close")}
           >
             <X className="h-5 w-5 text-terminal-dark" />
           </button>

@@ -177,82 +177,99 @@ class ToolRegistry {
   }
 
   /**
-   * Search for tools matching a query
+   * Search for tools matching a query using a lightweight Claude-style scorer.
    */
   search(query: string, limit = 20): ToolSearchResult[] {
-    const queryLower = query.toLowerCase();
-    const queryWords = queryLower.split(/\s+/).filter(Boolean);
+    const queryLower = query.trim().toLowerCase();
+    const queryParts = queryLower.split(/[^a-z0-9]+/).filter(Boolean);
 
-    const results: ToolSearchResult[] = [];
+    if (!queryLower) {
+      return [];
+    }
+
+    const results: Array<ToolSearchResult & { rawScore: number }> = [];
 
     for (const [name, tool] of this.tools) {
-      // Skip disabled tools
       if (!this.isToolEnabled(name)) continue;
 
-      // Calculate relevance score
-      let score = 0;
       const { metadata } = tool;
+      const nameLower = name.toLowerCase();
+      const displayNameLower = metadata.displayName.toLowerCase();
+      const searchHintLower = metadata.searchHint?.toLowerCase() ?? "";
+      const descriptionLower = metadata.shortDescription.toLowerCase();
+      const keywordsLower = metadata.keywords.map((keyword) => keyword.toLowerCase());
 
-      // Exact name match (highest weight)
-      if (name.toLowerCase() === queryLower) {
-        score += 1.0;
-      } else if (name.toLowerCase().includes(queryLower)) {
-        score += 0.7;
+      let score = 0;
+
+      if (nameLower === queryLower || displayNameLower === queryLower) {
+        score += 12;
+      } else {
+        if (nameLower.includes(queryLower)) score += 6;
+        if (displayNameLower.includes(queryLower)) score += 5;
       }
 
-      // Display name match
-      if (metadata.displayName.toLowerCase().includes(queryLower)) {
-        score += 0.6;
+      if (searchHintLower) {
+        if (searchHintLower === queryLower) {
+          score += 8;
+        } else if (searchHintLower.includes(queryLower)) {
+          score += 4;
+        }
       }
 
-      // Category match
+      if (descriptionLower.includes(queryLower)) {
+        score += 2;
+      }
+
       if (metadata.category.toLowerCase().includes(queryLower)) {
-        score += 0.5;
+        score += 1;
       }
 
-      // Keyword matches - prioritize exact matches over partial
-      for (const keyword of metadata.keywords) {
-        const keywordLower = keyword.toLowerCase();
-
-        // Exact full query match in keyword (highest keyword score)
+      for (const keywordLower of keywordsLower) {
         if (keywordLower === queryLower) {
-          score += 0.6;
+          score += 6;
         } else if (keywordLower.includes(queryLower)) {
-          score += 0.4;
+          score += 3;
+        }
+      }
+
+      for (const part of queryParts) {
+        if (nameLower === part || displayNameLower === part) {
+          score += 10;
+        } else {
+          if (nameLower.includes(part)) score += 6;
+          if (displayNameLower.includes(part)) score += 5;
         }
 
-        // Check individual query words against keywords
-        for (const word of queryWords) {
-          // Exact word match (higher weight for precise matches)
-          if (keywordLower === word) {
-            score += 0.5;
-          } else if (keywordLower.includes(word)) {
-            score += 0.2;
+        if (searchHintLower.includes(part)) score += 4;
+        if (descriptionLower.includes(part)) score += 2;
+        if (metadata.category.toLowerCase().includes(part)) score += 1;
+
+        for (const keywordLower of keywordsLower) {
+          if (keywordLower === part) {
+            score += 5;
+          } else if (keywordLower.includes(part)) {
+            score += 2;
           }
         }
       }
 
-      // Description match
-      if (metadata.shortDescription.toLowerCase().includes(queryLower)) {
-        score += 0.3;
-      }
+      if (score <= 0) continue;
 
-      if (score > 0) {
-        results.push({
-          name,
-          displayName: metadata.displayName,
-          category: metadata.category,
-          description: metadata.shortDescription,
-          relevance: Math.min(score, 1.0), // Cap at 1.0
-          fullInstructions: metadata.fullInstructions,
-        });
-      }
+      results.push({
+        name,
+        displayName: metadata.displayName,
+        category: metadata.category,
+        description: metadata.shortDescription,
+        relevance: Math.min(score / 20, 1),
+        fullInstructions: metadata.fullInstructions,
+        rawScore: score,
+      });
     }
 
-    // Sort by relevance and limit
     return results
-      .sort((a, b) => b.relevance - a.relevance)
-      .slice(0, limit);
+      .sort((a, b) => b.rawScore - a.rawScore || b.relevance - a.relevance)
+      .slice(0, limit)
+      .map(({ rawScore: _rawScore, ...result }) => result);
   }
 
   /**
@@ -273,7 +290,7 @@ class ToolRegistry {
 
       // CRITICAL: Agent-specific tool filtering
       // If agentEnabledTools is provided, ONLY load:
-      // 1. Core utility tools (alwaysLoad: true) - searchTools, listAllTools
+      // 1. Core utility tools (alwaysLoad: true) - searchTools
       // 2. Tools explicitly in the agentEnabledTools set
       if (agentEnabledTools) {
         const isAlwaysLoad = metadata.loading.alwaysLoad === true;
@@ -318,7 +335,7 @@ class ToolRegistry {
   }
 
   /**
-   * Get concise list of available tools (for listAllTools - token efficient)
+   * Get concise list of available tools (token efficient)
    */
   getAvailableToolsList(): Array<{
     name: string;

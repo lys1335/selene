@@ -99,7 +99,7 @@ interface TypewriterLinesProps {
   onComplete?: () => void;
 }
 
-export function TypewriterLines({
+function TypewriterLines({
   lines,
   lineDelay = 300,
   speed = 40,

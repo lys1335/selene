@@ -6,10 +6,8 @@ import { promisify } from "util";
 import {
   getSession,
   updateSession,
-  getOrCreateLocalUser,
 } from "@/lib/db/queries";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { loadSettings } from "@/lib/settings/settings-manager";
+import { resolveSessionAuth } from "@/lib/api/shared-handlers";
 import {
   getSessionProviderTemperatureForSession,
   resolveSessionUtilityModelForSession,
@@ -18,6 +16,7 @@ import { getWorkspaceInfo } from "@/lib/workspace/types";
 import { isEBADFError, spawnWithFileCapture } from "@/lib/spawn-utils";
 import { GitService } from "@/lib/workspace/git-service";
 import { getSyncFolders } from "@/lib/vectordb/sync-folder-crud";
+import { runGitCommand } from "@/lib/workspace/git-runner";
 import type {
   WorkspaceInfo,
   WorkspaceStatus,
@@ -138,8 +137,6 @@ function sanitizeWorkspacePatch(payload: unknown): Partial<WorkspaceInfo> {
   return safePayload;
 }
 
-const GIT_TIMEOUT_MS = 30_000;
-const GIT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 const GH_TIMEOUT_MS = 30_000;
 const GH_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 const GH_INSTALL_URL = "https://cli.github.com/";
@@ -150,16 +147,6 @@ const PR_TEMPLATE_CANDIDATES = [
   "pull_request_template.md",
   "PULL_REQUEST_TEMPLATE.md",
 ];
-
-// Default git options for child process git commands
-function gitExecOptions(cwd: string) {
-  return {
-    cwd,
-    encoding: "utf-8" as const,
-    timeout: GIT_TIMEOUT_MS,
-    maxBuffer: GIT_MAX_OUTPUT_BYTES,
-  };
-}
 
 function ghExecOptions(cwd: string) {
   return {
@@ -173,56 +160,6 @@ function ghExecOptions(cwd: string) {
       GIT_TERMINAL_PROMPT: "0",
     },
   };
-}
-
-async function runGitCommand(cwd: string, args: string[], input?: string): Promise<string> {
-  if (typeof input === "string") {
-    const fb = await spawnWithFileCapture(
-      "git",
-      args,
-      cwd,
-      process.env as NodeJS.ProcessEnv,
-      GIT_TIMEOUT_MS,
-      GIT_MAX_OUTPUT_BYTES,
-      input,
-    );
-    const exitCode = fb.exitCode ?? 1;
-    if (fb.timedOut) {
-      throw new Error(`Git command timed out after ${GIT_TIMEOUT_MS}ms`);
-    }
-    if (exitCode !== 0) {
-      const detail = fb.stderr.trim() || fb.stdout.trim() || `exit code ${exitCode}`;
-      throw new Error(`Git command failed: ${detail}`);
-    }
-    return fb.stdout;
-  }
-
-  try {
-    const { stdout } = await execFileAsync("git", args, gitExecOptions(cwd));
-    return stdout;
-  } catch (error) {
-    if (isEBADFError(error) && process.platform === "darwin") {
-      console.warn("[workspace route] git execFile EBADF - retrying with file-capture fallback");
-      const fb = await spawnWithFileCapture(
-        "git",
-        args,
-        cwd,
-        process.env as NodeJS.ProcessEnv,
-        GIT_TIMEOUT_MS,
-        GIT_MAX_OUTPUT_BYTES,
-      );
-      const exitCode = fb.exitCode ?? 1;
-      if (fb.timedOut) {
-        throw new Error(`Git command timed out after ${GIT_TIMEOUT_MS}ms`);
-      }
-      if (exitCode !== 0) {
-        const detail = fb.stderr.trim() || fb.stdout.trim() || `exit code ${exitCode}`;
-        throw new Error(`Git command failed: ${detail}`);
-      }
-      return fb.stdout;
-    }
-    throw error;
-  }
 }
 
 async function runGhCommand(cwd: string, args: string[], input?: string): Promise<string> {
@@ -524,17 +461,6 @@ async function buildWorkspaceStatus(workspaceInfo: WorkspaceInfo): Promise<Works
   return workspaceStatus;
 }
 
-async function validateSessionOwnership(sessionId: string, userId: string) {
-  const session = await getSession(sessionId);
-  if (!session) {
-    return { error: "Session not found", status: 404 };
-  }
-  if (session.userId !== userId) {
-    return { error: "Forbidden", status: 403 };
-  }
-  return { session };
-}
-
 async function isGitRepo(folderPath: string): Promise<boolean> {
   if (!isValidWorktreePath(folderPath) || !fs.existsSync(folderPath)) {
     return false;
@@ -649,21 +575,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-
     const { id } = await params;
+    const authResult = await resolveSessionAuth(req, id);
+    if ("errorResponse" in authResult) return authResult.errorResponse;
 
-    const ownershipResult = await validateSessionOwnership(id, dbUser.id);
-    if ("error" in ownershipResult) {
-      return NextResponse.json(
-        { error: ownershipResult.error },
-        { status: ownershipResult.status }
-      );
-    }
-
-    const { session } = ownershipResult;
+    const { session } = authResult;
     const metadata = session.metadata as Record<string, unknown> | null;
     const workspaceInfo = getWorkspaceInfo(metadata);
     const url = new URL(req.url);
@@ -748,21 +664,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-
     const { id } = await params;
+    const authResult = await resolveSessionAuth(req, id);
+    if ("errorResponse" in authResult) return authResult.errorResponse;
+    const { session } = authResult;
 
-    const ownershipResult = await validateSessionOwnership(id, dbUser.id);
-    if ("error" in ownershipResult) {
-      return NextResponse.json(
-        { error: ownershipResult.error },
-        { status: ownershipResult.status }
-      );
-    }
-
-    const { session } = ownershipResult;
     const safePayload = sanitizeWorkspacePatch(await req.json());
 
     const existingMetadata = (session.metadata as Record<string, unknown>) || {};
@@ -801,21 +707,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-
     const { id } = await params;
+    const authResult = await resolveSessionAuth(req, id);
+    if ("errorResponse" in authResult) return authResult.errorResponse;
 
-    const ownershipResult = await validateSessionOwnership(id, dbUser.id);
-    if ("error" in ownershipResult) {
-      return NextResponse.json(
-        { error: ownershipResult.error },
-        { status: ownershipResult.status }
-      );
-    }
-
-    const { session } = ownershipResult;
+    const { session } = authResult;
     const metadata = (session.metadata as Record<string, unknown>) || {};
     const body = (await req.json()) as WorkspaceActionBody;
     const { action } = body;

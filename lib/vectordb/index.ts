@@ -7,66 +7,15 @@
  * @module lib/vectordb
  */
 
-export { getLanceDB, isVectorDBEnabled, getVectorDBPath, testVectorDBConnection } from "./client";
 export {
-  ensureAgentTable,
-  deleteAgentTable,
-  getAgentTableName,
-  getAgentTableStats,
-  listAgentTables
+  getAgentTableStats
 } from "./collections";
 export {
-  indexFileToVectorDB,
-  removeFileFromVectorDB,
-  removeFolderFromVectorDB,
-  indexTextToVectorDB,
-  type IndexFileResult
-} from "./indexing";
-export {
-  searchVectorDB,
   type VectorSearchHit,
-  type VectorSearchOptions
 } from "./search";
 export {
   searchWithRouter,
 } from "./search-router";
 export {
-  addSyncFolder,
   getSyncFolders,
-  removeSyncFolder,
-  syncFolder,
-  syncAllFolders,
-  reindexAllFolders,
-  isSyncing,
-  isSyncingPath,
-  cancelSyncByPath,
-  cancelSyncById,
-  getSyncedFoldersNeedingWatch,
-  getStaleFolders,
-  restartAllWatchers,
-  syncStaleFolders,
-  type SyncFolderConfig,
-  type SyncResult,
-  type ParallelConfig,
 } from "./sync-service";
-export {
-  startWatching,
-  stopWatching,
-  stopAllWatchers,
-  getWatchedFolders,
-  isWatching,
-} from "./file-watcher";
-export {
-  startBackgroundSync,
-  stopBackgroundSync,
-  initializeVectorSync,
-  isVectorSyncInitialized,
-} from "./background-sync";
-export {
-  registerFolder as registerSharedFolder,
-  unregisterFolder as unregisterSharedFolder,
-  getSubscribers as getSharedFolderSubscribers,
-  getSubscriberCount as getSharedFolderSubscriberCount,
-  getWatcherOwner as getSharedFolderWatcherOwner,
-  getRegistrySnapshot as getSharedFolderRegistrySnapshot,
-} from "./shared-folder-registry";

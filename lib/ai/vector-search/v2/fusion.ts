@@ -5,14 +5,14 @@
 
 import type { VectorSearchHit } from "@/lib/vectordb/search";
 
-export interface RankedHit {
+interface RankedHit {
   id: string;
   rank: number;
   score: number;
   source: "dense" | "lexical";
 }
 
-export interface FusionOptions {
+interface FusionOptions {
   k?: number;
   denseWeight?: number;
   lexicalWeight?: number;
@@ -63,7 +63,7 @@ export function sortByFusedScore(
 /**
  * Cosine similarity for MMR diversification
  */
-export function cosineSimilarity(a: number[], b: number[]): number {
+function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   let normA = 0;
   let normB = 0;

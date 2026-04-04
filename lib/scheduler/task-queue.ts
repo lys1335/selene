@@ -15,7 +15,7 @@ import type { ContextSource, DeliveryMethod, DeliveryConfig } from "@/lib/db/sql
 import { getContextSourceManager } from "./context-sources";
 import { getDeliveryRouter } from "./delivery";
 import { taskRegistry } from "@/lib/background-tasks/registry";
-import type { ScheduledTask } from "@/lib/background-tasks/types";
+import type { BackgroundTask } from "@/lib/background-tasks/types";
 import { nowISO } from "@/lib/utils/timestamp";
 import { getInternalApiBaseUrl } from "@/lib/utils/environment";
 import { nextOrderingIndex } from "@/lib/session/message-ordering";
@@ -75,6 +75,7 @@ export class TaskQueue {
   /**
    * Cancel a running or queued task
    */
+  // fallow-ignore-next-line unused-class-member
   async cancel(runId: string): Promise<boolean> {
     // Check if queued (not yet started)
     const queueIndex = this.queue.findIndex((t) => t.runId === runId);
@@ -124,6 +125,7 @@ export class TaskQueue {
   /**
    * Start processing queue
    */
+  // fallow-ignore-next-line unused-class-member
   start(): void {
     if (this.isRunning) return;
     this.isRunning = true;
@@ -136,6 +138,7 @@ export class TaskQueue {
   /**
    * Stop processing queue
    */
+  // fallow-ignore-next-line unused-class-member
   async stop(): Promise<void> {
     this.isRunning = false;
     
@@ -155,6 +158,7 @@ export class TaskQueue {
   /**
    * Get current queue size
    */
+  // fallow-ignore-next-line unused-class-member
   getQueueSize(): number {
     return this.queue.length;
   }
@@ -195,7 +199,7 @@ export class TaskQueue {
     try {
       await this.updateRunStatus(task.runId, "running", { startedAt });
 
-      const unifiedTask: ScheduledTask = {
+      const unifiedTask: BackgroundTask = {
         type: "scheduled",
         runId: task.runId,
         taskId: task.taskId,

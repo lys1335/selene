@@ -27,42 +27,22 @@
 
 // Run context (AsyncLocalStorage-based)
 export {
-  type RunContextData,
-  type CreateRunContextOptions,
-  getRunContext,
-  requireRunContext,
   withRunContext,
-  withRunContextSync,
-  updateRunContext,
-  getRunElapsedMs,
 } from "./run-context";
 
 // Database queries
 export {
   // Agent runs
-  type CreateAgentRunOptions,
   createAgentRun,
   completeAgentRun,
   updateAgentRunMetadata,
-  getAgentRun,
-  listAgentRunsBySession,
-  // Agent run events
-  type AppendRunEventOptions,
   appendRunEvent,
-  getRunEvents,
   // Prompt templates & versions
-  getOrCreatePromptTemplate,
-  getOrCreatePromptVersion,
-  getPromptVersion,
-  getLatestPromptVersion,
   listPromptVersions,
   listPromptTemplates,
   // Stale run management
-  findStaleRuns,
   findZombieRuns,
-  markRunAsTimedOut,
   markRunAsCancelled,
-  cleanupStaleRuns,
   // Admin/List queries
   type ListAgentRunsOptions,
   listAgentRuns,
@@ -70,42 +50,15 @@ export {
   // Prompt analytics
   type PromptVersionMetrics,
   getPromptVersionMetrics,
-  getRunsByPromptVersion,
   getVersionAdoptionTimeline,
 } from "./queries";
 
 // Tool event handler integration
 export {
   initializeToolEventHandler,
-  isToolEventHandlerInitialized,
 } from "./tool-event-handler";
-
-// Traced LLM wrapper
-export {
-  generateTextTraced,
-  type TracedLLMOptions,
-  type GenerateTextTracedOptions,
-  type GenerateTextTracedResult,
-} from "./llm-traced";
 
 // Cleanup job
 export {
   startCleanupJob,
-  stopCleanupJob,
 } from "./cleanup-job";
-
-// Re-export schema types for convenience
-export type {
-  AgentRun,
-  NewAgentRun,
-  AgentRunEvent,
-  NewAgentRunEvent,
-  PromptTemplate,
-  NewPromptTemplate,
-  PromptVersion,
-  NewPromptVersion,
-  AgentRunEventType,
-  AgentRunStatus,
-  AgentRunTriggerType,
-  EventLevel,
-} from "@/lib/db/sqlite-schema";

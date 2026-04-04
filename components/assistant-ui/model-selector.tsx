@@ -15,7 +15,7 @@ import { useModelBag } from "@/components/model-bag/use-model-bag";
 import type { ModelItem } from "@/components/model-bag/model-bag.types";
 import { resilientPut } from "@/lib/utils/resilient-fetch";
 import { useTranslations } from "next-intl";
-import type { ContextWindowStatus } from "@/lib/hooks/use-context-status";
+import type { ContextStatusInfo } from "@/lib/hooks/use-context-status";
 
 const PROVIDER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   anthropic: { bg: "bg-amber-500/10", text: "text-amber-700", border: "border-amber-500/30" },
@@ -92,7 +92,7 @@ function getManualModelPlaceholder(provider: string): string {
 
 interface ModelSelectorProps {
   sessionId: string;
-  status: ContextWindowStatus | null;
+  status: ContextStatusInfo | null;
 }
 
 export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => {

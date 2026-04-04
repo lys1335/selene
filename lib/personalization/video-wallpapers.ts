@@ -9,7 +9,7 @@
  * Designed to loop seamlessly as ambient background layers behind UI at reduced opacity.
  */
 
-export interface VideoWallpaper {
+interface VideoWallpaper {
   id: string;
   /** Display label */
   label: string;
@@ -27,7 +27,7 @@ export interface VideoWallpaper {
   credit: string;
 }
 
-export type VideoWallpaperCategory =
+type VideoWallpaperCategory =
   | "forest"
   | "ocean"
   | "night"

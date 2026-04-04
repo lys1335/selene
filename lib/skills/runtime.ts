@@ -1,6 +1,6 @@
 import type { SkillInputParameter, SkillRecord } from "./types";
 
-export interface SkillPromptRenderResult {
+interface SkillPromptRenderResult {
   prompt: string;
   missingParameters: string[];
   resolvedParameters: Record<string, string | number | boolean | null>;

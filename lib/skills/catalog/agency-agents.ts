@@ -1,6 +1,6 @@
 import type { CatalogSkill } from "./types";
 
-export const AGENCY_AGENTS_COLLECTION = {
+const AGENCY_AGENTS_COLLECTION = {
   id: "agency-agents",
   label: "Agency Agents",
   url: "https://github.com/msitarzewski/agency-agents/tree/main",

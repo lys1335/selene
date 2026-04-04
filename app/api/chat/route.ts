@@ -63,7 +63,8 @@ import {
 } from "@/lib/observability";
 import { nextOrderingIndex } from "@/lib/session/message-ordering";
 import { getEnabledPluginsForAgent, getInstalledPlugins, loadPluginHooks } from "@/lib/plugins/registry";
-import { getWorkflowByAgentId, getWorkflowResources } from "@/lib/agents/workflows";
+import { getWorkflowByAgentId } from "@/lib/agents/workflows";
+import { getWorkflowResources } from "@/lib/agents/workflow-resource-context";
 import { INTERNAL_API_SECRET } from "@/lib/config/internal-api-secret";
 
 // ── Extracted utility modules ─────────────────────────────────────────────────
@@ -115,7 +116,7 @@ import {
 initializeToolEventHandler();
 
 // Maximum request duration in seconds
-export const maxDuration = 3600;
+export const maxDuration = 36000; // 10 hours
 
 // Ensure settings are loaded (syncs provider selection to process.env)
 loadSettings();
@@ -1011,10 +1012,42 @@ export async function POST(req: Request) {
             });
           }
 
+          // OpenRouter forwards to providers like Qwen/Alibaba that reject
+          // multiple system messages. Flatten CacheableSystemBlock[] into a
+          // single string so only one {role:"system"} is sent upstream.
+          // Also absorb any session-summary system message from cachedMessages
+          // so the final request has exactly one system message total.
+          // Cache control markers are Anthropic-specific anyway, so no loss.
+          let finalSystemPrompt: typeof systemPromptValue = systemPromptValue;
+          let finalMessages = cachedMessages;
+          if (provider === "openrouter") {
+            if (Array.isArray(systemPromptValue)) {
+              const parts = systemPromptValue.map((block) => block.content);
+              // Absorb leading system messages from cachedMessages into the prompt
+              const msgs = [...cachedMessages];
+              while (msgs.length > 0 && msgs[0].role === "system") {
+                parts.push(msgs[0].content as string);
+                msgs.shift();
+              }
+              finalSystemPrompt = parts.join("\n\n");
+              finalMessages = msgs;
+            } else if (typeof systemPromptValue === "string") {
+              // Even when not cached, absorb leading system messages
+              const parts = [systemPromptValue];
+              const msgs = [...cachedMessages];
+              while (msgs.length > 0 && msgs[0].role === "system") {
+                parts.push(msgs[0].content as string);
+                msgs.shift();
+              }
+              finalSystemPrompt = parts.join("\n\n");
+              finalMessages = msgs;
+            }
+          }
+
           return streamText({
             model: resolvedModel,
-            ...(injectContext && { system: systemPromptValue }),
-          messages: cachedMessages,
+            ...(injectContext && { system: finalSystemPrompt }),
+          messages: finalMessages,
           ...(providerSupportsFeature("tools", provider) ? {
             tools: allToolsWithMCP,
             activeTools: initialActiveToolNames as (keyof typeof allToolsWithMCP)[],
@@ -1148,7 +1181,7 @@ export async function POST(req: Request) {
               const hasDelegations = hasRunningDelegationsForSession(characterId, sessionId);
               const systemMsg = hasDelegations
                 ? "You have active delegations still running. You MUST call observe() or delegateToSubagent with action='observe' to wait for and collect their results. Do NOT respond to the user until all delegations have completed and you have processed their results."
-                : "You have background processes still running. You MUST call executeCommand with the processId to check their status, or wait for them to complete. Do NOT respond to the user until you have checked on all running processes.";
+                : "You have background processes still running. You MUST call bash or executeCommand with the processId to check their status, or wait for them to complete. Do NOT respond to the user until you have checked on all running processes.";
               return {
                 activeTools: currentActiveTools as string[],
                 toolChoice: "required" as const,
@@ -1200,9 +1233,14 @@ export async function POST(req: Request) {
               runId,
               errorType: error?.constructor?.name,
               stack: error instanceof Error ? error.stack?.split("\n").slice(0, 5).join("\n") : undefined,
-              // When error is a plain object (not Error), log its contents so we
-              // can actually see what the provider returned (e.g. Codex API errors).
-              raw: !(error instanceof Error) ? JSON.stringify(error, null, 2)?.slice(0, 2000) : undefined,
+              // Always log raw error details — for OpenRouter and other providers that
+              // wrap upstream rejections (e.g. image too large) in Error instances,
+              // the cause chain / response body is the only way to diagnose.
+              raw: {
+                cause: error instanceof Error && (error as Error).cause ? JSON.stringify((error as Error).cause, null, 2).slice(0, 2000) : undefined,
+                responseBody: (error as any)?.responseBody ? String((error as any).responseBody).slice(0, 2000) : undefined,
+                message: error instanceof Error ? error.message : undefined,
+              },
             });
             // Claude Code SDK agents self-correct after tool validation failures —
             // the stream stays open and onFinish will finalize the run properly.

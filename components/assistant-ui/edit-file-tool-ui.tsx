@@ -7,9 +7,10 @@ import { useTranslations } from "next-intl";
 import { useToolExpansion } from "./tool-expansion-context";
 import { DiffStyledPre } from "./diff-styled-pre";
 import {
-  type DiagnosticResult,
+  type ToolDiagnosticResult,
   getDiagnosticCounts,
   getDiagnosticOutput,
+  parseLintOutput,
 } from "./tool-diagnostics";
 
 interface EditFileResult {
@@ -18,7 +19,7 @@ interface EditFileResult {
   message: string;
   linesChanged?: number;
   created?: boolean;
-  diagnostics?: DiagnosticResult;
+  diagnostics?: ToolDiagnosticResult;
   diff?: string;
 }
 
@@ -29,7 +30,7 @@ interface WriteFileResult {
   bytesWritten?: number;
   lineCount?: number;
   created?: boolean;
-  diagnostics?: DiagnosticResult;
+  diagnostics?: ToolDiagnosticResult;
   diff?: string;
 }
 
@@ -245,30 +246,9 @@ export const EditFileToolUI: ToolCallContentPartComponent = ({
 
             const { tool } = result.diagnostics;
             const totalIssues = errors + warnings;
-            const outputLines = output.split('\n');
             const hasMultipleIssues = totalIssues > 1;
-            
-            // Parse output to separate errors and warnings (basic heuristic)
-            const errorLines: string[] = [];
-            const warningLines: string[] = [];
-            const otherLines: string[] = [];
-            
-            outputLines.forEach(line => {
-              if (line.includes('error') || line.includes('✖')) {
-                errorLines.push(line);
-              } else if (line.includes('warning') || line.includes('⚠')) {
-                warningLines.push(line);
-              } else {
-                otherLines.push(line);
-              }
-            });
-            
-            // Reconstruct output with errors first, then warnings
-            const sortedOutput = [
-              ...errorLines,
-              ...warningLines,
-              ...otherLines
-            ].join('\n');
+            const { sortedOutput, errorLines, warningLines, otherLines } = parseLintOutput(output);
+            const outputLines = [...errorLines, ...warningLines, ...otherLines];
             
             return (
               <div className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 space-y-2">

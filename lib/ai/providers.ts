@@ -81,30 +81,14 @@ import { BLACKBOX_ALL_MODEL_IDS } from "@/lib/auth/blackboxai-models";
 export {
   getEmbeddingModel,
   getEmbeddingModelId,
-  type EmbeddingProvider,
 } from "@/lib/ai/providers/embedding-provider";
-
-// Re-export client-level helpers that other modules may use directly
-export { getOpenRouterApiKey, getOpenRouterClient } from "@/lib/ai/providers/openrouter-client";
-export { getKimiApiKey, getKimiClient } from "@/lib/ai/providers/kimi-client";
-export { getOllamaClient, getOllamaBaseUrl } from "@/lib/ai/providers/ollama-client";
-export { getVllmClient, getVllmBaseUrl, getVllmApiKey } from "@/lib/ai/providers/vllm-client";
-export { getMiniMaxApiKey, getMiniMaxClient } from "@/lib/ai/providers/minimax-client";
-export { getBlackBoxApiKey, getBlackBoxClient } from "@/lib/ai/providers/blackboxai-client";
 
 // ---- Types -------------------------------------------------------------------
 
-export type LLMProvider =
-  | "anthropic"
-  | "openrouter"
-  | "antigravity"
-  | "codex"
-  | "kimi"
-  | "ollama"
-  | "claudecode"
-  | "minimax"
-  | "blackboxai"
-  | "vllm";
+// LLMProvider is defined in provider-types.ts to avoid a circular dependency
+// between providers.ts and model-validation.ts (which also needs this type).
+import type { LLMProvider } from "@/lib/ai/provider-types";
+export type { LLMProvider } from "@/lib/ai/provider-types";
 
 // ---- Model Sets & Defaults ---------------------------------------------------
 
@@ -625,7 +609,7 @@ export function getConfiguredModel(): string {
  * Get the appropriate temperature for the current provider.
  * Kimi K2.5 models require temperature=1 (fixed value).
  */
-export function getProviderTemperature(requestedTemp: number): number {
+function getProviderTemperature(requestedTemp: number): number {
   const provider = getConfiguredProvider();
   if (provider === "kimi") {
     return 1; // Kimi K2.5 fixed value; custom fetch overrides to 0.6 for non-thinking mode
@@ -638,7 +622,7 @@ export function getProviderTemperature(requestedTemp: number): number {
 /**
  * Get a language model instance for the configured provider and model.
  */
-export function getLanguageModel(modelOverride?: string): LanguageModel {
+function getLanguageModel(modelOverride?: string): LanguageModel {
   const provider = getConfiguredProvider();
   const model =
     resolveModelForProvider(
@@ -801,7 +785,7 @@ export function getModelByName(modelId: string): LanguageModel {
 /**
  * Get the chat model for conversations.
  */
-export function getChatModel(): LanguageModel {
+function getChatModel(): LanguageModel {
   const settings = loadSettings();
   const provider = getConfiguredProvider();
   const chatModel = resolveModelForProvider(

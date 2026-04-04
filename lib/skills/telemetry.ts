@@ -2,7 +2,7 @@ import { and, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/sqlite-client";
 import { skillTelemetryEvents } from "@/lib/db/sqlite-skills-schema";
 
-export type SkillTelemetryEventType =
+type SkillTelemetryEventType =
   | "skill_auto_triggered"
   | "skill_manual_run"
   | "skill_copy_succeeded"

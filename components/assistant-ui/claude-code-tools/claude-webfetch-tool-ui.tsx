@@ -4,6 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, GlobeIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
+import { useTranslations } from "next-intl";
 import { parseTextResult } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
@@ -36,6 +37,7 @@ function getDomain(url: string): string {
  * Shows URL domain, fetch status, and content preview.
  */
 export const ClaudeWebFetchToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.webfetch");
   const [expanded, setExpanded] = useState(false);
 
   const expansionCtx = useToolExpansion();
@@ -75,7 +77,7 @@ export const ClaudeWebFetchToolUI: ToolCallContentPartComponent = ({ args, resul
         {StatusIcon && <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", statusColor)} />}
         {!StatusIcon && <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-terminal-muted animate-pulse" />}
         <GlobeIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
-        <span className="text-terminal-muted">{isRunning ? "Fetching..." : hasError ? "Fetch failed" : "Fetched"}</span>
+        <span className="text-terminal-muted">{isRunning ? t("running") : hasError ? t("failed") : t("done")}</span>
         <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={domain}>{domain}</span>
 
         {content && !hasError && (
@@ -121,7 +123,7 @@ export const ClaudeWebFetchToolUI: ToolCallContentPartComponent = ({ args, resul
           )}
 
           {isRunning && (
-            <div className="text-terminal-muted animate-pulse">Fetching URL...</div>
+            <div className="text-terminal-muted animate-pulse">{t("fetching")}</div>
           )}
         </div>
       )}

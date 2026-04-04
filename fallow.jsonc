@@ -1,0 +1,145 @@
+{
+  "$schema": "https://unpkg.com/fallow-cli/schema.json",
+  // fallow auto-discovers .fallowrc.json (not fallow.jsonc) as the main config.
+  // This file is kept in sync with .fallowrc.json so the suppressions are visible here.
+  "ignoreDependencies": [
+    // Vendor plugin deps - not managed by us
+    "@nx-js/observer-util",
+    "@risingstack/react-easy-state",
+    // Used by tailwind.config.ts at runtime via require(); fallow can't trace dynamic require
+    // so it incorrectly classifies this as test-only.
+    "tailwindcss-animate"
+  ],
+  "ignorePatterns": [
+    // Vendor plugin - third party code, not maintained by us
+    "selene-plugins/_vendor_screenshot_rocks/**"
+    // tests/fixtures/mcp-idle-server.js: suppressed via // fallow-ignore-file in the file itself
+    // lib/channels/inbound.ts circular dep: suppressed via // fallow-ignore-file in the file
+  ],
+  "ignoreExports": [
+    // Drizzle ORM relations — must be exported for Drizzle's runtime module scanning.
+    // No source file imports these directly; Drizzle discovers them via the schema object graph.
+    {
+      "file": "lib/db/sqlite-character-schema.ts",
+      "exports": [
+        "charactersRelations",
+        "characterImagesRelations",
+        "agentDocumentsRelations",
+        "agentDocumentChunksRelations",
+        "agentSyncFoldersRelations",
+        "agentSyncFilesRelations",
+        "channelConnectionsRelations",
+        "channelConversationsRelations",
+        "channelMessagesRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-observability-schema.ts",
+      "exports": [
+        "agentRunsRelations",
+        "agentRunEventsRelations",
+        "promptTemplatesRelations",
+        "promptVersionsRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-plugins-schema.ts",
+      "exports": [
+        "pluginsRelations",
+        "agentPluginsRelations",
+        "pluginHooksRelations",
+        "pluginMcpServersRelations",
+        "pluginLspServersRelations",
+        "pluginFilesRelations",
+        "pluginSkillRevisionsRelations",
+        "marketplacesRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-schema-base.ts",
+      "exports": [
+        "usersRelations",
+        "sessionsRelations",
+        "messagesRelations",
+        "toolRunsRelations",
+        "webBrowseEntriesRelations",
+        "imagesRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-skills-schema.ts",
+      "exports": [
+        "skillsRelations",
+        "skillVersionsRelations",
+        "skillFilesRelations"
+      ]
+    },
+    // sqlite-voice-schema also exports table vars (voiceHistory, voiceDictionary) that
+    // Drizzle needs alongside the relations
+    {
+      "file": "lib/db/sqlite-voice-schema.ts",
+      "exports": [
+        "voiceHistory",
+        "voiceDictionary",
+        "voiceHistoryRelations",
+        "voiceDictionaryRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-workflows-schema.ts",
+      "exports": [
+        "agentWorkflowsRelations",
+        "agentWorkflowMembersRelations"
+      ]
+    },
+    {
+      "file": "lib/db/sqlite-schedule-schema.ts",
+      "exports": [
+        "scheduledTasksRelations",
+        "scheduledTaskRunsRelations"
+      ]
+    },
+    // Test utility exports — exported for test harness access, not used by production code
+    {
+      "file": "lib/ai/providers/codex-session-store.ts",
+      "exports": ["getActiveSessionIds", "getSessionCount", "clearAllSessions"]
+    },
+    {
+      "file": "lib/ai/providers/codex-ws-gate.ts",
+      "exports": ["getActiveWsCount", "getActiveWsTickets", "releaseAllWs"]
+    },
+    // Plugin barrel chain — these are re-exported via barrel files that fallow doesn't trace
+    {
+      "file": "lib/plugins/registry.ts",
+      "exports": [
+        "getPluginById",
+        "getPluginByName",
+        "updatePluginStatus",
+        "uninstallPlugin",
+        "updateMarketplaceCatalog",
+        "loadActivePluginHooks"
+      ]
+    },
+    {
+      "file": "lib/plugins/mcp-integration.ts",
+      "exports": ["disconnectPluginMCPServers", "loadAllPluginMCPServers"]
+    },
+    // Workflow/vectordb barrel chain — imported via barrel files fallow doesn't trace
+    {
+      "file": "lib/agents/workflow-folder-sharing.ts",
+      "exports": ["syncOwnFoldersToWorkflowMembers", "cleanupInheritedFoldersOnRemoval"]
+    },
+    {
+      "file": "lib/vectordb/shared-folder-registry.ts",
+      "exports": ["resolveRegistryPath", "isRegistered"]
+    },
+    {
+      "file": "lib/vectordb/sync-scheduler.ts",
+      "exports": ["isSyncingPath", "cancelSyncByPath"]
+    },
+    {
+      "file": "lib/voice/voice-utils.ts",
+      "exports": ["buildWhisperPromptFromDictionary"]
+    }
+  ]
+}

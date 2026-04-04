@@ -79,7 +79,7 @@ export function startCleanupJob(intervalMs: number = DEFAULT_CLEANUP_INTERVAL_MS
 /**
  * Stop the cleanup job scheduler
  */
-export function stopCleanupJob(): void {
+function stopCleanupJob(): void {
   if (cleanupIntervalId) {
     clearInterval(cleanupIntervalId);
     cleanupIntervalId = null;

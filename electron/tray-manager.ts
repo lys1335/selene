@@ -95,7 +95,7 @@ function resolveTrayIconImage(isMac: boolean): TrayIconResult | null {
 // Public API
 // ---------------------------------------------------------------------------
 
-export interface InitTrayOptions {
+interface InitTrayOptions {
   onShowMainWindow: () => void;
   onQuit: () => void;
   onVoiceSession: () => void;
@@ -246,6 +246,6 @@ export function destroyTray(): void {
  * Return the current Tray instance, or null if not yet initialized / already
  * destroyed.
  */
-export function getTray(): Tray | null {
+function getTray(): Tray | null {
   return getTrayInstance();
 }

@@ -134,7 +134,7 @@ export async function waitForServerReady(url: string, timeoutMs: number = 30000)
 // Server lifecycle
 // ---------------------------------------------------------------------------
 
-export interface StartNextServerOptions {
+interface StartNextServerOptions {
   userDataPath: string;
   /** Callback used to check if the Electron app is currently quitting. */
   isAppQuitting: () => boolean;
@@ -213,6 +213,10 @@ export async function startNextServer(opts: StartNextServerOptions): Promise<voi
           NEXT_TELEMETRY_DISABLED: "1",
           ELECTRON_RESOURCES_PATH: resourcesPath,
           SELENE_PRODUCTION_BUILD: "1",
+          // Keep-alive timeout for idle sockets between requests (milliseconds).
+          // Default is 5000ms which can recycle sockets too aggressively during
+          // periods of bursty activity. Set to 10 minutes.
+          KEEP_ALIVE_TIMEOUT: "600000",
         },
         stdio: "pipe",
         serviceName: "next-server",

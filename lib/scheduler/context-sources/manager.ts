@@ -11,7 +11,7 @@ import type { ContextFetcher, ResolvedContext } from "./types";
 // Use the base ContextFetcher type for the map since fetchers have different config types
 type AnyContextFetcher = ContextFetcher<Record<string, unknown>>;
 
-export class ContextSourceManager {
+class ContextSourceManager {
   private fetchers: Map<string, AnyContextFetcher> = new Map();
 
   /**

@@ -14,8 +14,6 @@ import { tool, jsonSchema } from "ai";
 import { readFile, access } from "fs/promises";
 import { basename } from "path";
 import {
-  isPathAllowed,
-  resolveWorkspaceAwarePaths,
   ensureParentDirectories,
   recordFileRead,
   recordFileWrite,
@@ -28,13 +26,14 @@ import {
   applyFileEdits,
   type FileEdit,
   atomicWriteFile,
+  resolveSyncedPath,
 } from "@/lib/ai/filesystem";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface EditFileToolOptions {
+interface EditFileToolOptions {
   sessionId: string;
   characterId?: string | null;
 }
@@ -157,32 +156,12 @@ export function createEditFileTool(options: EditFileToolOptions) {
         };
       }
 
-      // Get synced folders (workspace-aware — worktree path is included if active)
-      let syncedFolders: string[];
-      try {
-        syncedFolders = await resolveWorkspaceAwarePaths(characterId, sessionId);
-        if (syncedFolders.length === 0) {
-          return {
-            status: "no_folders",
-            error:
-              "No synced folders configured. Add synced folders in agent settings.",
-          };
-        }
-      } catch (error) {
-        return {
-          status: "error",
-          error: `Failed to get synced folders: ${error instanceof Error ? error.message : "Unknown error"}`,
-        };
+      // Get synced folders and validate path (workspace-aware)
+      const resolved = await resolveSyncedPath(filePath, characterId, sessionId);
+      if (!resolved.ok) {
+        return { status: resolved.status, error: resolved.error };
       }
-
-      // Validate path
-      const validPath = await isPathAllowed(filePath, syncedFolders);
-      if (!validPath) {
-        return {
-          status: "error",
-          error: `Path "${filePath}" is not within any synced folder. Allowed folders: ${syncedFolders.join(", ")}`,
-        };
-      }
+      const { validPath, syncedFolders } = resolved;
 
       // CREATE MODE: oldString is empty (Legacy support)
       if (oldString === "" && newString !== undefined && fileEdits.length === 0) {

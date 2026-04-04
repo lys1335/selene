@@ -66,7 +66,7 @@ export function ParakeetModelSelector({ formState, updateField }: ParakeetModelS
     }).electronAPI;
 
     if (!electronAPI?.model?.parakeetDownloadModel) {
-      setDownloadError("Download API not available");
+      setDownloadError(t("downloadApiUnavailable"));
       setDownloading(false);
       return;
     }
@@ -82,7 +82,7 @@ export function ParakeetModelSelector({ formState, updateField }: ParakeetModelS
           }
           if (data.status === "error") {
             setDownloading(false);
-            setDownloadError(data.error || "Download failed");
+            setDownloadError(data.error || t("downloadFailed"));
           }
         }
       });
@@ -91,10 +91,10 @@ export function ParakeetModelSelector({ formState, updateField }: ParakeetModelS
     try {
       const result = await electronAPI.model.parakeetDownloadModel(selectedModel);
       if (!result.success) {
-        setDownloadError(result.error || "Download failed");
+        setDownloadError(result.error || t("downloadFailed"));
       }
     } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : "Download failed");
+      setDownloadError(err instanceof Error ? err.message : t("downloadFailed"));
     } finally {
       setDownloading(false);
       electronAPI.model.removeProgressListener?.();

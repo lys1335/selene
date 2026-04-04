@@ -38,7 +38,7 @@ export const toOpenChatWorkspaceSession = (
     updatedAt: session.updatedAt ?? null,
 });
 
-export const toOpenChatWorkspaceSessionFromTab = (
+const toOpenChatWorkspaceSessionFromTab = (
     tab: Pick<ChatWorkspaceTab, "sessionId" | "title" | "characterId" | "characterName" | "updatedAt">,
 ): OpenChatWorkspaceSession => ({
     sessionId: tab.sessionId,
@@ -160,7 +160,7 @@ export const areSessionsEquivalent = (prev: SessionInfo[], next: SessionInfo[]) 
     return true;
 };
 
-export const isTextPart = (part: UIMessage["parts"][number] | undefined | null): part is { type: "text"; text: string } => {
+const isTextPart = (part: UIMessage["parts"][number] | undefined | null): part is { type: "text"; text: string } => {
     return Boolean(
         part &&
         part.type === "text" &&
@@ -168,7 +168,7 @@ export const isTextPart = (part: UIMessage["parts"][number] | undefined | null):
     );
 };
 
-export const getMessageSignature = (message: UIMessage) => {
+const getMessageSignature = (message: UIMessage) => {
     const parts = Array.isArray(message.parts) ? message.parts : [];
     const partTypes = parts.map((part) => (part?.type ? String(part.type) : "text")).join(",");
     const textDigest = parts
@@ -189,7 +189,7 @@ export const getMessagesSignature = (messages: UIMessage[]) => {
     return `${messages.length}:${getMessageSignature(lastMessage)}`;
 };
 
-export interface LivePromptForegroundReconciliationInput {
+interface LivePromptForegroundReconciliationInput {
     liveThreadMessageCount: number;
     persistedConversationMessageCount: number;
     hasInjectedMessages: boolean;
@@ -201,7 +201,7 @@ export const shouldDeferLivePromptForegroundReconciliation = (
     input.hasInjectedMessages &&
     input.persistedConversationMessageCount <= input.liveThreadMessageCount;
 
-export interface LivePromptForegroundDeferralBypassInput {
+interface LivePromptForegroundDeferralBypassInput {
     liveThreadMessages: UIMessage[];
     persistedUiMessages: UIMessage[];
     progressAssistantMessageId?: string | null;
@@ -232,7 +232,7 @@ export const shouldBypassLivePromptForegroundDeferral = (
     );
 };
 
-export interface BackgroundRunResolutionInput {
+interface BackgroundRunResolutionInput {
     isForegroundStreaming: boolean;
     hasActiveRun?: boolean;
     runId?: string | null;
@@ -241,7 +241,7 @@ export interface BackgroundRunResolutionInput {
     latestDeepResearchRunId?: string | null;
 }
 
-export interface BackgroundRunResolution {
+interface BackgroundRunResolution {
     activeForegroundRunId: string | null;
     resumedForegroundRunId: string | null;
     deepResearchRunId: string | null;
@@ -249,7 +249,7 @@ export interface BackgroundRunResolution {
     shouldShowBackgroundRun: boolean;
 }
 
-export interface SessionScopedAsyncResultInput {
+interface SessionScopedAsyncResultInput {
     activeSessionId: string | null | undefined;
     targetSessionId: string;
     requestId: number;

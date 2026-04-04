@@ -21,10 +21,10 @@ import type {
   FolderAnalysis,
   FolderSyncManagerProps,
   IndexingMode,
-  SyncMode,
-  ChunkPreset,
-  ReindexPolicy,
+  FolderFormState,
+  FolderFormActions,
 } from "./folder-sync-types";
+import type { SyncMode, ChunkPreset, ReindexPolicy } from "@/lib/vectordb/sync-mode-resolver";
 import {
   RECOMMENDED_EXCLUDES,
   DEFAULT_EXTENSIONS,
@@ -558,47 +558,24 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
       {showAddForm ? (
         <FolderSyncAddForm
           isElectron={isElectron}
-          newFolderPath={newFolderPath}
-          setNewFolderPath={setNewFolderPath}
-          newDisplayName={newDisplayName}
-          setNewDisplayName={setNewDisplayName}
-          newRecursive={newRecursive}
-          setNewRecursive={setNewRecursive}
-          newExtensions={newExtensions}
-          setNewExtensions={setNewExtensions}
-          newExcludePatterns={newExcludePatterns}
-          setNewExcludePatterns={setNewExcludePatterns}
-          newFolderMode={newFolderMode}
-          setNewFolderMode={setNewFolderMode}
-          newIndexingMode={newIndexingMode}
-          setNewIndexingMode={setNewIndexingMode}
-          newSyncMode={newSyncMode}
-          setNewSyncMode={setNewSyncMode}
-          newSyncCadenceMinutes={newSyncCadenceMinutes}
-          setNewSyncCadenceMinutes={setNewSyncCadenceMinutes}
-          newFileTypeFilters={newFileTypeFilters}
-          setNewFileTypeFilters={setNewFileTypeFilters}
-          newMaxFileSizeMB={newMaxFileSizeMB}
-          setNewMaxFileSizeMB={setNewMaxFileSizeMB}
-          newChunkPreset={newChunkPreset}
-          setNewChunkPreset={setNewChunkPreset}
-          newChunkSizeOverride={newChunkSizeOverride}
-          setNewChunkSizeOverride={setNewChunkSizeOverride}
-          newChunkOverlapOverride={newChunkOverlapOverride}
-          setNewChunkOverlapOverride={setNewChunkOverlapOverride}
-          newReindexPolicy={newReindexPolicy}
-          setNewReindexPolicy={setNewReindexPolicy}
-          useRecommendedExcludes={useRecommendedExcludes}
-          onToggleRecommendedExcludes={toggleRecommendedExcludes}
-          showAdvancedOptions={showAdvancedOptions}
-          setShowAdvancedOptions={setShowAdvancedOptions}
-          isAdding={isAdding}
-          isAnalyzing={isAnalyzing}
-          folderAnalysis={folderAnalysis}
-          analysisError={analysisError}
-          onAddFolder={handleAddFolder}
-          onCancel={resetForm}
-          onOpenFolderPicker={handleOpenFolderPicker}
+          {...({
+            newFolderPath, newDisplayName, newRecursive, newExtensions, newExcludePatterns,
+            newFolderMode, newIndexingMode, newSyncMode, newSyncCadenceMinutes, newFileTypeFilters,
+            newMaxFileSizeMB, newChunkPreset, newChunkSizeOverride, newChunkOverlapOverride,
+            newReindexPolicy, useRecommendedExcludes, showAdvancedOptions,
+            isAdding, isAnalyzing, folderAnalysis, analysisError,
+          } satisfies FolderFormState)}
+          {...({
+            setNewFolderPath, setNewDisplayName, setNewRecursive, setNewExtensions,
+            setNewExcludePatterns, setNewFolderMode, setNewIndexingMode, setNewSyncMode,
+            setNewSyncCadenceMinutes, setNewFileTypeFilters, setNewMaxFileSizeMB,
+            setNewChunkPreset, setNewChunkSizeOverride, setNewChunkOverlapOverride,
+            setNewReindexPolicy, setShowAdvancedOptions,
+            onToggleRecommendedExcludes: toggleRecommendedExcludes,
+            onAddFolder: handleAddFolder,
+            onCancel: resetForm,
+            onOpenFolderPicker: handleOpenFolderPicker,
+          } satisfies FolderFormActions)}
         />
       ) : (
         <Button

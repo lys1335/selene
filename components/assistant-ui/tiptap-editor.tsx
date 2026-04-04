@@ -416,7 +416,7 @@ function serializeToContentArray(
   return serializeDocToContentArray(editor.getJSON());
 }
 
-export function buildTranscriptInsertionTransaction(
+function buildTranscriptInsertionTransaction(
   state: EditorState,
   transcriptText: string,
 ): Transaction | null {
@@ -480,7 +480,7 @@ export function buildTranscriptInsertionTransaction(
   return tr.scrollIntoView();
 }
 
-export function insertTranscriptIntoEditor(
+function insertTranscriptIntoEditor(
   editor: Editor,
   transcriptText: string,
 ): boolean {

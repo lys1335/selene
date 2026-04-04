@@ -63,7 +63,7 @@ function toBuffer(content: SkillFile["content"]): Buffer {
   return Buffer.from(content as ArrayBuffer);
 }
 
-export interface SkillExportArtifact {
+interface SkillExportArtifact {
   fileName: string;
   mimeType: string;
   buffer: Buffer;

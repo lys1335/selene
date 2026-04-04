@@ -36,7 +36,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   } catch {
     // fall through
   }
-  return { title: "Chat — Selene" };
+  const t = await getTranslations("chat");
+  return { title: t("fallbackTitle") };
 }
 
 export default async function CharacterChatPage({ params, searchParams }: Props) {
@@ -85,7 +86,7 @@ export default async function CharacterChatPage({ params, searchParams }: Props)
     if (forceNew === "true") {
       // Force create new session
       const session = await createSession({
-        title: `Chat with ${charData.name}`,
+        title: t("sessionTitle", { name: charData.name }),
         userId: dbUser.id,
         metadata: { characterId, characterName: charData.name },
       });

@@ -2,19 +2,7 @@ import { db } from "./sqlite-client";
 import { sessions, messages, toolRuns } from "./sqlite-schema";
 import type { NewMessage, NewToolRun } from "./sqlite-schema";
 import { eq, desc, asc, and, sql, or, inArray } from "drizzle-orm";
-
-function parseMessageMetadata(metadata: NewMessage["metadata"]): Record<string, unknown> | null {
-  if (!metadata) return null;
-  if (typeof metadata === "string") {
-    try {
-      const parsed = JSON.parse(metadata);
-      return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
-    } catch {
-      return null;
-    }
-  }
-  return typeof metadata === "object" ? metadata as Record<string, unknown> : null;
-}
+import { parseMessageMetadata } from "@/lib/messages/parse-metadata";
 
 function countsTowardVisibleConversation(message: Pick<NewMessage, "role" | "metadata">): boolean {
   if (message.role !== "user" && message.role !== "assistant") return false;
@@ -312,7 +300,7 @@ export async function getNonCompactedMessages(sessionId: string) {
   });
 }
 
-export async function markMessagesAsCompacted(
+async function markMessagesAsCompacted(
   sessionId: string,
   beforeMessageId: string
 ) {
@@ -473,7 +461,7 @@ export async function updateToolRun(
   return toolRun;
 }
 
-export async function getToolRun(id: string) {
+async function getToolRun(id: string) {
   return db.query.toolRuns.findFirst({
     where: eq(toolRuns.id, id),
   });

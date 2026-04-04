@@ -37,8 +37,6 @@ function pruneExpiredEntries(now = Date.now()): void {
   }
 }
 
-export type { DelegationCompletion };
-
 export function addDelegationCompletion(completion: DelegationCompletion): void {
   pruneExpiredEntries();
   const store = getStore();

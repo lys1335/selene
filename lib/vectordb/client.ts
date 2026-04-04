@@ -56,7 +56,7 @@ async function loadLanceDBModule(): Promise<LanceDBModule | null> {
 /**
  * Get the path where LanceDB data will be stored
  */
-export function getVectorDBPath(): string {
+function getVectorDBPath(): string {
   // Use LOCAL_DATA_PATH if set (Electron mode), otherwise use .local-data
   const basePath = process.env.LOCAL_DATA_PATH || join(process.cwd(), ".local-data");
   const vectorDBPath = join(basePath, "vectordb");
@@ -103,7 +103,7 @@ export async function getLanceDB(): Promise<LanceDBConnection | null> {
 /**
  * Test the LanceDB connection
  */
-export async function testVectorDBConnection(): Promise<{
+async function testVectorDBConnection(): Promise<{
   success: boolean;
   message: string;
   path?: string;

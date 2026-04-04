@@ -14,7 +14,7 @@ export type TaskStatus =
   | "cancelled"
   | "stale";
 
-export interface BaseTask {
+interface BaseTask {
   runId: string;
   type: TaskType;
   status: TaskStatus;
@@ -29,7 +29,7 @@ export interface BaseTask {
   metadata?: Record<string, unknown>;
 }
 
-export interface ScheduledTask extends BaseTask {
+export interface BackgroundTask extends BaseTask {
   type: "scheduled";
   taskId: string;
   taskName: string;
@@ -55,9 +55,9 @@ export interface ChatTask extends BaseTask {
   messageCount?: number;
 }
 
-export type UnifiedTask = ScheduledTask | ChannelTask | ChatTask;
+export type UnifiedTask = BackgroundTask | ChannelTask | ChatTask;
 
-export interface TaskStartedEvent {
+interface TaskStartedEvent {
   eventType: "task:started";
   task: UnifiedTask;
   timestamp: string;
@@ -86,7 +86,7 @@ export interface TaskProgressEvent {
   timestamp: string;
 }
 
-export interface TaskCompletedEvent {
+interface TaskCompletedEvent {
   eventType: "task:completed";
   task: UnifiedTask;
   timestamp: string;
@@ -94,15 +94,15 @@ export interface TaskCompletedEvent {
 
 export type TaskEvent = TaskStartedEvent | TaskProgressEvent | TaskCompletedEvent;
 
-export function isScheduledTask(task: UnifiedTask): task is ScheduledTask {
+function isBackgroundTask(task: UnifiedTask): task is BackgroundTask {
   return task.type === "scheduled";
 }
 
-export function isChannelTask(task: UnifiedTask): task is ChannelTask {
+function isChannelTask(task: UnifiedTask): task is ChannelTask {
   return task.type === "channel";
 }
 
-export function isChatTask(task: UnifiedTask): task is ChatTask {
+function isChatTask(task: UnifiedTask): task is ChatTask {
   return task.type === "chat";
 }
 

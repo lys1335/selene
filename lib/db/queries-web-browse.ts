@@ -4,7 +4,7 @@ import type { NewWebBrowseEntry, WebBrowseEntry, NewImage } from "./sqlite-schem
 import { eq, desc, and, lt, gt, inArray } from "drizzle-orm";
 
 // Web Browse Entries
-export async function upsertWebBrowseEntry(data: NewWebBrowseEntry): Promise<WebBrowseEntry> {
+async function upsertWebBrowseEntry(data: NewWebBrowseEntry): Promise<WebBrowseEntry> {
   await db
     .delete(webBrowseEntries)
     .where(and(eq(webBrowseEntries.sessionId, data.sessionId), eq(webBrowseEntries.url, data.url)));
@@ -17,7 +17,7 @@ export async function upsertWebBrowseEntry(data: NewWebBrowseEntry): Promise<Web
   return entry;
 }
 
-export async function listWebBrowseEntries(sessionId: string): Promise<WebBrowseEntry[]> {
+async function listWebBrowseEntries(sessionId: string): Promise<WebBrowseEntry[]> {
   const now = new Date().toISOString();
   return db.query.webBrowseEntries.findMany({
     where: and(eq(webBrowseEntries.sessionId, sessionId), gt(webBrowseEntries.expiresAt, now)),
@@ -25,7 +25,7 @@ export async function listWebBrowseEntries(sessionId: string): Promise<WebBrowse
   });
 }
 
-export async function listWebBrowseEntriesByUrls(
+async function listWebBrowseEntriesByUrls(
   sessionId: string,
   urls: string[]
 ): Promise<WebBrowseEntry[]> {
@@ -41,11 +41,11 @@ export async function listWebBrowseEntriesByUrls(
   });
 }
 
-export async function deleteWebBrowseEntries(sessionId: string): Promise<void> {
+async function deleteWebBrowseEntries(sessionId: string): Promise<void> {
   await db.delete(webBrowseEntries).where(eq(webBrowseEntries.sessionId, sessionId));
 }
 
-export async function deleteExpiredWebBrowseEntries(): Promise<number> {
+async function deleteExpiredWebBrowseEntries(): Promise<number> {
   const now = new Date().toISOString();
   const deleted = await db
     .delete(webBrowseEntries)
@@ -60,14 +60,14 @@ export async function createImage(data: NewImage) {
   return image;
 }
 
-export async function getSessionImages(sessionId: string) {
+async function getSessionImages(sessionId: string) {
   return db.query.images.findMany({
     where: eq(images.sessionId, sessionId),
     orderBy: desc(images.createdAt),
   });
 }
 
-export async function getImage(id: string) {
+async function getImage(id: string) {
   return db.query.images.findFirst({
     where: eq(images.id, id),
   });

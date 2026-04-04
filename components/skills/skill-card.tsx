@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Plus, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SkillIcon } from "@/components/skills/skill-icon";
@@ -37,6 +38,7 @@ export function SkillCard({
   onDelete,
   onClick,
 }: SkillCardProps) {
+  const t = useTranslations("skills");
   const isInstalled = variant === "installed";
 
   return (
@@ -70,7 +72,7 @@ export function SkillCard({
               checked={isEnabled}
               onCheckedChange={(enabled) => onToggle(enabled)}
               disabled={isBusy}
-              aria-label={`Toggle ${skill.displayName}`}
+              aria-label={t("toggleSkill", { name: skill.displayName })}
               className="data-[state=checked]:bg-terminal-green"
             />
           )}
@@ -84,7 +86,7 @@ export function SkillCard({
                 event.stopPropagation();
                 onDelete();
               }}
-              aria-label={`Delete ${skill.displayName}`}
+              aria-label={t("deleteSkill", { name: skill.displayName })}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -101,7 +103,7 @@ export function SkillCard({
             event.stopPropagation();
             onInstall?.();
           }}
-          aria-label={`Install ${skill.displayName}`}
+          aria-label={t("installSkill", { name: skill.displayName })}
         >
           {isBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </Button>

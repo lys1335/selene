@@ -19,7 +19,7 @@ export interface DelegateToSubagentToolOptions {
   provider?: string;
 }
 
-export type DelegateAction = "start" | "observe" | "continue" | "answer" | "stop" | "list";
+type DelegateAction = "start" | "observe" | "continue" | "answer" | "stop" | "list";
 
 export interface DelegateToSubagentInput {
   action: DelegateAction;

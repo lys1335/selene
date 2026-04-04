@@ -45,7 +45,7 @@ export interface CompactionResult {
   };
 }
 
-export interface CompactionOptions {
+interface CompactionOptions {
   /** Number of recent messages to keep uncompacted (default: 6) */
   keepRecentMessages: number;
   /** Maximum tokens for the summary (default: 2000) */
@@ -650,6 +650,7 @@ export class CompactionService {
    * @param warningThreshold - Token threshold for warning
    * @returns Whether compaction is recommended
    */
+  // fallow-ignore-next-line unused-class-member
   static shouldCompact(
     currentTokens: number,
     warningThreshold: number
@@ -668,7 +669,7 @@ export class CompactionService {
  *
  * @deprecated Use CompactionService.compact() instead
  */
-export async function compactIfNeeded(
+async function compactIfNeeded(
   sessionId: string,
   modelId?: string,
   provider?: string

@@ -4,7 +4,7 @@ import type { OverlayAgent } from "@/app/api/overlay/agents/route";
 
 const LOCAL_STORAGE_KEY = "overlay:lastAgentId";
 
-export interface UseOverlayAgentPickerReturn {
+interface UseOverlayAgentPickerReturn {
   agents: OverlayAgent[];
   selectedAgent: OverlayAgent | null;
   selectAgent: (agent: OverlayAgent) => void;

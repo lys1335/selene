@@ -7,11 +7,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { getOrCreateLocalUser } from "@/lib/db/queries";
-import { getCharacter } from "@/lib/characters/queries";
-import { loadSettings } from "@/lib/settings/settings-manager";
 import { AgentMemoryManager, type MemoryCategory } from "@/lib/agent-memory";
+import { validationErrorResponse } from "@/lib/api/shared-handlers";
+import { requireCharacterOwnership } from "../_utils";
 import { z } from "zod";
 
 type RouteParams = { params: Promise<{ id: string; memoryId: string }> };
@@ -19,19 +17,10 @@ type RouteParams = { params: Promise<{ id: string; memoryId: string }> };
 // GET - Get a single memory
 export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-    const { id: characterId, memoryId } = await params;
-
-    // Verify character ownership
-    const character = await getCharacter(characterId);
-    if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
-    }
-    if (character.userId !== dbUser.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const { id, memoryId } = await params;
+    const auth = await requireCharacterOwnership(req, Promise.resolve({ id }));
+    if (auth instanceof NextResponse) return auth;
+    const { characterId } = auth;
 
     const manager = new AgentMemoryManager(characterId);
     const memory = await manager.getMemory(memoryId);
@@ -67,28 +56,15 @@ const updateMemorySchema = z.object({
 // PATCH - Update memory (approve, reject, edit)
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-    const { id: characterId, memoryId } = await params;
-
-    // Verify character ownership
-    const character = await getCharacter(characterId);
-    if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
-    }
-    if (character.userId !== dbUser.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const { id, memoryId } = await params;
+    const auth = await requireCharacterOwnership(req, Promise.resolve({ id }));
+    if (auth instanceof NextResponse) return auth;
+    const { characterId } = auth;
 
     const body = await req.json();
     const parseResult = updateMemorySchema.safeParse(body);
-    if (!parseResult.success) {
-      return NextResponse.json(
-        { error: "Invalid input", details: parseResult.error.flatten() },
-        { status: 400 }
-      );
-    }
+    // validationErrorResponse returns non-null when !success
+    if (!parseResult.success) return validationErrorResponse(parseResult)!;
 
     const manager = new AgentMemoryManager(characterId);
     const { action, content, category, reasoning } = parseResult.data;
@@ -137,19 +113,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 // DELETE - Delete a memory permanently
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-    const { id: characterId, memoryId } = await params;
-
-    // Verify character ownership
-    const character = await getCharacter(characterId);
-    if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
-    }
-    if (character.userId !== dbUser.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const { id, memoryId } = await params;
+    const auth = await requireCharacterOwnership(req, Promise.resolve({ id }));
+    if (auth instanceof NextResponse) return auth;
+    const { characterId } = auth;
 
     const manager = new AgentMemoryManager(characterId);
     const deleted = await manager.deleteMemory(memoryId);

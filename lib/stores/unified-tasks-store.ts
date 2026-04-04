@@ -96,10 +96,10 @@ export const useActiveTaskCount = () =>
 export const useActiveTasks = () =>
   useUnifiedTasksStore(useShallow((state) => state.tasks));
 
-export const useActiveTasksByType = (type: TaskType) =>
+const useActiveTasksByType = (type: TaskType) =>
   useUnifiedTasksStore(
     useShallow((state) => state.tasks.filter((t) => t.type === type))
   );
 
-export const useRecentlyCompletedTasks = () =>
+const useRecentlyCompletedTasks = () =>
   useUnifiedTasksStore(useShallow((state) => state.recentlyCompleted));

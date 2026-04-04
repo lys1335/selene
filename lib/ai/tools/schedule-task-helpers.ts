@@ -26,7 +26,7 @@ function normalizeToIsoLike(value: string): string {
   return trimmed;
 }
 
-export type ParseScheduledAtResult =
+type ParseScheduledAtResult =
   | { ok: true; scheduledAtIsoUtc: string; interpretation: "explicit" | "in_timezone" }
   | { ok: false; error: string };
 
@@ -79,7 +79,7 @@ export function isScheduledAtInFutureUtc(
   return ms > nowMs;
 }
 
-export type ResolveTimezoneResult =
+type ResolveTimezoneResult =
   | {
       ok: true;
       timezone: string;

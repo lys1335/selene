@@ -552,7 +552,7 @@ export const BLACKBOX_ALL_MODEL_IDS = [
 
 ] as const;
 
-export type BlackBoxModelId = (typeof BLACKBOX_ALL_MODEL_IDS)[number] | (string & {});
+type BlackBoxModelId = (typeof BLACKBOX_ALL_MODEL_IDS)[number] | (string & {});
 
 /**
  * Curated models shown in the UI model picker.
@@ -723,7 +723,7 @@ export const BLACKBOX_MODEL_IDS = [
 ] as const;
 
 // Default models for different roles
-export const BLACKBOX_DEFAULT_MODELS = {
+const BLACKBOX_DEFAULT_MODELS = {
   chat: "claude-sonnet-4.5" as BlackBoxModelId,
   utility: "gpt-4o-mini" as BlackBoxModelId,
   research: "claude-opus-4.5" as BlackBoxModelId,
@@ -901,7 +901,7 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 // Context window sizes (tokens) — known values for frequently used models
-export const BLACKBOX_CONTEXT_WINDOWS: Record<string, number> = {
+const BLACKBOX_CONTEXT_WINDOWS: Record<string, number> = {
   // Anthropic
   "claude-sonnet-4.6": 200000,
   "claude-sonnet-4.5": 200000,
@@ -1006,14 +1006,14 @@ export const BLACKBOX_CONTEXT_WINDOWS: Record<string, number> = {
 };
 
 // Free models — auto-detected from IDs ending in ":free" plus known free-tier models
-export const BLACKBOX_FREE_MODEL_IDS = new Set(
+const BLACKBOX_FREE_MODEL_IDS = new Set(
   BLACKBOX_ALL_MODEL_IDS.filter((id) => id.endsWith(":free"))
 );
 
 /**
  * Get display name for a BlackBox AI model
  */
-export function getBlackBoxModelDisplayName(modelId: string): string {
+function getBlackBoxModelDisplayName(modelId: string): string {
   return MODEL_LABELS[modelId] || modelId;
 }
 
@@ -1031,13 +1031,13 @@ export function getBlackBoxModels(): Array<{ id: BlackBoxModelId; name: string }
  * Check if a model ID is a known BlackBox AI model
  */
 const ALL_MODEL_SET = new Set<string>(BLACKBOX_ALL_MODEL_IDS);
-export function isBlackBoxModel(modelId: string): boolean {
+function isBlackBoxModel(modelId: string): boolean {
   return ALL_MODEL_SET.has(modelId) || ALL_MODEL_SET.has(modelId.toLowerCase());
 }
 
 /**
  * Get context window size for a BlackBox AI model
  */
-export function getBlackBoxContextWindow(modelId: string): number {
+function getBlackBoxContextWindow(modelId: string): number {
   return BLACKBOX_CONTEXT_WINDOWS[modelId] ?? 128000;
 }

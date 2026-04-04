@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { getOrCreateLocalUser } from "@/lib/db/queries";
-import { loadSettings } from "@/lib/settings/settings-manager";
+import { getAuthenticatedUser } from "@/lib/auth/route-auth";
 import { getCharacterStats } from "@/lib/characters/queries";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
+    const dbUser = await getAuthenticatedUser(req);
     const { id } = await params;
 
     const stats = await getCharacterStats(dbUser.id, id);

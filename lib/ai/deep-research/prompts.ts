@@ -48,7 +48,7 @@ Respond ONLY with a valid JSON object. Do not include any explanation, preamble,
 // Research Analysis Prompt
 // ============================================================================
 
-export const RESEARCH_ANALYZER_PROMPT = `You are a research analyst. Your task is to analyze search results and extract key findings.
+const RESEARCH_ANALYZER_PROMPT = `You are a research analyst. Your task is to analyze search results and extract key findings.
 
 For each set of search results, you must:
 1. Identify the most relevant and credible information
@@ -138,7 +138,7 @@ Make the report comprehensive yet readable. Focus on delivering value to the rea
 // Thinking/Reflection Prompt (for strategic decisions)
 // ============================================================================
 
-export const THINK_PROMPT = `You are a strategic research advisor. Reflect on the current state of the research and provide guidance.
+const THINK_PROMPT = `You are a strategic research advisor. Reflect on the current state of the research and provide guidance.
 
 Consider:
 1. What has been learned so far?

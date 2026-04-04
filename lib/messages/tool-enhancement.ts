@@ -12,7 +12,7 @@ import { nextOrderingIndex } from "@/lib/session/message-ordering";
 import type { DBToolResultPart } from "@/lib/messages/converter";
 
 // Types
-export interface FrontendMessagePart {
+interface FrontendMessagePart {
   type: string;
   text?: string;
   image?: string;
@@ -46,7 +46,7 @@ export interface FrontendMessage {
   }>;
 }
 
-export interface ToolResultEnhancementOptions {
+interface ToolResultEnhancementOptions {
   // Kept for API compatibility; strict history mode does not refetch missing results.
   refetchTools?: Record<string, unknown>;
   maxRefetch?: number;

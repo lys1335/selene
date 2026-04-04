@@ -5,19 +5,19 @@
  * Selene's ToolRegistry and per-agent MCP servers to the Claude Agent SDK.
  *
  * This lets the SDK agent see and call all Selene platform tools (vectorSearch,
- * memorize, runSkill, scheduleTask, etc.) and any MCP server tools configured
+ * memorize, skill, scheduleTask, etc.) and any MCP server tools configured
  * for the active agent — not just Claude Code's built-in tools.
  *
  * Tool exposure rules:
  *  - Built-in ToolRegistry tools: exposed if env-enabled + passes enabledTools filter
- *  - alwaysLoad utility tools (searchTools, listAllTools): always exposed
+ *  - alwaysLoad utility tools (searchTools): always exposed
  *  - MCP tools: scoped to the active agent's enabledMcpServers / enabledMcpTools
  *    (uses getMCPToolsForAgent, NOT getAllTools — prevents cross-agent tool leakage)
  *
  * Deferred loading (when ctx.toolLoadingMode === "deferred"):
  *  - Non-alwaysLoad tools require searchTools discovery before they can be called.
  *  - A session-scoped `activatedTools` Set tracks which tools have been discovered.
- *  - searchTools/listAllTools are created with a ToolSearchContext that references
+ *  - searchTools is created with a ToolSearchContext that references
  *    `activatedTools` as both initialActiveTools and discoveredTools. This bridges
  *    the SDK's activation state so isAvailable is correct and searchTools.execute()
  *    directly activates tools via the shared Set (no text-scanning needed).
@@ -35,8 +35,15 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { ToolRegistry } from "@/lib/ai/tool-registry/registry";
-import { getMCPToolsForAgent, getMCPToolId } from "@/lib/ai/tool-registry/mcp-tool-adapter";
-import { createToolSearchTool, createListToolsTool } from "@/lib/ai/tool-registry/search-tool";
+// Lazy imports to break the cycle:
+// providers → claudecode-provider → selene-sdk-mcp-server → mcp-tool-adapter → client-manager → ... → providers
+// providers → claudecode-provider → selene-sdk-mcp-server → search-tool → providers
+async function loadMcpToolAdapter() {
+  return import("@/lib/ai/tool-registry/mcp-tool-adapter");
+}
+async function loadSearchTool() {
+  return import("@/lib/ai/tool-registry/search-tool");
+}
 import type { ToolSearchContext } from "@/lib/ai/tool-registry/search-tool";
 import type { SeleneMcpContext } from "./mcp-context-store";
 
@@ -224,9 +231,11 @@ function nextSdkToolCallId(toolName: string): string {
  * Call this once per SDK query — the underlying MCP server is lightweight
  * (no subprocess, no network) and is garbage-collected when the query ends.
  */
-export function createSeleneSdkMcpServer(
+export async function createSeleneSdkMcpServer(
   ctx: SeleneMcpContext
-): McpSdkServerConfigWithInstance {
+): Promise<McpSdkServerConfigWithInstance> {
+  const { getMCPToolsForAgent, getMCPToolId } = await loadMcpToolAdapter();
+  const { createToolSearchTool } = await loadSearchTool();
   const registry = ToolRegistry.getInstance();
 
   const enabledSet = ctx.enabledTools ? new Set(ctx.enabledTools) : null;
@@ -251,7 +260,7 @@ export function createSeleneSdkMcpServer(
 
   const sdkTools: SdkMcpToolDefinition<any>[] = [];
 
-  // ── Bridge: ToolSearchContext for searchTools/listAllTools ──────────────
+  // ── Bridge: ToolSearchContext for searchTools ──────────────────────────
   //
   // FIX: The factory at tool-definitions.ts:75 creates searchTools without
   // ToolSearchContext, so isAvailable is always false in the SDK path.
@@ -300,18 +309,15 @@ export function createSeleneSdkMcpServer(
     }
 
     try {
-      // FIX: For searchTools and listAllTools, create context-aware instances
-      // instead of using the context-less factory. This bridges the SDK's
-      // activatedTools Set so isAvailable is correct and discoveredTools.add()
-      // directly activates tools for the deferred gate.
+      // FIX: For searchTools, create a context-aware instance instead of
+      // using the context-less factory. This bridges the SDK's activatedTools
+      // Set so isAvailable is correct and discoveredTools.add() directly
+      // activates tools for the deferred gate.
       const isSearchTools = name === "searchTools";
-      const isListAllTools = name === "listAllTools";
 
       let toolInstance: ReturnType<typeof registeredTool.factory>;
       if (isSearchTools) {
         toolInstance = createToolSearchTool(sdkToolSearchContext);
-      } else if (isListAllTools) {
-        toolInstance = createListToolsTool(sdkToolSearchContext);
       } else {
         toolInstance = registeredTool.factory(factoryOpts);
       }
@@ -320,8 +326,6 @@ export function createSeleneSdkMcpServer(
       const description =
         toolInstance.description ??
         registeredTool.metadata.shortDescription;
-
-      const isSearchOrList = isSearchTools || isListAllTools;
 
       sdkTools.push({
         name,
@@ -351,12 +355,11 @@ export function createSeleneSdkMcpServer(
             const toolCallId = nextSdkToolCallId(name);
             const result = await (toolInstance as any).execute?.(args, { toolCallId });
 
-            // searchTools/listAllTools: the context-aware instance already adds
-            // discovered tools to activatedTools via the shared discoveredTools
-            // reference. As a safety net, also parse the structured result to
-            // explicitly activate any tool names returned — this eliminates the
-            // old fragile substring-scanning approach.
-            if (isSearchOrList && result != null && typeof result === "object") {
+            // searchTools: the context-aware instance already adds discovered
+            // tools to activatedTools via the shared discoveredTools reference.
+            // As a safety net, also parse the structured result to explicitly
+            // activate any tool names returned.
+            if (isSearchTools && result != null && typeof result === "object") {
               const sr = result as { results?: Array<{ name?: string; resultType?: string }> };
               if (Array.isArray(sr.results)) {
                 for (const r of sr.results) {

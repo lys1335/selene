@@ -1,3 +1,4 @@
+// fallow-ignore-file unused-file
 const fs = require("node:fs");
 const path = require("node:path");
 const { notarize } = require("@electron/notarize");

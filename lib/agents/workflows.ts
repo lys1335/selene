@@ -5,12 +5,10 @@ import {
   agentWorkflowMembers,
 } from "@/lib/db/sqlite-workflows-schema";
 import { agentSyncFolders } from "@/lib/db/sqlite-character-schema";
-import {
-  cleanupInheritedFoldersOnRemoval,
-  shareFolderToWorkflowSubagents,
-  syncOwnFoldersToWorkflowMembers,
-  syncSharedFoldersToSubAgents,
-} from "./workflow-folder-sharing";
+// Lazy import to break the cycle: workflows → workflow-folder-sharing → workflows
+async function loadWorkflowFolderSharing() {
+  return import("./workflow-folder-sharing");
+}
 import {
   mapWorkflowRow,
   mapWorkflowMemberRow,
@@ -25,22 +23,22 @@ import {
   buildSharedResourcesSnapshot,
   refreshWorkflowSharedResources as _refreshWorkflowSharedResources,
   touchWorkflow,
+  getWorkflowById,
+  getWorkflowByAgentId,
+  getWorkflowMembers,
 } from "./workflow-db-helpers";
 
 // ── Re-exports (keep all public names accessible from this path) ───────────────
-export {
-  shareFolderToWorkflowSubagents,
-  syncSharedFoldersToSubAgents,
-} from "./workflow-folder-sharing";
+// Note: shareFolderToWorkflowSubagents and syncSharedFoldersToSubAgents are exported
+// directly from ./workflow-folder-sharing to avoid a circular dependency:
+// workflow-folder-sharing → workflows (dynamic) → workflow-folder-sharing (static re-export)
 
 export type {
-  WorkflowStatus,
   WorkflowSharedResources,
   AgentWorkflow,
   AgentWorkflowMember,
   WorkflowMembershipContext,
   WorkflowResourceContext,
-  WorkflowPromptContextDelegation,
   WorkflowPromptContextInput,
 } from "./workflow-types";
 
@@ -102,6 +100,40 @@ interface RemoveWorkflowMemberInput {
 // ── Thin wrapper: binds refreshWorkflowSharedResources to local getWorkflowById ─
 function refreshWorkflowSharedResources(workflowId: string, initiatorId: string): Promise<void> {
   return _refreshWorkflowSharedResources(workflowId, initiatorId, getWorkflowById);
+}
+
+// ── Helper: sync shared folders for new members then refresh shared resources ──
+async function syncFoldersForNewMembers(params: {
+  userId: string;
+  initiatorId: string;
+  workflowId: string;
+  subAgentIds: string[];
+  /** For each subagent, returns the other member IDs to sync its own folders to */
+  getOtherMembersFor?: (subAgentId: string) => string[];
+}): Promise<void> {
+  const { syncSharedFoldersToSubAgents, syncOwnFoldersToWorkflowMembers } = await loadWorkflowFolderSharing();
+  await syncSharedFoldersToSubAgents({
+    userId: params.userId,
+    initiatorId: params.initiatorId,
+    subAgentIds: params.subAgentIds,
+    workflowId: params.workflowId,
+  });
+
+  if (params.getOtherMembersFor) {
+    for (const subAgentId of params.subAgentIds) {
+      const otherMembers = params.getOtherMembersFor(subAgentId);
+      if (otherMembers.length > 0) {
+        await syncOwnFoldersToWorkflowMembers({
+          userId: params.userId,
+          sourceAgentId: subAgentId,
+          targetAgentIds: otherMembers,
+          workflowId: params.workflowId,
+        });
+      }
+    }
+  }
+
+  await refreshWorkflowSharedResources(params.workflowId, params.initiatorId);
 }
 
 // ── Public CRUD ────────────────────────────────────────────────────────────────
@@ -265,27 +297,13 @@ export async function createManualWorkflow(
   });
 
   if (uniqueSubAgentIds.length > 0) {
-    // Sync initiator's folders → all subagents
-    await syncSharedFoldersToSubAgents({
+    await syncFoldersForNewMembers({
       userId: input.userId,
       initiatorId: input.initiatorId,
-      subAgentIds: uniqueSubAgentIds,
       workflowId: workflowRow.id,
+      subAgentIds: uniqueSubAgentIds,
+      getOtherMembersFor: (subAgentId) => [input.initiatorId, ...uniqueSubAgentIds.filter((id) => id !== subAgentId)],
     });
-
-    // Sync each subagent's own folders → initiator + other subagents
-    for (const subAgentId of uniqueSubAgentIds) {
-      const otherMembers = [input.initiatorId, ...uniqueSubAgentIds.filter((id) => id !== subAgentId)];
-      await syncOwnFoldersToWorkflowMembers({
-        userId: input.userId,
-        sourceAgentId: subAgentId,
-        targetAgentIds: otherMembers,
-        workflowId: workflowRow.id,
-      });
-    }
-
-    // Refresh shared resources to reflect all members' folders
-    await refreshWorkflowSharedResources(workflowRow.id, input.initiatorId);
   }
 
   return mapWorkflowRow(workflowRow);
@@ -337,36 +355,56 @@ export async function addSubagentToWorkflow(
   }
 
   if (input.syncFolders !== false) {
-    // Sync all existing members' folders → new subagent
-    await syncSharedFoldersToSubAgents({
-      userId: input.userId,
-      initiatorId: workflow.initiatorId,
-      subAgentIds: [input.agentId],
-      workflowId: input.workflowId,
-    });
-
-    // Sync the new subagent's own folders → all other existing members
+    // Sync all existing members' folders → new subagent, and vice versa
     const existingMembers = await getWorkflowMembers(input.workflowId);
     const otherMemberIds = existingMembers
       .map((m) => m.agentId)
       .filter((id) => id !== input.agentId);
-
-    if (otherMemberIds.length > 0) {
-      await syncOwnFoldersToWorkflowMembers({
-        userId: input.userId,
-        sourceAgentId: input.agentId,
-        targetAgentIds: otherMemberIds,
-        workflowId: input.workflowId,
-      });
-    }
-
-    // Refresh shared resources to reflect the new member's folders
-    await refreshWorkflowSharedResources(input.workflowId, workflow.initiatorId);
+    await syncFoldersForNewMembers({
+      userId: input.userId,
+      initiatorId: workflow.initiatorId,
+      workflowId: input.workflowId,
+      subAgentIds: [input.agentId],
+      getOtherMembersFor: () => otherMemberIds,
+    });
   } else {
     await touchWorkflow(input.workflowId);
   }
 
   return member;
+}
+
+async function promoteWorkflowInitiator(
+  workflowId: string,
+  newInitiatorId: string
+): Promise<void> {
+  await db
+    .update(agentWorkflowMembers)
+    .set({ role: "subagent", updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(agentWorkflowMembers.workflowId, workflowId),
+        eq(agentWorkflowMembers.role, "initiator")
+      )
+    );
+
+  await db
+    .update(agentWorkflowMembers)
+    .set({ role: "initiator", updatedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(agentWorkflowMembers.workflowId, workflowId),
+        eq(agentWorkflowMembers.agentId, newInitiatorId)
+      )
+    );
+
+  await db
+    .update(agentWorkflows)
+    .set({
+      initiatorId: newInitiatorId,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(agentWorkflows.id, workflowId));
 }
 
 export async function setWorkflowInitiator(
@@ -394,33 +432,7 @@ export async function setWorkflowInitiator(
     return workflow;
   }
 
-  await db
-    .update(agentWorkflowMembers)
-    .set({ role: "subagent", updatedAt: new Date().toISOString() })
-    .where(
-      and(
-        eq(agentWorkflowMembers.workflowId, input.workflowId),
-        eq(agentWorkflowMembers.role, "initiator")
-      )
-    );
-
-  await db
-    .update(agentWorkflowMembers)
-    .set({ role: "initiator", updatedAt: new Date().toISOString() })
-    .where(
-      and(
-        eq(agentWorkflowMembers.workflowId, input.workflowId),
-        eq(agentWorkflowMembers.agentId, input.initiatorId)
-      )
-    );
-
-  await db
-    .update(agentWorkflows)
-    .set({
-      initiatorId: input.initiatorId,
-      updatedAt: new Date().toISOString(),
-    })
-    .where(eq(agentWorkflows.id, input.workflowId));
+  await promoteWorkflowInitiator(input.workflowId, input.initiatorId);
 
   await refreshWorkflowSharedResources(input.workflowId, input.initiatorId);
 
@@ -460,38 +472,13 @@ export async function removeWorkflowMember(
       return { workflowDeleted: true };
     }
 
-    await db
-      .update(agentWorkflowMembers)
-      .set({ role: "subagent", updatedAt: new Date().toISOString() })
-      .where(
-        and(
-          eq(agentWorkflowMembers.workflowId, input.workflowId),
-          eq(agentWorkflowMembers.role, "initiator")
-        )
-      );
-
-    await db
-      .update(agentWorkflowMembers)
-      .set({ role: "initiator", updatedAt: new Date().toISOString() })
-      .where(
-        and(
-          eq(agentWorkflowMembers.workflowId, input.workflowId),
-          eq(agentWorkflowMembers.agentId, replacement.agentId)
-        )
-      );
-
-    await db
-      .update(agentWorkflows)
-      .set({
-        initiatorId: replacement.agentId,
-        updatedAt: new Date().toISOString(),
-      })
-      .where(eq(agentWorkflows.id, input.workflowId));
+    await promoteWorkflowInitiator(input.workflowId, replacement.agentId);
 
     nextInitiatorId = replacement.agentId;
   }
 
   // Clean up inherited folders before removing the member
+  const { cleanupInheritedFoldersOnRemoval } = await loadWorkflowFolderSharing();
   await cleanupInheritedFoldersOnRemoval({
     workflowId: input.workflowId,
     leavingAgentId: input.agentId,
@@ -569,62 +556,16 @@ export async function detachAgentFromWorkflows(
   }
 }
 
-export async function getWorkflowByAgentId(
-  agentId: string
-): Promise<WorkflowMembershipContext | null> {
-  const rows = await db
-    .select({
-      workflow: agentWorkflows,
-      member: agentWorkflowMembers,
-    })
-    .from(agentWorkflowMembers)
-    .innerJoin(agentWorkflows, eq(agentWorkflowMembers.workflowId, agentWorkflows.id))
-    .where(
-      and(
-        eq(agentWorkflowMembers.agentId, agentId),
-        ne(agentWorkflows.status, "archived")
-      )
-    )
-    .orderBy(desc(agentWorkflows.updatedAt))
-    .limit(1);
+// Re-export read-only query helpers from workflow-db-helpers to keep
+// the public API of this module stable for existing callers.
+export {
+  getWorkflowByAgentId,
+  getWorkflowById,
+  getWorkflowMembers,
+} from "./workflow-db-helpers";
 
-  if (rows.length === 0) return null;
-
-  return {
-    workflow: mapWorkflowRow(rows[0].workflow),
-    member: mapWorkflowMemberRow(rows[0].member),
-  };
-}
-
-export async function getWorkflowById(
-  workflowId: string,
-  userId?: string
-): Promise<AgentWorkflow | null> {
-  const conditions = [eq(agentWorkflows.id, workflowId)];
-  if (userId) {
-    conditions.push(eq(agentWorkflows.userId, userId));
-  }
-
-  const rows = await db
-    .select()
-    .from(agentWorkflows)
-    .where(and(...conditions))
-    .limit(1);
-
-  if (rows.length === 0) return null;
-  return mapWorkflowRow(rows[0]);
-}
-
-export async function getWorkflowMembers(workflowId: string): Promise<AgentWorkflowMember[]> {
-  const rows = await db
-    .select()
-    .from(agentWorkflowMembers)
-    .where(eq(agentWorkflowMembers.workflowId, workflowId))
-    .orderBy(desc(agentWorkflowMembers.createdAt));
-  return rows.map(mapWorkflowMemberRow);
-}
-
-export { getWorkflowResources } from "./workflow-resource-context";
+// getWorkflowResources is exported directly from ./workflow-resource-context
+// to avoid a circular dependency: workflow-resource-context → delegate-to-subagent-tool → workflows → workflow-resource-context
 
 /**
  * Returns all active workflows where the given agent is the initiator.
@@ -692,13 +633,12 @@ export async function createSystemAgentWorkflow(input: {
   });
 
   if (uniqueSubAgentIds.length > 0) {
-    await syncSharedFoldersToSubAgents({
+    await syncFoldersForNewMembers({
       userId: input.userId,
       initiatorId: input.initiatorId,
-      subAgentIds: uniqueSubAgentIds,
       workflowId: workflowRow.id,
+      subAgentIds: uniqueSubAgentIds,
     });
-    await refreshWorkflowSharedResources(workflowRow.id, input.initiatorId);
   }
 
   return mapWorkflowRow(workflowRow);

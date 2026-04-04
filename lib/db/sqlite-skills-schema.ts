@@ -1,8 +1,7 @@
 import { sqliteTable, text, integer, index, blob, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
-import { users, sessions } from "./sqlite-schema";
+import { users, sessions } from "./sqlite-schema-base";
 import { characters } from "./sqlite-character-schema";
-
 export const skills = sqliteTable(
   "skills",
   {
@@ -150,10 +149,4 @@ export type NewSkillTelemetryEvent = typeof skillTelemetryEvents.$inferInsert;
 export type SkillFile = typeof skillFiles.$inferSelect;
 export type NewSkillFile = typeof skillFiles.$inferInsert;
 
-export interface SkillInputParameter {
-  name: string;
-  type?: "string" | "number" | "boolean";
-  description?: string;
-  required?: boolean;
-  defaultValue?: string | number | boolean | null;
-}
+

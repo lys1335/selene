@@ -280,7 +280,7 @@ export function Avatar3DModelSelector({
                     {t(`presets.${preset.id}`)}
                   </p>
                   <p className="font-mono text-[11px] text-terminal-muted">
-                    {preset.bodyType === "F" ? "Female" : "Male"} body
+                    {preset.bodyType === "F" ? t("bodyFemale") : t("bodyMale")}
                   </p>
                 </div>
 
@@ -307,7 +307,7 @@ export function Avatar3DModelSelector({
                   <p className="font-mono text-sm font-semibold text-terminal-dark">
                     {t("custom.current")}
                   </p>
-                  <p className="font-mono text-[11px] text-terminal-muted">Custom GLB</p>
+                  <p className="font-mono text-[11px] text-terminal-muted">{t("customGlb")}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

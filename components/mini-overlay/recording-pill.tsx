@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useEffect, useState, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { X, Mic, Brain, Volume2, Square, Check, AlertCircle, Loader2, ArrowUp, Copy } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import type { MiniOverlayPhase } from "@/lib/electron/types";
@@ -44,6 +45,7 @@ export function RecordingPill({
   onDismiss,
   onStopSpeaking,
 }: RecordingPillProps) {
+  const t = useTranslations("miniOverlay.recordingPill");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const copyResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [resolvedWaveformColor, setResolvedWaveformColor] = useState("#C2714F");
@@ -132,7 +134,7 @@ export function RecordingPill({
         style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
       >
         {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-        {copied ? "Copied" : "Copy"}
+        {copied ? t("copied") : t("copy")}
       </button>
     </div>
   ) : null;
@@ -144,7 +146,7 @@ export function RecordingPill({
           <div className="flex flex-col items-center gap-3 py-2">
             <div className="flex items-center gap-2">
               <span className="h-3 w-3 rounded-full bg-red-500 animate-pulse" />
-              <span className="text-sm font-medium text-foreground">Listening...</span>
+              <span className="text-sm font-medium text-foreground">{t("listening")}</span>
             </div>
             <canvas
               ref={canvasRef}
@@ -164,7 +166,7 @@ export function RecordingPill({
               }}
             >
               <ArrowUp className="h-3 w-3" />
-              Send
+              {t("send")}
               <kbd className="ml-1 text-[10px] opacity-70">⌘⇧A</kbd>
             </button>
           </div>
@@ -174,7 +176,7 @@ export function RecordingPill({
         return (
           <div className="flex items-center gap-2 py-2">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Transcribing...</span>
+            <span className="text-sm font-medium text-foreground">{t("transcribing")}</span>
           </div>
         );
 
@@ -182,7 +184,7 @@ export function RecordingPill({
         return (
           <div className="flex items-center gap-2 py-2">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Refining...</span>
+            <span className="text-sm font-medium text-foreground">{t("refining")}</span>
           </div>
         );
 
@@ -190,7 +192,7 @@ export function RecordingPill({
         return (
           <div className="flex items-center gap-2 py-2">
             <Brain className="h-4 w-4 animate-pulse text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Thinking...</span>
+            <span className="text-sm font-medium text-foreground">{t("thinking")}</span>
           </div>
         );
 
@@ -199,15 +201,15 @@ export function RecordingPill({
           <div className="flex w-full flex-col items-center gap-2 px-2 py-2">
             <div className="flex items-center gap-2">
               <Volume2 className="h-4 w-4 shrink-0 animate-pulse text-muted-foreground" />
-              <span className="text-sm font-medium text-foreground">Speaking</span>
+              <span className="text-sm font-medium text-foreground">{t("speaking")}</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onStopSpeaking?.();
                 }}
                 className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-                title="Stop audio"
-                aria-label="Stop audio"
+                title={t("stopAudio")}
+                aria-label={t("stopAudio")}
                 style={{ WebkitAppRegion: "no-drag" } as CSSProperties}
               >
                 <Square className="h-3.5 w-3.5 fill-current" />
@@ -221,7 +223,7 @@ export function RecordingPill({
         return (
           <div className="flex items-center gap-2 py-2">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Opening composer...</span>
+            <span className="text-sm font-medium text-foreground">{t("openingComposer")}</span>
           </div>
         );
 
@@ -245,7 +247,7 @@ export function RecordingPill({
                   WebkitAppRegion: "no-drag",
                 }}
               >
-                Open in Selene
+                {t("openInSelene")}
               </button>
               <button
                 onClick={(e) => {
@@ -258,7 +260,7 @@ export function RecordingPill({
                   WebkitAppRegion: "no-drag",
                 }}
               >
-                Cancel
+                {t("cancel")}
               </button>
             </div>
           </div>
@@ -269,7 +271,7 @@ export function RecordingPill({
           <div className="flex w-full flex-col items-center gap-2 px-2 py-2">
             <div className="flex items-center gap-2">
               <Check className="h-4 w-4 text-green-500" />
-              <span className="text-sm font-medium text-foreground">Done</span>
+              <span className="text-sm font-medium text-foreground">{t("done")}</span>
             </div>
             {responsePanel}
             <button
@@ -283,7 +285,7 @@ export function RecordingPill({
                 WebkitAppRegion: "no-drag",
               }}
             >
-              Close
+              {t("close")}
             </button>
           </div>
         );
@@ -292,7 +294,7 @@ export function RecordingPill({
         return (
           <div className="flex items-center gap-2 px-2 py-2">
             <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
-            <span className="text-sm text-red-500 line-clamp-2">{error ?? "An error occurred"}</span>
+            <span className="text-sm text-red-500 line-clamp-2">{error ?? t("errorDefault")}</span>
           </div>
         );
 
@@ -301,7 +303,7 @@ export function RecordingPill({
         return (
           <div className="flex items-center gap-2 py-2">
             <Mic className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-foreground">Ready</span>
+            <span className="text-sm font-medium text-foreground">{t("ready")}</span>
           </div>
         );
     }
@@ -329,7 +331,7 @@ export function RecordingPill({
                 key={`${url}-${i}`}
                 onClick={() => setShowFullScreenshot(url)}
                 className="group relative shrink-0"
-                title="Click to view full screenshot"
+                title={t("viewFullScreenshot")}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
@@ -344,11 +346,11 @@ export function RecordingPill({
             ))}
           </div>
         )}
-        <span className="whitespace-nowrap text-[10px] text-muted-foreground/60">{"\u2318\u21E7S"} add screenshot</span>
+        <span className="whitespace-nowrap text-[10px] text-muted-foreground/60">{"\u2318\u21E7S"} {t("addScreenshot")}</span>
         <button
           onClick={onClose}
           className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
-          aria-label="Close"
+          aria-label={t("close")}
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -376,7 +378,7 @@ export function RecordingPill({
             onClick={onCancel}
             className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
-            Cancel
+            {t("cancel")}
           </button>
         </div>
       )}

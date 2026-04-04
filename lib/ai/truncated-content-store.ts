@@ -39,7 +39,7 @@ export function sessionHasTruncatedContent(sessionId: string): boolean {
 // Types
 // ============================================================================
 
-export interface TruncatedContentEntry {
+interface TruncatedContentEntry {
   /** Unique identifier for retrieving the content */
   id: string;
   /** Session this content belongs to */
@@ -214,7 +214,7 @@ export function listStoredContent(sessionId: string): Array<{
 /**
  * Clear a specific session
  */
-export function clearSession(sessionId: string): void {
+export function clearTruncatedContentSession(sessionId: string): void {
   sessionStore.delete(sessionId);
   console.log(`[TruncatedContentStore] Cleared session: ${sessionId}`);
 }
@@ -222,7 +222,7 @@ export function clearSession(sessionId: string): void {
 /**
  * Clean up expired entries across all sessions
  */
-export function cleanupExpiredEntries(): number {
+function cleanupExpiredEntries(): number {
   const now = Date.now();
   let totalCleaned = 0;
   const sessionsToDelete: string[] = [];

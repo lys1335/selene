@@ -12,10 +12,10 @@ import { getWorkspaceInfo } from "@/lib/workspace/types";
 import { getAccessibleSyncFolders } from "@/lib/vectordb/accessible-sync-folders";
 import { validateSyncFolderPath } from "@/lib/vectordb/path-validation";
 import { loadSettings } from "@/lib/settings/settings-manager";
-import { logToolEvent } from "@/lib/ai/tool-registry";
+import { logToolEvent } from "@/lib/ai/tool-registry/logging";
 import { isOtherWorktreePath } from "@/lib/ai/filesystem/path-utils";
 
-export interface LocalGrepToolOptions {
+interface LocalGrepToolOptions {
     sessionId: string;
     characterId?: string | null;
 }

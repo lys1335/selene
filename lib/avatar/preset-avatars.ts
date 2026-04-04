@@ -20,6 +20,6 @@ export const PRESET_AVATARS: PresetAvatar[] = [
   { id: "playerzero", name: "Player Zero", modelUrl: "/avatars/playerzero.glb", bodyType: "M", accent: "#f97316", initials: "PZ" },
 ];
 
-export function getPresetById(id: string): PresetAvatar | undefined {
+function getPresetById(id: string): PresetAvatar | undefined {
   return PRESET_AVATARS.find((p) => p.id === id);
 }

@@ -15,7 +15,7 @@ import { normalizeToolResultOutput } from "@/lib/ai/tool-result-utils";
 import { convertDBMessagesToUIMessages } from "@/lib/messages/converter";
 import { loadSettings, saveSettings, type AppSettings } from "@/lib/settings/settings-manager";
 import { ContextWindowManager } from "@/lib/context-window";
-import type { LLMProvider } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/providers";
 
 type DBMessageLike = {
   role: string;

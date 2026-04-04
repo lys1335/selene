@@ -44,7 +44,7 @@ export interface FirecrawlScrapeResult {
   ogImage?: string;
 }
 
-export interface FirecrawlCrawlResult {
+interface FirecrawlCrawlResult {
   status: "success" | "error" | "no_api_key" | "pending";
   url: string;
   pages?: Array<{ url: string; title?: string; markdown?: string }>;
@@ -89,7 +89,7 @@ const scrapeSchema = jsonSchema<{
   additionalProperties: false,
 });
 
-export interface FirecrawlToolOptions {
+interface FirecrawlToolOptions {
   userId?: string;
   characterId?: string | null;
   sessionId?: string;
@@ -436,7 +436,7 @@ Note: Crawling is async and may take up to 60 seconds depending on page count.`,
 /**
  * Check if Firecrawl is available (API key configured)
  */
-export function isFirecrawlAvailable(): boolean {
+function isFirecrawlAvailable(): boolean {
   const provider = getWebScraperProvider();
   if (provider === "local") {
     return true;

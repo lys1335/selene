@@ -8,67 +8,26 @@ import { getVectorSearchConfig } from "@/lib/config/vector-search";
 import path from "path";
 import fs from "fs";
 import { loadSettings } from "@/lib/settings/settings-manager";
+import {
+  type TransformerDevice,
+  resolvePreferredDevice as resolvePreferredDeviceShared,
+  isRecoverableGpuRuntimeError,
+} from "@/lib/ai/transformer-device";
 
 let cachedPipeline: any = null;
 let cachedPipelinePromise: Promise<any> | null = null;
 let failedToLoad = false;
 let runtimeFallbackDevice: TransformerDevice | null = null;
 let lastPipelineDevice: TransformerDevice | null = null;
-type TransformerDevice =
-  | "auto"
-  | "gpu"
-  | "cpu"
-  | "wasm"
-  | "webgpu"
-  | "cuda"
-  | "dml"
-  | "webnn"
-  | "webnn-npu"
-  | "webnn-gpu"
-  | "webnn-cpu";
-
-function isTransformerDevice(value: string): value is TransformerDevice {
-  return [
-    "auto",
-    "gpu",
-    "cpu",
-    "wasm",
-    "webgpu",
-    "cuda",
-    "dml",
-    "webnn",
-    "webnn-npu",
-    "webnn-gpu",
-    "webnn-cpu",
-  ].includes(value);
-}
 
 function resolvePreferredDevice(): TransformerDevice {
-  if (runtimeFallbackDevice) return runtimeFallbackDevice;
-
-  const configured = process.env.LOCAL_EMBEDDING_DEVICE?.trim().toLowerCase();
-  if (configured && isTransformerDevice(configured)) return configured;
-
-  if (process.platform === "win32") return "dml";
-  if (process.platform === "linux" && process.arch === "x64") return "cuda";
-  return "cpu";
+  return resolvePreferredDeviceShared(runtimeFallbackDevice);
 }
 
 function resetPipelineState(): void {
   cachedPipeline = null;
   cachedPipelinePromise = null;
   lastPipelineDevice = null;
-}
-
-function isRecoverableGpuRuntimeError(error: unknown): boolean {
-  const message = String(error ?? "").toLowerCase();
-  return (
-    message.includes("device instance has been suspended") ||
-    message.includes("getdeviceremovedreason") ||
-    message.includes("dxgi_error_device_removed") ||
-    message.includes("dxgi_error_device_hung") ||
-    message.includes("887a0005")
-  );
 }
 
 /**

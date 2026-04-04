@@ -241,7 +241,7 @@ export function WorkspaceDashboard({ onNavigateToSession }: WorkspaceDashboardPr
                   {ws.agentAvatarUrl ? (
                     <img
                       src={ws.agentAvatarUrl}
-                      alt={ws.agentName ?? "Agent"}
+                      alt={ws.agentName ?? t("agentFallback")}
                       className="h-6 w-6 rounded-full object-cover shrink-0"
                     />
                   ) : (
@@ -252,7 +252,7 @@ export function WorkspaceDashboard({ onNavigateToSession }: WorkspaceDashboardPr
                     </div>
                   )}
                   <span className="text-xs font-mono font-medium text-terminal-dark truncate">
-                    {ws.agentName ?? "Agent"}
+                    {ws.agentName ?? t("agentFallback")}
                   </span>
                   <Badge
                     className={cn(

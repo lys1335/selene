@@ -58,7 +58,7 @@ export function WhisperModelSelector({ formState, updateField }: WhisperModelSel
 
     const modelInfo = WHISPER_MODELS.find((m) => m.id === modelId);
     if (!modelInfo) {
-      setDownloadError(`Unknown model: ${modelId}`);
+      setDownloadError(t("unknownModel", { modelId }));
       return;
     }
 
@@ -79,7 +79,7 @@ export function WhisperModelSelector({ formState, updateField }: WhisperModelSel
 
     // Safety check - API might not be fully exposed
     if (!electronAPI?.model?.downloadFile) {
-      setDownloadError(t("vector.advanced.reranking.downloadApiUnavailable"));
+      setDownloadError(t("downloadApiUnavailable"));
       setDownloading(null);
       return;
     }
@@ -97,7 +97,7 @@ export function WhisperModelSelector({ formState, updateField }: WhisperModelSel
           }
           if (data.status === "error") {
             setDownloading(null);
-            setDownloadError(data.error || "Download failed");
+            setDownloadError(data.error || t("downloadFailed"));
           }
         }
       });
@@ -110,7 +110,7 @@ export function WhisperModelSelector({ formState, updateField }: WhisperModelSel
         filename: modelInfo.hfFile,
       });
       if (!result.success) {
-        setDownloadError(result.error || "Download failed");
+        setDownloadError(result.error || t("downloadFailed"));
         return;
       }
 
@@ -124,7 +124,7 @@ export function WhisperModelSelector({ formState, updateField }: WhisperModelSel
         setModelStatus((prev) => ({ ...prev, [modelId]: true }));
       }
     } catch (err) {
-      setDownloadError(err instanceof Error ? err.message : "Download failed");
+      setDownloadError(err instanceof Error ? err.message : t("downloadFailed"));
     } finally {
       setDownloading(null);
       electronAPI.model.removeProgressListener?.();

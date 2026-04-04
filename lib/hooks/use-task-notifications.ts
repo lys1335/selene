@@ -499,6 +499,27 @@ function deriveCompletionIndicators(task: UnifiedTask): SessionActivityIndicator
   return uniqueIndicators(indicators);
 }
 
+function classifyTask(task: UnifiedTask): { isScheduledChat: boolean; isDelegationChat: boolean; displayName: string } {
+  const isScheduledChat =
+    task.type === "chat" &&
+    task.metadata &&
+    typeof task.metadata === "object" &&
+    "scheduledRunId" in task.metadata;
+  const isDelegationChat =
+    task.type === "chat" &&
+    task.metadata &&
+    typeof task.metadata === "object" &&
+    "isDelegation" in task.metadata;
+  const displayName = isDelegationChat
+    ? "Delegation"
+    : task.type === "scheduled"
+    ? task.taskName || "Scheduled task"
+    : task.type === "chat"
+    ? "Chat session"
+    : "Channel message";
+  return { isScheduledChat: Boolean(isScheduledChat), isDelegationChat: Boolean(isDelegationChat), displayName };
+}
+
 export function buildReconciledCompletionEvent(task: UnifiedTask): Extract<TaskEvent, { eventType: "task:completed" }> {
   return {
     eventType: "task:completed",
@@ -681,27 +702,10 @@ export function useTaskNotifications() {
     handleTaskStartedRef.current = (event: TaskEvent) => {
       if (event.eventType !== "task:started") return;
       const task = event.task;
-      const isScheduledChat =
-        task.type === "chat" &&
-        task.metadata &&
-        typeof task.metadata === "object" &&
-        "scheduledRunId" in task.metadata;
+      const { isScheduledChat, isDelegationChat, displayName } = classifyTask(task);
       if (isScheduledChat) {
         return;
       }
-      const isDelegationChat =
-        task.type === "chat" &&
-        task.metadata &&
-        typeof task.metadata === "object" &&
-        "isDelegation" in task.metadata;
-      const displayName =
-        isDelegationChat
-          ? "Delegation"
-          : task.type === "scheduled"
-          ? task.taskName || "Scheduled task"
-          : task.type === "chat"
-          ? "Chat session"
-          : "Channel message";
       console.log("[TaskNotifications] Task started:", displayName, task.runId);
 
       addTask(task);
@@ -755,27 +759,10 @@ export function useTaskNotifications() {
     handleTaskCompletedRef.current = (event: TaskEvent) => {
       if (event.eventType !== "task:completed") return;
       const task = event.task;
-      const isScheduledChat =
-        task.type === "chat" &&
-        task.metadata &&
-        typeof task.metadata === "object" &&
-        "scheduledRunId" in task.metadata;
+      const { isScheduledChat, isDelegationChat, displayName } = classifyTask(task);
       if (isScheduledChat) {
         return;
       }
-      const isDelegationChat =
-        task.type === "chat" &&
-        task.metadata &&
-        typeof task.metadata === "object" &&
-        "isDelegation" in task.metadata;
-      const displayName =
-        isDelegationChat
-          ? "Delegation"
-          : task.type === "scheduled"
-          ? task.taskName || "Scheduled task"
-          : task.type === "chat"
-          ? "Chat session"
-          : "Channel message";
       console.log("[TaskNotifications] Task completed:", displayName, task.status);
 
       // Evict any pending batched progress for this run so the stale event

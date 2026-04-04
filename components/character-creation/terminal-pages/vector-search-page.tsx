@@ -63,7 +63,7 @@ export function VectorSearchPage({
               {t("description", { agentName })}
             </p>
             <p className="text-xs text-terminal-dark/50 font-mono mt-1">
-              Sync folders from your file system so your agent can search their contents. Files are indexed locally for fast retrieval.
+              {t("detailedDescription")}
             </p>
           </div>
         </motion.div>

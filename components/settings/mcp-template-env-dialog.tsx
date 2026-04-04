@@ -31,24 +31,24 @@ interface MCPTemplateEnvDialogProps {
     onCancel: () => void;
 }
 
-/** Human-friendly labels for well-known env var names */
-const ENV_KEY_LABELS: Record<string, string> = {
-    CODA_API_KEY: "Coda API Key",
-    GITHUB_PERSONAL_ACCESS_TOKEN: "GitHub Personal Access Token",
-    COMPOSIO_API_KEY: "Composio API Key",
-    COMPOSIO_CONNECTION_ID: "Composio Connection ID",
-    SUPABASE_PROJECT_REF: "Supabase Project Ref",
-    SUPABASE_ACCESS_TOKEN: "Supabase Access Token",
+/** Human-friendly labels for well-known env var names (translation keys) */
+const ENV_KEY_LABEL_KEYS: Record<string, string> = {
+    CODA_API_KEY: "codaApiKey",
+    GITHUB_PERSONAL_ACCESS_TOKEN: "githubPat",
+    COMPOSIO_API_KEY: "composioApiKey",
+    COMPOSIO_CONNECTION_ID: "composioConnectionId",
+    SUPABASE_PROJECT_REF: "supabaseProjectRef",
+    SUPABASE_ACCESS_TOKEN: "supabaseAccessToken",
 };
 
-/** Well-known placeholder hints */
-const ENV_KEY_PLACEHOLDERS: Record<string, string> = {
-    CODA_API_KEY: "e.g. a1b2c3d4-e5f6-...",
-    GITHUB_PERSONAL_ACCESS_TOKEN: "ghp_...",
-    COMPOSIO_API_KEY: "Your Composio API key",
-    COMPOSIO_CONNECTION_ID: "Connection ID from Composio dashboard",
-    SUPABASE_PROJECT_REF: "e.g. abcdefghijklmnop",
-    SUPABASE_ACCESS_TOKEN: "sbp_...",
+/** Well-known placeholder hints (translation keys) */
+const ENV_KEY_PLACEHOLDER_KEYS: Record<string, string> = {
+    CODA_API_KEY: "codaApiKeyPlaceholder",
+    GITHUB_PERSONAL_ACCESS_TOKEN: "githubPatPlaceholder",
+    COMPOSIO_API_KEY: "composioApiKeyPlaceholder",
+    COMPOSIO_CONNECTION_ID: "composioConnectionIdPlaceholder",
+    SUPABASE_PROJECT_REF: "supabaseProjectRefPlaceholder",
+    SUPABASE_ACCESS_TOKEN: "supabaseAccessTokenPlaceholder",
 };
 
 /** Links where users can get their credentials */
@@ -139,7 +139,7 @@ export function MCPTemplateEnvDialog({
             await onInstall(template, trimmed);
         } catch (err) {
             setError(
-                err instanceof Error ? err.message : "Installation failed. Check your credentials and try again."
+                err instanceof Error ? err.message : t("envDialog.installFailed")
             );
         } finally {
             setIsInstalling(false);
@@ -185,10 +185,12 @@ export function MCPTemplateEnvDialog({
                         )}
 
                         {template.requiredEnv.map((key) => {
-                            const label = ENV_KEY_LABELS[key] || key;
-                            const placeholder =
-                                ENV_KEY_PLACEHOLDERS[key] ||
-                                t("envDialog.placeholder", { key: label });
+                            const labelKey = ENV_KEY_LABEL_KEYS[key];
+                            const label = labelKey ? t(`envLabels.${labelKey}`) : key;
+                            const placeholderKey = ENV_KEY_PLACEHOLDER_KEYS[key];
+                            const placeholder = placeholderKey
+                                ? t(`envPlaceholders.${placeholderKey}`)
+                                : t("envDialog.placeholder", { key: label });
                             const helpUrl = ENV_KEY_HELP_URLS[key];
                             const filled = !!envValues[key]?.trim() || hasExistingKey[key];
 

@@ -1,5 +1,5 @@
-export const RETRY_SCHEDULE_MS = [10_000, 30_000, 60_000, 120_000, 300_000, 600_000] as const;
-export const RETRY_MAX_DELAY_MS = 600_000;
+const RETRY_SCHEDULE_MS = [10_000, 30_000, 60_000, 120_000, 300_000, 600_000] as const;
+const RETRY_MAX_DELAY_MS = 600_000;
 
 const RECOVERABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
 const CONFLICT_STATUS_CODE = 409;
@@ -60,7 +60,7 @@ const UPSTREAM_ABORT_PATTERNS = [
   /socket hang up/i,
 ];
 
-export type RecoveryReason =
+type RecoveryReason =
   | "recoverable_status"
   | "conflict"
   | "recoverable_payload"
@@ -70,7 +70,7 @@ export type RecoveryReason =
   | "terminal_payload"
   | "unknown";
 
-export interface NormalizedStreamError {
+interface NormalizedStreamError {
   message: string;
   statusCode?: number;
   code?: string;

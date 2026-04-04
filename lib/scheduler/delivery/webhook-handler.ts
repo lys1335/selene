@@ -8,8 +8,10 @@ import type { DeliveryHandler, DeliveryPayload } from "./types";
 import type { WebhookDeliveryConfig } from "@/lib/db/sqlite-schedule-schema";
 
 export class WebhookDeliveryHandler implements DeliveryHandler {
+  // fallow-ignore-next-line unused-class-member
   type = "webhook";
 
+  // fallow-ignore-next-line unused-class-member
   async deliver(
     payload: DeliveryPayload,
     rawConfig: Record<string, unknown>

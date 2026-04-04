@@ -18,6 +18,7 @@ import {
   type RecoveryClassification,
 } from "@/lib/ai/retry/stream-recovery";
 import { normalizeAntigravityToolSchemas } from "./antigravity-schema";
+import { readRequestBody } from "./provider-utils";
 
 // ---- Constants ---------------------------------------------------------------
 
@@ -34,13 +35,13 @@ const ANTIGRAVITY_RETRY_CONFIG = {
 
 // ---- ID Generators -----------------------------------------------------------
 
-export function generateRequestId(): string {
+function generateRequestId(): string {
   const timestamp = Date.now().toString(36);
   const random = Math.random().toString(36).substring(2, 10);
   return `req-${timestamp}-${random}`;
 }
 
-export function generateSessionId(): string {
+function generateSessionId(): string {
   return `session-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 10)}`;
 }
 
@@ -56,41 +57,12 @@ function getNonEmptyString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-/**
- * Read a BodyInit value into a plain string regardless of its concrete type.
- */
-async function readRequestBody(body: BodyInit): Promise<string> {
-  if (typeof body === "string") {
-    return body;
-  }
-
-  if (body instanceof ArrayBuffer) {
-    return new TextDecoder().decode(body);
-  }
-
-  if (ArrayBuffer.isView(body)) {
-    const view = body as ArrayBufferView;
-    return new TextDecoder().decode(
-      view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength)
-    );
-  }
-
-  if (body instanceof URLSearchParams) {
-    return body.toString();
-  }
-
-  if (typeof (body as Blob).text === "function") {
-    return await (body as Blob).text();
-  }
-
-  throw new Error("Unsupported request body type for Antigravity request");
-}
 
 /**
  * Check if this is a Google Generative Language API request that should be
  * intercepted and forwarded to Antigravity.
  */
-export function isGenerativeLanguageRequest(url: string): boolean {
+function isGenerativeLanguageRequest(url: string): boolean {
   return (
     url.includes("generativelanguage.googleapis.com") ||
     (url.includes("/models/") &&
@@ -104,7 +76,7 @@ export function isGenerativeLanguageRequest(url: string): boolean {
  * The Antigravity Claude gateway expects strict call/result pairing by ID.
  * We only fill in missing IDs and preserve any IDs already provided by the SDK.
  */
-export function ensureClaudeFunctionPartIds(contents: unknown): void {
+function ensureClaudeFunctionPartIds(contents: unknown): void {
   if (!Array.isArray(contents)) return;
 
   const pendingIdsByName = new Map<string, string[]>();
@@ -279,7 +251,7 @@ function fixFunctionCallArgs(unwrapped: Record<string, unknown>): void {
 /**
  * Unwrap a non-streaming Antigravity response.
  */
-export function unwrapResponse(text: string): string {
+function unwrapResponse(text: string): string {
   try {
     const parsed = JSON.parse(text);
     const unwrapped = parsed.response !== undefined ? parsed.response : parsed;
@@ -303,7 +275,7 @@ export function unwrapResponse(text: string): string {
  * @param onComplete - Called when stream completes successfully
  * @param onRetryNeeded - Callback to get a new stream on retryable error, returns null if retry fails
  */
-export function createResponseTransformStreamWithRetry(
+function createResponseTransformStreamWithRetry(
   onComplete?: () => void,
   onRetryNeeded?: (errorText: string) => Promise<ReadableStream<string> | null>
 ): TransformStream<string, string> {

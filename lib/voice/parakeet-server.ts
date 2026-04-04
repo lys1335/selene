@@ -5,9 +5,9 @@ import { join } from "node:path";
 // Types
 // ---------------------------------------------------------------------------
 
-export type ParakeetServerState = "idle" | "starting" | "ready" | "stopping" | "error";
+type ParakeetServerState = "idle" | "starting" | "ready" | "stopping" | "error";
 
-export interface ParakeetServerStatus {
+interface ParakeetServerStatus {
   state: ParakeetServerState;
   endpoint: string | null;
   pid: number | null;
@@ -80,7 +80,7 @@ export function getOrStartParakeetServer(options: StartOptions): Promise<string>
 /**
  * Returns a snapshot of the server state.
  */
-export function getParakeetServerStatus(): ParakeetServerStatus {
+function getParakeetServerStatus(): ParakeetServerStatus {
   return {
     state: serverState,
     endpoint: serverEndpoint,

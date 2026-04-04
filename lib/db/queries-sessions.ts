@@ -3,12 +3,12 @@ import { sessions, agentRuns, messages } from "./sqlite-schema";
 import type { NewSession, Session } from "./sqlite-schema";
 import { eq, desc, asc, and, lt, sql, inArray, type SQL } from "drizzle-orm";
 
-export type SessionMetadataShape = {
+type SessionMetadataShape = {
   characterId?: string;
   channelType?: "whatsapp" | "telegram" | "slack" | "discord";
 };
 
-export interface ListSessionsPaginatedParams {
+interface ListSessionsPaginatedParams {
   userId: string;
   characterId?: string;
   characterName?: string;
@@ -21,13 +21,13 @@ export interface ListSessionsPaginatedParams {
   status?: "active" | "archived";
 }
 
-export interface ListSessionsPaginatedResult {
+interface ListSessionsPaginatedResult {
   sessions: (Session & { hasActiveRun?: boolean })[];
   nextCursor: string | null;
   totalCount: number;
 }
 
-export function extractSessionMetadataColumns(metadata: unknown) {
+function extractSessionMetadataColumns(metadata: unknown) {
   const meta = (metadata ?? {}) as SessionMetadataShape;
   return {
     characterId: meta.characterId ?? null,
@@ -146,7 +146,7 @@ export async function listSessionsByCharacterId(
 /**
  * Get session count for a character
  */
-export async function getCharacterSessionCount(
+async function getCharacterSessionCount(
   userId: string,
   characterId: string
 ): Promise<number> {

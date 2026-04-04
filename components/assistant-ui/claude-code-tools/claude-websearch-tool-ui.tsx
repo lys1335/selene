@@ -4,6 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, GlobeIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
+import { useTranslations } from "next-intl";
 import { parseTextResult } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
@@ -33,6 +34,7 @@ function isErrorResult(result: unknown): boolean {
  * Shows query, result count, and search content.
  */
 export const ClaudeWebSearchToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.websearch");
   const [expanded, setExpanded] = useState(false);
 
   const expansionCtx = useToolExpansion();
@@ -71,7 +73,7 @@ export const ClaudeWebSearchToolUI: ToolCallContentPartComponent = ({ args, resu
         {StatusIcon && <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", statusColor)} />}
         {!StatusIcon && <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-terminal-muted animate-pulse" />}
         <GlobeIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
-        <span className="text-terminal-muted">{isRunning ? "Searching..." : hasError ? "Search failed" : "Searched"}</span>
+        <span className="text-terminal-muted">{isRunning ? t("running") : hasError ? t("failed") : t("done")}</span>
         <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={query}>{query}</span>
 
         {expanded ? (
@@ -94,7 +96,7 @@ export const ClaudeWebSearchToolUI: ToolCallContentPartComponent = ({ args, resu
           )}
 
           {isRunning && (
-            <div className="text-terminal-muted animate-pulse">Searching the web...</div>
+            <div className="text-terminal-muted animate-pulse">{t("searching")}</div>
           )}
         </div>
       )}

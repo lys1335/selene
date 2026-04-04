@@ -30,7 +30,7 @@ export type ToolCategory =
 /**
  * Configuration for when a tool should be loaded
  */
-export interface ToolLoadingConfig {
+interface ToolLoadingConfig {
   /**
    * If true, this tool is excluded from the initial context and only
    * loaded when discovered via the tool search tool.
@@ -61,6 +61,12 @@ export interface ToolMetadata {
 
   /** Brief description for search results (max 100 chars) */
   shortDescription: string;
+
+  /**
+   * High-signal capability phrase used by searchTools ranking.
+   * Example: "search the web" or "edit files in the codebase".
+   */
+  searchHint?: string;
 
   /**
    * Full usage instructions returned by searchTools.
@@ -95,7 +101,7 @@ export interface ToolMetadata {
 /**
  * Options passed to tool factory functions
  */
-export interface ToolFactoryOptions {
+interface ToolFactoryOptions {
   /** Session ID for database tracking */
   sessionId?: string;
 
@@ -198,4 +204,6 @@ export interface ToolSearchResult {
   /** Full usage instructions (detailed parameters, examples, guidelines) */
   fullInstructions?: string;
 }
+
+// ToolSearchContext is now defined in search-tool.ts and re-exported from index.ts
 

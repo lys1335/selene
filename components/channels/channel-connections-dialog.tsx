@@ -467,13 +467,13 @@ export function ChannelConnectionsDialog({
                       <p className="text-xs font-mono text-terminal-muted">{t("form.keepExisting")}</p>
                     ) : (
                       <div className="space-y-2 rounded-md border border-terminal-border/30 bg-terminal-cream/70 p-3 text-xs font-mono text-terminal-muted">
-                        <p className="font-semibold text-terminal-dark">Get your bot token:</p>
+                        <p className="font-semibold text-terminal-dark">{t("telegram.helpTitle")}</p>
                         <ol className="list-decimal space-y-1.5 pl-4">
-                          <li>Open <code className="bg-terminal-dark/20 px-1 rounded">@Botfather</code> on Telegram</li>
-                          <li>Send <code className="bg-terminal-dark/20 px-1 rounded">/newbot</code> and follow the prompts</li>
-                          <li>Copy the API token Botfather gives you</li>
+                          <li>{t.rich("telegram.helpStep1", { code: (chunks) => <code className="bg-terminal-dark/20 px-1 rounded">{chunks}</code> })}</li>
+                          <li>{t.rich("telegram.helpStep2", { code: (chunks) => <code className="bg-terminal-dark/20 px-1 rounded">{chunks}</code> })}</li>
+                          <li>{t("telegram.helpStep3")}</li>
                         </ol>
-                        <p className="mt-2 text-red-400">⚠️ Keep your token private - never share it!</p>
+                        <p className="mt-2 text-red-400">{t("telegram.helpWarning")}</p>
                       </div>
                     )}
                   </div>

@@ -19,51 +19,12 @@
 
 // Export types
 export type {
-  ResearchSource,
-  ResearchFinding,
-  ResearchPlan,
-  DraftReport,
-  FinalReport,
-  DeepResearchState,
-  ResearchPhase,
-  DeepResearchEventType,
   DeepResearchEvent,
-  PhaseChangeEvent,
-  SearchProgressEvent,
-  SearchResultEvent,
-  AnalysisUpdateEvent,
-  DraftUpdateEvent,
-  RefinementUpdateEvent,
-  FinalReportEvent,
-  ErrorEvent,
-  CompleteEvent,
   DeepResearchConfig,
 } from './types';
-
-export { DEFAULT_CONFIG } from './types';
 
 // Export orchestrator functions
 export {
   runDeepResearch,
-  createInitialState,
-  type EventEmitter,
 } from './orchestrator';
-
-// Export search utilities
-export {
-  tavilySearch,
-  executeSearches,
-  isSearchAvailable,
-} from './search';
-
-// Export prompts (for customization)
-export {
-  RESEARCH_PLANNER_PROMPT,
-  SEARCH_QUERY_GENERATOR_PROMPT,
-  RESEARCH_ANALYZER_PROMPT,
-  DRAFT_REPORT_PROMPT,
-  REPORT_REFINEMENT_PROMPT,
-  FINAL_REPORT_PROMPT,
-  THINK_PROMPT,
-} from './prompts';
 

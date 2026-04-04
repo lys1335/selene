@@ -17,7 +17,7 @@ export interface ResolvedContext {
 }
 
 // Linear-specific config
-export interface LinearContextConfig {
+interface LinearContextConfig {
   teamId?: string;
   projectIds?: string[];
   statuses?: string[];
@@ -26,7 +26,7 @@ export interface LinearContextConfig {
 }
 
 // GitHub-specific config
-export interface GitHubContextConfig {
+interface GitHubContextConfig {
   owner: string;
   repo: string;
   type: "issues" | "prs" | "commits";
@@ -36,7 +36,7 @@ export interface GitHubContextConfig {
 }
 
 // Custom API config
-export interface APIContextConfig {
+interface APIContextConfig {
   url: string;
   method?: "GET" | "POST";
   headers?: Record<string, string>;
@@ -45,7 +45,7 @@ export interface APIContextConfig {
 }
 
 // Database query config
-export interface DatabaseContextConfig {
+interface DatabaseContextConfig {
   query: string;
   params?: Record<string, unknown>;
 }

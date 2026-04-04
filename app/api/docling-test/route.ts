@@ -1,8 +1,12 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "fs/promises";
-import { tmpdir } from "os";
+import { readFile, writeFile } from "fs/promises";
 import { basename, extname, join, relative } from "path";
 import { NextRequest, NextResponse } from "next/server";
-import { spawn } from "child_process";
+import {
+  runDocling,
+  listFilesRecursive,
+  cleanupTempPaths,
+  createDoclingWorkDir,
+} from "@/lib/documents/docling-runner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,19 +34,6 @@ type DoclingTestFailure = {
   outputFiles?: string[];
 };
 
-async function listFilesRecursive(dir: string): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const files = await Promise.all(entries.map(async (entry) => {
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      return listFilesRecursive(fullPath);
-    }
-    return [fullPath];
-  }));
-
-  return files.flat();
-}
-
 function trimOutput(value: string, maxLength = 20_000): string {
   if (value.length <= maxLength) {
     return value;
@@ -51,9 +42,12 @@ function trimOutput(value: string, maxLength = 20_000): string {
   return `${value.slice(0, maxLength)}\n...[truncated]`;
 }
 
+// Extra diagnostic flags passed only by the test endpoint, not in production.
+const DOCLING_TEST_EXTRA_ARGS = ["--num-threads", "4", "--verbose"];
+
 export async function POST(req: NextRequest) {
-  const cleanupPaths: string[] = [];
   const startedAt = Date.now();
+  let workDir: string | undefined;
 
   try {
     const formData = await req.formData();
@@ -67,70 +61,28 @@ export async function POST(req: NextRequest) {
     const extension = extname(file.name) || ".pdf";
     const safeBaseName = basename(file.name, extension).replace(/[^a-zA-Z0-9._-]+/g, "-") || "document";
 
-    const workDir = await mkdtemp(join(tmpdir(), "selene-docling-test-"));
-    cleanupPaths.push(workDir);
+    const dirs = await createDoclingWorkDir("selene-docling-test-");
+    workDir = dirs.workDir;
+    const { outputDir } = dirs;
 
     const inputPath = join(workDir, `${safeBaseName}${extension}`);
-    const outputDir = join(workDir, "out");
-    await mkdir(outputDir, { recursive: true });
-
     await writeFile(inputPath, fileBuffer);
 
+    // Build the full command array for inclusion in the diagnostic response.
     const command = [
-      "uv",
-      "tool",
-      "run",
-      "--from",
-      "docling",
-      "docling",
+      "uv", "tool", "run", "--from", "docling", "docling",
       inputPath,
-      "--to",
-      "md",
-      "--output",
-      outputDir,
-      "--device",
-      "cpu",
-      "--num-threads",
-      "4",
-      "--document-timeout",
-      "120",
-      "--verbose",
+      "--to", "md",
+      "--output", outputDir,
+      "--device", "cpu",
+      "--document-timeout", "120",
+      ...DOCLING_TEST_EXTRA_ARGS,
     ];
 
-    const result = await new Promise<{
-      exitCode: number | null;
-      stdout: string;
-      stderr: string;
-      error?: string;
-    }>((resolve) => {
-      const child = spawn(command[0], command.slice(1), {
-        stdio: ["ignore", "pipe", "pipe"],
-        env: process.env,
-      });
-
-      let stdout = "";
-      let stderr = "";
-      let settled = false;
-
-      child.stdout.on("data", (chunk) => {
-        stdout += chunk.toString();
-      });
-
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk.toString();
-      });
-
-      child.on("error", (error) => {
-        if (settled) return;
-        settled = true;
-        resolve({ exitCode: null, stdout, stderr, error: error.message });
-      });
-
-      child.on("close", (exitCode) => {
-        if (settled) return;
-        settled = true;
-        resolve({ exitCode, stdout, stderr });
-      });
+    const result = await runDocling({
+      inputPath,
+      outputDir,
+      extraArgs: DOCLING_TEST_EXTRA_ARGS,
     });
 
     const durationMs = Date.now() - startedAt;
@@ -182,15 +134,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(payload, { status: 500 });
   } finally {
-    await Promise.all(cleanupPaths.map(async (target) => {
-      try {
-        const info = await stat(target);
-        if (info) {
-          await rm(target, { recursive: true, force: true });
-        }
-      } catch {
-        // Ignore cleanup errors in this temporary test route.
-      }
-    }));
+    if (workDir) {
+      await cleanupTempPaths([workDir]);
+    }
   }
 }

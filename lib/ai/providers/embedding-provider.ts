@@ -14,7 +14,7 @@ import { getOpenRouterClient, getOpenRouterApiKey } from "./openrouter-client";
 
 // ---- Constants ---------------------------------------------------------------
 
-export type EmbeddingProvider = "openrouter" | "local";
+type EmbeddingProvider = "openrouter" | "local";
 
 const DEFAULT_EMBEDDING_PROVIDER: EmbeddingProvider = "openrouter";
 const DEFAULT_EMBEDDING_MODEL = "qwen/qwen3-embedding-4b";
@@ -32,7 +32,7 @@ let _hasLoggedLocalEmbeddings = false;
  * 2. Or ALLOW_LOCAL_EMBEDDINGS=true is set for development
  * 3. Or EMBEDDING_MODEL_DIR is set and exists (user configured a model path)
  */
-export function canUseLocalEmbeddings(): boolean {
+function canUseLocalEmbeddings(): boolean {
   const isElectronRuntime = Boolean(
     process.versions.electron || process.env.ELECTRON_USER_DATA_PATH
   );
@@ -65,12 +65,12 @@ export function canUseLocalEmbeddings(): boolean {
 
 // ---- Config resolution -------------------------------------------------------
 
-export function normalizeEmbeddingProvider(provider?: string): EmbeddingProvider {
+function normalizeEmbeddingProvider(provider?: string): EmbeddingProvider {
   if (provider === "local") return "local";
   return DEFAULT_EMBEDDING_PROVIDER;
 }
 
-export function resolveEmbeddingModelConfig(
+function resolveEmbeddingModelConfig(
   settings: { embeddingProvider?: string; embeddingModel?: string },
   modelOverride?: string
 ): {

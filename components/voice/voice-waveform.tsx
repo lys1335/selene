@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { useTranslations } from "next-intl";
 
 interface VoiceWaveformProps {
   isRecording: boolean;
@@ -14,6 +15,7 @@ const BAR_MIN_HEIGHT = 2;
 const BAR_MAX_HEIGHT = 28;
 
 export function VoiceWaveform({ isRecording, analyserNode, className }: VoiceWaveformProps) {
+  const t = useTranslations("voice.waveform");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
   const canvasSizedRef = useRef(false);
@@ -126,7 +128,7 @@ export function VoiceWaveform({ isRecording, analyserNode, className }: VoiceWav
       className={cn("flex items-center gap-3 px-3 py-2", className)}
       role="status"
       aria-live="polite"
-      aria-label="Recording in progress"
+      aria-label={t("recordingInProgress")}
     >
       {/* Recording dot */}
       <div className="relative flex items-center justify-center">

@@ -6,7 +6,7 @@ import { resilientFetch } from "@/lib/utils/resilient-fetch";
 /**
  * Context window status as returned by the API.
  */
-export interface ContextWindowStatus {
+export interface ContextStatusInfo {
   percentage: number;
   status: "safe" | "warning" | "critical" | "exceeded";
   currentTokens: number;
@@ -30,7 +30,7 @@ export interface ContextWindowStatus {
   };
 }
 
-export interface UseContextStatusOptions {
+interface UseContextStatusOptions {
   /** Session ID to track. Null/undefined disables polling. */
   sessionId: string | null | undefined;
   /** Poll interval in ms. Default: 0 (no polling, only manual refresh). */
@@ -41,8 +41,8 @@ export interface UseContextStatusOptions {
   pauseWhenHidden?: boolean;
 }
 
-export interface UseContextStatusReturn {
-  status: ContextWindowStatus | null;
+interface UseContextStatusReturn {
+  status: ContextStatusInfo | null;
   isLoading: boolean;
   error: string | null;
   /** Manually refresh the context status. */
@@ -69,7 +69,7 @@ export function useContextStatus({
   autoFetch = true,
   pauseWhenHidden = true,
 }: UseContextStatusOptions): UseContextStatusReturn {
-  const [status, setStatus] = useState<ContextWindowStatus | null>(null);
+  const [status, setStatus] = useState<ContextStatusInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCompacting, setIsCompacting] = useState(false);
@@ -86,7 +86,7 @@ export function useContextStatus({
     setIsLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await resilientFetch<ContextWindowStatus>(
+    const { data, error: fetchError } = await resilientFetch<ContextStatusInfo>(
       `/api/sessions/${sessionId}/context-status`,
       { signal: controller.signal, retries: 0 }
     );
@@ -114,7 +114,7 @@ export function useContextStatus({
     const { data, error: fetchError } = await resilientFetch<{
       success?: boolean;
       compacted?: boolean;
-      status?: ContextWindowStatus;
+      status?: ContextStatusInfo;
     }>(`/api/sessions/${sessionId}/context-status`, { method: "POST", retries: 0 });
 
     if (fetchError) {

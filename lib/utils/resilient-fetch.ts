@@ -6,7 +6,7 @@
  * that should never hang indefinitely on slow/unreliable connections.
  */
 
-export interface ResilientFetchOptions extends Omit<RequestInit, "signal"> {
+interface ResilientFetchOptions extends Omit<RequestInit, "signal"> {
   /** Timeout in ms. Default: 10000 (10s). Use 30000 for uploads. */
   timeout?: number;
   /** Number of retries on failure. Default: 2. Set 0 to disable. */
@@ -19,7 +19,7 @@ export interface ResilientFetchOptions extends Omit<RequestInit, "signal"> {
   onRetry?: (attempt: number, error: Error) => void;
 }
 
-export interface ResilientFetchResult<T> {
+interface ResilientFetchResult<T> {
   data: T | null;
   error: string | null;
   timedOut: boolean;

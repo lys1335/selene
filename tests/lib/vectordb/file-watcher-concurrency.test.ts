@@ -1,35 +1,5 @@
 import { describe, it, expect } from "vitest";
-
-async function processWithConcurrency<T>(
-    items: T[],
-    concurrency: number,
-    handler: (item: T) => Promise<void>
-): Promise<void> {
-    const queue = [...items];
-    const active: Promise<void>[] = [];
-
-    while (queue.length > 0 || active.length > 0) {
-        while (queue.length > 0 && active.length < concurrency) {
-            const item = queue.shift()!;
-
-            const promise = handler(item);
-            active.push(promise);
-
-            promise.finally(() => {
-                const index = active.indexOf(promise);
-                if (index > -1) active.splice(index, 1);
-            }).catch(() => { });
-        }
-
-        if (active.length > 0) {
-            try {
-                await Promise.race(active);
-            } catch (e) {
-                // Ignore errors in race
-            }
-        }
-    }
-}
+import { processWithConcurrency } from "@/lib/vectordb/file-watcher-utils";
 
 describe("Concurrency Tests", () => {
     it("Should process all 5 items", async () => {

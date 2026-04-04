@@ -38,6 +38,9 @@ const registryMocks = vi.hoisted(() => ({
 
 const workflowMocks = vi.hoisted(() => ({
   createWorkflowFromPluginImport: vi.fn(),
+}));
+
+const workflowFolderSharingMocks = vi.hoisted(() => ({
   syncSharedFoldersToSubAgents: vi.fn(),
 }));
 
@@ -66,6 +69,7 @@ vi.mock("@/lib/plugins/import-parser", () => parserMocks);
 vi.mock("@/lib/characters/queries", () => characterMocks);
 vi.mock("@/lib/plugins/registry", () => registryMocks);
 vi.mock("@/lib/agents/workflows", () => workflowMocks);
+vi.mock("@/lib/agents/workflow-folder-sharing", () => workflowFolderSharingMocks);
 vi.mock("@/lib/workspace/setup", () => workspaceMocks);
 vi.mock("fs/promises", () => fsPromisesMocks);
 vi.mock("fs", () => fsMocks);

@@ -96,7 +96,7 @@ export function getSearchHistory(
 /**
  * Clear session for a session key
  */
-export function clearSession(sessionKey: string): void {
+export function clearVectorSearchSession(sessionKey: string): void {
   sessionStore.delete(sessionKey);
   console.log(`[VectorSearchSession] Cleared session: ${sessionKey}`);
 }
@@ -104,7 +104,7 @@ export function clearSession(sessionKey: string): void {
 /**
  * Clean up stale sessions (older than TTL)
  */
-export function cleanupStaleSessions(): number {
+function cleanupStaleSessions(): number {
   const now = Date.now();
   let cleaned = 0;
   const sessionsToDelete: string[] = [];

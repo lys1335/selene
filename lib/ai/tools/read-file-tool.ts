@@ -10,8 +10,8 @@
  */
 
 import { tool, jsonSchema } from "ai";
-import { readFile, open } from "fs/promises";
-import { basename, extname } from "path";
+import { readFile } from "fs/promises";
+import { basename } from "path";
 import {
   isPathAllowed,
   resolveWorkspaceAwarePaths,
@@ -19,6 +19,12 @@ import {
   findSimilarFiles,
 } from "@/lib/ai/filesystem";
 import { findAgentDocumentByName, getAgentDocumentChunksByDocumentId } from "@/lib/db/queries";
+import {
+  getCodeLanguage,
+  isBinaryFile,
+  selectLines,
+  formatLinesWithNumbers,
+} from "@/lib/ai/tools/file-content-utils";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -105,52 +111,6 @@ const readFileSchema = jsonSchema<ReadFileInput>({
 });
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function getCodeLanguage(filePath: string): string {
-  const ext = extname(filePath).toLowerCase().slice(1);
-  const langMap: Record<string, string> = {
-    ts: "typescript",
-    tsx: "tsx",
-    js: "javascript",
-    jsx: "jsx",
-    py: "python",
-    md: "markdown",
-    json: "json",
-    html: "html",
-    css: "css",
-    sql: "sql",
-    yaml: "yaml",
-    yml: "yaml",
-    sh: "bash",
-    bash: "bash",
-  };
-  return langMap[ext] || ext || "text";
-}
-
-async function isBinaryFile(filePath: string): Promise<boolean> {
-  let fileHandle;
-  try {
-    fileHandle = await open(filePath, "r");
-    const buffer = Buffer.alloc(1024);
-    const { bytesRead } = await fileHandle.read(buffer, 0, 1024, 0);
-    
-    // Check for null bytes in the first chunk
-    for (let i = 0; i < bytesRead; i++) {
-      if (buffer[i] === 0) {
-        return true;
-      }
-    }
-    return false;
-  } catch {
-    return false; // Assume text if we can't read (or let readFile handle error)
-  } finally {
-    await fileHandle?.close();
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Knowledge Base Logic
 // ---------------------------------------------------------------------------
 
@@ -176,35 +136,16 @@ async function tryReadFromKnowledgeBase(
     }
 
     const content = chunks.map((chunk) => chunk.text).join("\n\n---\n\n");
-    const lines = content.split("\n");
+    const allLines = content.split("\n");
 
-    // Apply Logic
-    let selectedLines = lines;
-    let actualStartLine = 1;
-    let actualEndLine = lines.length;
+    const { lines: selectedLines, actualStartLine, actualEndLine } = selectLines(allLines, {
+      head, tail, startLine, endLine, maxLineCount: MAX_LINE_COUNT,
+    });
 
-    if (head) {
-      actualEndLine = Math.min(lines.length, head);
-      selectedLines = lines.slice(0, actualEndLine);
-    } else if (tail) {
-      actualStartLine = Math.max(1, lines.length - tail + 1);
-      selectedLines = lines.slice(actualStartLine - 1);
-    } else if (startLine !== undefined || endLine !== undefined) {
-      actualStartLine = Math.max(1, startLine ?? 1);
-      actualEndLine = Math.min(lines.length, endLine ?? lines.length);
-      selectedLines = lines.slice(actualStartLine - 1, actualEndLine);
-    } else if (lines.length > MAX_LINE_COUNT) {
-      selectedLines = lines.slice(0, MAX_LINE_COUNT);
-      actualEndLine = MAX_LINE_COUNT;
-    }
-
-    // Format
     const lang = getCodeLanguage(document.originalFilename);
-    const formattedContent = selectedLines
-      .map((line, idx) => `${String(actualStartLine + idx).padStart(4, " ")} | ${line}`)
-      .join("\n");
+    const formattedContent = formatLinesWithNumbers(selectedLines, actualStartLine);
 
-    const truncated = selectedLines.length < lines.length;
+    const truncated = selectedLines.length < allLines.length;
     const displayName = document.title || document.originalFilename;
 
     return {
@@ -214,12 +155,12 @@ async function tryReadFromKnowledgeBase(
       lineRange: `${actualStartLine}-${actualEndLine}`,
       startLine: actualStartLine,
       endLine: actualEndLine,
-      totalLines: lines.length,
+      totalLines: allLines.length,
       content: formattedContent,
       truncated,
       message: truncated
-        ? `Showing lines ${actualStartLine}-${actualEndLine} of ${lines.length} total lines from Knowledge Base document "${displayName}"`
-        : `Read ${lines.length} lines from Knowledge Base document "${displayName}"`,
+        ? `Showing lines ${actualStartLine}-${actualEndLine} of ${allLines.length} total lines from Knowledge Base document "${displayName}"`
+        : `Read ${allLines.length} lines from Knowledge Base document "${displayName}"`,
       source: "knowledge_base",
       documentTitle: document.title || undefined,
     };
@@ -385,14 +326,9 @@ export function createReadFileTool(options: ReadFileToolOptions) {
       // Read File
       try {
         const content = await readFile(validPath, "utf-8");
-        const lines = content.split("\n");
+        const allLines = content.split("\n");
 
         if (content.length > MAX_FILE_SIZE_BYTES) {
-           // If too large, but user asked for head/tail/range, we might still be able to serve it if we streamed it.
-           // But here we already read it into memory (node fs.readFile).
-           // Optimization: We could use fs.read with buffer for huge files, but 1MB limit is small enough for memory.
-           // If content > 1MB, we reject unless it's a specific range?
-           // Actually, let's just warn.
            if (!head && !tail && !startLine && !endLine) {
               return {
                 status: "error",
@@ -402,39 +338,14 @@ export function createReadFileTool(options: ReadFileToolOptions) {
            }
         }
 
-        // Apply Logic
-        let selectedLines = lines;
-        let actualStartLine = 1;
-        let actualEndLine = lines.length;
+        const { lines: selectedLines, actualStartLine, actualEndLine } = selectLines(allLines, {
+          head, tail, startLine, endLine, maxLineCount: MAX_LINE_COUNT,
+        });
 
-        if (head) {
-          actualEndLine = Math.min(lines.length, head);
-          selectedLines = lines.slice(0, actualEndLine);
-        } else if (tail) {
-          actualStartLine = Math.max(1, lines.length - tail + 1);
-          selectedLines = lines.slice(actualStartLine - 1);
-        } else if (startLine !== undefined || endLine !== undefined) {
-          actualStartLine = Math.max(1, startLine ?? 1);
-          actualEndLine = Math.min(lines.length, endLine ?? lines.length);
-          selectedLines = lines.slice(actualStartLine - 1, actualEndLine);
-        } else if (lines.length > MAX_LINE_COUNT) {
-          selectedLines = lines.slice(0, MAX_LINE_COUNT);
-          actualEndLine = MAX_LINE_COUNT;
-        }
-
-        // Format
         const lang = getCodeLanguage(validPath);
-        const formattedContent = selectedLines
-          .map((line, idx) => {
-            const lineNum = `${String(actualStartLine + idx).padStart(4, " ")} | `;
-            const truncatedLine = line.length > MAX_LINE_WIDTH
-              ? line.slice(0, MAX_LINE_WIDTH) + `... [truncated]`
-              : line;
-            return lineNum + truncatedLine;
-          })
-          .join("\n");
+        const formattedContent = formatLinesWithNumbers(selectedLines, actualStartLine, MAX_LINE_WIDTH);
 
-        const truncated = selectedLines.length < lines.length;
+        const truncated = selectedLines.length < allLines.length;
 
         // Record Read
         recordFileRead(sessionId, validPath);
@@ -446,12 +357,12 @@ export function createReadFileTool(options: ReadFileToolOptions) {
           lineRange: `${actualStartLine}-${actualEndLine}`,
           startLine: actualStartLine,
           endLine: actualEndLine,
-          totalLines: lines.length,
+          totalLines: allLines.length,
           content: formattedContent,
           truncated,
           message: truncated
-            ? `Showing lines ${actualStartLine}-${actualEndLine} of ${lines.length} total lines`
-            : `Read ${lines.length} lines from ${basename(validPath)}`,
+            ? `Showing lines ${actualStartLine}-${actualEndLine} of ${allLines.length} total lines`
+            : `Read ${allLines.length} lines from ${basename(validPath)}`,
           source: "synced_folder",
         };
       } catch (error) {

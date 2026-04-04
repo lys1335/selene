@@ -139,7 +139,7 @@ export function BrowserAgentMenu({ character }: BrowserAgentMenuProps) {
           <button
             type="button"
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-            aria-label="Agent menu"
+            aria-label={t("browserWorkspace.agentMenuAriaLabel")}
           >
             <MoreHorizontal className="h-4 w-4" />
           </button>
@@ -166,7 +166,7 @@ export function BrowserAgentMenu({ character }: BrowserAgentMenuProps) {
 
           {/* Agent Management */}
           <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground">
-            Agent
+            {t("browserWorkspace.agentLabel")}
           </DropdownMenuLabel>
           <DropdownMenuItem
             onSelect={() => charActions.openIdentityEditor(characterSummary)}

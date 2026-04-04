@@ -11,10 +11,6 @@ const globalForSqliteMigrations = globalThis as typeof globalThis & {
   didLogSqliteTableInit?: boolean;
 };
 
-// Re-export for external consumers that import from this file path.
-export { runSkillsMigrations } from "./migrations/skills-tables";
-export { runDataMigrations } from "./migrations/data-migrations";
-
 /**
  * Initialize all database tables and run inline schema migrations.
  * This function is idempotent and safe to call on every connection.

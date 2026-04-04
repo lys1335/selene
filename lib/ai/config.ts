@@ -27,7 +27,7 @@ interface SystemPromptOptions {
  * This function returns an empty string for backward compatibility.
  * Detailed instructions are provided via searchTools fullInstructions.
  */
-export function getToolInstructions(_options: SystemPromptOptions): string {
+function getToolInstructions(_options: SystemPromptOptions): string {
   // All tool instructions now live in tool-definitions.ts fullInstructions.
   // This function is kept for backward compatibility but returns empty.
   return "";
@@ -49,7 +49,7 @@ export function getSystemPrompt(options: SystemPromptOptions = {}): string {
 }
 
 // Default system prompt export (for backward compatibility)
-export const SYSTEM_PROMPT = getSystemPrompt({ stylyApiEnabled: true });
+const SYSTEM_PROMPT = getSystemPrompt({ stylyApiEnabled: true });
 
 // ============================================================================
 // AI Model Configuration

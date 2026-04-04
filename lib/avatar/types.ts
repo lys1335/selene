@@ -98,7 +98,7 @@ export interface RhubarbOutput {
 }
 
 /** A single cue from Rhubarb's JSON output */
-export interface RhubarbMouthCue {
+interface RhubarbMouthCue {
   /** Start time in seconds */
   start: number;
   /** End time in seconds */

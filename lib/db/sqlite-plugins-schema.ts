@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
-import { users } from "./sqlite-schema";
+import { users } from "./sqlite-schema-base";
 import { characters } from "./sqlite-character-schema";
 import { agentWorkflows } from "./sqlite-workflows-schema";
 

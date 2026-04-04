@@ -405,7 +405,7 @@ export function MarketplaceBrowser({ onInstallComplete }: MarketplaceBrowserProp
                       </Badge>
                     ))}
                     <span className="font-mono text-[8px] text-terminal-muted/60">
-                      from {plugin.marketplaceName}
+                      {t("from", { name: plugin.marketplaceName })}
                     </span>
                   </div>
                 </div>

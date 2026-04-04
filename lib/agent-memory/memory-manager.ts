@@ -526,6 +526,7 @@ export class AgentMemoryManager {
   /**
    * Check if memories directory exists for this agent
    */
+  // fallow-ignore-next-line unused-class-member
   hasMemoryData(): boolean {
     return existsSync(this.memoriesFilePath);
   }
@@ -533,6 +534,7 @@ export class AgentMemoryManager {
   /**
    * Get the base path for this agent's memory data
    */
+  // fallow-ignore-next-line unused-class-member
   getBasePath(): string {
     return this.basePath;
   }

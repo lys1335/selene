@@ -17,25 +17,6 @@ import {
 } from "@/lib/auth/antigravity-auth";
 import { createAntigravityFetch } from "./antigravity-streaming";
 
-// Re-export schema utilities so existing imports keep working
-export {
-  normalizeAntigravityToolSchemas,
-  sanitizeSchema,
-  isPlainObject,
-  DEFAULT_ANTIGRAVITY_INPUT_SCHEMA,
-  ANTIGRAVITY_ALLOWED_SCHEMA_KEYS,
-} from "./antigravity-schema";
-
-// Re-export streaming utilities so existing imports keep working
-export {
-  createAntigravityFetch,
-  createResponseTransformStreamWithRetry,
-  unwrapResponse,
-  ensureClaudeFunctionPartIds,
-  isGenerativeLanguageRequest,
-  generateRequestId,
-  generateSessionId,
-} from "./antigravity-streaming";
 
 // ---- Model configuration -----------------------------------------------------
 
@@ -71,7 +52,7 @@ function resolveModelName(modelId: string): string {
 /**
  * Create an Antigravity provider instance (async — fetches project ID if needed).
  */
-export async function createAntigravityProviderAsync(): Promise<
+async function createAntigravityProviderAsync(): Promise<
   ((modelId: string) => LanguageModel) | null
 > {
   const token = getAntigravityToken();

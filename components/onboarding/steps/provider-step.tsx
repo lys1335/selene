@@ -6,11 +6,11 @@ import { AlertTriangle, ArrowLeft, ArrowRight, Check, Info, Sparkles, Key, Globe
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
-export type LLMProvider = "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "claudecode";
+export type OnboardingProvider = "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "claudecode";
 
 interface ProviderStepProps {
-    selectedProvider: LLMProvider;
-    onSelect: (provider: LLMProvider) => void;
+    selectedProvider: OnboardingProvider;
+    onSelect: (provider: OnboardingProvider) => void;
     onContinue: () => void;
     onBack: () => void;
 }

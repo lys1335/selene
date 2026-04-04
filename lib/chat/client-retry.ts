@@ -2,7 +2,7 @@ import type { CreateUIMessage, UIMessage } from "ai";
 
 import { classifyRecoverability } from "@/lib/ai/retry/stream-recovery";
 
-export type RetryMessage = CreateUIMessage<UIMessage> & { messageId: string };
+type RetryMessage = CreateUIMessage<UIMessage> & { messageId: string };
 
 function clonePart<T>(part: T): T {
   if (!part || typeof part !== "object") return part;
@@ -51,7 +51,7 @@ export function hasMeaningfulAssistantContent(message: UIMessage | undefined): b
   return Array.isArray(message.parts) && message.parts.some(isMeaningfulAssistantPart);
 }
 
-export function getLastUserMessage(messages: UIMessage[]): UIMessage | undefined {
+function getLastUserMessage(messages: UIMessage[]): UIMessage | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.role === "user") {

@@ -13,7 +13,7 @@ type CacheMetadata = {
   url: string;
 };
 
-export type CodexModelFamily = "gpt-5.4" | "gpt-5.2-codex" | "codex-max" | "codex" | "gpt-5.2" | "gpt-5.1";
+type CodexModelFamily = "gpt-5.4" | "gpt-5.2-codex" | "codex-max" | "codex" | "gpt-5.2" | "gpt-5.1";
 
 const PROMPT_FILES: Record<CodexModelFamily, string> = {
   // GPT-5.4 doesn't have its own prompt file yet; fall back to gpt-5.2-codex prompt
@@ -39,7 +39,7 @@ function getCacheDir(): string {
   return join(baseDir, "codex-cache");
 }
 
-export function getModelFamily(normalizedModel: string): CodexModelFamily {
+function getModelFamily(normalizedModel: string): CodexModelFamily {
   if (normalizedModel.includes("gpt-5.4") || normalizedModel.includes("gpt 5.4")) {
     return "gpt-5.4";
   }

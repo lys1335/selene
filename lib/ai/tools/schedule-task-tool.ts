@@ -47,7 +47,7 @@ interface ScheduleTaskInput {
 /**
  * Options for creating the scheduleTask tool
  */
-export interface ScheduleTaskToolOptions {
+interface ScheduleTaskToolOptions {
   sessionId: string;
   userId: string;
   characterId: string;

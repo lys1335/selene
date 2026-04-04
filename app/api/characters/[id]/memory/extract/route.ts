@@ -5,12 +5,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { getOrCreateLocalUser } from "@/lib/db/queries";
-import { getCharacter } from "@/lib/characters/queries";
-import { loadSettings } from "@/lib/settings/settings-manager";
 import { manualExtraction } from "@/lib/agent-memory";
 import { z } from "zod";
+import { requireCharacterOwnership } from "../_utils";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -22,19 +19,9 @@ const extractSchema = z.object({
 // POST - Trigger manual extraction
 export async function POST(req: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-    const { id: characterId } = await params;
-
-    // Verify character ownership
-    const character = await getCharacter(characterId);
-    if (!character) {
-      return NextResponse.json({ error: "Character not found" }, { status: 404 });
-    }
-    if (character.userId !== dbUser.id) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const auth = await requireCharacterOwnership(req, params);
+    if (auth instanceof NextResponse) return auth;
+    const { characterId } = auth;
 
     const body = await req.json();
     const parseResult = extractSchema.safeParse(body);

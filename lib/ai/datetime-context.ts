@@ -51,7 +51,7 @@ function getTimezoneInfo(date: Date): { abbreviation: string; ianaName: string }
  * // Returns something like:
  * // "Current Date & Time: 2025-12-06 (Friday) 14:23:45 PST (America/Los_Angeles)"
  */
-export function getCurrentDateTimeContext(): string {
+function getCurrentDateTimeContext(): string {
   const now = new Date();
   
   // ISO 8601 date (YYYY-MM-DD)

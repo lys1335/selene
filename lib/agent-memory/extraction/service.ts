@@ -12,7 +12,7 @@ import { calculateImportance, meetsThreshold, normalizeFactors } from "./importa
 import { loadSettings } from "@/lib/settings/settings-manager";
 import type { MemoryEntry, MemoryCategory, ExtractedMemory } from "../types";
 
-export interface ExtractionInput {
+interface ExtractionInput {
   characterId: string;
   sessionId: string;
   messages: Array<{

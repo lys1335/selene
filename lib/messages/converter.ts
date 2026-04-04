@@ -4,22 +4,23 @@ import {
   isInternalToolHistoryLeakText,
 } from "@/lib/messages/internal-tool-history";
 import type { ContextProvenance } from "@/lib/context-window/scoped-counting-contract";
+import { parseMessageMetadata } from "@/lib/messages/parse-metadata";
 
 type ToolInvocationState = "input-streaming" | "input-available" | "output-available" | "output-error" | "output-denied";
 
-export interface DBTextContentPart extends ContextProvenance {
+interface DBTextContentPart extends ContextProvenance {
   type: "text";
   text: string;
 }
 
-export interface DBImageContentPart extends ContextProvenance {
+interface DBImageContentPart extends ContextProvenance {
   type: "image";
   image: string;
   filename?: string;
   mediaType?: string;
 }
 
-export interface DBFileContentPart extends ContextProvenance {
+interface DBFileContentPart extends ContextProvenance {
   type: "file";
   url: string;
   filename?: string;
@@ -70,20 +71,7 @@ export interface DBMessage {
   toolCallId?: string | null;  // For role="tool" messages, references the parent tool call
 }
 
-function parseMessageMetadata(metadata: unknown): Record<string, unknown> | null {
-  if (!metadata) return null;
-  if (typeof metadata === "string") {
-    try {
-      const parsed = JSON.parse(metadata);
-      return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : null;
-    } catch {
-      return null;
-    }
-  }
-  return typeof metadata === "object" ? metadata as Record<string, unknown> : null;
-}
-
-export function isInjectedLivePromptUserMessage(dbMessage: Pick<DBMessage, "role" | "metadata">): boolean {
+function isInjectedLivePromptUserMessage(dbMessage: Pick<DBMessage, "role" | "metadata">): boolean {
   if (dbMessage.role !== "user") return false;
   const metadata = parseMessageMetadata(dbMessage.metadata);
   return metadata?.livePromptInjected === true;
@@ -426,15 +414,44 @@ function buildUIPartsFromDBContent(
   return parts;
 }
 
-export function convertContentPartsToUIParts(content: DBContentPart[]): UIMessage["parts"] {
+function convertContentPartsToUIParts(content: DBContentPart[]): UIMessage["parts"] {
   const parts = buildUIPartsFromDBContent(content);
   return parts as UIMessage["parts"];
+}
+
+function buildMessageCustomMetadata(
+  dbMeta: { usage?: Record<string, unknown>; cache?: Record<string, unknown>; custom?: Record<string, unknown> } | undefined,
+  tokenCount: number | null | undefined,
+  content: DBContentPart[]
+): Record<string, unknown> {
+  const customMetadata: Record<string, unknown> = {};
+
+  if (dbMeta?.usage) {
+    customMetadata.usage = dbMeta.usage;
+  }
+  if (dbMeta?.cache) {
+    customMetadata.cache = dbMeta.cache;
+  }
+  if (tokenCount) {
+    customMetadata.tokenCount = tokenCount;
+  }
+  const existingAttachments = Array.isArray(dbMeta?.custom?.attachments)
+    ? dbMeta?.custom?.attachments
+    : [];
+  const fallbackAttachments = collectAttachmentMetadataFromContent(content);
+  const attachments =
+    existingAttachments.length > 0 ? existingAttachments : fallbackAttachments;
+  if (attachments.length > 0) {
+    customMetadata.attachments = attachments;
+  }
+
+  return customMetadata;
 }
 
 /**
  * Convert a database message to UIMessage format for assistant-ui
  */
-export function convertDBMessageToUIMessage(dbMessage: DBMessage): UIMessage | null {
+function convertDBMessageToUIMessage(dbMessage: DBMessage): UIMessage | null {
   // Skip system/tool role messages
   if (dbMessage.role === "system" || dbMessage.role === "tool") {
     return null;
@@ -460,29 +477,7 @@ export function convertDBMessageToUIMessage(dbMessage: DBMessage): UIMessage | n
     cache?: Record<string, unknown>;
     custom?: Record<string, unknown>;
   } | undefined;
-  const customMetadata: Record<string, unknown> = {};
-
-  // Pass through usage from database metadata
-  if (dbMeta?.usage) {
-    customMetadata.usage = dbMeta.usage;
-  }
-  if (dbMeta?.cache) {
-    customMetadata.cache = dbMeta.cache;
-  }
-
-  // Also include tokenCount for convenience
-  if (dbMessage.tokenCount) {
-    customMetadata.tokenCount = dbMessage.tokenCount;
-  }
-  const existingAttachments = Array.isArray(dbMeta?.custom?.attachments)
-    ? dbMeta?.custom?.attachments
-    : [];
-  const fallbackAttachments = collectAttachmentMetadataFromContent(content);
-  const attachments =
-    existingAttachments.length > 0 ? existingAttachments : fallbackAttachments;
-  if (attachments.length > 0) {
-    customMetadata.attachments = attachments;
-  }
+  const customMetadata = buildMessageCustomMetadata(dbMeta, dbMessage.tokenCount, content);
 
   return {
     id: dbMessage.id,
@@ -595,26 +590,7 @@ export function convertDBMessagesToUIMessages(dbMessages: DBMessage[]): UIMessag
       cache?: Record<string, unknown>;
       custom?: Record<string, unknown>;
     } | undefined;
-    const customMetadata: Record<string, unknown> = {};
-
-    if (dbMeta?.usage) {
-      customMetadata.usage = dbMeta.usage;
-    }
-    if (dbMeta?.cache) {
-      customMetadata.cache = dbMeta.cache;
-    }
-    if (dbMsg.tokenCount) {
-      customMetadata.tokenCount = dbMsg.tokenCount;
-    }
-    const existingAttachments = Array.isArray(dbMeta?.custom?.attachments)
-      ? dbMeta?.custom?.attachments
-      : [];
-    const fallbackAttachments = collectAttachmentMetadataFromContent(content);
-    const attachments =
-      existingAttachments.length > 0 ? existingAttachments : fallbackAttachments;
-    if (attachments.length > 0) {
-      customMetadata.attachments = attachments;
-    }
+    const customMetadata = buildMessageCustomMetadata(dbMeta, dbMsg.tokenCount, content);
 
     result.push({
       id: dbMsg.id,
@@ -709,7 +685,7 @@ export function convertToThreadMessageLike(messages: UIMessage[]): ThreadMessage
  * Generate a stable signature for content parts to detect meaningful changes.
  * Used to prevent unnecessary re-renders during streaming.
  */
-export function getContentPartsSignature(parts: DBContentPart[]): string {
+function getContentPartsSignature(parts: DBContentPart[]): string {
     if (!parts || parts.length === 0) return "";
     
     // Create a lightweight signature that captures meaningful changes

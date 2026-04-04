@@ -39,7 +39,8 @@ vi.mock("@/lib/utils/resilient-fetch", () => ({
 
 import { useBackgroundProcessing } from "@/components/chat/chat-interface-hooks";
 import { convertDBMessagesToUIMessages } from "@/lib/messages/converter";
-import type { SessionState, DBMessage } from "@/components/chat/chat-interface-types";
+import type { SessionState } from "@/components/chat/chat-interface-types";
+import type { DBMessage } from "@/lib/messages/converter";
 
 function makeDbMessages(): DBMessage[] {
   return [

@@ -1,3 +1,4 @@
+// fallow-ignore-file circular-dependency
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -180,7 +181,7 @@ export type ClaudeAgentSdkQueryOptions = {
    *
    * When provided here (for `queryWithSdkOptions` callers) or propagated via
    * `mcpContextStore` (for the fetch-interceptor / chat-route path), the SDK
-   * agent can call vectorSearch, memorize, runSkill, scheduleTask, and any
+   * agent can call vectorSearch, memorize, skill, scheduleTask, and any
    * MCP server tools configured for the active agent.
    */
   mcpContext?: SeleneMcpContext;
@@ -833,6 +834,45 @@ function createAnthropicMessageResponse(
 
 
 /**
+ * Resolve all Selene MCP context-derived values needed for a Claude Agent SDK call:
+ * the MCP context itself, an in-process MCP server instance, the resolved working
+ * directory, merged plugin configs, and merged hook map.
+ */
+async function resolveSeleneContext(sdk: ClaudeAgentSdkQueryOptions | undefined) {
+  const mcpCtx: SeleneMcpContext | undefined =
+    sdk?.mcpContext ?? mcpContextStore.getStore();
+
+  const seleneMcpServers = mcpCtx
+    ? { "selene-platform": await createSeleneSdkMcpServer(mcpCtx) }
+    : undefined;
+
+  const candidateCwd = sdk?.cwd ?? mcpCtx?.cwd ?? process.cwd();
+  const resolvedCwd = existsSync(candidateCwd) ? candidateCwd : process.cwd();
+  if (resolvedCwd !== candidateCwd) {
+    console.warn(`[ClaudeCode] cwd "${candidateCwd}" does not exist, falling back to process.cwd()`);
+  }
+
+  // Bridge Selene plugin cache paths → SDK plugin configs
+  const selenePluginConfigs: SdkPluginConfig[] = (mcpCtx?.pluginPaths ?? [])
+    .map((p) => ({ type: "local" as const, path: p }));
+  const mergedPlugins = selenePluginConfigs.length > 0 || sdk?.plugins
+    ? [...selenePluginConfigs, ...(sdk?.plugins ?? [])]
+    : undefined;
+
+  // Bridge Selene hooks → SDK hook callbacks
+  const seleneHooks = mcpCtx?.hookContext
+    ? buildSdkHooksFromSelene(
+        mcpCtx.sessionId,
+        mcpCtx.hookContext.allowedPluginNames,
+        mcpCtx.hookContext.pluginRoots,
+      )
+    : undefined;
+  const mergedHookMap = mergeHooks(seleneHooks, sdk?.hooks);
+
+  return { mcpCtx, seleneMcpServers, resolvedCwd, mergedPlugins, mergedHookMap };
+}
+
+/**
  * Create a real-time streaming Response that pipes Claude Agent SDK events
  * as Anthropic-compatible SSE content blocks.
  *
@@ -886,36 +926,9 @@ function createStreamingClaudeCodeResponse(options: {
 
       try {
         const sdk = options.sdkOptions;
-        const mcpCtx: SeleneMcpContext | undefined =
-          sdk?.mcpContext ?? mcpContextStore.getStore();
+        const { mcpCtx, seleneMcpServers, resolvedCwd, mergedPlugins, mergedHookMap } =
+          await resolveSeleneContext(sdk);
         const sdkToolResultBridge = mcpCtx?.sdkToolResultBridge;
-
-        const seleneMcpServers = mcpCtx
-          ? { "selene-platform": createSeleneSdkMcpServer(mcpCtx) }
-          : undefined;
-
-        const candidateCwd = sdk?.cwd ?? mcpCtx?.cwd ?? process.cwd();
-        const resolvedCwd = existsSync(candidateCwd) ? candidateCwd : process.cwd();
-        if (resolvedCwd !== candidateCwd) {
-          console.warn(`[ClaudeCode] cwd "${candidateCwd}" does not exist, falling back to process.cwd()`);
-        }
-
-        // Bridge Selene plugin cache paths → SDK plugin configs
-        const selenePluginConfigs: SdkPluginConfig[] = (mcpCtx?.pluginPaths ?? [])
-          .map((p) => ({ type: "local" as const, path: p }));
-        const mergedPlugins = selenePluginConfigs.length > 0 || sdk?.plugins
-          ? [...selenePluginConfigs, ...(sdk?.plugins ?? [])]
-          : undefined;
-
-        // Bridge Selene hooks → SDK hook callbacks
-        const seleneHooks = mcpCtx?.hookContext
-          ? buildSdkHooksFromSelene(
-              mcpCtx.sessionId,
-              mcpCtx.hookContext.allowedPluginNames,
-              mcpCtx.hookContext.pluginRoots,
-            )
-          : undefined;
-        const mergedHookMap = mergeHooks(seleneHooks, sdk?.hooks);
 
         // ── Interactive tool gate: pause SDK for AskUserQuestion / ExitPlanMode ──
         // The async PreToolUse hook blocks the SDK from auto-executing
@@ -1655,41 +1668,8 @@ async function runClaudeAgentQuery(options: {
   }
 
   const sdk = options.sdkOptions;
-
-  // Resolve per-request Selene MCP context: explicit sdkOptions take precedence,
-  // then fall back to AsyncLocalStorage (set by the chat route before streamText).
-  const mcpCtx: SeleneMcpContext | undefined =
-    sdk?.mcpContext ?? mcpContextStore.getStore();
-
-  // Build an in-process MCP server that exposes Selene platform tools to the
-  // SDK agent when context is available.
-  const seleneMcpServers = mcpCtx
-    ? { "selene-platform": createSeleneSdkMcpServer(mcpCtx) }
-    : undefined;
-
-  // Resolve working directory: explicit SDK option > MCP context > process.cwd()
-  const candidateCwd = sdk?.cwd ?? mcpCtx?.cwd ?? process.cwd();
-  const resolvedCwd = existsSync(candidateCwd) ? candidateCwd : process.cwd();
-  if (resolvedCwd !== candidateCwd) {
-    console.warn(`[ClaudeCode] cwd "${candidateCwd}" does not exist, falling back to process.cwd()`);
-  }
-
-  // Bridge Selene plugin cache paths → SDK plugin configs
-  const selenePluginConfigs: SdkPluginConfig[] = (mcpCtx?.pluginPaths ?? [])
-    .map((p) => ({ type: "local" as const, path: p }));
-  const mergedPlugins = selenePluginConfigs.length > 0 || sdk?.plugins
-    ? [...selenePluginConfigs, ...(sdk?.plugins ?? [])]
-    : undefined;
-
-  // Bridge Selene hooks → SDK hook callbacks
-  const seleneHooks = mcpCtx?.hookContext
-    ? buildSdkHooksFromSelene(
-        mcpCtx.sessionId,
-        mcpCtx.hookContext.allowedPluginNames,
-        mcpCtx.hookContext.pluginRoots,
-      )
-    : undefined;
-  const mergedHookMap = mergeHooks(seleneHooks, sdk?.hooks);
+  const { mcpCtx, seleneMcpServers, resolvedCwd, mergedPlugins, mergedHookMap } =
+    await resolveSeleneContext(sdk);
 
   const { executable: sdkExecutable, env: sdkEnv } = getSdkExecutableConfig();
 
@@ -1849,6 +1829,56 @@ async function runClaudeAgentQuery(options: {
 }
 
 /**
+ * Shared retry-with-backoff loop for Agent SDK calls.
+ *
+ * Runs `attempt` in a loop, retrying on recoverable errors. When an auth error
+ * is detected, calls `onAuthError(authStatus)` so the caller can decide whether
+ * to throw or return an error Response. Returns the result of the first
+ * successful `attempt` call.
+ */
+async function withClaudeCodeRetry<T>(
+  label: string,
+  signal: AbortSignal | undefined,
+  model: string,
+  attempt: (n: number) => Promise<T>,
+  onAuthError: (authStatus: Awaited<ReturnType<typeof readClaudeAgentSdkAuthStatus>>) => Promise<T | undefined>
+): Promise<T> {
+  for (let n = 0; ; n += 1) {
+    try {
+      return await attempt(n);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      if (isAuthError(message)) {
+        const authStatus = await readClaudeAgentSdkAuthStatus({ timeoutMs: 20_000, model });
+        if (!authStatus.authenticated) {
+          const handled = await onAuthError(authStatus);
+          if (handled !== undefined) return handled;
+        }
+      }
+
+      const classification = classifyRecoverability({ provider: "claudecode", error, message });
+      const retry = shouldRetry({
+        classification,
+        attempt: n,
+        maxAttempts: CLAUDECODE_MAX_RETRY_ATTEMPTS,
+        aborted: signal?.aborted ?? false,
+      });
+
+      if (!retry) throw error;
+
+      const delay = getBackoffDelayMs(n);
+      console.debug(`[ClaudeCode] Retrying Agent SDK ${label}`, {
+        attempt: n + 1,
+        reason: classification.reason,
+        delayMs: delay,
+      });
+      await sleepWithAbort(delay, signal ?? undefined);
+    }
+  }
+}
+
+/**
  * Execute a Claude Agent SDK query with full SDK capabilities.
  *
  * Unlike the fetch-interceptor path (`createClaudeCodeProvider`), this API
@@ -1881,8 +1911,11 @@ export async function queryWithSdkOptions(options: {
 }): Promise<string> {
   const model = options.model ?? DEFAULT_MODEL;
 
-  for (let attempt = 0; ; attempt += 1) {
-    try {
+  return withClaudeCodeRetry(
+    "query",
+    options.signal,
+    model,
+    async () => {
       const result = await runClaudeAgentQuery({
         prompt: options.prompt,
         model,
@@ -1891,46 +1924,15 @@ export async function queryWithSdkOptions(options: {
         sdkOptions: options.sdkOptions,
       });
       return result.text;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-
-      if (isAuthError(message)) {
-        const authStatus = await readClaudeAgentSdkAuthStatus({ timeoutMs: 20_000, model });
-        if (!authStatus.authenticated) {
-          const err = new Error("Claude Agent SDK authentication required") as Error & {
-            auth: { required: boolean; url: string | undefined; output: string[] | undefined };
-          };
-          err.auth = { required: true, url: authStatus.authUrl, output: authStatus.output };
-          throw err;
-        }
-      }
-
-      const classification = classifyRecoverability({
-        provider: "claudecode",
-        error,
-        message,
-      });
-
-      const retry = shouldRetry({
-        classification,
-        attempt,
-        maxAttempts: CLAUDECODE_MAX_RETRY_ATTEMPTS,
-        aborted: options.signal?.aborted ?? false,
-      });
-
-      if (!retry) {
-        throw error;
-      }
-
-      const delay = getBackoffDelayMs(attempt);
-      console.debug("[ClaudeCode] Retrying Agent SDK query", {
-        attempt: attempt + 1,
-        reason: classification.reason,
-        delayMs: delay,
-      });
-      await sleepWithAbort(delay, options.signal ?? undefined);
+    },
+    async (authStatus) => {
+      const err = new Error("Claude Agent SDK authentication required") as Error & {
+        auth: { required: boolean; url: string | undefined; output: string[] | undefined };
+      };
+      err.auth = { required: true, url: authStatus.authUrl, output: authStatus.output };
+      throw err;
     }
-  }
+  );
 }
 
 function createClaudeCodeFetch(): typeof fetch {
@@ -1993,68 +1995,28 @@ function createClaudeCodeFetch(): typeof fetch {
       });
     }
 
-    for (let attempt = 0; ; attempt += 1) {
-      try {
+    return withClaudeCodeRetry(
+      "request",
+      init.signal ?? undefined,
+      model,
+      async () => {
         const { text: output, usage } = await runClaudeAgentQuery({
           prompt: makePrompt(),
           model,
           systemPrompt,
           signal: init.signal ?? undefined,
         });
-
         return createAnthropicMessageResponse(output, model, usage);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-
-        if (isAuthError(message)) {
-          const authStatus = await readClaudeAgentSdkAuthStatus({ timeoutMs: 20_000, model });
-          if (!authStatus.authenticated) {
-            return new Response(
-              JSON.stringify({
-                error: "Claude Agent SDK authentication required",
-                auth: {
-                  required: true,
-                  url: authStatus.authUrl,
-                  output: authStatus.output,
-                },
-              }),
-              {
-                status: 401,
-                headers: {
-                  "Content-Type": "application/json",
-                },
-              },
-            );
-          }
-        }
-
-        const classification = classifyRecoverability({
-          provider: "claudecode",
-          error,
-          message,
-        });
-
-        const retry = shouldRetry({
-          classification,
-          attempt,
-          maxAttempts: CLAUDECODE_MAX_RETRY_ATTEMPTS,
-          aborted: init.signal?.aborted ?? false,
-        });
-
-        if (!retry) {
-          throw error;
-        }
-
-        const delay = getBackoffDelayMs(attempt);
-        console.debug("[ClaudeCode] Retrying Agent SDK request", {
-          attempt: attempt + 1,
-          reason: classification.reason,
-          delayMs: delay,
-          outcome: "scheduled",
-        });
-        await sleepWithAbort(delay, init.signal ?? undefined);
-      }
-    }
+      },
+      async (authStatus) =>
+        new Response(
+          JSON.stringify({
+            error: "Claude Agent SDK authentication required",
+            auth: { required: true, url: authStatus.authUrl, output: authStatus.output },
+          }),
+          { status: 401, headers: { "Content-Type": "application/json" } }
+        )
+    );
   };
 }
 

@@ -22,6 +22,7 @@ import {
 } from "./tool-live-status";
 import { getCanonicalToolName, humanizeToolName, loadToolNameCache } from "./tool-name-utils";
 import { getToolBadgeStatus } from "./tool-status";
+import { getResultCount } from "./thread-message-activity";
 
 type ToolCallPart = Extract<MessagePartState, { type: "tool-call" }>;
 type ToolCallPartLike = ToolCallPart & {
@@ -83,18 +84,6 @@ const TOOLS_AUTO_EXPAND = new Set([
   "promptLibrary",
 ]);
 
-function getResultCount(result: unknown): number | null {
-  if (!result || typeof result !== "object") return null;
-  const record = result as Record<string, unknown>;
-
-  if (Array.isArray(record.sources)) return record.sources.length;
-  if (Array.isArray(record.results)) return record.results.length;
-  if (Array.isArray(record.images)) return record.images.length;
-  if (Array.isArray(record.videos)) return record.videos.length;
-  if (typeof record.matchCount === "number") return record.matchCount;
-
-  return null;
-}
 
 function extractMediaFromResult(result: unknown): Array<{ type: "image" | "video"; url: string }> {
   if (!result || typeof result !== "object") return [];

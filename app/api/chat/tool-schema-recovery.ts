@@ -2,7 +2,7 @@
  * Helpers for recovering from provider-level tool schema validation failures.
  */
 
-export interface InvalidToolSchemaError {
+interface InvalidToolSchemaError {
   toolName: string;
   reason: string;
   message: string;

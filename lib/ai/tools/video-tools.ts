@@ -1,13 +1,11 @@
 import { tool, jsonSchema } from "ai";
 import {
   callWan22Video,
-  isAsyncResult as isWan22VideoAsyncResult,
+  isVideoAsyncResult,
 } from "@/lib/ai/wan22-video-client";
-import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
+import { createToolRun, updateToolRun } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
-
-// Helper to get current timestamp as ISO string for SQLite
-const now = () => new Date().toISOString();
+import { failToolRun, saveGeneratedVideos } from "@/lib/ai/tools/tool-run-utils";
 
 // ==========================================================================
 // WAN 2.2 VIDEO TOOL (Image-to-Video with PainterI2V)
@@ -115,7 +113,7 @@ async function executeWan22Video(sessionId: string, args: Wan22VideoArgs) {
       sessionId
     );
 
-    if (isWan22VideoAsyncResult(result)) {
+    if (isVideoAsyncResult(result)) {
       await updateToolRun(toolRun.id, {
         status: "pending",
         metadata: { jobId: result.jobId, statusUrl: result.statusUrl },
@@ -128,48 +126,9 @@ async function executeWan22Video(sessionId: string, args: Wan22VideoArgs) {
       };
     }
 
-    // Note: We use the images table with format="mp4" for videos
-    for (const video of result.videos) {
-      await createImage({
-        sessionId,
-        toolRunId: toolRun.id,
-        role: "generated",
-        localPath: video.localPath || video.url,
-        url: video.url,
-        format: video.format,
-        metadata: {
-          prompt: positive,
-          fps: video.fps,
-          duration: video.duration,
-          mediaType: "video",
-        },
-      });
-    }
-
-    await updateToolRun(toolRun.id, {
-      status: "succeeded",
-      result: { videos: result.videos },
-      completedAt: now(),
-    });
-
-    return {
-      status: "completed",
-      videos: result.videos,
-      timeTaken: result.timeTaken,
-    };
+    return saveGeneratedVideos(sessionId, toolRun.id, result, positive);
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 
@@ -328,7 +287,7 @@ async function executeWan22PixelVideo(sessionId: string, args: Wan22PixelVideoAr
       sessionId
     );
 
-    if (isWan22VideoAsyncResult(result)) {
+    if (isVideoAsyncResult(result)) {
       await updateToolRun(toolRun.id, {
         status: "pending",
         metadata: { jobId: result.jobId, statusUrl: result.statusUrl },
@@ -342,48 +301,11 @@ async function executeWan22PixelVideo(sessionId: string, args: Wan22PixelVideoAr
       };
     }
 
-    for (const video of result.videos) {
-      await createImage({
-        sessionId,
-        toolRunId: toolRun.id,
-        role: "generated",
-        localPath: video.localPath || video.url,
-        url: video.url,
-        format: video.format,
-        metadata: {
-          prompt: positive,
-          fps: video.fps,
-          duration: video.duration,
-          mediaType: "video",
-          toolType: "pixel-animation",
-        },
-      });
-    }
-
-    await updateToolRun(toolRun.id, {
-      status: "succeeded",
-      result: { videos: result.videos },
-      completedAt: now(),
+    return saveGeneratedVideos(sessionId, toolRun.id, result, positive, {
+      toolType: "pixel-animation",
     });
-
-    return {
-      status: "completed",
-      videos: result.videos,
-      timeTaken: result.timeTaken,
-    };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 

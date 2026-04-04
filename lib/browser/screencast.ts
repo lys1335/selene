@@ -13,7 +13,7 @@ import type { Page, CDPSession } from "playwright-core";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface ScreencastFrame {
+interface ScreencastFrame {
   /** Base64-encoded JPEG image data */
   data: string;
   /** Frame metadata from CDP */
@@ -200,7 +200,7 @@ export function isScreencastActive(sessionId: string): boolean {
 /**
  * Get count of active screencasts (diagnostics).
  */
-export function getActiveScreencastCount(): number {
+function getActiveScreencastCount(): number {
   return getState().sessions.size;
 }
 

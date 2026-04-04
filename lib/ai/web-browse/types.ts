@@ -41,7 +41,7 @@ export interface WebBrowseOptions {
   sessionMetadata?: Record<string, unknown> | null;
 }
 
-export interface WebBrowseResult {
+interface WebBrowseResult {
   status: "success" | "error" | "no_api_key" | "synthesizing";
   url: string;
   title?: string;
@@ -63,7 +63,7 @@ export type WebBrowsePhase =
   | "complete"
   | "error";
 
-export interface WebBrowseProgressEvent {
+interface WebBrowseProgressEvent {
   type: "phase_change";
   phase: WebBrowsePhase;
   message: string;
@@ -71,7 +71,7 @@ export interface WebBrowseProgressEvent {
   timestamp: Date;
 }
 
-export interface WebBrowseContentEvent {
+interface WebBrowseContentEvent {
   type: "content_fetched";
   url: string;
   title: string;
@@ -79,14 +79,14 @@ export interface WebBrowseContentEvent {
   timestamp: Date;
 }
 
-export interface WebBrowseSynthesisEvent {
+interface WebBrowseSynthesisEvent {
   type: "synthesis_complete";
   synthesis: string;
   sourcesUsed: string[];
   timestamp: Date;
 }
 
-export interface WebBrowseErrorEvent {
+interface WebBrowseErrorEvent {
   type: "error";
   error: string;
   timestamp: Date;
@@ -104,7 +104,7 @@ export type WebBrowseEventEmitter = (event: WebBrowseEvent) => void;
 // Synthesis Types
 // ============================================================================
 
-export interface SynthesisRequest {
+export interface WebBrowseSynthesisRequest {
   sessionId: string;
   query: string;
   urls?: string[]; // Optional: limit to specific URLs
@@ -112,7 +112,7 @@ export interface SynthesisRequest {
   abortSignal?: AbortSignal;
 }
 
-export interface SynthesisResult {
+export interface WebBrowseSynthesisResult {
   success: boolean;
   synthesis: string;
   sourcesUsed: string[];

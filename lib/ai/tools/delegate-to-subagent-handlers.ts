@@ -126,7 +126,7 @@ function getChatApiBaseUrl(): string {
   return getInternalApiBaseUrl();
 }
 
-export async function executeDelegation(
+async function executeDelegation(
   delegationId: string,
   sessionId: string,
   characterId: string,
@@ -204,7 +204,7 @@ export function extractTextFromContent(content: unknown): string | undefined {
   return undefined;
 }
 
-export function normalizeLookup(value: string): string {
+function normalizeLookup(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
@@ -212,7 +212,7 @@ export function normalizeCompatibilityInput(input: DelegateToSubagentInput): Del
   return input;
 }
 
-export function sleep(ms: number): Promise<void> {
+export function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
@@ -372,7 +372,7 @@ export function resolveSubagentCandidate(
  * Read the sub-agent's final assistant response from DB.
  * Returns only the last assistant text — no intermediate previews or metadata.
  */
-export async function extractFinalResponse(sessionId: string): Promise<string | undefined> {
+async function extractFinalResponse(sessionId: string): Promise<string | undefined> {
   const messages = await getMessages(sessionId);
   if (!Array.isArray(messages)) return undefined;
 
@@ -470,15 +470,3 @@ export function startBackgroundExecution(
   delegation.streamPromise = streamPromise;
 }
 
-// ---------------------------------------------------------------------------
-// Backward-compatible re-exports of action handlers
-// ---------------------------------------------------------------------------
-
-export {
-  handleStartAction,
-  handleObserve,
-  handleContinue,
-  handleAnswer,
-  handleStop,
-  handleList,
-} from "./delegate-subagent-action-handlers";

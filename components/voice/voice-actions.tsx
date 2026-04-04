@@ -8,9 +8,9 @@ import { useTranslations } from "next-intl";
 
 interface VoiceAction {
   id: string;
-  label: string;
+  labelKey: string;
   icon: React.ElementType;
-  description: string;
+  descriptionKey: string;
 }
 
 interface VoiceActionsProps {
@@ -22,10 +22,10 @@ interface VoiceActionsProps {
 }
 
 const ACTIONS: VoiceAction[] = [
-  { id: "fix-grammar", label: "Fix Grammar", icon: CheckIcon, description: "Clean up grammar and punctuation" },
-  { id: "professional", label: "Professional", icon: BriefcaseIcon, description: "Rewrite in professional tone" },
-  { id: "summarize", label: "Summarize", icon: ListIcon, description: "Condense into key points" },
-  { id: "translate", label: "Translate", icon: LanguagesIcon, description: "Translate to another language" },
+  { id: "fix-grammar", labelKey: "actions.fixGrammar", icon: CheckIcon, descriptionKey: "actions.fixGrammarDesc" },
+  { id: "professional", labelKey: "actions.professional", icon: BriefcaseIcon, descriptionKey: "actions.professionalDesc" },
+  { id: "summarize", labelKey: "actions.summarize", icon: ListIcon, descriptionKey: "actions.summarizeDesc" },
+  { id: "translate", labelKey: "actions.translate", icon: LanguagesIcon, descriptionKey: "actions.translateDesc" },
 ];
 
 export function VoiceActions({ text, sessionId, onResult, className, disabled = false }: VoiceActionsProps) {
@@ -52,7 +52,7 @@ export function VoiceActions({ text, sessionId, onResult, className, disabled = 
       const data = await response.json() as { success?: boolean; text?: string; error?: string };
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || "Action failed");
+        throw new Error(data.error || t("actions.actionFailed"));
       }
 
       if (typeof data.text === "string") {
@@ -60,7 +60,7 @@ export function VoiceActions({ text, sessionId, onResult, className, disabled = 
         toast.success(t("actionComplete"));
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Action failed";
+      const message = error instanceof Error ? error.message : t("actions.actionFailed");
       toast.error(message);
     } finally {
       setRunningAction(null);
@@ -81,7 +81,7 @@ export function VoiceActions({ text, sessionId, onResult, className, disabled = 
             key={action.id}
             onClick={() => void handleAction(action.id)}
             disabled={disabled || !!runningAction}
-            aria-label={action.description}
+            aria-label={t(action.descriptionKey)}
             className={cn(
               "flex items-center gap-1 rounded-md px-2.5 py-1.5 text-[11px] font-mono transition-all min-h-[36px]",
               "border border-terminal-border/40 text-terminal-muted",
@@ -95,7 +95,7 @@ export function VoiceActions({ text, sessionId, onResult, className, disabled = 
             ) : (
               <Icon className="size-3" />
             )}
-            <span className="hidden sm:inline">{action.label}</span>
+            <span className="hidden sm:inline">{t(action.labelKey)}</span>
           </button>
         );
       })}

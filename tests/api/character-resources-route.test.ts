@@ -23,6 +23,9 @@ const pluginRegistryMocks = vi.hoisted(() => ({
 
 const workflowMocks = vi.hoisted(() => ({
   getWorkflowByAgentId: vi.fn(),
+}));
+
+const workflowResourceMocks = vi.hoisted(() => ({
   getWorkflowResources: vi.fn(),
 }));
 
@@ -32,6 +35,7 @@ vi.mock("@/lib/db/queries", () => dbMocks);
 vi.mock("@/lib/characters/queries", () => characterMocks);
 vi.mock("@/lib/plugins/registry", () => pluginRegistryMocks);
 vi.mock("@/lib/agents/workflows", () => workflowMocks);
+vi.mock("@/lib/agents/workflow-resource-context", () => workflowResourceMocks);
 
 import { GET } from "@/app/api/characters/[id]/resources/route";
 
@@ -106,7 +110,7 @@ describe("GET /api/characters/[id]/resources", () => {
       workflow: { id: "workflow-1", name: "wf-1" },
     });
 
-    workflowMocks.getWorkflowResources.mockResolvedValue({
+    workflowResourceMocks.getWorkflowResources.mockResolvedValue({
       role: "initiator",
       sharedResources: {
         pluginIds: ["plugin-1"],

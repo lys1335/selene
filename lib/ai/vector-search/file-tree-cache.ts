@@ -42,6 +42,6 @@ export async function getFileTreeSummaryForSearch(characterId: string): Promise<
   }
 }
 
-export function clearFileTreeSummary(characterId: string): void {
+function clearFileTreeSummary(characterId: string): void {
   fileTreeCache.delete(characterId);
 }

@@ -50,7 +50,7 @@ const RAW_DEFAULT_IGNORE_PATTERNS = [
 ];
 
 export const DEFAULT_IGNORE_PATTERNS = Array.from(new Set(RAW_DEFAULT_IGNORE_PATTERNS));
-export const DEFAULT_BINARY_ASSET_EXTENSIONS = new Set([
+const DEFAULT_BINARY_ASSET_EXTENSIONS = new Set([
   "avif",
   "bmp",
   "cur",

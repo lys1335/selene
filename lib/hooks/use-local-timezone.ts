@@ -17,8 +17,6 @@ import { formatTimezoneDisplay } from "@/lib/utils/timezone";
 export {
   formatTimezoneDisplay,
   parseTimezoneValue,
-  resolveTimezone,
-  isValidTimezone,
 } from "@/lib/utils/timezone";
 
 interface UseLocalTimezoneResult {

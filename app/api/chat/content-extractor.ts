@@ -375,6 +375,33 @@ async function extractAttachmentContextText(
   }
 }
 
+async function appendAttachmentByType(
+  contentParts: ModelContentPart[],
+  attachmentLookup: Map<string, AttachmentPathMetadata>,
+  seenAttachmentUrls: Set<string>,
+  attachment: AttachmentPathMetadata,
+  includeUrlHelpers: boolean,
+  convertUserImagesToBase64: boolean,
+  isUserMessage: boolean,
+  sessionId?: string,
+): Promise<void> {
+  if (!attachment.url) return;
+  if (attachment.contentType?.startsWith("image/")) {
+    await appendImagePart(
+      contentParts,
+      attachmentLookup,
+      seenAttachmentUrls,
+      attachment.url,
+      attachment.name || "uploaded image",
+      includeUrlHelpers,
+      convertUserImagesToBase64,
+      isUserMessage,
+    );
+  } else {
+    await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
+  }
+}
+
 function appendTextPartIfPresent(
   contentParts: ModelContentPart[],
   text: string | null | undefined,
@@ -450,6 +477,39 @@ function getStringContent(content: unknown, sessionId?: string): string {
   if (!stripped.trim() && pasteBlocks.length === 0) return "";
   const sanitized = sanitizeTextContent(stripped, "string content", sessionId);
   return reinsertPasteBlocks(sanitized, pasteBlocks);
+}
+
+function pushToolCallAndResult(
+  contentParts: ModelContentPart[],
+  toolName: string,
+  toolCallId: string | undefined,
+  input: unknown,
+  output: unknown,
+  normalizedInput: Record<string, unknown> | null,
+): void {
+  if (toolCallId && normalizedInput) {
+    contentParts.push({
+      type: "tool-call",
+      toolCallId,
+      toolName,
+      input: normalizedInput,
+    });
+  }
+
+  if (toolCallId && output !== undefined) {
+    const normalizedOutput = normalizeToolResultOutput(
+      toolName,
+      output,
+      normalizedInput,
+      { mode: "projection" },
+    ).output;
+    contentParts.push({
+      type: "tool-result",
+      toolCallId,
+      toolName,
+      output: toModelToolResultOutput(normalizedOutput),
+    });
+  }
 }
 
 export async function extractContent(
@@ -552,29 +612,7 @@ export async function extractContent(
           ? normalizeToolCallInput(part.input, toolName, toolCallId) ?? {}
           : null;
 
-        if (toolCallId && normalizedInput) {
-          contentParts.push({
-            type: "tool-call",
-            toolCallId,
-            toolName,
-            input: normalizedInput,
-          });
-        }
-
-        if (toolCallId && output !== undefined) {
-          const normalizedOutput = normalizeToolResultOutput(
-            toolName,
-            output,
-            normalizedInput,
-            { mode: "projection" },
-          ).output;
-          contentParts.push({
-            type: "tool-result",
-            toolCallId,
-            toolName,
-            output: toModelToolResultOutput(normalizedOutput),
-          });
-        }
+        pushToolCallAndResult(contentParts, toolName, toolCallId, part.input, output, normalizedInput);
 
         if (output?.images && output.images.length > 0) {
           const urlList = output.images
@@ -663,30 +701,8 @@ export async function extractContent(
         const normalizedInput = toolCallId
           ? normalizeToolCallInput(part.input, toolName, toolCallId) ?? {}
           : null;
-        if (toolCallId && normalizedInput) {
-          contentParts.push({
-            type: "tool-call",
-            toolCallId,
-            toolName,
-            input: normalizedInput,
-          });
-        }
-
         const toolOutput = part.output ?? part.result;
-        if (toolCallId && toolOutput !== undefined) {
-          const normalizedOutput = normalizeToolResultOutput(
-            toolName,
-            toolOutput,
-            normalizedInput,
-            { mode: "projection" },
-          ).output;
-          contentParts.push({
-            type: "tool-result",
-            toolCallId,
-            toolName,
-            output: toModelToolResultOutput(normalizedOutput),
-          });
-        }
+        pushToolCallAndResult(contentParts, toolName, toolCallId, part.input, toolOutput, normalizedInput);
       }
     }
 
@@ -704,42 +720,14 @@ export async function extractContent(
 
     if (msg.experimental_attachments && Array.isArray(msg.experimental_attachments)) {
       for (const attachment of msg.experimental_attachments) {
-        if (!attachment.url) continue;
-        if (attachment.contentType?.startsWith("image/")) {
-          await appendImagePart(
-            contentParts,
-            attachmentLookup,
-            seenAttachmentUrls,
-            attachment.url,
-            attachment.name || "uploaded image",
-            includeUrlHelpers,
-            convertUserImagesToBase64,
-            isUserMessage,
-          );
-        } else {
-          await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
-        }
+        await appendAttachmentByType(contentParts, attachmentLookup, seenAttachmentUrls, attachment, includeUrlHelpers, convertUserImagesToBase64, isUserMessage, sessionId);
       }
     }
 
     const metadataAttachments = msg.metadata?.custom?.attachments;
     if (metadataAttachments && Array.isArray(metadataAttachments)) {
       for (const attachment of metadataAttachments) {
-        if (!attachment.url) continue;
-        if (attachment.contentType?.startsWith("image/")) {
-          await appendImagePart(
-            contentParts,
-            attachmentLookup,
-            seenAttachmentUrls,
-            attachment.url,
-            attachment.name || "uploaded image",
-            includeUrlHelpers,
-            convertUserImagesToBase64,
-            isUserMessage,
-          );
-        } else {
-          await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
-        }
+        await appendAttachmentByType(contentParts, attachmentLookup, seenAttachmentUrls, attachment, includeUrlHelpers, convertUserImagesToBase64, isUserMessage, sessionId);
       }
     }
 
@@ -768,7 +756,7 @@ export async function extractContent(
       );
     }
 
-    for (const attachment of msg.metadata?.custom?.attachments ?? []) {
+    async function processAttachment(attachment: AttachmentPathMetadata): Promise<void> {
       const contentType = inferAttachmentContentType(attachment, attachment.name);
       if (!attachment.url) {
         if (contentType.startsWith("image/")) {
@@ -779,7 +767,7 @@ export async function extractContent(
               : null,
           );
         }
-        continue;
+        return;
       }
       if (contentType.startsWith("image/")) {
         await appendImagePart(
@@ -793,39 +781,17 @@ export async function extractContent(
           isUserMessage,
         );
       } else {
-        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
+        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) return;
         await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
       }
     }
 
+    for (const attachment of msg.metadata?.custom?.attachments ?? []) {
+      await processAttachment(attachment);
+    }
+
     for (const attachment of msg.experimental_attachments ?? []) {
-      const contentType = inferAttachmentContentType(attachment, attachment.name);
-      if (!attachment.url) {
-        if (contentType.startsWith("image/")) {
-          appendTextPartIfPresent(
-            contentParts,
-            includeUrlHelpers
-              ? formatAttachmentHelperText(resolveAttachmentForHelper(attachmentLookup, attachment), attachment.name || "uploaded image")
-              : null,
-          );
-        }
-        continue;
-      }
-      if (contentType.startsWith("image/")) {
-        await appendImagePart(
-          contentParts,
-          attachmentLookup,
-          seenAttachmentUrls,
-          attachment.url,
-          attachment.name || "uploaded image",
-          includeUrlHelpers,
-          convertUserImagesToBase64,
-          isUserMessage,
-        );
-      } else {
-        if (!trackAttachmentUrl(seenAttachmentUrls, attachment.url)) continue;
-        await appendNonImageAttachment(contentParts, attachmentLookup, attachment, sessionId);
-      }
+      await processAttachment(attachment);
     }
 
     if (contentParts.length > 0) {

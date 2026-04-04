@@ -16,7 +16,7 @@ export type ThemePresetId =
   | "rose"
   | "aurora";
 
-export interface ThemePreset {
+interface ThemePreset {
   id: ThemePresetId;
   label: string;
   description: string;

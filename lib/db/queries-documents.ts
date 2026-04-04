@@ -147,7 +147,7 @@ export async function deleteAgentDocument(id: string, userId: string): Promise<v
     .where(and(eq(agentDocuments.id, id), eq(agentDocuments.userId, userId)));
 }
 
-export async function getExpiredAgentDocuments(): Promise<AgentDocument[]> {
+async function getExpiredAgentDocuments(): Promise<AgentDocument[]> {
   const now = new Date().toISOString();
   return db.select()
     .from(agentDocuments)

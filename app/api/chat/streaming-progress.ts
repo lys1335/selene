@@ -163,7 +163,7 @@ export function filterStreamingPartsForPersistence(
   return filteredParts;
 }
 
-export function buildProgressContentSnapshot(
+function buildProgressContentSnapshot(
   streamingState: StreamingMessageState,
   persistedParts: DBContentPart[]
 ): DBContentPart[] {
@@ -233,7 +233,7 @@ function sanitizeAssistantProgressParts(parts: DBContentPart[]): DBContentPart[]
 const DISABLE_PROGRESS_CONTENT_LIMITER =
   process.env.DISABLE_PROGRESS_CONTENT_LIMITER === "true";
 
-export interface SyncStreamingMessageContext {
+interface SyncStreamingMessageContext {
   sessionId: string;
   userId: string;
   eventCharacterId: string;
@@ -362,7 +362,8 @@ export function createSyncStreamingMessage(
       });
 
       if (progressRunId && progressType) {
-        const progressSnapshot = buildProgressContentSnapshot(streamingState, partsSnapshot);
+        const rawProgressSnapshot = buildProgressContentSnapshot(streamingState, partsSnapshot);
+        const progressSnapshot = sanitizeAssistantProgressParts(rawProgressSnapshot);
 
         // Strip argsText from tool-call parts before progress emission.
         // argsText is only needed for finalization, not for display, and can

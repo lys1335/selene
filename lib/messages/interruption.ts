@@ -1,4 +1,4 @@
-export type InterruptionContext =
+type InterruptionContext =
   | "chat"
   | "deep-research"
   | "web-browse"

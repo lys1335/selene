@@ -23,7 +23,7 @@ import {
   getDocumentTypeLabel,
 } from "@/lib/documents/file-types";
 
-export interface AgentDocument {
+interface AgentDocumentItem {
   id: string;
   originalFilename: string;
   title?: string | null;
@@ -40,7 +40,7 @@ interface DocumentsPanelProps {
 }
 
 export function DocumentsPanel({ agentId }: DocumentsPanelProps) {
-  const [documents, setDocuments] = useState<AgentDocument[]>([]);
+  const [documents, setDocuments] = useState<AgentDocumentItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export function DocumentsPanel({ agentId }: DocumentsPanelProps) {
 
   const fetchDocuments = useCallback(async () => {
     setError(null);
-    const { data, error } = await resilientFetch<{ documents: AgentDocument[] }>(
+    const { data, error } = await resilientFetch<{ documents: AgentDocumentItem[] }>(
       `/api/characters/${agentId}/documents`
     );
     if (error || !data) {

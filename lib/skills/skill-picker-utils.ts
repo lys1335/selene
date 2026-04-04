@@ -1,13 +1,13 @@
 import type { SkillInputParameter } from "@/lib/skills/types";
 
-export interface SlashSkillTrigger {
+interface SlashSkillTrigger {
   query: string;
   matchStart: number;
   matchEnd: number;
   hasLeadingWhitespace: boolean;
 }
 
-export interface SkillInsertResult {
+interface SkillInsertResult {
   value: string;
   nextCursor: number;
 }

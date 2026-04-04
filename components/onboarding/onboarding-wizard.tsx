@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { resilientPost, resilientFetch } from "@/lib/utils/resilient-fetch";
+import { useWizardNavigation, wizardPageVariants } from "@/lib/hooks/use-wizard-navigation";
 import { Shell } from "@/components/layout/shell";
 import {
     WelcomeStep,
@@ -14,13 +15,13 @@ import {
 } from "./steps";
 import { Sparkles, Key, Layers } from "lucide-react";
 
-import type { LLMProvider } from "./steps/provider-step";
+import type { OnboardingProvider } from "./steps/provider-step";
 import type { SelenePath, PathConfigState } from "./steps/path-selector";
 
 type OnboardingStep = "welcome" | "provider" | "auth" | "features";
 
 interface OnboardingState {
-    llmProvider: LLMProvider;
+    llmProvider: OnboardingProvider;
     apiKey: string;
     isAuthenticated: boolean;
 }
@@ -32,21 +33,6 @@ const ONBOARDING_STEP_IDS = [
     { id: "features", icon: <Layers className="w-4 h-4" /> },
 ];
 
-const pageVariants = {
-    enter: (direction: number) => ({
-        x: direction > 0 ? "100%" : "-100%",
-        opacity: 0,
-    }),
-    center: {
-        x: 0,
-        opacity: 1,
-    },
-    exit: (direction: number) => ({
-        x: direction < 0 ? "100%" : "-100%",
-        opacity: 0,
-    }),
-};
-
 export function OnboardingWizard() {
     const t = useTranslations("onboarding.wizard");
     const ONBOARDING_STEPS = [
@@ -55,8 +41,7 @@ export function OnboardingWizard() {
         { ...ONBOARDING_STEP_IDS[2], label: t("stepConnect") },
         { ...ONBOARDING_STEP_IDS[3], label: t("stepFeatures") },
     ];
-    const [currentStep, setCurrentStep] = useState<OnboardingStep>("welcome");
-    const [direction, setDirection] = useState(0);
+    const { currentPage: currentStep, direction, navigateTo } = useWizardNavigation<OnboardingStep>("welcome");
     const [state, setState] = useState<OnboardingState>({
         llmProvider: "antigravity",
         apiKey: "",
@@ -64,11 +49,6 @@ export function OnboardingWizard() {
     });
 
     const router = useRouter();
-
-    const navigateTo = useCallback((step: OnboardingStep, dir: number = 1) => {
-        setDirection(dir);
-        setCurrentStep(step);
-    }, []);
 
     const handleComplete = async (pathData?: { path: SelenePath | null; config: PathConfigState }) => {
         try {
@@ -147,7 +127,7 @@ export function OnboardingWizard() {
                         <motion.div
                             key={currentStep}
                             custom={direction}
-                            variants={pageVariants}
+                            variants={wizardPageVariants}
                             initial="enter"
                             animate="center"
                             exit="exit"

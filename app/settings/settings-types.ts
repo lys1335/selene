@@ -3,9 +3,12 @@ import {
   DEFAULT_CHAT_WORKSPACE_MODE,
   type ChatWorkspaceMode,
 } from "@/lib/chat/workspace-mode";
+import type { VoiceSettingsFields } from "@/lib/settings/voice-settings-fields";
 
-export interface AppSettings {
-  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
+export type LlmProvider = "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
+
+interface AppSettingsPublic {
+  llmProvider: LlmProvider;
   anthropicApiKey?: string;
   openrouterApiKey?: string;
   kimiApiKey?: string;
@@ -104,7 +107,7 @@ export interface AppSettings {
 export type SettingsSection = "api-keys" | "models" | "vector-search" | "comfyui" | "preferences" | "memory" | "mcp" | "plugins" | "voice";
 
 export interface FormState {
-  llmProvider: "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
+  llmProvider: LlmProvider;
   anthropicApiKey: string;
   openrouterApiKey: string;
   kimiApiKey: string;
@@ -174,10 +177,6 @@ export interface FormState {
   // Local image generation settings
   comfyuiEnabled: boolean;
   comfyuiBackendPath: string;
-  flux2Klein4bEnabled: boolean;
-  flux2Klein4bBackendPath: string;
-  flux2Klein9bEnabled: boolean;
-  flux2Klein9bBackendPath: string;
   comfyuiCustomHost: string;
   comfyuiCustomPort: number;
   comfyuiCustomUseHttps: boolean;
@@ -190,51 +189,51 @@ export interface FormState {
   // EverMemOS shared memory settings
   everMemOSEnabled: boolean;
   everMemOSServerUrl: string;
-  // Voice & Audio settings
-  ttsEnabled: boolean;
-  ttsProvider: "elevenlabs" | "openai" | "edge";
-  ttsAutoMode: "off" | "always" | "channels-only";
-  elevenLabsApiKey: string;
-  elevenLabsVoiceId: string;
-  openaiTtsVoice: string;
-  edgeTtsVoice: string;
-  ttsSummarizeThreshold: number;
-  ttsReadCodeBlocks: boolean;
-  ttsSpeakCodeSymbols: boolean;
-  sttEnabled: boolean;
-  sttProvider: "openai" | "local" | "parakeet";
-  sttLocalModel: string;
-  voicePostProcessing: boolean;
-  voiceAgentName: string;
-  voiceAudioCues: boolean;
-  voiceAutoLearn: boolean;
-  voiceActivationMode: "tap" | "push";
-  parakeetModel: string;
-  parakeetAutoStart: boolean;
-  parakeetServerPort: number;
-  voiceHotkey: string;
-  screenCaptureEnabled: boolean;
-  screenCaptureShortcut: string;
-  quickCaptureEnabled: boolean;
-  quickCaptureHotkey: string;
-  quickCaptureAutoSend: boolean;
-  quickCaptureAutoSendDelay: number;
-  screenCaptureExcludedApps: string;
-  screenCaptureRetention: "session" | "day" | "week" | "forever";
-  screenCapturePreviewBeforeSend: boolean;
-  screenCaptureOnboardingSeen: boolean;
-  customDictionary: string[];
-  voiceHistoryEnabled: boolean;
-  voiceHistoryLimit: number;
-  voiceHistoryRetentionDays: number;
-  voiceHistoryPreviewLength: number;
-  voiceActionsEnabled: boolean;
-  voiceActionDefaultLanguage: string;
-  voiceActionPreserveStyle: boolean;
-  voiceActionConfirmDestructive: boolean;
-  voiceActionFormalTone: "auto" | "business" | "casual";
-  voiceActionTranslationStyle: "natural" | "literal";
-  voiceActionSummarizeLength: "short" | "medium" | "long";
+  // Voice & Audio settings (shared field definitions — see lib/settings/voice-settings-fields.ts)
+  ttsEnabled: VoiceSettingsFields["ttsEnabled"];
+  ttsProvider: VoiceSettingsFields["ttsProvider"];
+  ttsAutoMode: VoiceSettingsFields["ttsAutoMode"];
+  elevenLabsApiKey: VoiceSettingsFields["elevenLabsApiKey"];
+  elevenLabsVoiceId: VoiceSettingsFields["elevenLabsVoiceId"];
+  openaiTtsVoice: VoiceSettingsFields["openaiTtsVoice"];
+  edgeTtsVoice: VoiceSettingsFields["edgeTtsVoice"];
+  ttsSummarizeThreshold: VoiceSettingsFields["ttsSummarizeThreshold"];
+  ttsReadCodeBlocks: VoiceSettingsFields["ttsReadCodeBlocks"];
+  ttsSpeakCodeSymbols: VoiceSettingsFields["ttsSpeakCodeSymbols"];
+  sttEnabled: VoiceSettingsFields["sttEnabled"];
+  sttProvider: VoiceSettingsFields["sttProvider"];
+  sttLocalModel: VoiceSettingsFields["sttLocalModel"];
+  voicePostProcessing: VoiceSettingsFields["voicePostProcessing"];
+  voiceAgentName: VoiceSettingsFields["voiceAgentName"];
+  voiceAudioCues: VoiceSettingsFields["voiceAudioCues"];
+  voiceAutoLearn: VoiceSettingsFields["voiceAutoLearn"];
+  voiceActivationMode: VoiceSettingsFields["voiceActivationMode"];
+  parakeetModel: VoiceSettingsFields["parakeetModel"];
+  parakeetAutoStart: VoiceSettingsFields["parakeetAutoStart"];
+  parakeetServerPort: VoiceSettingsFields["parakeetServerPort"];
+  voiceHotkey: VoiceSettingsFields["voiceHotkey"];
+  screenCaptureEnabled: VoiceSettingsFields["screenCaptureEnabled"];
+  screenCaptureShortcut: VoiceSettingsFields["screenCaptureShortcut"];
+  quickCaptureEnabled: VoiceSettingsFields["quickCaptureEnabled"];
+  quickCaptureHotkey: VoiceSettingsFields["quickCaptureHotkey"];
+  quickCaptureAutoSend: VoiceSettingsFields["quickCaptureAutoSend"];
+  quickCaptureAutoSendDelay: VoiceSettingsFields["quickCaptureAutoSendDelay"];
+  screenCaptureExcludedApps: VoiceSettingsFields["screenCaptureExcludedApps"];
+  screenCaptureRetention: VoiceSettingsFields["screenCaptureRetention"];
+  screenCapturePreviewBeforeSend: VoiceSettingsFields["screenCapturePreviewBeforeSend"];
+  screenCaptureOnboardingSeen: VoiceSettingsFields["screenCaptureOnboardingSeen"];
+  customDictionary: VoiceSettingsFields["customDictionary"];
+  voiceHistoryEnabled: VoiceSettingsFields["voiceHistoryEnabled"];
+  voiceHistoryLimit: VoiceSettingsFields["voiceHistoryLimit"];
+  voiceHistoryRetentionDays: VoiceSettingsFields["voiceHistoryRetentionDays"];
+  voiceHistoryPreviewLength: VoiceSettingsFields["voiceHistoryPreviewLength"];
+  voiceActionsEnabled: VoiceSettingsFields["voiceActionsEnabled"];
+  voiceActionDefaultLanguage: VoiceSettingsFields["voiceActionDefaultLanguage"];
+  voiceActionPreserveStyle: VoiceSettingsFields["voiceActionPreserveStyle"];
+  voiceActionConfirmDestructive: VoiceSettingsFields["voiceActionConfirmDestructive"];
+  voiceActionFormalTone: VoiceSettingsFields["voiceActionFormalTone"];
+  voiceActionTranslationStyle: VoiceSettingsFields["voiceActionTranslationStyle"];
+  voiceActionSummarizeLength: VoiceSettingsFields["voiceActionSummarizeLength"];
   // Video generation provider keys
   runwayApiSecret: string;
   vertexAIProjectId: string;
@@ -314,10 +313,6 @@ export const DEFAULT_FORM_STATE: FormState = {
   localGrepRespectGitignore: true,
   comfyuiEnabled: false,
   comfyuiBackendPath: "",
-  flux2Klein4bEnabled: false,
-  flux2Klein4bBackendPath: "",
-  flux2Klein9bEnabled: false,
-  flux2Klein9bBackendPath: "",
   comfyuiCustomHost: "127.0.0.1",
   comfyuiCustomPort: 8188,
   comfyuiCustomUseHttps: false,
@@ -450,10 +445,6 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     localGrepRespectGitignore: data.localGrepRespectGitignore ?? true,
     comfyuiEnabled: data.comfyuiEnabled ?? false,
     comfyuiBackendPath: data.comfyuiBackendPath ?? "",
-    flux2Klein4bEnabled: data.flux2Klein4bEnabled ?? false,
-    flux2Klein4bBackendPath: data.flux2Klein4bBackendPath ?? "",
-    flux2Klein9bEnabled: data.flux2Klein9bEnabled ?? false,
-    flux2Klein9bBackendPath: data.flux2Klein9bBackendPath ?? "",
     comfyuiCustomHost: data.comfyuiCustomHost ?? "127.0.0.1",
     comfyuiCustomPort: data.comfyuiCustomPort ?? 8188,
     comfyuiCustomUseHttps: data.comfyuiCustomUseHttps ?? false,

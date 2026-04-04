@@ -5,6 +5,7 @@ import { useState, useEffect, useRef, memo, useMemo, useCallback } from "react";
 import ShikiHighlighter, { type ShikiHighlighterProps } from "react-shiki";
 import type { SyntaxHighlighterProps as AUIProps } from "@assistant-ui/react-markdown";
 import { CheckIcon, CopyIcon } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/components/theme/theme-provider";
 
@@ -49,6 +50,7 @@ function getCodeBlockLayout(code: string): {
 }
 
 function CopyCodeButton({ code }: { code: string }) {
+  const t = useTranslations("assistantUi.codeBlock");
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -68,7 +70,7 @@ function CopyCodeButton({ code }: { code: string }) {
           ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-500"
           : "border-terminal-cream/20 bg-terminal-cream/[0.06] text-terminal-cream/50 hover:border-terminal-cream/35 hover:bg-terminal-cream/[0.12] hover:text-terminal-cream/80"
       )}
-      aria-label="Copy code"
+      aria-label={t("copyCode")}
     >
       {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
       {copied ? "Copied" : "Copy"}

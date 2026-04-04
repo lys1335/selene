@@ -5,14 +5,14 @@
 
 import { getLanceDB } from "../client";
 import { getAgentTableName } from "../collections";
-import { searchVectorDB, type VectorSearchHit, type VectorSearchOptions } from "../search";
+import { searchVectorDB, type VectorSearchHit, type VectorDBSearchOptions } from "../search";
 import { generateLexicalVector } from "./lexical-vectors";
 import { rrfFusion, sortByFusedScore } from "@/lib/ai/vector-search/v2/fusion";
 import { getVectorSearchConfig } from "@/lib/config/vector-search";
 import { expandQuery } from "./query-expansion";
 import { rerankResults } from "@/lib/ai/vector-search/v2/reranker";
 
-export interface HybridSearchOptions extends VectorSearchOptions {
+interface HybridSearchOptions extends VectorDBSearchOptions {
   enableDiversification?: boolean;
 }
 

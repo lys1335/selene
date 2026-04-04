@@ -9,7 +9,7 @@ import { createHash } from "crypto";
 
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 
-export interface MemoryInjectionDecision {
+interface MemoryInjectionDecision {
   normalizedMarkdown: string;
   signature: string | null;
   shouldInject: boolean;
@@ -20,7 +20,7 @@ export interface MemoryInjectionDecision {
   dedupedMemoryLineCount: number;
 }
 
-export function estimateTokenCount(text: string): number {
+function estimateTokenCount(text: string): number {
   if (!text.trim()) return 0;
   return Math.ceil(text.length / CHARS_PER_TOKEN_ESTIMATE);
 }
@@ -60,7 +60,7 @@ export function normalizeApprovedMemoryMarkdown(markdown: string): {
   };
 }
 
-export function getMemorySignature(markdown: string): string {
+function getMemorySignature(markdown: string): string {
   return createHash("sha256").update(markdown).digest("hex");
 }
 

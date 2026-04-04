@@ -1,6 +1,6 @@
 import type { AgentTemplateMemory } from "./types";
 
-export const PLATFORM_CONTEXT_MEMORIES: AgentTemplateMemory[] = [
+const PLATFORM_CONTEXT_MEMORIES: AgentTemplateMemory[] = [
   {
     category: "domain_knowledge",
     content:

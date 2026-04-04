@@ -142,12 +142,12 @@ export interface FormattedMemory {
 }
 
 // API response types
-export interface MemoryListResponse {
+interface MemoryListResponse {
   memories: MemoryEntry[];
   metadata: MemoryMetadata;
 }
 
-export interface MemoryActionResponse {
+interface MemoryActionResponse {
   success: boolean;
   memory?: MemoryEntry;
   error?: string;

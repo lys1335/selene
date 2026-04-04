@@ -1,10 +1,10 @@
-export interface ComposerCaptureMetadata {
+interface ComposerCaptureMetadata {
   activeAppName?: string | null;
   activeWindowTitle?: string | null;
   browserUrl?: string | null;
 }
 
-export interface BuildSimpleComposerSubmissionArgs {
+interface BuildSimpleComposerSubmissionArgs {
   inputValue: string;
   enhancedContext?: string | null;
   captureMetadata?: ComposerCaptureMetadata | null;

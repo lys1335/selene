@@ -6,7 +6,7 @@ process.env.WAN22_IMAGEN_ENDPOINT = "https://example.test/models/wan-2-2-imagen/
 
 import {
   callWan22Imagen,
-  isAsyncResult,
+  isImagenAsyncResult,
   type Wan22ImagenInput,
   type Wan22ImagenSyncResult,
   type Wan22ImagenAsyncResult,
@@ -38,7 +38,7 @@ describe("WAN 2.2 Imagen Client", () => {
         status: "processing",
         statusUrl: "https://example.test/jobs/job-123",
       };
-      expect(isAsyncResult(asyncResult)).toBe(true);
+      expect(isImagenAsyncResult(asyncResult)).toBe(true);
     });
 
     it("should return false for sync results", () => {
@@ -46,7 +46,7 @@ describe("WAN 2.2 Imagen Client", () => {
         images: [{ url: "https://example.com/image.png", width: 768, height: 1344, format: "png" }],
         timeTaken: 5.2,
       };
-      expect(isAsyncResult(syncResult)).toBe(false);
+      expect(isImagenAsyncResult(syncResult)).toBe(false);
     });
   });
 
@@ -79,8 +79,8 @@ describe("WAN 2.2 Imagen Client", () => {
         })
       );
 
-      expect(isAsyncResult(result)).toBe(false);
-      if (!isAsyncResult(result)) {
+      expect(isImagenAsyncResult(result)).toBe(false);
+      if (!isImagenAsyncResult(result)) {
         expect(result.images).toHaveLength(1);
         expect(result.images[0].width).toBe(768);
         expect(result.images[0].height).toBe(1344);
@@ -126,7 +126,7 @@ describe("WAN 2.2 Imagen Client", () => {
       expect(body.width).toBe(1024);
       expect(body.height).toBe(1024);
 
-      if (!isAsyncResult(result)) {
+      if (!isImagenAsyncResult(result)) {
         expect(result.images[0].width).toBe(1024);
         expect(result.images[0].height).toBe(1024);
       }
@@ -194,8 +194,8 @@ describe("WAN 2.2 Imagen Client", () => {
         expect.any(Object)
       );
 
-      expect(isAsyncResult(result)).toBe(true);
-      if (isAsyncResult(result)) {
+      expect(isImagenAsyncResult(result)).toBe(true);
+      if (isImagenAsyncResult(result)) {
         expect(result.jobId).toBe("job-456");
         expect(result.status).toBe("processing");
         expect(result.statusUrl).toBe("https://example.test/jobs/job-456");

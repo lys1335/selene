@@ -50,7 +50,7 @@ const PROVIDER_NAMES: Record<string, string> = {
 const ROLE_FIELDS = ["chatModel", "researchModel", "visionModel", "utilityModel"] as const;
 type RoleField = (typeof ROLE_FIELDS)[number];
 
-export interface ResolvedSessionModelScope {
+interface ResolvedSessionModelScope {
   effectiveConfig: ResolvedModelConfig;
   sources: ResolvedModelSources;
   sessionConfig: SessionModelConfig | null;
@@ -58,7 +58,7 @@ export interface ResolvedSessionModelScope {
   globalConfig: ModelConfig;
 }
 
-export interface SessionResolverOptions {
+interface SessionResolverOptions {
   characterId?: string | null;
   agentModelConfig?: AgentModelConfig | null;
   settings?: AppSettings;
@@ -346,7 +346,7 @@ export async function resolveSessionModelScopeForSession(
   });
 }
 
-export function getSessionModelId(
+function getSessionModelId(
   sessionMetadata: Record<string, unknown> | null | undefined,
   options: SessionResolverOptions = {},
 ): string {
@@ -374,7 +374,7 @@ export async function getSessionProviderForSession(
   return (await resolveSessionModelScopeForSession(sessionMetadata, options)).effectiveConfig.provider;
 }
 
-export function resolveSessionChatModel(
+function resolveSessionChatModel(
   sessionMetadata: Record<string, unknown> | null | undefined,
   options: SessionResolverOptions = {},
 ): LanguageModel {
@@ -382,7 +382,7 @@ export function resolveSessionChatModel(
   return getLanguageModelForProvider(scope.effectiveConfig.provider, scope.effectiveConfig.chatModel);
 }
 
-export async function resolveSessionChatModelForSession(
+async function resolveSessionChatModelForSession(
   sessionMetadata: Record<string, unknown> | null | undefined,
   options: SessionResolverOptions = {},
 ): Promise<LanguageModel> {
@@ -390,7 +390,7 @@ export async function resolveSessionChatModelForSession(
   return getLanguageModelForProvider(scope.effectiveConfig.provider, scope.effectiveConfig.chatModel);
 }
 
-export function resolveSessionLanguageModel(
+function resolveSessionLanguageModel(
   sessionMetadata: Record<string, unknown> | null | undefined,
   options: SessionResolverOptions = {},
 ): LanguageModel {
@@ -414,7 +414,7 @@ export function resolveSessionResearchModel(
   return getLanguageModelForProvider(scope.effectiveConfig.provider, scope.effectiveConfig.researchModel);
 }
 
-export async function resolveSessionResearchModelForSession(
+async function resolveSessionResearchModelForSession(
   sessionMetadata: Record<string, unknown> | null | undefined,
   options: SessionResolverOptions = {},
 ): Promise<LanguageModel> {
@@ -422,7 +422,7 @@ export async function resolveSessionResearchModelForSession(
   return getLanguageModelForProvider(scope.effectiveConfig.provider, scope.effectiveConfig.researchModel);
 }
 
-export function resolveSessionVisionModel(
+function resolveSessionVisionModel(
   sessionMetadata: Record<string, unknown> | null | undefined,
   options: SessionResolverOptions = {},
 ): LanguageModel {
@@ -476,7 +476,7 @@ export function clearSessionModelMetadata(
   return result;
 }
 
-export function getSessionDisplayName(
+function getSessionDisplayName(
   sessionMetadata: Record<string, unknown> | null | undefined,
   options: SessionResolverOptions = {},
 ): string {
@@ -526,7 +526,7 @@ export async function getSessionProviderTemperatureForSession(
   return provider === "kimi" ? 1 : requestedTemp;
 }
 
-export function getAgentModelConfigFromMetadata(
+function getAgentModelConfigFromMetadata(
   metadata: Record<string, unknown> | null | undefined,
 ): AgentModelConfig | null {
   return getAgentModelConfigFromUnknown(metadata?.modelConfig);

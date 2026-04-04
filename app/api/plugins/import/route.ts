@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { getOrCreateLocalUser } from "@/lib/db/queries";
-import { loadSettings } from "@/lib/settings/settings-manager";
+import {
+  resolveImportAuthUser,
+  validateMultiImportFiles,
+  importErrorResponse,
+} from "@/lib/import/shared-import-utils";
 import {
   parsePluginFromFiles,
   parsePluginFromMarkdown,
@@ -10,10 +12,8 @@ import {
 import { createCharacter, getCharacter, getUserCharacters } from "@/lib/characters/queries";
 import { enablePluginForAgent, installPlugin } from "@/lib/plugins/registry";
 import { buildAgentMetadataSeed } from "@/lib/plugins/import-parser";
-import {
-  createWorkflowFromPluginImport,
-  syncSharedFoldersToSubAgents,
-} from "@/lib/agents/workflows";
+import { createWorkflowFromPluginImport } from "@/lib/agents/workflows";
+import { syncSharedFoldersToSubAgents } from "@/lib/agents/workflow-folder-sharing";
 import type { InstalledPlugin, PluginAgentEntry, PluginParseResult, PluginScope } from "@/lib/plugins/types";
 import { mkdir, copyFile } from "fs/promises";
 import { existsSync } from "fs";
@@ -271,9 +271,9 @@ export async function POST(request: NextRequest) {
   const requestId = Math.random().toString(36).slice(2, 8);
 
   try {
-    const authUserId = await requireAuth(request);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(authUserId, settings.localUserEmail);
+    const authResult = await resolveImportAuthUser(request);
+    if (authResult instanceof NextResponse) return authResult;
+    const { dbUser } = authResult;
 
     const formData = await request.formData();
     const singleFile = formData.get("file") as File | null;
@@ -284,24 +284,8 @@ export async function POST(request: NextRequest) {
 
     const uploadFiles = multipleFiles.length > 0 ? multipleFiles : singleFile ? [singleFile] : [];
 
-    if (uploadFiles.length === 0) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
-    }
-
-    const maxSizePerFile = 50 * 1024 * 1024;
-    const totalSize = uploadFiles.reduce((sum, file) => sum + file.size, 0);
-    if (uploadFiles.some((file) => file.size > maxSizePerFile)) {
-      return NextResponse.json(
-        { error: "One or more files exceed the 50MB per-file limit" },
-        { status: 400 }
-      );
-    }
-    if (totalSize > 150 * 1024 * 1024) {
-      return NextResponse.json(
-        { error: "Total upload size exceeds 150MB limit" },
-        { status: 400 }
-      );
-    }
+    const filesError = validateMultiImportFiles(uploadFiles);
+    if (filesError) return filesError;
 
     let parsed: PluginParseResult;
 
@@ -521,17 +505,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error(`[PluginImport:${requestId}] Error:`, error);
-
-    if (
-      error instanceof Error &&
-      (error.message === "Unauthorized" || error.message === "Invalid session")
-    ) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Plugin import failed" },
-      { status: 500 }
-    );
+    return importErrorResponse(error, "Plugin import failed");
   }
 }

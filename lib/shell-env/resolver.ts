@@ -315,7 +315,7 @@ export function getResolvedShellEnvironment(): Record<string, string> {
     return cachedShellEnv ?? {};
 }
 
-export function resetResolvedShellEnvironmentForTests(): void {
+function resetResolvedShellEnvironmentForTests(): void {
     cachedShellEnv = null;
     shellEnvResolutionAttempted = false;
 }

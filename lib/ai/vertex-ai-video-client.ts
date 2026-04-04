@@ -15,7 +15,7 @@ const getLocation = () => {
   return settings.vertexAILocation || process.env.VERTEX_AI_LOCATION || "us-central1";
 };
 
-export interface VertexAIVideoInput {
+interface VertexAIVideoInput {
   prompt: string;
   image_url?: string;
   model?: string;
@@ -28,7 +28,7 @@ export interface VertexAIVideoInput {
   sample_count?: number;         // 1-4
 }
 
-export interface VertexAIVideoSyncResult {
+interface VertexAIVideoSyncResult {
   videos: Array<{
     url: string;
     localPath?: string;

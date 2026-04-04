@@ -5,7 +5,7 @@
 import type { ModelItem, ModelRole } from "./model-bag.types";
 
 /** First letter of the model name, uppercased */
-export function getModelIcon(model: ModelItem): string {
+function getModelIcon(model: ModelItem): string {
   return model.name.charAt(0).toUpperCase();
 }
 
@@ -31,7 +31,7 @@ export function invertAssignments(
 }
 
 /** Speed label for tooltip */
-export function speedLabel(speed?: "fast" | "standard" | "slow"): string {
+function speedLabel(speed?: "fast" | "standard" | "slow"): string {
   switch (speed) {
     case "fast":
       return "Fast";
@@ -43,7 +43,7 @@ export function speedLabel(speed?: "fast" | "standard" | "slow"): string {
 }
 
 /** Tier label for tooltip */
-export function tierLabel(tier: ModelItem["tier"]): string {
+function tierLabel(tier: ModelItem["tier"]): string {
   switch (tier) {
     case "flagship":
       return "Flagship";

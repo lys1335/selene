@@ -41,7 +41,7 @@ const MAX_SINGLE_RESULT_CHARS = 50_000; // ~12,500 tokens
 // Types
 // ============================================================================
 
-export interface ProgressLimitResult {
+interface ProgressLimitResult {
   /** The (possibly truncated) content array */
   content: unknown[];
   /** Whether any truncation was applied */
@@ -75,9 +75,9 @@ function isToolResultPart(part: unknown): part is {
   return obj.type === "tool-result" && "result" in obj;
 }
 
-function isRunSkillToolResult(part: unknown): boolean {
+function isSkillToolResult(part: unknown): boolean {
   if (!isToolResultPart(part)) return false;
-  return part.toolName === "runSkill";
+  return part.toolName === "skill";
 }
 
 /**
@@ -208,9 +208,9 @@ export function limitProgressContent(content: unknown[] | undefined): ProgressLi
   const originalTokens = estimateTokens(content);
   const originalBytes = Buffer.byteLength(JSON.stringify(content), "utf8");
 
-  // Preserve full runSkill payloads in progress projection to avoid silently
+  // Preserve full skill tool payloads in progress projection to avoid silently
   // clipping skill content returned by action=inspect/action=run.
-  if (content.some(isRunSkillToolResult)) {
+  if (content.some(isSkillToolResult)) {
     return {
       content,
       wasTruncated: false,

@@ -8,7 +8,7 @@
  * Manual override is supported via `character.metadata.accentColor`.
  */
 
-export interface AccentColor {
+interface AccentColor {
   /** Unique identifier (e.g. "terracotta") */
   id: string;
   /** Display label */
@@ -21,7 +21,7 @@ export interface AccentColor {
   hex: string;
 }
 
-export const ACCENT_COLORS: AccentColor[] = [
+const ACCENT_COLORS: AccentColor[] = [
   { id: "scuderia",    label: "Scuderia",    hsl: "0 85% 48%",   hslDark: "0 85% 54%",   hex: "#DC2626" },
   { id: "papaya",      label: "Papaya",      hsl: "25 95% 53%",  hslDark: "25 95% 58%",  hex: "#F97316" },
   { id: "petronas",    label: "Petronas",    hsl: "174 85% 42%", hslDark: "174 85% 50%", hex: "#10B4A6" },
@@ -69,4 +69,24 @@ export function getAgentAccentColor(
   }
   const index = hashString(characterId) % ACCENT_COLORS.length;
   return ACCENT_COLORS[index];
+}
+
+/**
+ * Build a three-stop gradient from an accent color hex value.
+ * Returns values compatible with GradientBackground's `colors` prop.
+ */
+export function buildAgentGradientColors(
+  hex: string
+): Array<{ color: string; stop: string }> {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const dr = Math.max(0, Math.round(r * 0.3));
+  const dg = Math.max(0, Math.round(g * 0.3));
+  const db = Math.max(0, Math.round(b * 0.3));
+  return [
+    { color: `rgba(${dr},${dg},${db},1)`, stop: "0%" },
+    { color: `rgba(${r},${g},${b},1)`, stop: "60%" },
+    { color: `rgba(${Math.min(255, r + 30)},${Math.min(255, g + 30)},${Math.min(255, b + 30)},1)`, stop: "100%" },
+  ];
 }

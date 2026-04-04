@@ -9,7 +9,7 @@ import { users } from "@/lib/db/sqlite-schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
-export interface LocalUser {
+interface LocalUser {
   id: string;
   email: string;
 }
@@ -181,7 +181,7 @@ export async function hasAnyUsers(): Promise<boolean> {
 /**
  * Update user email
  */
-export async function updateUserEmail(email: string): Promise<LocalUser> {
+async function updateUserEmail(email: string): Promise<LocalUser> {
   const user = await getLocalUser();
 
   await db.update(users).set({ email }).where(eq(users.id, user.id));
@@ -196,7 +196,7 @@ export async function updateUserEmail(email: string): Promise<LocalUser> {
 /**
  * Update user password
  */
-export async function updateUserPassword(
+async function updateUserPassword(
   userId: string,
   newPassword: string
 ): Promise<void> {
@@ -223,7 +223,7 @@ export function parseSessionCookie(cookieHeader: string | null): string | null {
  * Check if a user is "authenticated" (for API compatibility)
  * Now checks for valid session cookie
  */
-export async function isAuthenticated(
+async function isAuthenticated(
   cookieHeader?: string | null
 ): Promise<boolean> {
   const sessionId = parseSessionCookie(cookieHeader || null);
@@ -264,7 +264,7 @@ export function clearUserCache(): void {
  * Initialize the local auth system
  * Should be called on app startup
  */
-export async function initializeAuth(): Promise<LocalUser | null> {
+async function initializeAuth(): Promise<LocalUser | null> {
   // Check if any users exist
   const hasUsers = await hasAnyUsers();
   if (!hasUsers) {

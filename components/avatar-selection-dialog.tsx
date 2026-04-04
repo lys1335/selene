@@ -1,15 +1,9 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
+import { AvatarDialogShell, AvatarUploadButton } from "@/components/avatar-dialog-shell";
 import { Button } from "@/components/ui/button";
-import { Loader2, Upload, Check, Trash2, ImagePlus } from "lucide-react";
+import { Loader2, Check, Trash2, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resilientFetch, resilientPost, resilientPatch, resilientDelete } from "@/lib/utils/resilient-fetch";
 import type { CharacterImage } from "@/lib/db/sqlite-character-schema";
@@ -134,31 +128,16 @@ export function AvatarSelectionDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md bg-terminal-cream border-terminal-border">
-        <DialogHeader>
-          <DialogTitle className="font-mono text-terminal-dark">
-            {t("dialog.title", { name: characterName })}
-          </DialogTitle>
-          <DialogDescription className="font-mono text-terminal-muted">
-            {t("dialog.subtitle")}
-          </DialogDescription>
-        </DialogHeader>
-
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileSelect}
-          accept={ACCEPTED_IMAGE_TYPES.join(",")}
-          className="hidden"
-        />
-
-        {error && (
-          <div className="p-3 bg-red-100 rounded-lg">
-            <p className="text-sm font-mono text-red-700">{error}</p>
-          </div>
-        )}
-
+    <AvatarDialogShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title={t("dialog.title", { name: characterName })}
+      subtitle={t("dialog.subtitle")}
+      fileInputRef={fileInputRef}
+      onFileChange={handleFileSelect}
+      accept={ACCEPTED_IMAGE_TYPES.join(",")}
+      error={error}
+    >
         <div className="space-y-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
@@ -217,24 +196,12 @@ export function AvatarSelectionDialog({
             </div>
           )}
 
-          <Button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            variant="outline"
-            className="w-full font-mono border-terminal-border hover:bg-terminal-dark/5"
-          >
-            {uploading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                {t("actions.uploading")}
-              </>
-            ) : (
-              <>
-                <Upload className="w-4 h-4 mr-2" />
-                {t("actions.upload")}
-              </>
-            )}
-          </Button>
+          <AvatarUploadButton
+            fileInputRef={fileInputRef}
+            uploading={uploading}
+            uploadLabel={t("actions.upload")}
+            uploadingLabel={t("actions.uploading")}
+          />
           <p className="text-xs font-mono text-terminal-muted text-center">
             {t("note")}
           </p>
@@ -248,7 +215,6 @@ export function AvatarSelectionDialog({
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+    </AvatarDialogShell>
   );
 }

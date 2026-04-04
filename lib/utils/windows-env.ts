@@ -19,7 +19,7 @@ import { join } from "path";
  * The `\\usr\\bin$` pattern is scoped to Git/MSYS paths to avoid accidentally
  * filtering unrelated directories that happen to end in `\\usr\\bin`.
  */
-export const GIT_BASH_PATH_PATTERNS: RegExp[] = [
+const GIT_BASH_PATH_PATTERNS: RegExp[] = [
   /\\git\\usr\\bin$/i,
   /\\git\\usr\\lib$/i,
   /\\git\\bin$/i,
@@ -45,7 +45,7 @@ const MSYS_FORWARD_SLASH_PREFIX = /^\/(?:usr|bin|mingw|msys|etc|tmp|dev|proc)/;
  */
 const MSYS_DRIVE_PATH = /^\/([a-z])\/(.*)/i;
 
-export interface NormalizeWindowsEnvironmentOptions {
+interface NormalizeWindowsEnvironmentOptions {
   filterGitBashPath?: boolean;
   ensureComSpec?: boolean;
   ensureSystemPaths?: boolean;
@@ -56,7 +56,7 @@ export interface NormalizeWindowsEnvironmentOptions {
  * Convert an MSYS2-style path (/c/Program Files/...) to a Windows path
  * (C:\Program Files\...). Returns the original string if it's not an MSYS path.
  */
-export function convertMsysPath(segment: string): string {
+function convertMsysPath(segment: string): string {
   const match = segment.match(MSYS_DRIVE_PATH);
   if (!match) return segment;
   const driveLetter = match[1]!.toUpperCase();
@@ -73,7 +73,7 @@ export function convertMsysPath(segment: string): string {
  * to Windows format before filtering, so valid paths are preserved rather than
  * dropped entirely.
  */
-export function filterGitBashFromPath(pathStr: string): string {
+function filterGitBashFromPath(pathStr: string): string {
   return pathStr
     .split(";")
     .map((seg) => seg.trim())
@@ -93,7 +93,7 @@ export function filterGitBashFromPath(pathStr: string): string {
  * MSYS2 / MINGW environment variables that signal a Unix-shell environment.
  * Removing these prevents child processes from detecting Git Bash context.
  */
-export const MSYS_ENV_VARS: readonly string[] = [
+const MSYS_ENV_VARS: readonly string[] = [
   "SHELL",
   "MSYSTEM",
   "MSYSTEM_CARCH",
@@ -169,7 +169,7 @@ export function consolidatePathKeys(env: Record<string, string | undefined>): st
  * Remove MSYS/Git Bash environment variables from the given environment.
  * Only strips env vars - does not touch PATH. Mutates `env` in place.
  */
-export function stripMsysEnvVars(env: Record<string, string | undefined>): void {
+function stripMsysEnvVars(env: Record<string, string | undefined>): void {
   for (const varName of MSYS_ENV_VARS) {
     delete env[varName];
   }
@@ -258,7 +258,7 @@ export function normalizeWindowsEnvironment(
  * executeCommand via cmd.exe/PowerShell). Do not use this for the Claude Code
  * SDK, where Git Bash must remain available.
  */
-export function cleanWindowsEnv(env: Record<string, string | undefined>): void {
+function cleanWindowsEnv(env: Record<string, string | undefined>): void {
   const normalized = normalizeWindowsEnvironment(env, {
     filterGitBashPath: true,
     ensureComSpec: true,

@@ -14,7 +14,7 @@ import {
   integer,
 } from "drizzle-orm/sqlite-core";
 import { relations, sql } from "drizzle-orm";
-import { users, sessions, messages, toolRuns } from "./sqlite-schema";
+import { users, sessions, messages, toolRuns } from "./sqlite-schema-base";
 
 // ============================================================================
 // AGENT RUNS TABLE (Root span / correlation entity)

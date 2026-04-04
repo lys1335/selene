@@ -143,7 +143,7 @@ function summarizeObjectReadable(record: Record<string, unknown>, maxLength: num
   }
 }
 
-export function summarizeToolValue(value: unknown, maxLength: number = 120): string | undefined {
+function summarizeToolValue(value: unknown, maxLength: number = 120): string | undefined {
   if (value === undefined || value === null) return undefined;
 
   if (typeof value === "string") {
@@ -305,7 +305,7 @@ export function summarizeToolInput(value: unknown): string | undefined {
   return summarizeToolValue(value, 96);
 }
 
-export function summarizeToolOutput(value: unknown): string | undefined {
+function summarizeToolOutput(value: unknown): string | undefined {
   return summarizeToolValue(value, 120);
 }
 

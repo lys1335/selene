@@ -12,8 +12,8 @@ import type { BundledRuntimeInfo } from "./executor-runtime";
 
 // ── Timeout / output-size constants ──────────────────────────────────────────
 
-export const DEFAULT_TIMEOUT = 30000;           // 30 seconds
-export const LONG_RUNNING_TIMEOUT = 120_000;    // 2 minutes
+const DEFAULT_TIMEOUT = 30000;           // 30 seconds
+const LONG_RUNNING_TIMEOUT = 120_000;    // 2 minutes
 export const BACKGROUND_TIMEOUT = 600_000;      // 10 minutes
 // Note: This byte limit prevents memory/performance issues during execution.
 // Projection/token limiting happens later in model/transport shaping paths.
@@ -23,7 +23,7 @@ export const DEFAULT_MAX_OUTPUT_SIZE = 1048576; // 1MB
 /**
  * Commands that typically need longer timeouts (package managers, scaffolders)
  */
-export const LONG_RUNNING_COMMANDS = new Set([
+const LONG_RUNNING_COMMANDS = new Set([
     "npm", "npx", "yarn", "pnpm", "pnpx",
     "pip", "pip3", "cargo", "go", "dotnet",
     "composer", "bundle", "gem", "mvn", "gradle",
@@ -112,7 +112,7 @@ export function wrapWithRTK(
 
 // ── Search metadata helpers ───────────────────────────────────────────────────
 
-export function isShellRipgrepCommand(command: string): boolean {
+function isShellRipgrepCommand(command: string): boolean {
     return normalizeExecutable(command) === "rg";
 }
 

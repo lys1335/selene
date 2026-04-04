@@ -28,44 +28,11 @@
 
 // Export types
 export type {
-  WebContentEntry,
-  WebBrowseSession,
-  WebBrowseOptions,
-  WebBrowseResult,
-  WebBrowsePhase,
   WebBrowseEvent,
-  WebBrowseEventEmitter,
-  WebBrowseProgressEvent,
-  WebBrowseContentEvent,
-  WebBrowseSynthesisEvent,
-  WebBrowseErrorEvent,
-  SynthesisRequest,
-  SynthesisResult,
 } from "./types";
-
-// Export session store functions
-export {
-  getWebBrowseSession,
-  addWebContent,
-  getSessionContent,
-  getContentByUrls,
-  getSessionRecentUrls,
-  setSessionRecentUrls,
-  clearSession,
-  cleanupExpiredEntries,
-} from "./session-store";
-
-// Export synthesizer
-export { synthesizeWebContent } from "./synthesizer";
 
 // Export orchestrator
 export {
   browseAndSynthesize,
-  querySessionContent,
-  type BrowseAndSynthesizeParams,
-  type BrowseAndSynthesizeResult,
 } from "./orchestrator";
-
-// Export tools
-export { createWebBrowseTool } from "./tool";
 

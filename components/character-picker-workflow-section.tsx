@@ -25,7 +25,7 @@ import type { CharacterSummary, WorkflowGroup } from "@/components/character-pic
 
 const DatabaseIcon = Database;
 
-export function WorkflowCard({
+function WorkflowCard({
   wf,
   isExpanded,
   workflowDrafts,

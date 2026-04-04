@@ -15,6 +15,7 @@ import {
   MinusIcon,
   UserIcon,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { AvatarRenderer } from "./avatar-renderer";
 import type { Avatar3DConfig, Avatar3DRef } from "./types";
@@ -57,6 +58,7 @@ function AvatarPipWidget({
   onHide,
   onShow,
 }: AvatarPipWidgetProps) {
+  const t = useTranslations("avatar3d.pip");
   // ── Drag state ──
   const isDraggingRef = useRef(false);
   const dragStartRef = useRef({ sx: 0, sy: 0, ox: 0, oy: 0 });
@@ -156,7 +158,7 @@ function AvatarPipWidget({
               <button
                 onClick={(e) => { e.stopPropagation(); onMuteToggle(); }}
                 className="size-7 flex items-center justify-center rounded-lg bg-background/60 backdrop-blur-sm hover:bg-background/90 transition-colors cursor-pointer"
-                title={muted ? "Unmute avatar" : "Mute avatar"}
+                title={muted ? t("unmute") : t("mute")}
               >
                 {muted ? (
                   <VolumeXIcon className="size-3.5 text-muted-foreground" />
@@ -167,7 +169,7 @@ function AvatarPipWidget({
               <button
                 onClick={(e) => { e.stopPropagation(); onHide(); }}
                 className="size-7 flex items-center justify-center rounded-lg bg-background/60 backdrop-blur-sm hover:bg-background/90 transition-colors cursor-pointer"
-                title="Minimize avatar"
+                title={t("minimize")}
               >
                 <MinusIcon className="size-3.5 text-muted-foreground" />
               </button>
@@ -195,10 +197,10 @@ function AvatarPipWidget({
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.6, opacity: 0 }}
           transition={{ duration: 0.2 }}
-          title="Show avatar"
+          title={t("show")}
         >
           <UserIcon className="size-4 text-foreground" />
-          <span className="text-xs font-medium text-foreground">Avatar</span>
+          <span className="text-xs font-medium text-foreground">{t("avatar")}</span>
         </motion.button>
       )}
     </AnimatePresence>

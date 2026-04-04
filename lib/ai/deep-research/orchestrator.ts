@@ -27,7 +27,7 @@ import type {
   FinalReport,
 } from './types';
 
-export type EventEmitter = (event: DeepResearchEvent) => void;
+type EventEmitter = (event: DeepResearchEvent) => void;
 
 interface ResearchGenerationConfig {
   model: ReturnType<typeof getResearchModel>;
@@ -85,7 +85,7 @@ async function resolveResearchGenerationConfig(config: Partial<DeepResearchConfi
 /**
  * Create initial research state
  */
-export function createInitialState(userQuery: string, config: Partial<DeepResearchConfig> = {}): DeepResearchState {
+function createInitialState(userQuery: string, config: Partial<DeepResearchConfig> = {}): DeepResearchState {
   return {
     userQuery,
     findings: [],

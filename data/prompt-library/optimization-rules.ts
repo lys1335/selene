@@ -1,23 +1,23 @@
-export interface OptimizationRuleExample {
+interface OptimizationRuleExample {
   before: string;
   after: string;
 }
 
-export interface OptimizationRule {
+interface OptimizationRule {
   id: string;
   name: string;
   description: string;
   examples: OptimizationRuleExample[];
 }
 
-export interface SceneTypeGuide {
+interface SceneTypeGuide {
   type: string;
   recommendedTerms: string[];
   recommendedParams: string[];
   commonConstraints: string[];
 }
 
-export const OPTIMIZATION_RULES: OptimizationRule[] = [
+const OPTIMIZATION_RULES: OptimizationRule[] = [
   {
     id: "replace-feeling-words",
     name: "Replace feeling words with professional terms",
@@ -81,7 +81,7 @@ export const OPTIMIZATION_RULES: OptimizationRule[] = [
   },
 ];
 
-export const SCENE_TYPES: SceneTypeGuide[] = [
+const SCENE_TYPES: SceneTypeGuide[] = [
   // Alias export name follows the implementation plan wording.
   {
     type: "Product Photography",

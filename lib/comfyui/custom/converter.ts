@@ -192,7 +192,7 @@ function mapWidgetValues(
   });
 }
 
-export function uiToApiWorkflow(
+function uiToApiWorkflow(
   uiWorkflow: Record<string, unknown>,
   options?: { objectInfo?: ObjectInfoMap }
 ): Record<string, WorkflowNode> {

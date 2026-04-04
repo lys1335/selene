@@ -2,6 +2,7 @@
 
 import { type FC, useCallback, useMemo, useState } from "react";
 import { CheckCircle, CircleNotch, NotePencil, MapTrifold } from "@phosphor-icons/react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { parseNestedJsonString } from "@/lib/utils/parse-nested-json";
 import { useChatSessionId } from "@/components/chat-provider";
@@ -74,14 +75,15 @@ export const PlanApprovalToolUI: ToolCallContentPartComponent = ({
   addResult,
 }) => {
   const sessionId = useChatSessionId();
+  const t = useTranslations("assistantUi.planApproval");
   const args = useMemo(() => normalizeArgs(rawArgs ?? argsText), [rawArgs, argsText]);
   const plan = typeof args?.plan === "string" ? args.plan.trim() : "";
-  const question = args?.question?.trim() || "Review the plan and choose how to continue.";
+  const question = args?.question?.trim() || t("reviewPrompt");
   const options = Array.isArray(args?.options) && args.options.length > 0
     ? args.options
     : [
-        { label: "Approve & Continue", description: "Approve this plan and start implementation." },
-        { label: "Reject / Edit", description: "Send feedback and keep the agent in planning mode." },
+        { label: t("approveLabel"), description: t("approveDescription") },
+        { label: t("rejectLabel"), description: t("rejectDescription") },
       ];
 
   const existingResult = (result && typeof result === "object" ? result : undefined) as PlanApprovalResult | undefined;
@@ -126,7 +128,7 @@ export const PlanApprovalToolUI: ToolCallContentPartComponent = ({
     return (
       <div className="my-2 inline-flex items-center gap-2 rounded border border-terminal-border/40 bg-terminal-bg/20 px-3 py-2 font-mono text-xs text-terminal-muted">
         <MapTrifold className="h-4 w-4 text-terminal-amber" weight="duotone" />
-        <span>Preparing plan review...</span>
+        <span>{t("preparing")}</span>
         <CircleNotch className="h-3.5 w-3.5 animate-spin text-terminal-amber" />
       </div>
     );
@@ -140,22 +142,22 @@ export const PlanApprovalToolUI: ToolCallContentPartComponent = ({
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-[10px] font-mono font-semibold uppercase tracking-[0.16em] text-terminal-muted">
-            Plan Approval
+            {t("title")}
           </div>
           <p className="mt-1 text-sm font-mono leading-relaxed text-foreground">{question}</p>
           {existingResult?.approved === true && (
-            <p className="mt-2 text-xs font-mono text-terminal-green">Approved. The agent can continue implementing.</p>
+            <p className="mt-2 text-xs font-mono text-terminal-green">{t("approved")}</p>
           )}
           {existingResult?.action === "Reject / Edit" && (
             <p className="mt-2 text-xs font-mono text-terminal-amber">
-              Feedback sent{existingResult.message ? `: ${existingResult.message}` : "."}
+              {t("feedbackSent")}{existingResult.message ? `: ${existingResult.message}` : "."}
             </p>
           )}
         </div>
       </div>
 
       <pre className="max-h-80 overflow-auto rounded-lg border border-terminal-border/40 bg-terminal-bg/30 p-3 text-xs leading-6 text-terminal-dark whitespace-pre-wrap font-mono">
-        {plan || "No plan content was captured."}
+        {plan || t("noPlanContent")}
       </pre>
 
       {!isResolved && (
@@ -191,14 +193,14 @@ export const PlanApprovalToolUI: ToolCallContentPartComponent = ({
           <div className="rounded-lg border border-terminal-border/40 bg-terminal-bg/20 p-3">
             <div className="mb-2 flex items-center gap-2 text-xs font-mono text-terminal-muted">
               <NotePencil className="h-4 w-4" />
-              <span>Optional feedback for plan changes</span>
+              <span>{t("optionalFeedback")}</span>
             </div>
             <textarea
               value={feedback}
               onChange={(event) => setFeedback(event.target.value)}
               disabled={submitting}
               rows={4}
-              placeholder="Tell the agent what to revise before implementation starts."
+              placeholder={t("feedbackPlaceholder")}
               className="w-full resize-y rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-foreground outline-none transition focus:border-terminal-amber/50"
             />
             <div className="mt-3 flex justify-end">
@@ -216,10 +218,10 @@ export const PlanApprovalToolUI: ToolCallContentPartComponent = ({
                 {submitting && selectedAction === "Reject / Edit" ? (
                   <span className="inline-flex items-center gap-2">
                     <CircleNotch className="h-3.5 w-3.5 animate-spin" />
-                    Sending...
+                    {t("sending")}
                   </span>
                 ) : (
-                  "Send feedback"
+                  t("sendFeedback")
                 )}
               </button>
             </div>

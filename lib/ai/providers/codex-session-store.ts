@@ -30,7 +30,7 @@ export const WS_DISABLED_COOLDOWN_MS = 60_000;
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export interface CodexSessionState {
+interface CodexSessionState {
   /** Sticky routing token from the last successful response. */
   turnState: string | null;
   /** Timestamp until which WS is disabled for this session. */

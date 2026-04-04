@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, use } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Download, Loader2, Play } from "lucide-react";
-
-type SkillStatus = "draft" | "active" | "archived";
+import { SkillFormFields } from "@/components/skills/skill-form-fields";
+import type { SkillStatus } from "@/lib/skills/types";
+import { useSkillForm, splitLines } from "@/lib/hooks/use-skill-form";
 
 type SkillRecord = {
   id: string;
@@ -43,41 +44,25 @@ type SkillVersion = {
 
 type CharacterOption = { id: string; name: string; displayName?: string | null };
 
-function splitLines(value: string): string[] {
-  return value
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-}
-
 export default function SkillDetailPage({ params }: { params: Promise<{ id: string; skillId: string }> }) {
   const { id: characterId, skillId } = use(params);
   const router = useRouter();
   const t = useTranslations("skills.detail");
-  const tNew = useTranslations("skills.new");
-  const tStatus = useTranslations("skills.status");
 
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [running, setRunning] = useState(false);
   const [copying, setCopying] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const [skill, setSkill] = useState<SkillRecord | null>(null);
   const [runs, setRuns] = useState<SkillRun[]>([]);
   const [versions, setVersions] = useState<SkillVersion[]>([]);
   const [characters, setCharacters] = useState<CharacterOption[]>([]);
-
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [promptTemplate, setPromptTemplate] = useState("");
-  const [category, setCategory] = useState("general");
   const [status, setStatus] = useState<SkillStatus>("active");
-  const [toolHints, setToolHints] = useState("");
-  const [triggerExamples, setTriggerExamples] = useState("");
   const [copyTargetCharacterId, setCopyTargetCharacterId] = useState("");
+
+  const { form, setForm, resetForm, saving, error, setError, canSave, runSave } = useSkillForm();
 
   const loadSkill = async () => {
     setLoading(true);
@@ -95,13 +80,15 @@ export default function SkillDetailPage({ params }: { params: Promise<{ id: stri
       setRuns(nextRuns);
       setVersions(nextVersions);
 
-      setName(nextSkill.name || "");
-      setDescription(nextSkill.description || "");
-      setPromptTemplate(nextSkill.promptTemplate || "");
-      setCategory(nextSkill.category || "general");
+      resetForm({
+        name: nextSkill.name || "",
+        description: nextSkill.description || "",
+        promptTemplate: nextSkill.promptTemplate || "",
+        category: nextSkill.category || "general",
+        toolHints: (nextSkill.toolHints || []).join("\n"),
+        triggerExamples: (nextSkill.triggerExamples || []).join("\n"),
+      });
       setStatus(nextSkill.status || "active");
-      setToolHints((nextSkill.toolHints || []).join("\n"));
-      setTriggerExamples((nextSkill.triggerExamples || []).join("\n"));
 
       await fetch("/api/skills/telemetry", {
         method: "POST",
@@ -126,25 +113,20 @@ export default function SkillDetailPage({ params }: { params: Promise<{ id: stri
     void loadSkill();
   }, [skillId]);
 
-  const canSave = useMemo(() => name.trim().length > 0 && promptTemplate.trim().length > 0, [name, promptTemplate]);
-
-  const onSave = async () => {
-    if (!canSave || saving || !skill) return;
-    setSaving(true);
-    setError(null);
-    setMessage(null);
-
-    try {
+  const onSave = () => {
+    if (!skill) return;
+    runSave(async () => {
+      setMessage(null);
       const response = await fetch(`/api/skills/${skill.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(),
-          description: description.trim() || null,
-          promptTemplate: promptTemplate.trim(),
-          category: category.trim() || "general",
-          toolHints: splitLines(toolHints),
-          triggerExamples: splitLines(triggerExamples),
+          name: form.name.trim(),
+          description: form.description.trim() || null,
+          promptTemplate: form.promptTemplate.trim(),
+          category: form.category.trim() || "general",
+          toolHints: splitLines(form.toolHints),
+          triggerExamples: splitLines(form.triggerExamples),
           status,
           expectedVersion: skill.version,
         }),
@@ -153,14 +135,9 @@ export default function SkillDetailPage({ params }: { params: Promise<{ id: stri
       if (!response.ok) {
         throw new Error(payload?.error || t("saveFailed"));
       }
-
       setMessage(t("updatedSuccess"));
       await loadSkill();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t("saveFailed"));
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   const onRunNow = async () => {
@@ -180,7 +157,6 @@ export default function SkillDetailPage({ params }: { params: Promise<{ id: stri
         throw new Error(payload?.error || t("runFailed"));
       }
 
-      // Redirect to the session where the skill is running
       if (payload.sessionId && payload.characterId) {
         router.push(`/chat/${payload.characterId}?sessionId=${payload.sessionId}`);
         return;
@@ -289,46 +265,12 @@ export default function SkillDetailPage({ params }: { params: Promise<{ id: stri
                 <CardTitle className="font-mono">{t("title")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="text-sm font-mono text-terminal-dark">
-                    {tNew("nameLabel")}
-                    <input value={name} onChange={(e) => setName(e.target.value)} className="mt-1 w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm" />
-                  </label>
-                  <label className="text-sm font-mono text-terminal-dark">
-                    {tNew("categoryLabel")}
-                    <input value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm" />
-                  </label>
-                </div>
-
-                <label className="block text-sm font-mono text-terminal-dark">
-                  {tNew("descriptionLabel")}
-                  <textarea value={description} onChange={(e) => setDescription(e.target.value)} className="mt-1 min-h-[80px] w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm" />
-                </label>
-
-                <label className="block text-sm font-mono text-terminal-dark">
-                  {tNew("promptLabel")}
-                  <textarea value={promptTemplate} onChange={(e) => setPromptTemplate(e.target.value)} className="mt-1 min-h-[180px] w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm" />
-                </label>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="block text-sm font-mono text-terminal-dark">
-                    {tNew("toolHintsLabel")}
-                    <textarea value={toolHints} onChange={(e) => setToolHints(e.target.value)} className="mt-1 min-h-[110px] w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm" />
-                  </label>
-                  <label className="block text-sm font-mono text-terminal-dark">
-                    {tNew("triggerLabel")}
-                    <textarea value={triggerExamples} onChange={(e) => setTriggerExamples(e.target.value)} className="mt-1 min-h-[110px] w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm" />
-                  </label>
-                </div>
-
-                <label className="block text-sm font-mono text-terminal-dark">
-                  {t("statusLabel")}
-                  <select value={status} onChange={(e) => setStatus(e.target.value as SkillStatus)} className="mt-1 w-full rounded border border-terminal-border bg-white px-3 py-2 font-mono text-sm">
-                    <option value="active">{tStatus("active")}</option>
-                    <option value="draft">{tStatus("draft")}</option>
-                    <option value="archived">{tStatus("archived")}</option>
-                  </select>
-                </label>
+                <SkillFormFields
+                  values={form}
+                  onChange={setForm}
+                  status={status}
+                  onStatusChange={setStatus}
+                />
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant="outline" className="font-mono">{t("version", { version: skill.version })}</Badge>

@@ -486,21 +486,21 @@ export function MCPSettings() {
                                                                 ...prev,
                                                                 [ps.namespacedName]: e.target.value,
                                                             }))}
-                                                            placeholder="https://your-server.example.com/sse"
+                                                            placeholder={t("pluginUrlPlaceholder")}
                                                             className="flex-1 font-mono text-xs"
                                                             disabled={isBusy}
                                                             onKeyDown={(e) => {
                                                                 if (e.key === "Enter") handleSavePluginUrl(ps);
                                                             }}
                                                             autoFocus={ps.incomplete}
-                                                            aria-label={`Server URL for ${ps.serverName}`}
+                                                            aria-label={t("pluginServerUrlFor", { name: ps.serverName })}
                                                         />
                                                         <Button
                                                             size="sm"
                                                             onClick={() => handleSavePluginUrl(ps)}
                                                             disabled={isBusy || !pluginUrlInputs[ps.namespacedName]?.trim()}
                                                             className="shrink-0"
-                                                            aria-label={`Save URL for ${ps.serverName}`}
+                                                            aria-label={t("pluginSaveUrlFor", { name: ps.serverName })}
                                                         >
                                                             {isBusy ? (
                                                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -769,7 +769,7 @@ export function MCPSettings() {
                             <Input
                                 value={newEnvKey}
                                 onChange={(e) => setNewEnvKey(e.target.value)}
-                                placeholder="MY_API_KEY"
+                                placeholder={t("envKeyPlaceholder")}
                                 className="w-1/3 font-mono text-xs"
                                 autoFocus
                                 onKeyDown={(e) => {

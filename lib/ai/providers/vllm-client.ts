@@ -27,13 +27,13 @@ function normalizeVllmUrl(url: string): string {
   return normalized;
 }
 
-export function getVllmBaseUrl(): string {
+function getVllmBaseUrl(): string {
   const settings = loadSettings();
   const raw = settings.vllmBaseUrl || process.env.VLLM_BASE_URL || VLLM_DEFAULT_BASE_URL;
   return normalizeVllmUrl(raw);
 }
 
-export function getVllmApiKey(): string {
+function getVllmApiKey(): string {
   const settings = loadSettings();
   return settings.vllmApiKey || process.env.VLLM_API_KEY || "";
 }

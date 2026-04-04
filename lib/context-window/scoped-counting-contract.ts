@@ -1,4 +1,4 @@
-import type { LLMProvider } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/providers";
 
 export type ContextScope = "main" | "delegated";
 
@@ -19,7 +19,7 @@ export interface ScopedCountOptions {
   hasDelegatedAnnotations?: boolean;
 }
 
-export const CLAUDECODE_PROVIDER: LLMProvider = "claudecode";
+const CLAUDECODE_PROVIDER: LLMProvider = "claudecode";
 
 const TRUE_VALUES = new Set(["1", "true", "yes", "on"]);
 
@@ -37,11 +37,11 @@ function readEnvNumber(name: string, defaultValue: number): number {
   return parsed;
 }
 
-export function isScopedCountingEnabled(): boolean {
+function isScopedCountingEnabled(): boolean {
   return readEnvBool("CONTEXT_SCOPED_COUNTING_ENABLED", false);
 }
 
-export function isScopedDualCalcEnabled(): boolean {
+function isScopedDualCalcEnabled(): boolean {
   return readEnvBool("CONTEXT_SCOPED_COUNTING_DUAL_CALC", true);
 }
 

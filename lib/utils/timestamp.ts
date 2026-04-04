@@ -18,7 +18,7 @@ export function nowISO(): string {
  * Normalize any timestamp to ISO 8601 format.
  * Handles both legacy SQLite datetime and ISO 8601 inputs.
  */
-export function normalizeTimestamp(
+function normalizeTimestamp(
   timestamp: string | Date | null | undefined
 ): string | null {
   if (!timestamp) return null;

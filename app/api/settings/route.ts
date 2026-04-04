@@ -120,12 +120,6 @@ export async function PUT(request: NextRequest) {
       comfyuiCustomUseHttps: body.comfyuiCustomUseHttps !== undefined ? body.comfyuiCustomUseHttps : currentSettings.comfyuiCustomUseHttps,
       comfyuiCustomAutoDetect: body.comfyuiCustomAutoDetect !== undefined ? body.comfyuiCustomAutoDetect : currentSettings.comfyuiCustomAutoDetect,
       comfyuiCustomBaseUrl: body.comfyuiCustomBaseUrl !== undefined ? body.comfyuiCustomBaseUrl : currentSettings.comfyuiCustomBaseUrl,
-      // FLUX.2 Klein 4B
-      flux2Klein4bEnabled: body.flux2Klein4bEnabled !== undefined ? body.flux2Klein4bEnabled : currentSettings.flux2Klein4bEnabled,
-      flux2Klein4bBackendPath: body.flux2Klein4bBackendPath !== undefined ? body.flux2Klein4bBackendPath : currentSettings.flux2Klein4bBackendPath,
-      // FLUX.2 Klein 9B
-      flux2Klein9bEnabled: body.flux2Klein9bEnabled !== undefined ? body.flux2Klein9bEnabled : currentSettings.flux2Klein9bEnabled,
-      flux2Klein9bBackendPath: body.flux2Klein9bBackendPath !== undefined ? body.flux2Klein9bBackendPath : currentSettings.flux2Klein9bBackendPath,
       // Local Grep settings
       localGrepEnabled: body.localGrepEnabled !== undefined ? body.localGrepEnabled : currentSettings.localGrepEnabled,
       localGrepMaxResults: body.localGrepMaxResults !== undefined ? body.localGrepMaxResults : currentSettings.localGrepMaxResults,

@@ -11,7 +11,8 @@
  * - providers.ts         isModelCompatibleWithProvider() / validateModelForProvider()
  */
 
-import type { AgentModelConfig, LLMProvider } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/provider-types";
+import type { AgentModelConfig } from "@/components/model-bag/model-bag.types";
 
 // ---------------------------------------------------------------------------
 // Provider-specific model ID sets (imported dynamically to avoid circular deps)
@@ -141,7 +142,7 @@ export function isModelCompatibleWithProvider(
 // Validation result types
 // ---------------------------------------------------------------------------
 
-export interface ModelValidationResult {
+interface ModelValidationResult {
   valid: boolean;
   /** The validated model ID (same as input if valid) */
   model: string;
@@ -183,7 +184,7 @@ export function validateModelForProvider(
 // Batch validation (for settings with multiple model fields)
 // ---------------------------------------------------------------------------
 
-export type ModelFieldName = "chatModel" | "researchModel" | "visionModel" | "utilityModel";
+type ModelFieldName = "chatModel" | "researchModel" | "visionModel" | "utilityModel";
 
 export interface BatchValidationResult {
   valid: boolean;

@@ -1,6 +1,7 @@
 "use client";
 
 import { FC, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { parseNestedJsonString } from "@/lib/utils/parse-nested-json";
 import {
@@ -170,12 +171,12 @@ const ACTION_ICONS: Record<string, typeof BookOpen> = {
   categories: Grid3X3,
 };
 
-const ACTION_LABELS: Record<string, string> = {
-  get: "Prompt Details",
-  search: "Search Results",
-  trending: "Trending Prompts",
-  random: "Random Picks",
-  categories: "Categories",
+const ACTION_LABEL_KEYS: Record<string, string> = {
+  get: "get",
+  search: "search",
+  trending: "trending",
+  random: "random",
+  categories: "categories",
 };
 
 function formatNumber(n: number): string {
@@ -189,6 +190,7 @@ function formatNumber(n: number): string {
 // ============================================================================
 
 const CopyButton: FC<{ text: string }> = ({ text }) => {
+  const t = useTranslations("assistantUi.promptLibrary");
   const [copied, setCopied] = useState(false);
   const handleCopy = async () => {
     await navigator.clipboard.writeText(text);
@@ -204,7 +206,7 @@ const CopyButton: FC<{ text: string }> = ({ text }) => {
           ? "bg-terminal-green/20 text-terminal-green"
           : "hover:bg-terminal-dark/5 text-terminal-muted hover:text-terminal-dark",
       )}
-      title="Copy prompt"
+      title={t("copyPrompt")}
     >
       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
     </button>
@@ -214,6 +216,7 @@ const CopyButton: FC<{ text: string }> = ({ text }) => {
 
 /** Full prompt card for action=get */
 const PromptDetailCard: FC<{ prompt: PromptEntry }> = ({ prompt }) => {
+  const t = useTranslations("assistantUi.promptLibrary");
   const [expanded, setExpanded] = useState(false);
   const isLong = prompt.prompt.length > 300;
   const displayText = expanded ? prompt.prompt : prompt.prompt.slice(0, 300);
@@ -251,7 +254,7 @@ const PromptDetailCard: FC<{ prompt: PromptEntry }> = ({ prompt }) => {
               className="flex items-center gap-1 text-[11px] text-terminal-muted hover:text-terminal-dark transition-colors"
             >
               {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-              {expanded ? "Less" : "More"}
+              {expanded ? t("less") : t("more")}
             </button>
           )}
           <div className="ml-auto">
@@ -279,7 +282,7 @@ const PromptDetailCard: FC<{ prompt: PromptEntry }> = ({ prompt }) => {
             className="inline-flex items-center gap-0.5 text-terminal-green hover:underline ml-auto"
           >
             <ExternalLink className="w-2.5 h-2.5" />
-            Source
+            {t("source")}
           </a>
         )}
       </div>
@@ -356,12 +359,14 @@ export const PromptLibraryToolUI: ToolCallContentPartComponent = ({
   state,
   errorText,
 }) => {
+  const t = useTranslations("assistantUi.promptLibrary");
   const resolvedRaw = result ?? output;
   const data = useMemo(() => normalizeResult(resolvedRaw), [resolvedRaw]);
 
   const action = data?.action || args?.action || "search";
   const ActionIcon = ACTION_ICONS[action] || BookOpen;
-  const actionLabel = ACTION_LABELS[action] || "Prompt Library";
+  const labelKey = ACTION_LABEL_KEYS[action];
+  const actionLabel = labelKey ? t(`actions.${labelKey}`) : t("title");
 
   // Loading state
   const isInputState = state === "input-streaming" || state === "input-available";
@@ -394,10 +399,10 @@ export const PromptLibraryToolUI: ToolCallContentPartComponent = ({
           </div>
           <div className="flex-1 min-w-0">
             <span className="text-xs font-medium text-red-600 uppercase tracking-wider">
-              {actionLabel} Error
+              {actionLabel} {t("error")}
             </span>
             <p className="mt-1 text-sm text-red-600/90">
-              {errorText || data?.error || "Failed to query prompt library"}
+              {errorText || data?.error || t("queryFailed")}
             </p>
           </div>
         </div>
@@ -454,7 +459,7 @@ export const PromptLibraryToolUI: ToolCallContentPartComponent = ({
           ))}
           {data.results.length === 0 && (
             <p className="text-sm text-terminal-muted text-center py-4">
-              No prompts found
+              {t("noPromptsFound")}
             </p>
           )}
         </div>

@@ -194,10 +194,11 @@ function HunkView({ hunk }: { hunk: GitDiffHunk }) {
  * Renders the diff for a single file using structured hunk data.
  */
 function FileDiffView({ file }: { file: GitDiffFile }) {
+  const t = useTranslations("workspace.diff");
   if (file.isBinary) {
     return (
       <div className="flex items-center justify-center py-8 text-terminal-muted">
-        <p className="text-sm font-mono">Binary file — diff not available</p>
+        <p className="text-sm font-mono">{t("binaryFile")}</p>
       </div>
     );
   }
@@ -205,7 +206,7 @@ function FileDiffView({ file }: { file: GitDiffFile }) {
   if (file.hunks.length === 0) {
     return (
       <div className="flex items-center justify-center py-8 text-terminal-muted">
-        <p className="text-sm font-mono">No diff content</p>
+        <p className="text-sm font-mono">{t("noDiffContent")}</p>
       </div>
     );
   }
@@ -341,7 +342,7 @@ export function DiffReviewPanel({
           { action: "stage", filePath }
         );
         if (stageError) {
-          toast.error("Failed to stage file");
+          toast.error(t("stageFileFailed"));
         } else {
           await fetchDiffData();
         }
@@ -363,7 +364,7 @@ export function DiffReviewPanel({
           { action: "unstage", filePath }
         );
         if (unstageError) {
-          toast.error("Failed to unstage file");
+          toast.error(t("unstageFileFailed"));
         } else {
           await fetchDiffData();
         }
@@ -384,16 +385,16 @@ export function DiffReviewPanel({
         { action: "stage-all" }
       );
       if (stageError) {
-        toast.error("Failed to stage all files");
+        toast.error(t("stageAllFailed"));
       } else {
         await fetchDiffData();
       }
     } catch {
-      toast.error("Failed to stage all files");
+      toast.error(t("stageAllFailed"));
     } finally {
       setIsStaging(null);
     }
-  }, [sessionId, fetchDiffData]);
+  }, [sessionId, fetchDiffData, t]);
 
   const handleUnstageAll = useCallback(async () => {
     setIsStaging("all");
@@ -403,12 +404,12 @@ export function DiffReviewPanel({
         { action: "unstage-all" }
       );
       if (unstageError) {
-        toast.error("Failed to unstage all files");
+        toast.error(t("unstageAllFailed"));
       } else {
         await fetchDiffData();
       }
     } catch {
-      toast.error("Failed to unstage all files");
+      toast.error(t("unstageAllFailed"));
     } finally {
       setIsStaging(null);
     }
@@ -418,7 +419,7 @@ export function DiffReviewPanel({
 
   const handleCommit = useCallback(async () => {
     if (!commitMessage.trim()) {
-      toast.error("Commit message is required");
+      toast.error(t("commitMessageRequired"));
       return;
     }
     setIsCommitting(true);
@@ -428,18 +429,18 @@ export function DiffReviewPanel({
         { action: "commit", message: commitMessage.trim() }
       );
       if (commitError) {
-        toast.error("Commit failed");
+        toast.error(t("commitFailed"));
       } else {
-        toast.success("Changes committed");
+        toast.success(t("changesCommitted"));
         setCommitMessage("");
         await fetchDiffData();
       }
     } catch {
-      toast.error("Commit failed");
+      toast.error(t("commitFailed"));
     } finally {
       setIsCommitting(false);
     }
-  }, [sessionId, commitMessage, fetchDiffData]);
+  }, [sessionId, commitMessage, fetchDiffData, t]);
 
   // ─── Existing actions ───────────────────────────────────────────────────
 
@@ -735,13 +736,12 @@ export function DiffReviewPanel({
               <div className="flex items-center justify-between px-4 py-3 border-b border-terminal-border">
                 <div className="flex items-center gap-2 min-w-0">
                   <h2 className="font-mono text-sm font-medium text-terminal-dark truncate">
-                    Changes in{" "}
+                    {t("changesIn")}{" "}
                     <span className="text-emerald-700">{branch}</span>
                   </h2>
                   {totalChangedFiles > 0 && (
                     <span className="text-xs font-mono text-terminal-muted flex-shrink-0">
-                      ({totalChangedFiles} file
-                      {totalChangedFiles !== 1 ? "s" : ""})
+                      ({t("fileCount", { count: totalChangedFiles })})
                     </span>
                   )}
                   {diffResult?.stats && (
@@ -769,10 +769,10 @@ export function DiffReviewPanel({
               <div className="flex items-center gap-1 px-4 py-2 border-b border-terminal-border bg-terminal-cream/50">
                 {(
                   [
-                    { key: "unstaged", label: "Unstaged" },
-                    { key: "staged", label: "Staged" },
-                    { key: "branch", label: "Branch" },
-                  ] as const
+                    { key: "unstaged" as const, label: t("tabUnstaged") },
+                    { key: "staged" as const, label: t("tabStaged") },
+                    { key: "branch" as const, label: t("tabBranch") },
+                  ]
                 ).map((tab) => (
                   <button
                     key={tab.key}
@@ -845,7 +845,7 @@ export function DiffReviewPanel({
                           disabled={isStaging !== null || !hasUnstagedFiles}
                         >
                           <CheckSquareIcon className="w-3 h-3" />
-                          Stage All
+                          {t("stageAll")}
                         </Button>
                         <Button
                           variant="ghost"
@@ -855,7 +855,7 @@ export function DiffReviewPanel({
                           disabled={isStaging !== null || !hasStagedFiles}
                         >
                           <SquareIcon className="w-3 h-3" />
-                          Unstage All
+                          {t("unstageAll")}
                         </Button>
                       </div>
 
@@ -961,9 +961,9 @@ export function DiffReviewPanel({
                           <div className="flex items-center justify-center py-12 text-terminal-muted">
                             <p className="text-sm font-mono">
                               {activeTab === "staged"
-                                ? "No staged changes"
+                                ? t("noStagedChanges")
                                 : activeTab === "unstaged"
-                                  ? "No unstaged changes"
+                                  ? t("noUnstagedChanges")
                                   : t("noChanges")}
                             </p>
                           </div>
@@ -972,7 +972,7 @@ export function DiffReviewPanel({
                         {!selectedDiffFile && diffFiles.length > 0 && (
                           <div className="flex items-center justify-center py-12 text-terminal-muted">
                             <p className="text-sm font-mono">
-                              Select a file to view diff
+                              {t("selectFileToViewDiff")}
                             </p>
                           </div>
                         )}
@@ -997,7 +997,7 @@ export function DiffReviewPanel({
                       <Textarea
                         value={commitMessage}
                         onChange={(e) => setCommitMessage(e.target.value)}
-                        placeholder="Commit message..."
+                        placeholder={t("commitMessagePlaceholder")}
                         className="min-h-[60px] max-h-[120px] text-xs font-mono bg-white/60 border border-terminal-border/50 resize-none"
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -1020,11 +1020,10 @@ export function DiffReviewPanel({
                           ) : (
                             <GitCommitIcon className="w-3.5 h-3.5" />
                           )}
-                          {isCommitting ? "Committing..." : "Commit"}
+                          {isCommitting ? t("committing") : t("commit")}
                         </Button>
                         <span className="text-[10px] font-mono text-terminal-muted">
-                          {gitStatus!.staged.length} staged file
-                          {gitStatus!.staged.length !== 1 ? "s" : ""}
+                          {t("stagedFileCount", { count: gitStatus!.staged.length })}
                           {" · "}
                           <kbd className="px-1 py-0.5 rounded bg-terminal-dark/5 text-[9px]">
                             {typeof navigator !== "undefined" &&

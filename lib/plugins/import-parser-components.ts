@@ -78,7 +78,7 @@ export function safeMatter(content: string): { data: Record<string, unknown>; co
 /**
  * Resolve component paths from manifest overrides or defaults.
  */
-export function resolveComponentPaths(
+function resolveComponentPaths(
   manifestValue: string | string[] | undefined,
   defaults: string[]
 ): string[] {
@@ -208,7 +208,7 @@ export function discoverAgents(files: PluginFileEntry[], manifest: PluginManifes
   return agents;
 }
 
-export function isAgentMarkdown(relativePath: string): boolean {
+function isAgentMarkdown(relativePath: string): boolean {
   const lower = relativePath.toLowerCase();
   return lower.endsWith(".md") || lower.endsWith(".mds");
 }
@@ -217,7 +217,7 @@ export function isAgentMarkdown(relativePath: string): boolean {
  * Supports both flat files (agents/reviewer.md) and folder-style layouts
  * (agents/reviewer/AGENT.md, agents/reviewer/Agent.mds).
  */
-export function inferAgentName(relativePath: string): string {
+function inferAgentName(relativePath: string): string {
   const base = path.basename(relativePath);
   const lowerBase = base.toLowerCase();
 

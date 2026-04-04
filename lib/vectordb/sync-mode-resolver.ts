@@ -5,7 +5,7 @@ export type ReindexPolicy = "smart" | "always" | "never";
 export type ChunkPreset = "balanced" | "small" | "large" | "custom";
 export type SyncExecutionTrigger = "manual" | "scheduled" | "triggered" | "auto";
 
-export interface FolderSyncRuntimeSettings {
+interface FolderSyncRuntimeSettings {
   indexingMode?: "files-only" | "full" | "auto" | null;
   syncMode?: SyncMode | null;
   syncCadenceMinutes?: number | null;
@@ -16,7 +16,7 @@ export interface FolderSyncRuntimeSettings {
   reindexPolicy?: ReindexPolicy | null;
 }
 
-export interface ResolvedFolderSyncBehavior {
+interface ResolvedFolderSyncBehavior {
   syncMode: SyncMode;
   syncCadenceMinutes: number;
   shouldCreateEmbeddings: boolean;
@@ -30,15 +30,15 @@ export interface ResolvedFolderSyncBehavior {
   reindexPolicy: ReindexPolicy;
 }
 
-export const DEFAULT_SYNC_MODE: SyncMode = "auto";
-export const DEFAULT_SYNC_CADENCE_MINUTES = 60;
-export const DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
-export const DEFAULT_CHUNK_PRESET: ChunkPreset = "balanced";
-export const DEFAULT_REINDEX_POLICY: ReindexPolicy = "smart";
+const DEFAULT_SYNC_MODE: SyncMode = "auto";
+const DEFAULT_SYNC_CADENCE_MINUTES = 60;
+const DEFAULT_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+const DEFAULT_CHUNK_PRESET: ChunkPreset = "balanced";
+const DEFAULT_REINDEX_POLICY: ReindexPolicy = "smart";
 
 const MIN_SYNC_CADENCE_MINUTES = 5;
 
-export function normalizeSyncMode(value: unknown): SyncMode {
+function normalizeSyncMode(value: unknown): SyncMode {
   if (value === "manual" || value === "scheduled" || value === "triggered" || value === "auto") {
     return value;
   }

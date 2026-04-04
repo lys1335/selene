@@ -1,4 +1,4 @@
-export interface TemplateVariable {
+interface TemplateVariable {
     syntax: string;
     label: string;
     description: string;

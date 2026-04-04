@@ -25,12 +25,6 @@ const TOOL_CATEGORIES: Record<string, string> = {
   firecrawlCrawl: "search",
   generateImageFlux2: "image-generation",
   generateImageWan22: "image-generation",
-  generateImageFlux2Klein4B: "image-generation",
-  editImageFlux2Klein4B: "image-editing",
-  referenceImageFlux2Klein4B: "image-generation",
-  generateImageFlux2Klein9B: "image-generation",
-  editImageFlux2Klein9B: "image-editing",
-  referenceImageFlux2Klein9B: "image-generation",
   editRoomImage: "image-editing",
   editImage: "image-editing",
   generateVideoWan22: "video-generation",
@@ -115,7 +109,7 @@ export function ToolBadge({
 }
 
 /** Get icon configuration for a tool ID */
-export function getToolIconConfig(toolId: string): ToolIconConfig {
+function getToolIconConfig(toolId: string): ToolIconConfig {
   return getToolIcon(toolId);
 }
 

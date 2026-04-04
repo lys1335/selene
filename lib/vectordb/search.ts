@@ -25,7 +25,7 @@ export interface VectorSearchHit {
   version?: number;
 }
 
-export interface VectorSearchOptions {
+export interface VectorDBSearchOptions {
   topK?: number;
   minScore?: number;
   folderIds?: string[]; // Filter by specific folders
@@ -37,7 +37,7 @@ export interface VectorSearchOptions {
 export async function searchVectorDB(params: {
   characterId: string;
   query: string;
-  options?: VectorSearchOptions;
+  options?: VectorDBSearchOptions;
 }): Promise<VectorSearchHit[]> {
   const { characterId, query, options } = params;
 
@@ -126,10 +126,10 @@ export async function searchVectorDB(params: {
 /**
  * Search with combined results from multiple agents (for future use)
  */
-export async function searchMultipleAgents(params: {
+async function searchMultipleAgents(params: {
   characterIds: string[];
   query: string;
-  options?: VectorSearchOptions;
+  options?: VectorDBSearchOptions;
 }): Promise<VectorSearchHit[]> {
   const { characterIds, query, options } = params;
 

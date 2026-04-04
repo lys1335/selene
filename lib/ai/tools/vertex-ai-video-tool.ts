@@ -1,9 +1,8 @@
 import { tool, jsonSchema } from "ai";
 import { callVertexAIVideo } from "@/lib/ai/vertex-ai-video-client";
-import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
+import { createToolRun } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
-
-const now = () => new Date().toISOString();
+import { failToolRun, saveGeneratedVideos } from "@/lib/ai/tools/tool-run-utils";
 
 // ==========================================================================
 // VERTEX AI VEO VIDEO TOOL (Text-to-Video and Image-to-Video)
@@ -160,50 +159,12 @@ async function executeVertexAIVideo(sessionId: string, args: VertexAIVideoArgs) 
       sessionId
     );
 
-    // Store each video in the images table with mediaType: "video"
-    for (const video of result.videos) {
-      await createImage({
-        sessionId,
-        toolRunId: toolRun.id,
-        role: "generated",
-        localPath: video.localPath || video.url,
-        url: video.url,
-        format: video.format,
-        metadata: {
-          prompt,
-          fps: video.fps,
-          duration: video.duration,
-          mediaType: "video",
-          provider: "vertex-ai",
-          model: model ?? "veo-3.0-generate-001",
-        },
-      });
-    }
-
-    await updateToolRun(toolRun.id, {
-      status: "succeeded",
-      result: { videos: result.videos },
-      completedAt: now(),
+    return saveGeneratedVideos(sessionId, toolRun.id, result, prompt, {
+      provider: "vertex-ai",
+      model: model ?? "veo-3.0-generate-001",
     });
-
-    return {
-      status: "completed",
-      videos: result.videos,
-      timeTaken: result.timeTaken,
-    };
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 

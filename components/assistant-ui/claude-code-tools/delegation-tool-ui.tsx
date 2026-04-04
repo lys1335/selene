@@ -12,6 +12,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
 import { parseTextResult } from "./parse-text-result";
+import { useTranslations } from "next-intl";
 
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -85,6 +86,7 @@ function isErrorResult(dr: DelegationResult): boolean {
  * Shows agent name, delegation status, action, and result content.
  */
 export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.delegation");
   const [expanded, setExpanded] = useState(false);
 
   const expansionCtx = useToolExpansion();
@@ -143,10 +145,10 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
       : "text-emerald-600 dark:text-emerald-400";
 
   const statusLabel = isRunning
-    ? `Delegating to ${resolvedAgentName}...`
+    ? t("delegating", { agent: resolvedAgentName })
     : hasError
-      ? `${resolvedAgentName} failed`
-      : `${resolvedAgentName}`;
+      ? t("failed", { agent: resolvedAgentName })
+      : t("done", { agent: resolvedAgentName });
 
   return (
     <div className="my-1 rounded-md border border-border bg-terminal-cream/50 dark:bg-terminal-cream/80 font-mono text-xs overflow-hidden">
@@ -191,7 +193,7 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
           {task && (
             <div className="space-y-1">
               <div className="text-[10px] text-terminal-muted uppercase tracking-wider">
-                Task
+                {t("task")}
               </div>
               <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
                 {task.length > 2000
@@ -205,7 +207,7 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
           {displayContent && !hasError && (
             <div className="space-y-1">
               <div className="text-[10px] text-terminal-muted uppercase tracking-wider">
-                Result
+                {t("result")}
               </div>
               <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-96 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
                 {displayContent}
@@ -216,7 +218,7 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
           {dr.allResponses && dr.allResponses.length > 1 && mainContent && (
             <div className="space-y-1">
               <div className="text-[10px] text-terminal-muted uppercase tracking-wider">
-                All Responses ({dr.allResponses.length})
+                {t("allResponses", { count: dr.allResponses.length })}
               </div>
               <pre className="rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 overflow-x-auto max-h-48 overflow-y-auto text-terminal-dark dark:text-terminal-dark/90 whitespace-pre-wrap break-all font-mono text-[11px]">
                 {(() => {
@@ -235,17 +237,17 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
           {hasError && (
             <div className="space-y-1">
               <div className="text-[10px] text-red-600 uppercase tracking-wider">
-                Error
+                {t("error")}
               </div>
               <pre className="rounded bg-red-50 dark:bg-red-950/40 p-2 overflow-x-auto max-h-48 overflow-y-auto text-red-700 dark:text-red-300 whitespace-pre-wrap break-all font-mono text-[11px]">
-                {dr.error || dr.status || "Unknown error"}
+                {dr.error || dr.status || t("unknownError")}
               </pre>
             </div>
           )}
 
           {isRunning && (
             <div className="text-terminal-muted animate-pulse flex items-center gap-1.5">
-              Sub-agent working...
+              {t("subagentWorking")}
             </div>
           )}
         </div>

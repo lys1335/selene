@@ -381,7 +381,7 @@ export async function submitClaudeLoginCode(
   });
 }
 
-export function getActiveLoginUrl(): string | null {
+function getActiveLoginUrl(): string | null {
   return getActive()?.url ?? null;
 }
 

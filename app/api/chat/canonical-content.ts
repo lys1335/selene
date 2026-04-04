@@ -4,13 +4,13 @@ import { normalizeToolCallInput } from "./tool-call-utils";
 import { cloneContentParts } from "./streaming-state";
 import { sanitizeAssistantOutputText } from "./content-sanitizer";
 
-export interface StepToolCallLike {
+interface StepToolCallLike {
   toolCallId: string;
   toolName: string;
   input: unknown;
 }
 
-export interface StepToolResultLike {
+interface StepToolResultLike {
   toolCallId: string;
   output: unknown;
   toolName?: string;

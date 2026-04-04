@@ -1,6 +1,7 @@
 "use client";
 
 import { Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
 interface SkillSearchProps {
@@ -10,7 +11,9 @@ interface SkillSearchProps {
   className?: string;
 }
 
-export function SkillSearch({ value, onChange, placeholder = "Search skills...", className }: SkillSearchProps) {
+export function SkillSearch({ value, onChange, placeholder, className }: SkillSearchProps) {
+  const t = useTranslations("skills");
+  const resolvedPlaceholder = placeholder ?? t("searchPlaceholder");
   return (
     <div className={cn("relative", className)}>
       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-terminal-muted" />
@@ -18,8 +21,8 @@ export function SkillSearch({ value, onChange, placeholder = "Search skills...",
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        aria-label={placeholder}
+        placeholder={resolvedPlaceholder}
+        aria-label={resolvedPlaceholder}
         className="w-full rounded-lg border border-terminal-border bg-white py-2 pl-9 pr-3 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/60 focus:border-terminal-green/40 focus:outline-none focus:ring-1 focus:ring-terminal-green/20"
       />
     </div>

@@ -6,9 +6,6 @@ import { dirname, join } from "path";
 import { runSessionMaintenance } from "./maintenance";
 import { initializeTables } from "./sqlite-migrations";
 
-// Re-export migration helpers for callers that need them directly
-export { initializeTables, runSkillsMigrations, runDataMigrations } from "./sqlite-migrations";
-
 // Get the database path from environment or use default
 function getDbPath(): string {
   // In Electron, LOCAL_DATA_PATH is set to userDataPath/data
@@ -106,7 +103,7 @@ export const db: BetterSQLite3Database<typeof schema> = isBuildTime
   : getDb();
 
 // Export close function for cleanup
-export function closeDb(): void {
+function closeDb(): void {
   if (globalForDb.sqlite) {
     globalForDb.sqlite.close();
     globalForDb.sqlite = undefined;

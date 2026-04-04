@@ -2,6 +2,7 @@ import { loadSettings } from "@/lib/settings/settings-manager";
 import type { TTSOptions, TTSProvider, TTSResult } from "../types";
 
 export class ElevenLabsTTSProvider implements TTSProvider {
+  // fallow-ignore-next-line unused-class-member
   name = "elevenlabs";
 
   isAvailable(): boolean {

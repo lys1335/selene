@@ -41,6 +41,17 @@ export interface BaseSystemPromptOptions {
   enableCaching?: boolean;
 }
 
+function buildCoreIdentity(options: Pick<BaseSystemPromptOptions, "agentName" | "agentRole" | "agentVibe" | "personalityTraits">): string {
+  const identityParts: string[] = [`You are ${options.agentName}, ${options.agentRole}.`];
+  if (options.agentVibe) {
+    identityParts.push(`**Vibe:** ${options.agentVibe}`);
+  }
+  if (options.personalityTraits && options.personalityTraits.length > 0) {
+    identityParts.push(`**Personality:** ${options.personalityTraits.join(", ")}`);
+  }
+  return identityParts.join("\n");
+}
+
 /**
  * Build a minimal, efficient base system prompt.
  *
@@ -52,29 +63,14 @@ export interface BaseSystemPromptOptions {
  * 5. Media display rules (~100 tokens)
  * 6. Tool discovery hint (~70 tokens, optional)
  */
-export function buildBaseSystemPrompt(options: BaseSystemPromptOptions): string {
+function buildBaseSystemPrompt(options: BaseSystemPromptOptions): string {
   const {
-    agentName,
-    agentRole,
-    agentVibe,
-    personalityTraits,
     includeToolDiscovery = true,
     toolLoadingMode = "deferred",
     additionalContext,
   } = options;
 
-  // Build core identity section
-  const identityParts: string[] = [`You are ${agentName}, ${agentRole}.`];
-
-  if (agentVibe) {
-    identityParts.push(`**Vibe:** ${agentVibe}`);
-  }
-
-  if (personalityTraits && personalityTraits.length > 0) {
-    identityParts.push(`**Personality:** ${personalityTraits.join(", ")}`);
-  }
-
-  const coreIdentity = identityParts.join("\n");
+  const coreIdentity = buildCoreIdentity(options);
 
   // Assemble the prompt
   const sections = [
@@ -106,7 +102,7 @@ export function buildBaseSystemPrompt(options: BaseSystemPromptOptions): string 
 /**
  * Default Selene agent configuration
  */
-export const DEFAULT_AGENT_CONFIG: BaseSystemPromptOptions = {
+const DEFAULT_AGENT_CONFIG: BaseSystemPromptOptions = {
   agentName: "Selene",
   agentRole: `a powerful AI agent on the Selene platform — an open-source, self-hosted agent platform with rich capabilities including:
 - **Tools & Plugins**: Extensible tool system with plugin marketplace, hooks lifecycle (PreToolUse/PostToolUse), and MCP server integration
@@ -152,14 +148,10 @@ export function buildDefaultSystemPrompt(
  *
  * @see https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching
  */
-export function buildCacheableSystemPrompt(
+function buildCacheableSystemPrompt(
   options: BaseSystemPromptOptions
 ): CacheableSystemBlock[] {
   const {
-    agentName,
-    agentRole,
-    agentVibe,
-    personalityTraits,
     includeToolDiscovery = true,
     toolLoadingMode = "deferred",
     additionalContext,
@@ -168,18 +160,7 @@ export function buildCacheableSystemPrompt(
 
   const blocks: CacheableSystemBlock[] = [];
 
-  // Build core identity section
-  const identityParts: string[] = [`You are ${agentName}, ${agentRole}.`];
-
-  if (agentVibe) {
-    identityParts.push(`**Vibe:** ${agentVibe}`);
-  }
-
-  if (personalityTraits && personalityTraits.length > 0) {
-    identityParts.push(`**Personality:** ${personalityTraits.join(", ")}`);
-  }
-
-  const coreIdentity = identityParts.join("\n");
+  const coreIdentity = buildCoreIdentity(options);
 
   // Block 1: Temporal context (changes daily, not cached)
   blocks.push({

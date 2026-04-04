@@ -34,7 +34,7 @@ Input.displayName = "Input"
 // ANIMATED INPUT WITH FOCUS EFFECTS
 // ============================================================================
 
-export interface AnimatedInputProps
+interface AnimatedInputProps
   extends Omit<HTMLMotionProps<"input">, "ref"> {
   type?: string;
 }
@@ -68,4 +68,4 @@ const AnimatedInput = React.forwardRef<HTMLInputElement, AnimatedInputProps>(
 )
 AnimatedInput.displayName = "AnimatedInput"
 
-export { Input, AnimatedInput }
+export { Input }

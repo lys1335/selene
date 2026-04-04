@@ -9,9 +9,9 @@ type ToolResultNormalization = {
   error?: string;
 };
 
-export type ToolResultNormalizationMode = "canonical" | "projection";
+type ToolResultNormalizationMode = "canonical" | "projection";
 
-export interface NormalizeToolResultOptions {
+interface NormalizeToolResultOptions {
   /**
    * `canonical`: for durable persistence in session history. Must be lossless.
    * `projection`: for model input / transport shaping. May apply truncation.
@@ -145,7 +145,7 @@ function summarizeToolKeys(result: Record<string, unknown>): string {
   return ` keys=${keys.join(", ")}`;
 }
 
-export function buildToolSummary(toolName: string, input?: unknown, output?: unknown): string {
+function buildToolSummary(toolName: string, input?: unknown, output?: unknown): string {
   const safeName = toolName || "tool";
 
   if (output === null || output === undefined) {
@@ -241,16 +241,19 @@ export function buildToolSummary(toolName: string, input?: unknown, output?: unk
       const exitText = exitCode !== undefined ? ` (exit ${exitCode})` : "";
       return `Command "${command}":${statusTag}${exitText}, stdout ${stdoutLen} chars, stderr ${stderrLen} chars`;
     }
+    case "bash": {
+      const command = getString(inputObj?.command) || getString(result.command) || "command";
+      const exitCode = getNumber(result.exitCode);
+      const stdoutLen = getString(result.stdout)?.length || 0;
+      const stderrLen = getString(result.stderr)?.length || 0;
+      const statusTag = status ? ` ${status}` : "";
+      const exitText = exitCode !== undefined ? ` (exit ${exitCode})` : "";
+      return `Bash "${command}":${statusTag}${exitText}, stdout ${stdoutLen} chars, stderr ${stderrLen} chars`;
+    }
     case "searchTools": {
       const query = getString(result.query) || getString(inputObj?.query) || "query";
       const results = Array.isArray(result.results) ? result.results.length : 0;
       return `Tool search "${query}": ${results} result${results === 1 ? "" : "s"}`;
-    }
-    case "listAllTools": {
-      const results = Array.isArray(result.results) ? result.results.length : undefined;
-      return results !== undefined
-        ? `Tool list: ${results} tool${results === 1 ? "" : "s"}`
-        : "Tool list returned";
     }
     case "retrieveFullContent": {
       const contentId = getString(result.contentId) || getString(inputObj?.contentId);
@@ -328,7 +331,7 @@ function hasProjectionTruncationMarker(value: unknown): boolean {
   return false;
 }
 
-export function getToolSummaryFromOutput(toolName: string, output?: unknown, input?: unknown): string {
+function getToolSummaryFromOutput(toolName: string, output?: unknown, input?: unknown): string {
   const resultObj = getRecord(output);
   const summary = getString(resultObj?.summary);
   if (summary) {
@@ -355,9 +358,9 @@ export function normalizeToolResultOutput(
 
   if (mode === "projection") {
     // Exempt tools that intentionally return full content payloads.
-    // readFile has built-in limits; runSkill and webSearch browse mode may return
+    // readFile has built-in limits; skill and webSearch browse mode may return
     // richer content that should not be utility-truncated here.
-    const EXEMPT_TOOLS = new Set(["readFile", "runSkill", "webSearch"]);
+    const EXEMPT_TOOLS = new Set(["readFile", "skill", "webSearch"]);
 
     // Apply token limit (universal safety net) — UNLESS tool is exempt
     // This prevents context bloat from massive outputs like ls -R, pip freeze, etc.
@@ -462,7 +465,7 @@ export function isMissingToolResult(output: unknown): boolean {
  * @param result - The tool result from database (could be string or object)
  * @returns Structured tool result object
  */
-export function normalizeLegacyToolResult(result: unknown): Record<string, unknown> {
+function normalizeLegacyToolResult(result: unknown): Record<string, unknown> {
   // If null/undefined, return empty error result
   if (result === null || result === undefined) {
     return { status: "error", error: "No result available" };

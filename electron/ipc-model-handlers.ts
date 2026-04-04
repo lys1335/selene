@@ -5,7 +5,7 @@ import * as os from "node:os";
 import { spawn } from "node:child_process";
 import { listFiles, downloadFile } from "@huggingface/hub";
 import { debugLog, debugError } from "./debug-logger";
-import type { IpcHandlerContext } from "./ipc-handlers";
+import type { IpcHandlerContext } from "./ipc-context";
 import {
   getParakeetModel,
   getSherpaOnnxArchiveName,

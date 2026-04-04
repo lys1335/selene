@@ -1,4 +1,4 @@
-export interface MessageChunk {
+interface MessageChunk {
   text: string;
   index: number;
   total: number;
@@ -6,7 +6,7 @@ export interface MessageChunk {
   isLast: boolean;
 }
 
-export interface ChunkOptions {
+interface ChunkOptions {
   maxLength?: number;
   preserveHeaders?: boolean;
   addChunkHeaders?: boolean;

@@ -17,8 +17,6 @@ import { hasFilesystemPathArg, resolveMCPConfig } from "./mcp-config-resolver";
 // Re-export resolveMCPConfig so existing callers importing from client-manager still work
 export { resolveMCPConfig } from "./mcp-config-resolver";
 
-// Re-export types for convenience
-export type { MCPDiscoveredTool, MCPServerStatus };
 
 /**
  * Singleton manager for MCP client connections

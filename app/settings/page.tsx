@@ -541,7 +541,7 @@ export default function SettingsPage() {
       const result = await response.json();
       if (result.folderResyncRecommended) {
         toast.warning(
-          result.folderResyncMessage || "Search index settings changed. If results look outdated, refresh synced folders in Agent Settings.",
+          result.folderResyncMessage || t("folderResyncFallback"),
           { duration: 9000 }
         );
       }

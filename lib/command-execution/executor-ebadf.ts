@@ -25,6 +25,7 @@ interface EBADFFallbackContext {
     finalEnv: NodeJS.ProcessEnv;
     timeout: number;
     maxOutputSize: number;
+    stdinData?: string;
     startTime: number;
     wrappedByRTK: boolean;
     characterId: string | undefined;
@@ -40,14 +41,20 @@ export async function runEBADFFallback(
 ): Promise<ExecuteResult> {
     const {
         command, finalCommand, finalArgs, cwd, finalEnv,
-        timeout, maxOutputSize, startTime,
+        timeout, maxOutputSize, stdinData, startTime,
         wrappedByRTK, characterId, baseSearchMetadata,
     } = ctx;
     const context = { characterId };
 
     try {
         const fb = await spawnWithFileCapture(
-            finalCommand, finalArgs, cwd, finalEnv, timeout, maxOutputSize,
+            finalCommand,
+            finalArgs,
+            cwd,
+            finalEnv,
+            timeout,
+            maxOutputSize,
+            stdinData,
         );
         const executionTime = Date.now() - startTime;
         commandLogger.logExecutionComplete(

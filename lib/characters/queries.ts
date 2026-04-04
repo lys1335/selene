@@ -8,8 +8,28 @@ import {
 } from "@/lib/db/sqlite-character-schema";
 import { skills } from "@/lib/db/sqlite-skills-schema";
 import { eq, desc, and, sql } from "drizzle-orm";
-import { getAgentModelConfigFromMetadata, type SessionResolverOptions } from "@/lib/ai/session-model-resolver";
 import type { AgentModelConfig } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/provider-types";
+
+// Inline helper — avoids a circular dependency with session-model-resolver.ts
+// (which dynamically imports getCharacter from this file).
+function parseAgentModelConfigFromMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+): AgentModelConfig | null {
+  const raw = metadata?.modelConfig;
+  if (!raw || typeof raw !== "object") return null;
+  const config = raw as Record<string, unknown>;
+  const result: AgentModelConfig = {};
+  if (typeof config.provider === "string") {
+    result.provider = config.provider as LLMProvider;
+  }
+  for (const field of ["chatModel", "researchModel", "visionModel", "utilityModel"] as const) {
+    if (typeof config[field] === "string" && config[field]) {
+      result[field] = config[field] as string;
+    }
+  }
+  return Object.keys(result).length > 0 ? result : null;
+}
 
 // Helper to get current timestamp as ISO string for SQLite
 const now = () => new Date().toISOString();
@@ -33,19 +53,9 @@ export async function getCharacterModelConfig(
   id: string,
 ): Promise<AgentModelConfig | null> {
   const character = await getCharacter(id);
-  return getAgentModelConfigFromMetadata(
+  return parseAgentModelConfigFromMetadata(
     (character?.metadata as Record<string, unknown> | null) ?? null,
   );
-}
-
-export function buildSessionResolverOptions(
-  characterId: string | null | undefined,
-  agentModelConfig?: AgentModelConfig | null,
-): SessionResolverOptions {
-  return {
-    characterId,
-    agentModelConfig: agentModelConfig ?? undefined,
-  };
 }
 
 export async function getCharacterFull(id: string): Promise<CharacterFull | null> {
@@ -76,7 +86,7 @@ export async function getUserCharacters(userId: string) {
   });
 }
 
-export interface CharacterStatsRecord {
+interface CharacterStatsRecord {
   characterId: string;
   skillCount: number;
   runCount: number;
@@ -124,7 +134,7 @@ export async function getCharacterStats(userId: string, characterId: string): Pr
   };
 }
 
-export async function getUserActiveCharacters(userId: string) {
+async function getUserActiveCharacters(userId: string) {
   return db.query.characters.findMany({
     where: and(
       eq(characters.userId, userId),
@@ -156,7 +166,7 @@ export async function deleteCharacter(id: string) {
   await db.delete(characters).where(eq(characters.id, id));
 }
 
-export async function archiveCharacter(id: string) {
+async function archiveCharacter(id: string) {
   return updateCharacter(id, { status: "archived" });
 }
 
@@ -208,7 +218,7 @@ export async function getCharacterImages(characterId: string) {
   });
 }
 
-export async function getPrimaryCharacterImage(characterId: string) {
+async function getPrimaryCharacterImage(characterId: string) {
   return db.query.characterImages.findFirst({
     where: and(
       eq(characterImages.characterId, characterId),
@@ -242,7 +252,7 @@ export async function setPrimaryCharacterImage(characterId: string, imageId: str
 // DRAFT/PROGRESS OPERATIONS
 // ============================================================================
 
-export async function getDraftCharacter(userId: string) {
+async function getDraftCharacter(userId: string) {
   return db.query.characters.findFirst({
     where: and(
       eq(characters.userId, userId),
@@ -252,7 +262,7 @@ export async function getDraftCharacter(userId: string) {
   });
 }
 
-export async function completeCharacterCreation(characterId: string) {
+async function completeCharacterCreation(characterId: string) {
   return updateCharacter(characterId, {
     status: "active"
   });
@@ -262,7 +272,7 @@ export async function completeCharacterCreation(characterId: string) {
 // INTERACTION TRACKING
 // ============================================================================
 
-export async function updateLastInteraction(characterId: string) {
+async function updateLastInteraction(characterId: string) {
   return db
     .update(characters)
     .set({ lastInteractionAt: now() })

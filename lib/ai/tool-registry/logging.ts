@@ -9,7 +9,7 @@ import type { ToolExecutionOptions } from "ai";
 /**
  * Log levels
  */
-export type LogLevel = "debug" | "info" | "warn" | "error";
+type LogLevel = "debug" | "info" | "warn" | "error";
 
 /**
  * Tool execution log entry
@@ -90,7 +90,7 @@ export function logToolEvent(entry: Omit<ToolLogEntry, "timestamp">): void {
 /**
  * Create a logger for a specific tool
  */
-export function createToolLogger(toolName: string, sessionId?: string) {
+function createToolLogger(toolName: string, sessionId?: string) {
   return {
     start(args?: Record<string, unknown>) {
       logToolEvent({

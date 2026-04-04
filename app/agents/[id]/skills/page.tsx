@@ -6,7 +6,8 @@ import { useRouter } from "next/navigation";
 import { Shell } from "@/components/layout/shell";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, AlertCircle, Plus, Upload } from "lucide-react";
+import { Loader2, Plus, Upload } from "lucide-react";
+import { AgentPageGuard } from "@/components/layout/agent-page-loading-error";
 import { useTranslations } from "next-intl";
 import { SkillImportDropzone } from "@/components/skills/skill-import-dropzone";
 import { SkillCard } from "@/components/skills/skill-card";
@@ -156,29 +157,8 @@ export default function AgentSkillsPage({ params }: { params: Promise<{ id: stri
     }
   };
 
-  if (isLoading) {
-    return (
-      <Shell>
-        <div className="flex h-full items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-terminal-green" />
-        </div>
-      </Shell>
-    );
-  }
-
-  if (error) {
-    return (
-      <Shell>
-        <div className="flex h-full items-center justify-center">
-          <div className="flex flex-col items-center gap-4 max-w-md text-center">
-            <AlertCircle className="h-12 w-12 text-destructive" />
-            <h1 className="text-xl font-semibold font-mono">{error}</h1>
-            <Button asChild><Link href="/">{tc("back")}</Link></Button>
-          </div>
-        </div>
-      </Shell>
-    );
-  }
+  if (isLoading) return <AgentPageGuard loading={true} />;
+  if (error) return <AgentPageGuard loading={false} error={error} backLabel={tc("back")} />;
 
   const agentName = character?.displayName || character?.name || "Agent";
 

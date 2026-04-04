@@ -1,4 +1,4 @@
-export interface TranscriptInsertion {
+interface TranscriptInsertion {
   replacementText: string;
   nextValue: string;
   selectionStart: number;
@@ -6,20 +6,20 @@ export interface TranscriptInsertion {
   nextCursor: number;
 }
 
-export interface BuildTranscriptInsertionParams {
+interface BuildTranscriptInsertionParams {
   currentValue: string;
   transcript: string;
   selectionStart?: number | null;
   selectionEnd?: number | null;
 }
 
-export interface FinalizeTranscriptParams {
+interface FinalizeTranscriptParams {
   transcript: string;
   postProcessingEnabled: boolean;
   enhancedText?: string | null;
 }
 
-export interface FinalizeTranscriptResult {
+interface FinalizeTranscriptResult {
   transcript: string;
   finalText: string;
   fallbackText: string;

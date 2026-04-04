@@ -8,7 +8,7 @@
  * Source: https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support
  */
 
-export interface EdgeTTSVoice {
+interface EdgeTTSVoice {
   /** Full voice ID, e.g. "en-US-AriaNeural" */
   id: string;
   /** Display name, e.g. "Aria" */
@@ -352,7 +352,7 @@ export const DEFAULT_EDGE_TTS_VOICE = "en-US-AriaNeural";
 /**
  * Get unique language labels sorted alphabetically.
  */
-export function getEdgeTTSLanguages(): string[] {
+function getEdgeTTSLanguages(): string[] {
   const langs = new Set(EDGE_TTS_VOICES.map((v) => v.language));
   return Array.from(langs).sort();
 }
@@ -360,7 +360,7 @@ export function getEdgeTTSLanguages(): string[] {
 /**
  * Get voices filtered by language.
  */
-export function getEdgeTTSVoicesByLanguage(language: string): EdgeTTSVoice[] {
+function getEdgeTTSVoicesByLanguage(language: string): EdgeTTSVoice[] {
   return EDGE_TTS_VOICES.filter((v) => v.language === language);
 }
 

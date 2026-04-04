@@ -5,14 +5,11 @@
  */
 
 export {
-  SchedulerService,
   getScheduler,
   startScheduler,
-  stopScheduler,
 } from "./scheduler-service";
 
 export {
-  TaskQueue,
   type QueuedTask,
 } from "./task-queue";
 

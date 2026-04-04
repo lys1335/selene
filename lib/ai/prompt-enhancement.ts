@@ -22,34 +22,6 @@ import { searchWithRouter, type VectorSearchHit } from "@/lib/vectordb";
 import { isVectorDBEnabled } from "@/lib/vectordb/client";
 import { getSyncFolders } from "@/lib/vectordb/sync-service";
 
-// Re-export utilities for backward compatibility
-export type {
-  TokenBudget,
-  FileDependency,
-  ConceptExpansionResult,
-  RankedSnippet,
-  FileGroup,
-} from "./prompt-enhancement-utils";
-
-export {
-  DEFAULT_TOKEN_BUDGET,
-  estimateTokens,
-  truncateToTokenBudget,
-  DOMAIN_EXPANSIONS,
-  extractDependenciesFromChunk,
-  normalizeDependencyPath,
-  resolveDependencies,
-  expandQueryConcepts,
-  selectSnippets,
-  getCodeLanguage,
-  formatSnippetsAsContext,
-  getFileType,
-  groupResultsByFile,
-  extractBriefDescription,
-  formatAsStructuredContext,
-  buildEnhancedPrompt,
-  buildEnhancedPromptV2,
-} from "./prompt-enhancement-utils";
 
 import {
   DEFAULT_TOKEN_BUDGET,
@@ -100,7 +72,7 @@ export interface EnhancedPromptOptions {
  * Since enhancement is now manual (user clicks button), we mainly check
  * that the query isn't empty or trivially short.
  */
-export function canEnhanceQuery(query: string): boolean {
+function canEnhanceQuery(query: string): boolean {
   const trimmed = query.trim();
   // Need at least 3 characters to do meaningful search
   return trimmed.length >= 3;
@@ -109,7 +81,7 @@ export function canEnhanceQuery(query: string): boolean {
 /**
  * Check if an agent has indexed files
  */
-export async function hasIndexedFiles(characterId: string): Promise<boolean> {
+async function hasIndexedFiles(characterId: string): Promise<boolean> {
   if (!isVectorDBEnabled()) {
     return false;
   }

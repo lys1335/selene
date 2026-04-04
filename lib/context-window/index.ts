@@ -34,63 +34,8 @@
 export {
   ContextWindowManager,
   type ContextWindowStatus,
-  type ContextCheckResult,
-  type ContextStatus,
 } from "./manager";
-
-// Token tracking
-export {
-  TokenTracker,
-  formatTokenCount,
-  calculateUsagePercentage,
-  estimateTextTokens,
-  estimateContentTokens,
-  type TokenUsage,
-  type TokenBreakdown,
-  type TokenEstimate,
-} from "./token-tracker";
-
-// Provider configuration
-export {
-  getContextWindowConfig,
-  getContextWindowLimit,
-  getTokenThresholds,
-  getCompactionSettings,
-  parseContextWindowString,
-  formatContextWindowSize,
-  supportsStreaming,
-  PROVIDER_DEFAULT_LIMITS,
-  MODEL_CONTEXT_CONFIGS,
-  type ContextWindowConfig,
-} from "./provider-limits";
-
-// Compaction service
-export {
-  CompactionService,
-  compactIfNeeded,
-  type CompactionResult,
-  type CompactionOptions,
-} from "./compaction-service";
-
-// Scoped counting contracts + helpers
-export {
-  type ContextScope,
-  type ContextProvenance,
-  type ScopedCountOptions,
-  CLAUDECODE_PROVIDER,
-  isScopedCountingEnabled,
-  isScopedDualCalcEnabled,
-  isScopedFallbackEnabled,
-  getScopedFallbackMinConfidence,
-  shouldUseScopedCounting,
-  shouldDualCalculate,
-  normalizeProvenance,
-} from "./scoped-counting-contract";
 
 export {
   isDelegatedToolName,
-  isDelegatedSubagentIntermediateResult,
-  getDefaultScopeFromSessionMetadata,
 } from "./claudecode-scope-classifier";
-export { LegacyScopeHeuristic, type LegacyScopeInference } from "./fallback-scope-parser";
-export { logScopedCountingTelemetry } from "./scoped-counting-telemetry";

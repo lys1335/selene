@@ -80,7 +80,7 @@ export async function allocateOrderingIndices(
  * Get the current max ordering index for a session (for diagnostics only).
  * Do NOT use this to calculate next indices - use nextOrderingIndex() instead.
  */
-export async function getCurrentMaxOrderingIndex(sessionId: string): Promise<number> {
+async function getCurrentMaxOrderingIndex(sessionId: string): Promise<number> {
   const session = await db.query.sessions.findFirst({
     where: eq(sessions.id, sessionId),
     columns: { lastOrderingIndex: true },
@@ -95,7 +95,7 @@ export async function getCurrentMaxOrderingIndex(sessionId: string): Promise<num
  *
  * WARNING: This is expensive and should only be run during maintenance.
  */
-export async function reorderSessionMessages(sessionId: string): Promise<void> {
+async function reorderSessionMessages(sessionId: string): Promise<void> {
   const sessionMessages = await db.query.messages.findMany({
     where: eq(messages.sessionId, sessionId),
     orderBy: [messages.orderingIndex, messages.createdAt],

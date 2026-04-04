@@ -1,25 +1,11 @@
 import { desktopCapturer, screen, systemPreferences } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { ScreenCaptureResult } from "../lib/electron/types";
 
 export const DEFAULT_SCREEN_CAPTURE_HOTKEY = "CommandOrControl+Shift+S";
 
-export type ScreenCapturePermissionStatus =
-  | "granted"
-  | "denied"
-  | "restricted"
-  | "not-determined"
-  | "unknown";
-
-export interface ScreenCaptureResult {
-  success: boolean;
-  imageUrl?: string;
-  relativePath?: string;
-  width?: number;
-  height?: number;
-  error?: string;
-  permissionStatus: ScreenCapturePermissionStatus;
-}
+type ScreenCapturePermissionStatus = ScreenCaptureResult["permissionStatus"];
 
 function getTimestamp(): string {
   return new Date().toISOString().replace(/[:.]/g, "-");
@@ -39,7 +25,7 @@ const SCREENSHOT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
  * Delete screenshot files older than SCREENSHOT_TTL_MS.
  * Call once at app startup to prevent unbounded disk growth.
  */
-export function cleanOldScreenshots(mediaDir: string): void {
+function cleanOldScreenshots(mediaDir: string): void {
   const screenshotsDir = path.join(mediaDir, "screenshots");
   if (!fs.existsSync(screenshotsDir)) return;
   try {

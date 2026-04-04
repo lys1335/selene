@@ -10,7 +10,7 @@ import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import { ReadBuffer, serializeMessage } from "@modelcontextprotocol/sdk/shared/stdio.js";
 import { isEBADFError } from "@/lib/spawn-utils";
 
-export type StdioServerParameters = {
+type StdioServerParameters = {
     command: string;
     args?: string[];
     env?: Record<string, string>;
@@ -631,6 +631,7 @@ export class StdioClientTransport implements Transport {
         });
     }
 
+    // fallow-ignore-next-line unused-class-member
     get stderr(): Stream | null {
         if (this._stderrStream) {
             return this._stderrStream;
@@ -690,6 +691,7 @@ export class StdioClientTransport implements Transport {
         this._readBuffer.clear();
     }
 
+    // fallow-ignore-next-line unused-class-member
     send(message: JSONRPCMessage, _options?: TransportSendOptions): Promise<void> {
         return new Promise(resolve => {
             if (!this._process?.stdin) {

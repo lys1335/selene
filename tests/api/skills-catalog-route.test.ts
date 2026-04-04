@@ -37,6 +37,7 @@ vi.mock("@/lib/auth/local-auth", () => authMocks);
 vi.mock("@/lib/settings/settings-manager", () => settingsMocks);
 vi.mock("@/lib/db/queries", () => dbMocks);
 vi.mock("@/lib/skills/catalog", () => catalogMocks);
+vi.mock("@/lib/skills/catalog/system-skills", () => ({ SYSTEM_SKILLS: catalogMocks.SYSTEM_SKILLS }));
 vi.mock("@/lib/skills/queries", () => queryMocks);
 
 import { GET } from "@/app/api/skills/catalog/route";

@@ -1,6 +1,6 @@
 import { loadSettings } from "@/lib/settings/settings-manager";
 
-export type WebScraperProvider = "firecrawl" | "local";
+type WebScraperProvider = "firecrawl" | "local";
 
 export function getWebScraperProvider(): WebScraperProvider {
   const settings = loadSettings();
@@ -17,7 +17,7 @@ export function getWebScraperProvider(): WebScraperProvider {
   return hasFirecrawlKey ? "firecrawl" : "local";
 }
 
-export function isWebScraperConfigured(): boolean {
+function isWebScraperConfigured(): boolean {
   // Always true: local scraper is the baselene, Firecrawl is optional enhancement.
   return true;
 }

@@ -14,7 +14,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSession } from "@/lib/browser/session-manager";
+import { getBrowserSession } from "@/lib/browser/session-manager";
 import { recordAction, initHistory } from "@/lib/browser/action-history";
 import {
   dispatchClick,
@@ -58,7 +58,7 @@ export async function POST(
 
   const { sessionId } = await params;
 
-  const session = getSession(sessionId);
+  const session = getBrowserSession(sessionId);
   if (!session) {
     return NextResponse.json(
       { error: "No active browser session", sessionId },
@@ -101,6 +101,15 @@ export async function POST(
   initHistory(sessionId);
 
   const startTime = Date.now();
+  // `session` is guaranteed non-null here (guarded above), capture for closure use
+  const activeSession = session;
+
+  async function capturePageState(): Promise<{ pageUrl: string; pageTitle: string }> {
+    return {
+      pageUrl: activeSession.page.url(),
+      pageTitle: await activeSession.page.title(),
+    };
+  }
 
   try {
     let actionDescription: string;
@@ -117,8 +126,6 @@ export async function POST(
           clickCount: payload.clickCount,
         });
         actionDescription = `User clicked at (${Math.round(payload.x)}, ${Math.round(payload.y)})`;
-        pageUrl = session.page.url();
-        pageTitle = await session.page.title();
         break;
       }
 
@@ -128,8 +135,6 @@ export async function POST(
         }
         await dispatchType(sessionId, session.page, payload.text);
         actionDescription = `User typed "${payload.text.slice(0, 50)}${payload.text.length > 50 ? "..." : ""}"`;
-        pageUrl = session.page.url();
-        pageTitle = await session.page.title();
         break;
       }
 
@@ -141,8 +146,6 @@ export async function POST(
           modifiers: payload.modifiers,
         });
         actionDescription = `User pressed ${payload.key}`;
-        pageUrl = session.page.url();
-        pageTitle = await session.page.title();
         break;
       }
 
@@ -152,8 +155,6 @@ export async function POST(
         }
         await dispatchScroll(sessionId, session.page, payload.x, payload.y, payload.deltaX, payload.deltaY);
         actionDescription = `User scrolled at (${Math.round(payload.x)}, ${Math.round(payload.y)})`;
-        pageUrl = session.page.url();
-        pageTitle = await session.page.title();
         break;
       }
 
@@ -192,8 +193,6 @@ export async function POST(
           timeout: 30_000,
         });
         actionDescription = `User navigated to ${payload.url}`;
-        pageUrl = session.page.url();
-        pageTitle = await session.page.title();
         break;
       }
 
@@ -204,6 +203,7 @@ export async function POST(
         );
     }
 
+    ({ pageUrl, pageTitle } = await capturePageState());
     const durationMs = Date.now() - startTime;
 
     // Record in action history with source: "user"

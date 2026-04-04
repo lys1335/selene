@@ -37,7 +37,7 @@ interface UseVoiceRecordingOptions {
   voiceActivationMode?: "tap" | "push";
 }
 
-export interface UseVoiceRecordingReturn {
+interface UseVoiceRecordingReturn {
   isRecordingVoice: boolean;
   isTranscribingVoice: boolean;
   handleVoiceInput: () => Promise<void>;
@@ -334,7 +334,7 @@ interface UseSkillPickerStateOptions {
   updateCursorPosition: (start: number, end?: number) => void;
 }
 
-export interface UseSkillPickerStateReturn {
+interface UseSkillPickerStateReturn {
   skills: ComposerSkillLite[];
   filteredSkills: ComposerSkillLite[];
   isLoadingSkills: boolean;
@@ -350,7 +350,7 @@ export interface UseSkillPickerStateReturn {
   setSelectedSkillIndex: (updater: ((index: number) => number) | number) => void;
 }
 
-export function useSkillPickerState({
+function useSkillPickerState({
   characterId,
   inputValue,
   cursorPosition,
@@ -565,7 +565,7 @@ interface UsePromptEnhancementOptions {
   expandInput?: (input: string) => string;
 }
 
-export interface UsePromptEnhancementReturn {
+interface UsePromptEnhancementReturn {
   isEnhancing: boolean;
   enhancedContext: string | null;
   enhancementInfo: { filesFound?: number; chunksRetrieved?: number } | null;

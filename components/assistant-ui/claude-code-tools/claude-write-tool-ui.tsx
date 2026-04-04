@@ -4,6 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, PlusIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
+import { useTranslations } from "next-intl";
 import { DiffStyledPre } from "../diff-styled-pre";
 import { parseTextResult } from "./parse-text-result";
 
@@ -35,6 +36,7 @@ function isErrorResult(result: unknown): boolean {
  * Shows file name, content preview, and line count.
  */
 export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.write");
   const [expanded, setExpanded] = useState(false);
   const [showFullContent, setShowFullContent] = useState(false);
 
@@ -79,7 +81,7 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
         {!StatusIcon && <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-terminal-muted animate-pulse" />}
         <PlusIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
         <span className="text-terminal-muted">
-          {isRunning ? "Writing..." : hasError ? "Write failed" : "Wrote"}
+          {isRunning ? t("running") : hasError ? t("failed") : t("done")}
         </span>
         <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={filePath || fileName}>{fileName}</span>
 
@@ -115,7 +117,7 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
                   onClick={() => setShowFullContent(!showFullContent)}
                   className="text-[11px] text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
                 >
-                  {showFullContent ? "▲ Show less" : `▼ Show all (${contentLines.length} lines)`}
+                  {showFullContent ? t("showLess") : t("showAll", { count: contentLines.length })}
                 </button>
               )}
             </div>
@@ -123,12 +125,12 @@ export const ClaudeWriteToolUI: ToolCallContentPartComponent = ({ args, result }
 
           {result !== undefined && (
             <div className={cn("text-[11px]", statusColor)}>
-              {parseTextResult(result) || (hasError ? "Write failed" : "File written")}
+              {parseTextResult(result) || (hasError ? t("resultFailed") : t("resultWritten"))}
             </div>
           )}
 
           {isRunning && (
-            <div className="text-terminal-muted animate-pulse">Writing file...</div>
+            <div className="text-terminal-muted animate-pulse">{t("writing")}</div>
           )}
         </div>
       )}

@@ -75,6 +75,7 @@ type TelegramConnectorOptions = {
 
 export class TelegramConnector implements ChannelConnector {
   connectionId: string;
+  // fallow-ignore-next-line unused-class-member
   channelType: ChannelConnector["channelType"] = "telegram";
   status: ChannelConnector["status"] = "disconnected";
 
@@ -146,6 +147,7 @@ export class TelegramConnector implements ChannelConnector {
     this.connecting = false;
   }
 
+  // fallow-ignore-next-line unused-class-member
   async disconnect(): Promise<void> {
     this.connecting = false;
     this.started = false;
@@ -272,6 +274,7 @@ export class TelegramConnector implements ChannelConnector {
     };
   }
 
+  // fallow-ignore-next-line unused-class-member
   async sendTyping(peerId: string): Promise<void> {
     if (!this.bot || this.status !== "connected") return;
     try {
@@ -281,15 +284,18 @@ export class TelegramConnector implements ChannelConnector {
     }
   }
 
+  // fallow-ignore-next-line unused-class-member
   async markAsRead(peerId: string, messageId: string): Promise<void> {
     // Telegram Bot API does not support marking messages as read.
     return Promise.resolve();
   }
 
+  // fallow-ignore-next-line unused-class-member
   setInteractiveAnswerHandler(handler: (data: InteractiveAnswerData) => void): void {
     this.interactiveAnswerHandler = handler;
   }
 
+  // fallow-ignore-next-line unused-class-member
   async sendInteractiveQuestion(payload: InteractiveQuestionPayload): Promise<ChannelSendResult> {
     const chatId = Number(payload.peerId);
     const keyboard = new InlineKeyboard();

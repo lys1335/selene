@@ -6,7 +6,7 @@ import { agentSyncFolders, characters } from "@/lib/db/sqlite-character-schema";
 import { normalizeFolderPath } from "./path-validation";
 import { getSyncFolders } from "./sync-folder-crud";
 
-export type AccessibleSyncFolder = typeof agentSyncFolders.$inferSelect;
+type AccessibleSyncFolder = typeof agentSyncFolders.$inferSelect;
 
 export async function getAccessibleSyncFolders(characterId: string): Promise<AccessibleSyncFolder[]> {
   const ownFolders = await getSyncFolders(characterId);

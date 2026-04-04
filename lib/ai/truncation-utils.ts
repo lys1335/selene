@@ -4,13 +4,13 @@
  * Provides unified formatting for truncation markers across all tools.
  */
 
-export type TruncationIdType = "logId" | "contentId";
+type TruncationIdType = "logId" | "contentId";
 
 // ============================================================================
 // Middle Truncation (Head + Tail)
 // ============================================================================
 
-export interface MiddleTruncateResult {
+interface MiddleTruncateResult {
   content: string;
   truncated: boolean;
   originalLength: number;
@@ -56,7 +56,7 @@ export function middleTruncateText(text: string, maxChars: number): MiddleTrunca
   };
 }
 
-export interface TruncationMarkerParams {
+interface TruncationMarkerParams {
   originalLength: number;
   truncatedLength: number;
   estimatedTokens: number;

@@ -219,7 +219,7 @@ export function EmbeddingSetupPage({
                     transition={{ duration: prefersReducedMotion ? 0 : 0.4, delay: prefersReducedMotion ? 0 : 0.2 }}
                     className="font-mono text-sm text-terminal-dark/60 -mt-2"
                 >
-                    Embeddings convert your documents into searchable vectors. This lets your agent find relevant information from uploaded files and synced folders.
+                    {t("explanation")}
                 </motion.p>
 
                 {/* Provider Selection */}
@@ -235,14 +235,14 @@ export function EmbeddingSetupPage({
                                 <ProviderCard
                                     icon={<CloudIcon className="w-5 h-5" />}
                                     title={t("providers.openrouter.title")}
-                                    description="Cloud-powered, high quality. Requires API key."
+                                    description={t("providers.openrouter.description")}
                                     selected={provider === "openrouter"}
                                     onClick={() => handleProviderChange("openrouter")}
                                 />
                                 <ProviderCard
                                     icon={<HardDriveIcon className="w-5 h-5" />}
                                     title={t("providers.local.title")}
-                                    description="Free, private, runs on your device. No API key needed."
+                                    description={t("providers.local.description")}
                                     selected={provider === "local"}
                                     onClick={() => handleProviderChange("local")}
                                 />
@@ -263,13 +263,13 @@ export function EmbeddingSetupPage({
                                     {hasOpenRouterKey && !editingApiKey ? (
                                         <div className="flex items-center gap-2 rounded border border-terminal-green/40 bg-terminal-green/5 px-3 py-2">
                                             <CheckCircleIcon className="w-4 h-4 text-terminal-green" />
-                                            <span className="font-mono text-sm text-terminal-green">API key configured</span>
+                                            <span className="font-mono text-sm text-terminal-green">{t("apiKeyConfigured")}</span>
                                             <button
                                                 type="button"
                                                 onClick={() => setEditingApiKey(true)}
                                                 className="ml-auto text-xs font-mono text-terminal-dark/50 hover:text-terminal-dark transition-colors"
                                             >
-                                                Change
+                                                {t("change")}
                                             </button>
                                         </div>
                                     ) : (

@@ -20,14 +20,14 @@ describe("limitProgressContent", () => {
     expect(result.truncatedParts).toBe(0);
   });
 
-  it("keeps oversized runSkill tool-result payloads unchanged", () => {
+  it("keeps oversized skill tool-result payloads unchanged", () => {
     const hugeSkillContent = "x".repeat(250_000);
     const content = [
       { type: "text", text: "Inspecting skill" },
       {
         type: "tool-result",
         toolCallId: "tc-runskill-1",
-        toolName: "runSkill",
+        toolName: "skill",
         result: {
           success: true,
           action: "inspect",

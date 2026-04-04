@@ -520,6 +520,13 @@ export default function ChatInterface({
         });
     }, [bg.clearTrackedRunState, clearScheduledBanner]);
 
+    const startBackgroundRun = useCallback((runId: string) => {
+        bg.setIsProcessingInBackground(true);
+        bg.setProcessingRunId(runId);
+        bg.setIsZombieRun(false);
+        bg.startPollingForCompletion(runId);
+    }, [bg.setIsProcessingInBackground, bg.setProcessingRunId, bg.setIsZombieRun, bg.startPollingForCompletion]);
+
     // ── Session CRUD & list management ──
     const sm = useSessionManager({
         character,
@@ -1058,10 +1065,7 @@ export default function ChatInterface({
 
             if (activeDelegationTaskForSession?.runId) {
                 const delegationRunId = activeDelegationTaskForSession.runId;
-                bg.setIsProcessingInBackground(true);
-                bg.setProcessingRunId(delegationRunId);
-                bg.setIsZombieRun(false);
-                bg.startPollingForCompletion(delegationRunId);
+                startBackgroundRun(delegationRunId);
                 void reloadSessionMessages(targetSessionId, { force: true });
                 return;
             }
@@ -1196,10 +1200,7 @@ export default function ChatInterface({
 
             console.log("[Background Processing] Detected active task from store:", stillActive.runId);
             if (isDelegationTask(stillActive)) {
-                bg.setIsProcessingInBackground(true);
-                bg.setProcessingRunId(stillActive.runId);
-                bg.setIsZombieRun(false);
-                bg.startPollingForCompletion(stillActive.runId);
+                startBackgroundRun(stillActive.runId);
                 void reloadSessionMessages(sessionId, { force: true });
                 return;
             }
@@ -1215,8 +1216,8 @@ export default function ChatInterface({
             }
         };
     // bg.processingRunId is the only reactive bg value used in the guard.
-    // Setters & startPollingForCompletion are identity-stable.
-    }, [activeTasks, bg.processingRunId, reloadSessionMessages, sessionId]);
+    // startBackgroundRun, setters & startPollingForCompletion are identity-stable.
+    }, [activeTasks, bg.processingRunId, reloadSessionMessages, sessionId, startBackgroundRun]);
 
     useEffect(() => {
         if (activeScheduledTaskForSession?.type === "scheduled") {
@@ -1269,14 +1270,11 @@ export default function ChatInterface({
             return;
         }
 
-        bg.setIsProcessingInBackground(true);
-        bg.setProcessingRunId(activeDelegationTaskForSession.runId);
-        bg.setIsZombieRun(false);
-        bg.startPollingForCompletion(activeDelegationTaskForSession.runId);
+        startBackgroundRun(activeDelegationTaskForSession.runId);
     // Use specific deps — bg.processingRunId for the guard check,
-    // activeDelegationTaskForSession for the trigger.  Setters, refs,
-    // and startPollingForCompletion are identity-stable.
-    }, [activeDelegationTaskForSession, bg.processingRunId]);
+    // activeDelegationTaskForSession for the trigger.  startBackgroundRun,
+    // setters, refs, and startPollingForCompletion are identity-stable.
+    }, [activeDelegationTaskForSession, bg.processingRunId, startBackgroundRun]);
 
     const handleCancelRun = useCallback(async () => {
         if (!activeRun || !sessionId) return;
@@ -1342,10 +1340,7 @@ export default function ChatInterface({
                 }
 
                 if (isDelegationTask(detail.task)) {
-                    bg.setIsProcessingInBackground(true);
-                    bg.setProcessingRunId(detail.task.runId);
-                    bg.setIsZombieRun(false);
-                    bg.startPollingForCompletion(detail.task.runId);
+                    startBackgroundRun(detail.task.runId);
                 }
 
                 void reloadSessionMessages(sessionId, { force: true });
@@ -1383,6 +1378,7 @@ export default function ChatInterface({
         reloadSessionMessages,
         sessionId,
         sm.userLoadedMoreRef,
+        startBackgroundRun,
     ]);
 
     useEffect(() => {
@@ -1537,6 +1533,12 @@ export default function ChatInterface({
         void reloadSessionMessages(sessionId, { force: true }).catch(() => {});
         sm.notifySessionUpdate(sessionId, { messageCount: liveThreadMessagesRef.current.length });
         sm.refreshSessionTimestamp(sessionId, { includeActivity: true });
+
+        // The foreground stream may have closed prematurely (e.g. TCP timeout,
+        // proxy disconnect) while the agent continues running in the background.
+        // Check for an active backend task and transition to background polling
+        // so the UI doesn't freeze in a stale state.
+        void checkActiveRunRef.current();
     }, [sessionId, reloadSessionMessages, sm.notifySessionUpdate, sm.refreshSessionTimestamp]);
 
     const handleThemeChooserClose = useCallback(() => {
@@ -1617,6 +1619,133 @@ export default function ChatInterface({
         );
     }
 
+    // ── Shared render helpers (used by both browser-tabs and sidebar layouts) ──
+
+    /** Avatar bridges + PiP widget — rendered when avatarConfig.enabled. */
+    const renderAvatarBlock = () => avatarConfig.enabled ? (
+        <>
+            <AvatarAudioBridge avatarRef={avatarRef} mutedRef={avatarMutedRef} />
+            <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} ttsSpeakCodeSymbols={ttsSpeakCodeSymbols} muted={avatarMuted} mutedRef={avatarMutedRef} />
+            <AvatarPipWidget
+                avatarRef={avatarRef}
+                config={avatarConfig}
+                muted={avatarMuted}
+                hidden={avatarHidden}
+                onMuteToggle={() => setAvatarMuted((m) => !m)}
+                onHide={() => setAvatarHidden(true)}
+                onShow={() => setAvatarHidden(false)}
+            />
+        </>
+    ) : null;
+
+    /**
+     * Git workspace header bar.
+     * showDetecting: when true, renders a "Checking git repos..." spinner when no
+     * workspace or git folder has been detected yet (sidebar mode only).
+     * containerClassName: extra classes for the wrapping div.
+     */
+    const renderGitWorkspaceHeader = (showDetecting: boolean, containerClassName: string) => {
+        const visible = currentWorkspaceInfo || detectedPrimaryGitFolder || (showDetecting && isDetectingGitFolders);
+        if (!visible) return null;
+        return (
+            <div className={`${containerClassName} items-center justify-end px-4 pt-2`}>
+                {currentWorkspaceInfo ? (
+                    <WorkspaceIndicator
+                        sessionId={sessionId}
+                        workspaceInfo={currentWorkspaceInfo}
+                        onOpenDiffPanel={() => setIsDiffPanelOpen(true)}
+                    />
+                ) : detectedPrimaryGitFolder ? (
+                    <button
+                        type="button"
+                        onClick={() => void handleEnableGitMode()}
+                        disabled={isEnablingGitMode}
+                        className="inline-flex items-center gap-2 rounded-md border border-terminal-dark/10 bg-terminal-dark px-3 py-1.5 text-xs font-mono text-terminal-cream transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
+                        title={detectedPrimaryGitFolder.path}
+                    >
+                        {isEnablingGitMode ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                            <GitBranchIcon className="h-3.5 w-3.5" />
+                        )}
+                        <span>{isEnablingGitMode ? "Enabling Git Mode..." : `Enable Git Mode · ${detectedPrimaryGitFolder.branch}`}</span>
+                    </button>
+                ) : showDetecting ? (
+                    <div className="inline-flex items-center gap-2 rounded-md border border-terminal-dark/10 bg-terminal-dark/5 px-3 py-1.5 text-xs font-mono text-terminal-muted">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Checking git repos...</span>
+                    </div>
+                ) : null}
+            </div>
+        );
+    };
+
+    /** ScheduledRunBanner — shown when an active run is present. */
+    const renderActiveRunBanner = () => activeRun ? (
+        <div className="px-4 pt-2 space-y-2">
+            <ScheduledRunBanner
+                run={activeRun}
+                onCancel={handleCancelRun}
+                cancelling={isCancellingRun}
+            />
+        </div>
+    ) : null;
+
+    /** Thread component with shared onLivePromptInjected logic. */
+    const renderThread = () => (
+        <Thread
+            onSessionActivity={handleSessionActivity}
+            footer={null}
+            isBackgroundTaskRunning={Boolean(activeRun || bg.processingRunId)}
+            isProcessingInBackground={bg.isProcessingInBackground}
+            sessionId={sessionId}
+            activeRunId={bg.processingRunId}
+            isWorkspaceContext={Boolean(currentWorkspaceInfo)}
+            onCancelBackgroundRun={bg.handleCancelBackgroundRun}
+            isCancellingBackgroundRun={bg.isCancellingBackgroundRun}
+            canCancelBackgroundRun={Boolean(bg.processingRunId)}
+            isZombieBackgroundRun={bg.isZombieRun}
+            onPostCancel={handlePostCancel}
+            onLivePromptInjected={async () => {
+                await reloadSessionMessages(sessionId ?? "", { force: true });
+                try {
+                    const res = await fetch(`/api/sessions/${sessionId}/consume-undrained-signal`, { method: "POST" });
+                    if (res.ok) {
+                        const data = await res.json() as { hasPending?: boolean };
+                        return data.hasPending === true;
+                    }
+                } catch { /* non-fatal */ }
+                return false;
+            }}
+        />
+    );
+
+    /** Shared ChatProvider shell + bridges, with variable container style and inner layout. */
+    const renderChatCore = (containerStyle: React.CSSProperties, innerContent: React.ReactNode) => (
+        <CharacterProvider character={characterDisplay}>
+            <div style={containerStyle}>
+                <ChatProvider
+                    key={chatProviderKey}
+                    sessionId={sessionId}
+                    characterId={character.id}
+                    initialMessages={messages}
+                >
+                    <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
+                    <OverlaySyncBridge
+                        characterId={character.id}
+                        onOverlaySessionUpdated={handleOverlaySessionUpdated}
+                    />
+                    <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
+                    <ForegroundStreamingBridge
+                        isForegroundStreamingRef={isForegroundStreamingRef}
+                        onForegroundRunFinished={handleForegroundRunFinished}
+                    />
+                    {innerContent}
+                </ChatProvider>
+            </div>
+        </CharacterProvider>
+    );
+
     // ── Browser-tabs mode: persistent top-tab workspace ──
     const currentSessionTitle = sm.sessions.find((s) => s.id === sessionId)?.title ?? null;
     const librarySessions = sm.sessions.filter((session) => !session.metadata?.pinned);
@@ -1649,112 +1778,17 @@ export default function ChatInterface({
                     onRestoreArchivedSession={handleBrowserArchivedRestore}
                     onDeleteSessionFromLibrary={handleBrowserTabDeleteSession}
                 >
-                    <CharacterProvider character={characterDisplay}>
-                        <div
-                            style={{
-                                height: "100%",
-                                display: "flex",
-                                flexDirection: "column",
-                            }}
-                        >
-                            <ChatProvider
-                                key={chatProviderKey}
-                                sessionId={sessionId}
-                                characterId={character.id}
-                                initialMessages={messages}
-                            >
-                                <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
-                                <OverlaySyncBridge
-                                    characterId={character.id}
-                                    onOverlaySessionUpdated={handleOverlaySessionUpdated}
-                                />
-                                <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
-                                <ForegroundStreamingBridge
-                                    isForegroundStreamingRef={isForegroundStreamingRef}
-                                    onForegroundRunFinished={handleForegroundRunFinished}
-                                />
-                                <div className="flex h-full min-h-0 flex-col">
-                                    {(currentWorkspaceInfo || detectedPrimaryGitFolder) && (
-                                        <div className="flex items-center justify-end px-4 pt-2">
-                                            {currentWorkspaceInfo ? (
-                                                <WorkspaceIndicator
-                                                    sessionId={sessionId}
-                                                    workspaceInfo={currentWorkspaceInfo}
-                                                    onOpenDiffPanel={() => setIsDiffPanelOpen(true)}
-                                                />
-                                            ) : detectedPrimaryGitFolder ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => void handleEnableGitMode()}
-                                                    disabled={isEnablingGitMode}
-                                                    className="inline-flex items-center gap-2 rounded-md border border-terminal-dark/10 bg-terminal-dark px-3 py-1.5 text-xs font-mono text-terminal-cream transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
-                                                    title={detectedPrimaryGitFolder.path}
-                                                >
-                                                    {isEnablingGitMode ? (
-                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                                    ) : (
-                                                        <GitBranchIcon className="h-3.5 w-3.5" />
-                                                    )}
-                                                    <span>{isEnablingGitMode ? "Enabling Git Mode..." : `Enable Git Mode · ${detectedPrimaryGitFolder.branch}`}</span>
-                                                </button>
-                                            ) : null}
-                                        </div>
-                                    )}
-                                    {activeRun && (
-                                        <div className="px-4 pt-2 space-y-2">
-                                            <ScheduledRunBanner
-                                                run={activeRun}
-                                                onCancel={handleCancelRun}
-                                                cancelling={isCancellingRun}
-                                            />
-                                        </div>
-                                    )}
-                                    {avatarConfig.enabled && (
-                                        <>
-                                            <AvatarAudioBridge avatarRef={avatarRef} mutedRef={avatarMutedRef} />
-                                            <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} ttsSpeakCodeSymbols={ttsSpeakCodeSymbols} muted={avatarMuted} mutedRef={avatarMutedRef} />
-                                            <AvatarPipWidget
-                                                avatarRef={avatarRef}
-                                                config={avatarConfig}
-                                                muted={avatarMuted}
-                                                hidden={avatarHidden}
-                                                onMuteToggle={() => setAvatarMuted((m) => !m)}
-                                                onHide={() => setAvatarHidden(true)}
-                                                onShow={() => setAvatarHidden(false)}
-                                            />
-                                        </>
-                                    )}
-                                    <div className="min-h-0 flex-1">
-                                    <Thread
-                                        onSessionActivity={handleSessionActivity}
-                                        footer={null}
-                                        isBackgroundTaskRunning={Boolean(activeRun || bg.processingRunId)}
-                                        isProcessingInBackground={bg.isProcessingInBackground}
-                                        sessionId={sessionId}
-                                        activeRunId={bg.processingRunId}
-                                        isWorkspaceContext={Boolean(currentWorkspaceInfo)}
-                                        onCancelBackgroundRun={bg.handleCancelBackgroundRun}
-                                        isCancellingBackgroundRun={bg.isCancellingBackgroundRun}
-                                        canCancelBackgroundRun={Boolean(bg.processingRunId)}
-                                        isZombieBackgroundRun={bg.isZombieRun}
-                                        onPostCancel={handlePostCancel}
-                                        onLivePromptInjected={async () => {
-                                            await reloadSessionMessages(sessionId ?? "", { force: true });
-                                            try {
-                                                const res = await fetch(`/api/sessions/${sessionId}/consume-undrained-signal`, { method: "POST" });
-                                                if (res.ok) {
-                                                    const data = await res.json() as { hasPending?: boolean };
-                                                    return data.hasPending === true;
-                                                }
-                                            } catch { /* non-fatal */ }
-                                            return false;
-                                        }}
-                                    />
-                                    </div>
-                                </div>
-                            </ChatProvider>
+                    {renderChatCore(
+                        { height: "100%", display: "flex", flexDirection: "column" },
+                        <div className="flex h-full min-h-0 flex-col">
+                            {renderGitWorkspaceHeader(false, "flex")}
+                            {renderActiveRunBanner()}
+                            {renderAvatarBlock()}
+                            <div className="min-h-0 flex-1">
+                                {renderThread()}
+                            </div>
                         </div>
-                    </CharacterProvider>
+                    )}
                 </BrowserChatWorkspace>
                 {currentWorkspaceInfo && (
                     <DiffReviewPanel
@@ -1805,121 +1839,21 @@ export default function ChatInterface({
                 />
             }
         >
-            <CharacterProvider character={characterDisplay}>
-                <div
-                    style={{
-                        opacity: bg.isChatFading ? 0 : 1,
-                        transition: "opacity 150ms ease-in-out",
-                        height: "100%",
-                        display: "flex",
-                        flexDirection: "column",
-                    }}
-                >
-                    <ChatProvider
-                        key={chatProviderKey}
-                        sessionId={sessionId}
-                        characterId={character.id}
-                        initialMessages={messages}
-                    >
-                        <ChatSetMessagesBridge setMessagesRef={chatSetMessagesRef} />
-                        <OverlaySyncBridge
-                            characterId={character.id}
-                            onOverlaySessionUpdated={handleOverlaySessionUpdated}
-                        />
-                        <ChatMessagesBridge messagesRef={liveThreadMessagesRef} />
-                        <ForegroundStreamingBridge
-                            isForegroundStreamingRef={isForegroundStreamingRef}
-                            onForegroundRunFinished={handleForegroundRunFinished}
-                        />
-                        <div className="flex h-full min-h-0 flex-col gap-3">
-                            {(currentWorkspaceInfo || detectedPrimaryGitFolder || isDetectingGitFolders) && (
-                                <div className="flex flex-shrink-0 items-center justify-end px-4 pt-2">
-                                    {currentWorkspaceInfo ? (
-                                        <WorkspaceIndicator
-                                            sessionId={sessionId}
-                                            workspaceInfo={currentWorkspaceInfo}
-                                            onOpenDiffPanel={() => setIsDiffPanelOpen(true)}
-                                        />
-                                    ) : detectedPrimaryGitFolder ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => void handleEnableGitMode()}
-                                            disabled={isEnablingGitMode}
-                                            className="inline-flex items-center gap-2 rounded-md border border-terminal-dark/10 bg-terminal-dark px-3 py-1.5 text-xs font-mono text-terminal-cream transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-70"
-                                            title={detectedPrimaryGitFolder.path}
-                                        >
-                                            {isEnablingGitMode ? (
-                                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                                <GitBranchIcon className="h-3.5 w-3.5" />
-                                            )}
-                                            <span>{isEnablingGitMode ? "Enabling Git Mode..." : `Enable Git Mode · ${detectedPrimaryGitFolder.branch}`}</span>
-                                        </button>
-                                    ) : (
-                                        <div className="inline-flex items-center gap-2 rounded-md border border-terminal-dark/10 bg-terminal-dark/5 px-3 py-1.5 text-xs font-mono text-terminal-muted">
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                            <span>Checking git repos...</span>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            {activeRun && (
-                                <div className="px-4 pt-2 space-y-2">
-                                    <ScheduledRunBanner
-                                        run={activeRun}
-                                        onCancel={handleCancelRun}
-                                        cancelling={isCancellingRun}
-                                    />
-                                </div>
-                            )}
-                            {avatarConfig.enabled && (
-                                <>
-                                    <AvatarAudioBridge avatarRef={avatarRef} mutedRef={avatarMutedRef} />
-                                    <StreamingAutoSpeakBridge ttsAutoMode={ttsAutoMode} ttsEnabled={ttsEnabled} ttsReadCodeBlocks={ttsReadCodeBlocks} ttsSpeakCodeSymbols={ttsSpeakCodeSymbols} muted={avatarMuted} mutedRef={avatarMutedRef} />
-                                    <AvatarPipWidget
-                                        avatarRef={avatarRef}
-                                        config={avatarConfig}
-                                        muted={avatarMuted}
-                                        hidden={avatarHidden}
-                                        onMuteToggle={() => setAvatarMuted((m) => !m)}
-                                        onHide={() => setAvatarHidden(true)}
-                                        onShow={() => setAvatarHidden(false)}
-                                    />
-                                </>
-                            )}
-                            <Thread
-                                onSessionActivity={handleSessionActivity}
-                                footer={null}
-                                isBackgroundTaskRunning={Boolean(activeRun || bg.processingRunId)}
-                                isProcessingInBackground={bg.isProcessingInBackground}
-                                sessionId={sessionId}
-                                activeRunId={bg.processingRunId}
-                                isWorkspaceContext={Boolean(currentWorkspaceInfo)}
-                                onCancelBackgroundRun={bg.handleCancelBackgroundRun}
-                                isCancellingBackgroundRun={bg.isCancellingBackgroundRun}
-                                canCancelBackgroundRun={Boolean(bg.processingRunId)}
-                                isZombieBackgroundRun={bg.isZombieRun}
-                                onPostCancel={handlePostCancel}
-                                onLivePromptInjected={async () => {
-                                    // remount:true so ChatProvider reinitialises from DB (same as background mode).
-                                    // Safe here: the run has ended before this callback fires (isQueueBlocked=false).
-                                    await reloadSessionMessages(sessionId ?? "", { force: true });
-                                    // Check if the run had undrained queue messages that need a new run.
-                                    // Returns true → thread-composer converts injected-live chips to fallback.
-                                    try {
-                                        const res = await fetch(`/api/sessions/${sessionId}/consume-undrained-signal`, { method: "POST" });
-                                        if (res.ok) {
-                                            const data = await res.json() as { hasPending?: boolean };
-                                            return data.hasPending === true;
-                                        }
-                                    } catch { /* non-fatal */ }
-                                    return false;
-                                }}
-                            />
-                        </div>
-                    </ChatProvider>
+            {renderChatCore(
+                {
+                    opacity: bg.isChatFading ? 0 : 1,
+                    transition: "opacity 150ms ease-in-out",
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                },
+                <div className="flex h-full min-h-0 flex-col gap-3">
+                    {renderGitWorkspaceHeader(true, "flex flex-shrink-0")}
+                    {renderActiveRunBanner()}
+                    {renderAvatarBlock()}
+                    {renderThread()}
                 </div>
-            </CharacterProvider>
+            )}
             {currentWorkspaceInfo && (
                 <DiffReviewPanel
                     sessionId={sessionId}

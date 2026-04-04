@@ -26,7 +26,7 @@ export interface CacheConfig {
 /**
  * Cache performance metrics from API response
  */
-export interface CacheMetrics {
+interface CacheMetrics {
   /** Tokens written to cache (new cache entry creation) */
   cacheCreationTokens: number;
 

@@ -334,7 +334,7 @@ export function FolderItem({
             )}
             {folder.embeddingModel && (
               <div className="col-span-2">
-                <span className="text-terminal-muted">Model:</span>{" "}
+                <span className="text-terminal-muted">{t("model")}</span>{" "}
                 <span className="text-terminal-dark">{folder.embeddingModel}</span>
               </div>
             )}

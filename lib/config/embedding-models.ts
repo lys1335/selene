@@ -119,7 +119,7 @@ export const LOCAL_EMBEDDING_MODELS: EmbeddingModelInfo[] = [
 ];
 
 /** All known embedding models across all providers */
-export const ALL_EMBEDDING_MODELS: EmbeddingModelInfo[] = [
+const ALL_EMBEDDING_MODELS: EmbeddingModelInfo[] = [
   ...OPENROUTER_EMBEDDING_MODELS,
   ...LOCAL_EMBEDDING_MODELS,
 ];
@@ -128,7 +128,7 @@ export const ALL_EMBEDDING_MODELS: EmbeddingModelInfo[] = [
  * Look up a known embedding model by ID.
  * Returns undefined for custom/unknown model IDs.
  */
-export function getEmbeddingModelInfo(modelId: string): EmbeddingModelInfo | undefined {
+function getEmbeddingModelInfo(modelId: string): EmbeddingModelInfo | undefined {
   return ALL_EMBEDDING_MODELS.find((m) => m.id === modelId);
 }
 
@@ -136,7 +136,7 @@ export function getEmbeddingModelInfo(modelId: string): EmbeddingModelInfo | und
  * Get the vector dimensions for a known embedding model.
  * Returns undefined if the model is not in our registry (custom model).
  */
-export function getEmbeddingDimensions(modelId: string): number | undefined {
+function getEmbeddingDimensions(modelId: string): number | undefined {
   return getEmbeddingModelInfo(modelId)?.dimensions;
 }
 
@@ -230,7 +230,7 @@ export function isValidRerankerModel(modelId: string): boolean | null {
 
 // ─── Validation Helpers ─────────────────────────────────────────────────────
 
-export interface ModelValidationResult {
+interface EmbeddingValidationResult {
   valid: boolean;
   warnings: string[];
   errors: string[];
@@ -255,8 +255,8 @@ export function validateModelConfiguration(params: {
   rerankModel: string;
   previousEmbeddingProvider?: string;
   previousEmbeddingModel?: string;
-}): ModelValidationResult {
-  const result: ModelValidationResult = {
+}): EmbeddingValidationResult {
+  const result: EmbeddingValidationResult = {
     valid: true,
     warnings: [],
     errors: [],

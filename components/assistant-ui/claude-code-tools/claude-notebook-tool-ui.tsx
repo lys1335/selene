@@ -4,6 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { CheckCircleIcon, XCircleIcon, BookOpenIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
+import { useTranslations } from "next-intl";
 import { parseTextResult } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
@@ -35,6 +36,7 @@ function isErrorResult(result: unknown): boolean {
  * Shows notebook file name, cell edit info, and source preview.
  */
 export const ClaudeNotebookEditToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.notebook");
   const [expanded, setExpanded] = useState(false);
 
   const expansionCtx = useToolExpansion();
@@ -54,10 +56,10 @@ export const ClaudeNotebookEditToolUI: ToolCallContentPartComponent = ({ args, r
   const hasError = isErrorResult(result);
 
   const actionLabel = editMode === "insert"
-    ? "Insert cell"
+    ? t("insertCell")
     : editMode === "delete"
-      ? "Delete cell"
-      : "Edit cell";
+      ? t("deleteCell")
+      : t("editCell");
 
   const StatusIcon = isRunning ? null : hasError ? XCircleIcon : CheckCircleIcon;
   const statusColor = isRunning
@@ -119,12 +121,12 @@ export const ClaudeNotebookEditToolUI: ToolCallContentPartComponent = ({ args, r
 
           {result !== undefined && (
             <div className={cn("text-[11px]", statusColor)}>
-              {parseTextResult(result) || (hasError ? "Edit failed" : "Cell updated")}
+              {parseTextResult(result) || (hasError ? t("resultFailed") : t("resultUpdated"))}
             </div>
           )}
 
           {isRunning && (
-            <div className="text-terminal-muted animate-pulse">Editing notebook...</div>
+            <div className="text-terminal-muted animate-pulse">{t("editing")}</div>
           )}
         </div>
       )}

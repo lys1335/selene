@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addSessionMessage,
-  clearSession,
+  clearPromptEnhancementSession,
   getEnhancementSession,
   getSessionMemorySignature,
   setSessionMemorySignature,
@@ -13,8 +13,8 @@ describe("prompt enhancement session isolation", () => {
     const sessionA = "enhance:session-a";
     const sessionB = "enhance:session-b";
 
-    clearSession(sessionA);
-    clearSession(sessionB);
+    clearPromptEnhancementSession(sessionA);
+    clearPromptEnhancementSession(sessionB);
 
     addSessionMessage(sessionA, { role: "user", content: "A1" });
     addSessionMessage(sessionA, { role: "assistant", content: "A2" });
@@ -34,8 +34,8 @@ describe("prompt enhancement session isolation", () => {
     const sessionA = "enhance:session-memory-a";
     const sessionB = "enhance:session-memory-b";
 
-    clearSession(sessionA);
-    clearSession(sessionB);
+    clearPromptEnhancementSession(sessionA);
+    clearPromptEnhancementSession(sessionB);
 
     setSessionMemorySignature(sessionA, "sig-a");
     setSessionMemorySignature(sessionB, "sig-b");

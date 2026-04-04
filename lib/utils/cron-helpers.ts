@@ -9,7 +9,7 @@
  * @param days Array of day numbers (0=Sunday, 1=Monday, ..., 6=Saturday)
  * @returns Cron-compatible day-of-week string
  */
-export function daysToCron(days: number[]): string {
+function daysToCron(days: number[]): string {
     if (days.length === 0) return "*";
     if (days.length === 7) return "*";
     return days.sort((a, b) => a - b).join(",");
@@ -20,7 +20,7 @@ export function daysToCron(days: number[]): string {
  * @param cronDayField Cron day-of-week field (e.g., "1,3,5" or "*")
  * @returns Array of day numbers (0=Sunday, 1=Monday, ..., 6=Saturday)
  */
-export function cronToDays(cronDayField: string): number[] {
+function cronToDays(cronDayField: string): number[] {
     if (cronDayField === "*") return [0, 1, 2, 3, 4, 5, 6];
 
     const days: number[] = [];

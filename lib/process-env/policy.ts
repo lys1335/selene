@@ -28,28 +28,28 @@ const CLAUDE_SDK_BLOCKED_KEYS = new Set([
   "NODE_ENV",
 ]);
 
-export type EnvironmentTarget = "execute-command" | "claude-sdk";
-export type BaseEnvironmentSource = "shell" | "process";
+type EnvironmentTarget = "execute-command" | "claude-sdk";
+type BaseEnvironmentSource = "shell" | "process";
 
-export interface BundledPathRuntime {
+interface BundledPathRuntime {
   resourcesPath?: string | null;
   bundledBinDirs?: string[];
   shouldMergeHostPathFallback?: boolean;
 }
 
-export interface ResolveBaseEnvironmentOptions {
+interface ResolveBaseEnvironmentOptions {
   preferShellEnvironment?: boolean;
   processEnv?: Record<string, string | undefined>;
   shellEnv?: Record<string, string>;
 }
 
-export interface ResolvedBaseEnvironment {
+interface ResolvedBaseEnvironment {
   env: Record<string, string | undefined>;
   source: BaseEnvironmentSource;
   shellEnvAvailable: boolean;
 }
 
-export interface BuildEnvironmentForTargetOptions {
+interface BuildEnvironmentForTargetOptions {
   target: EnvironmentTarget;
   isProduction?: boolean;
   processEnv?: Record<string, string | undefined>;
@@ -57,14 +57,14 @@ export interface BuildEnvironmentForTargetOptions {
   runtime?: BundledPathRuntime;
 }
 
-export interface BuildEnvironmentForTargetResult {
+interface BuildEnvironmentForTargetResult {
   env: Record<string, string | undefined>;
   source: BaseEnvironmentSource;
   shellEnvAvailable: boolean;
   hostPathPreserved: boolean;
 }
 
-export interface InitializeProcessEnvironmentOptions {
+interface InitializeProcessEnvironmentOptions {
   processEnv?: NodeJS.ProcessEnv;
   filterGitBashPath?: boolean;
   ensureComSpec?: boolean;

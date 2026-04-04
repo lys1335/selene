@@ -27,7 +27,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-export interface PatchFileToolOptions {
+interface PatchFileToolOptions {
   sessionId: string;
   characterId?: string | null;
 }

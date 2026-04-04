@@ -24,22 +24,7 @@
 // Types
 export type {
   MemoryCategory,
-  MemoryStatus,
-  MemorySource,
-  ImportanceFactors,
-  MemoryEntry,
-  MemoryLogEvent,
-  MemoryLogEventType,
-  MemoryMetadata,
-  CreateMemoryInput,
-  UpdateMemoryInput,
-  ExtractedMemory,
-  FormattedMemory,
-  MemoryListResponse,
-  MemoryActionResponse,
 } from "./types";
-
-export { MEMORY_CATEGORIES } from "./types";
 
 // Memory Manager
 export { AgentMemoryManager } from "./memory-manager";
@@ -47,32 +32,10 @@ export { AgentMemoryManager } from "./memory-manager";
 // Prompt Injection
 export {
   formatMemoriesForPrompt,
-  getPendingMemoryCount,
-  getApprovedMemoryCount,
 } from "./prompt-injection";
 
 // Extraction
 export {
-  // Prompt
-  MEMORY_EXTRACTION_PROMPT,
-  buildExtractionPrompt,
-  // Importance
-  IMPORTANCE_WEIGHTS,
-  IMPORTANCE_THRESHOLD,
-  calculateImportance,
-  meetsThreshold,
-  scoreAboveThreshold,
-  validateFactors,
-  normalizeFactors,
-  explainScore,
-  // Service
-  extractMemories,
-  type ExtractionInput,
-  type ExtractionResult,
-  // Trigger
-  shouldTriggerExtraction,
   triggerExtraction,
   manualExtraction,
-  resetCooldown,
-  clearAllCooldowns,
 } from "./extraction";

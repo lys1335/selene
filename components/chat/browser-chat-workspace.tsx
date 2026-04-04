@@ -459,7 +459,7 @@ export function BrowserChatWorkspace({
               type="button"
               onClick={() => window.electronAPI?.window.minimize()}
               className="flex h-8 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              aria-label="Minimize"
+              aria-label={t("browserWorkspace.minimize")}
             >
               <MinusIcon className="h-3.5 w-3.5" />
             </button>
@@ -467,7 +467,7 @@ export function BrowserChatWorkspace({
               type="button"
               onClick={() => window.electronAPI?.window.maximize()}
               className="flex h-8 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-              aria-label="Maximize"
+              aria-label={t("browserWorkspace.maximize")}
             >
               <SquareIcon className="h-3.5 w-3.5" />
             </button>
@@ -475,7 +475,7 @@ export function BrowserChatWorkspace({
               type="button"
               onClick={() => window.electronAPI?.window.close()}
               className="flex h-8 w-10 items-center justify-center text-muted-foreground transition-colors hover:bg-red-500/90 hover:text-white"
-              aria-label="Close"
+              aria-label={t("browserWorkspace.close")}
             >
               <X className="h-3.5 w-3.5" />
             </button>

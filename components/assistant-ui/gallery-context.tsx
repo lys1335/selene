@@ -9,7 +9,7 @@ import { createContext, useContext, type ReactNode, type FC } from "react";
 // communicate with the chat composer, allowing users to attach images from
 // galleries as references for their next message.
 
-export interface GalleryContextValue {
+interface GalleryContextValue {
     /**
      * Attach an image to the chat composer as a reference.
      * When the user clicks an image in a gallery, this function is called
@@ -24,7 +24,7 @@ export const useGallery = (): GalleryContextValue | null => {
     return useContext(GalleryContext);
 };
 
-export const useGalleryRequired = (): GalleryContextValue => {
+const useGalleryRequired = (): GalleryContextValue => {
     const context = useContext(GalleryContext);
     if (!context) {
         throw new Error("useGalleryRequired must be used within a GalleryProvider");

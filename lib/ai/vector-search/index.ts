@@ -13,33 +13,9 @@
 
 // Types
 export type {
-  SearchStrategy,
-  SearchHistoryEntry,
-  VectorSearchSession,
-  VectorSearchOptions,
   SearchFinding,
   VectorSearchResult,
-  VectorSearchPhase,
-  VectorSearchEvent,
-  VectorSearchEventEmitter,
-  RawSearchResult,
-  SynthesisRequest,
-  SynthesisResult,
 } from "./types";
 
-// Session management
-export {
-  getVectorSearchSession,
-  addSearchHistory,
-  getSearchHistory,
-  clearSession,
-  cleanupStaleSessions,
-  getSessionStats,
-} from "./session-store";
-
-// Synthesizer
-export { synthesizeSearchResults } from "./synthesizer";
-
 // Tool factory
-export { createVectorSearchToolV2, createVectorQueryTool, createReadFileTool } from "./tool";
-export type { ReadFileToolOptions } from "./tool";
+export { createVectorSearchToolV2 } from "./tool";

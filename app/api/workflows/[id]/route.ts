@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { getOrCreateLocalUser } from "@/lib/db/queries";
-import { loadSettings } from "@/lib/settings/settings-manager";
+import { getAuthenticatedUser } from "@/lib/auth/route-auth";
 import {
   addSubagentToWorkflow,
   deleteWorkflow,
@@ -43,9 +41,7 @@ const workflowPatchSchema = z.discriminatedUnion("action", [
 
 export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
+    const dbUser = await getAuthenticatedUser(req);
     const { id } = await params;
 
     const workflow = await getWorkflowById(id, dbUser.id);
@@ -73,9 +69,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
 
 export async function PATCH(req: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
+    const dbUser = await getAuthenticatedUser(req);
     const { id } = await params;
     const body = await req.json();
 
@@ -186,9 +180,7 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
 
 export async function DELETE(req: NextRequest, { params }: RouteParams) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
+    const dbUser = await getAuthenticatedUser(req);
     const { id } = await params;
 
     // Check if this is a system workflow — mark it dismissed so it won't be re-created

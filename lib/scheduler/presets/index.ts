@@ -15,7 +15,7 @@ import { dailyStandupPreset } from "./daily-standup";
 /**
  * All available presets
  */
-export const presets: SchedulePreset[] = [
+const presets: SchedulePreset[] = [
   linearSummaryPreset,
   weeklyDigestPreset,
   codeReviewPreset,
@@ -46,7 +46,7 @@ export function getPresetsByCategory(category: PresetCategory): SchedulePreset[]
 /**
  * Get all preset categories with counts
  */
-export function getPresetCategories(): Array<{ category: PresetCategory; count: number }> {
+function getPresetCategories(): Array<{ category: PresetCategory; count: number }> {
   const categories = new Map<PresetCategory, number>();
   
   for (const preset of presets) {

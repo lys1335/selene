@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   addSearchHistory,
-  clearSession,
+  clearVectorSearchSession,
   getSearchHistory,
   getSessionStats,
   getVectorSearchSession,
@@ -10,8 +10,8 @@ import {
 
 describe("vector search session store scoping", () => {
   beforeEach(() => {
-    clearSession("vector:session-a");
-    clearSession("vector:session-b");
+    clearVectorSearchSession("vector:session-a");
+    clearVectorSearchSession("vector:session-b");
   });
 
   it("isolates search history per session key", () => {

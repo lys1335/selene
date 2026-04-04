@@ -5,8 +5,6 @@ export type ToolDependency =
   | "webScraper"
   | "openrouterKey"
   | "comfyuiEnabled"
-  | "flux2Klein4bEnabled"
-  | "flux2Klein9bEnabled"
   | "localGrepEnabled"
   | "devWorkspaceEnabled"
   | "runwayApiSecret"
@@ -20,7 +18,7 @@ export type CharacterToolCatalogItem = {
   description?: string;
 };
 
-export type RegistryToolCatalogItem = {
+type RegistryToolCatalogItem = {
   id: string;
   category: string;
   displayName: string;
@@ -45,8 +43,7 @@ export const CHARACTER_TOOL_CATALOG: CharacterToolCatalogItem[] = [
   { id: "showProductImages", category: "utility" },
   { id: "executeCommand", category: "utility", dependencies: ["syncedFolders"] },
   { id: "scheduleTask", category: "scheduling" },
-  { id: "runSkill", category: "utility" },
-  { id: "updateSkill", category: "utility" },
+  { id: "skill", category: "utility" },
   { id: "memorize", category: "utility" },
   { id: "calculator", category: "utility" },
   { id: "updatePlan", category: "utility" },
@@ -76,12 +73,6 @@ export const CHARACTER_TOOL_CATALOG: CharacterToolCatalogItem[] = [
   { id: "editImageGemini3Pro", category: "image-editing", dependencies: ["openrouterKey"] },
   { id: "referenceImageGemini3Pro", category: "image-generation", dependencies: ["openrouterKey"] },
   { id: "generateImageZImage", category: "image-generation", dependencies: ["comfyuiEnabled"] },
-  { id: "generateImageFlux2Klein4B", category: "image-generation", dependencies: ["flux2Klein4bEnabled"] },
-  { id: "editImageFlux2Klein4B", category: "image-editing", dependencies: ["flux2Klein4bEnabled"] },
-  { id: "referenceImageFlux2Klein4B", category: "image-generation", dependencies: ["flux2Klein4bEnabled"] },
-  { id: "generateImageFlux2Klein9B", category: "image-generation", dependencies: ["flux2Klein9bEnabled"] },
-  { id: "editImageFlux2Klein9B", category: "image-editing", dependencies: ["flux2Klein9bEnabled"] },
-  { id: "referenceImageFlux2Klein9B", category: "image-generation", dependencies: ["flux2Klein9bEnabled"] },
   { id: "generateVideoRunway", category: "video-generation", dependencies: ["runwayApiSecret"] },
   { id: "generateVideoVertexAI", category: "video-generation", dependencies: ["vertexAIProjectId"] },
 ];

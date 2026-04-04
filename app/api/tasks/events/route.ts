@@ -13,6 +13,10 @@ import { nowISO } from "@/lib/utils/timestamp";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+// SSE connections are long-lived (hours for background agent tasks).
+// Without this, Next.js standalone mode applies a default function timeout
+// that silently kills the stream after ~30 minutes.
+export const maxDuration = 86400; // 24 hours
 
 const DEBUG_SSE_EVENTS = process.env.DEBUG_SSE_EVENTS === "true";
 const HEARTBEAT_INTERVAL_MS = 15_000;

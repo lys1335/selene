@@ -19,7 +19,6 @@ import { tool, jsonSchema } from "ai";
 
 // Re-export all types and registry items for backward compatibility
 export type { DelegateToSubagentToolOptions } from "./delegate-to-subagent-types";
-export { MAX_OBSERVE_WAIT_SECONDS } from "./delegate-to-subagent-types";
 
 // Re-export the external accessor used by API routes and system prompt builders
 export { getActiveDelegationsForCharacter } from "./delegate-to-subagent-handlers";
@@ -27,13 +26,15 @@ export { getActiveDelegationsForCharacter } from "./delegate-to-subagent-handler
 import {
   normalizeCompatibilityInput,
   buildDelegationsSummary,
+} from "./delegate-to-subagent-handlers";
+import {
   handleStartAction,
   handleObserve,
   handleContinue,
   handleAnswer,
   handleStop,
   handleList,
-} from "./delegate-to-subagent-handlers";
+} from "./delegate-subagent-action-handlers";
 
 import {
   MAX_OBSERVE_WAIT_SECONDS,

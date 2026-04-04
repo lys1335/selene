@@ -4,6 +4,7 @@ import { type FC, useEffect, useRef, useState } from "react";
 import { FileTextIcon, CheckCircleIcon, XCircleIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToolExpansion } from "../tool-expansion-context";
+import { useTranslations } from "next-intl";
 import { parseTextResult } from "./parse-text-result";
 
 type ToolCallContentPartComponent = FC<{
@@ -34,6 +35,7 @@ function isErrorResult(result: unknown): boolean {
  * Shows file name, line range, and content preview.
  */
 export const ClaudeReadToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+  const t = useTranslations("assistantUi.claudeTools.read");
   const [expanded, setExpanded] = useState(false);
 
   const expansionCtx = useToolExpansion();
@@ -88,7 +90,7 @@ export const ClaudeReadToolUI: ToolCallContentPartComponent = ({ args, result })
         {StatusIcon && <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", statusColor)} />}
         {!StatusIcon && <div className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-terminal-muted animate-pulse" />}
         <FileTextIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
-        <span className="text-terminal-muted">{isRunning ? "Reading..." : hasError ? "Read failed" : "Read"}</span>
+        <span className="text-terminal-muted">{isRunning ? t("running") : hasError ? t("failed") : t("done")}</span>
         <span className="font-medium text-terminal-dark truncate min-w-0 flex-1" title={filePath || fileName}>{fileName}</span>
 
         {rangeLabel && (
@@ -125,7 +127,7 @@ export const ClaudeReadToolUI: ToolCallContentPartComponent = ({ args, result })
           )}
 
           {isRunning && (
-            <div className="text-terminal-muted animate-pulse">Reading file...</div>
+            <div className="text-terminal-muted animate-pulse">{t("reading")}</div>
           )}
         </div>
       )}

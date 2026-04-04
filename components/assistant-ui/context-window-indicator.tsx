@@ -11,10 +11,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import type { ContextWindowStatus } from "@/lib/hooks/use-context-status";
+import type { ContextStatusInfo } from "@/lib/hooks/use-context-status";
 
 interface ContextWindowIndicatorProps {
-  status: ContextWindowStatus | null;
+  status: ContextStatusInfo | null;
   isLoading: boolean;
   onCompact?: () => Promise<{ success: boolean; compacted: boolean }>;
   isCompacting?: boolean;

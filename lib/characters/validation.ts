@@ -4,9 +4,9 @@ import { z } from "zod";
 // ENUM SCHEMAS
 // ============================================================================
 
-export const characterStatusSchema = z.enum(["draft", "active", "archived"]);
+const characterStatusSchema = z.enum(["draft", "active", "archived"]);
 
-export const characterImageTypeSchema = z.enum([
+const characterImageTypeSchema = z.enum([
   "portrait", "full_body", "expression", "outfit", "scene", "avatar"
 ]);
 
@@ -29,7 +29,7 @@ export const updateCharacterSchema = createCharacterSchema.partial().extend({
 // CHARACTER IMAGE SCHEMA
 // ============================================================================
 
-export const characterImageSchema = z.object({
+const characterImageSchema = z.object({
   imageType: characterImageTypeSchema,
   isPrimary: z.boolean().optional().default(false),
   s3Key: z.string().min(1),
@@ -55,20 +55,20 @@ export const characterImageSchema = z.object({
  */
 const workflowRoleSchema = z.enum(["initiator", "subagent"]);
 
-export const workflowSandboxPolicySchema = z.object({
+const workflowSandboxPolicySchema = z.object({
   allowSharedFolders: z.boolean().default(true),
   allowSharedMcp: z.boolean().default(true),
   allowSharedHooks: z.boolean().default(true),
 });
 
-export const inheritedResourcesSchema = z.object({
+const inheritedResourcesSchema = z.object({
   syncFolderIds: z.array(z.string()).default([]),
   pluginIds: z.array(z.string()).default([]),
   mcpServerNames: z.array(z.string()).default([]),
   hookEvents: z.array(z.string()).default([]),
 });
 
-export const pluginAgentSeedSchema = z.object({
+const pluginAgentSeedSchema = z.object({
   sourcePath: z.string().max(500).optional(),
   description: z.string().max(2000).optional(),
   purpose: z.string().max(2000).optional(),
@@ -194,7 +194,7 @@ export const agentMetadataSchema = z.object({
 // TYPE EXPORTS
 // ============================================================================
 
-export type CreateCharacterInput = z.infer<typeof createCharacterSchema>;
-export type UpdateCharacterInput = z.infer<typeof updateCharacterSchema>;
-export type CharacterImageInput = z.infer<typeof characterImageSchema>;
+type CreateCharacterInput = z.infer<typeof createCharacterSchema>;
+type UpdateCharacterInput = z.infer<typeof updateCharacterSchema>;
+type CharacterImageInput = z.infer<typeof characterImageSchema>;
 export type AgentMetadata = z.infer<typeof agentMetadataSchema>;

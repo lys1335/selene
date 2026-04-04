@@ -4,7 +4,7 @@
  * TypeScript interfaces for the command execution module.
  */
 
-export type ExecuteCommandLiveStatus = "running" | "success" | "error";
+type ExecuteCommandLiveStatus = "running" | "success" | "error";
 
 export interface ExecuteCommandProgressUpdate {
   toolCallId?: string;
@@ -33,6 +33,8 @@ export interface ExecuteOptions {
   command: string;
   /** Command arguments (e.g., ['run', 'build']) */
   args: string[];
+  /** Optional stdin payload written to the child process before closing stdin. */
+  stdin?: string;
   /** Working directory - must be within synced folders */
   cwd: string;
   /** Character/agent ID for folder validation */
@@ -45,6 +47,12 @@ export interface ExecuteOptions {
   confirmRemoval?: boolean;
   /** Internal use: skip RTK wrapping for this invocation */
   forceDirectExecution?: boolean;
+  /** Internal use: retry the command through the user's login shell on Unix. */
+  forceShellExecution?: boolean;
+  /** Internal use: preserve the original raw command line for shell retries. */
+  rawCommandLine?: string;
+  /** Internal use: avoid infinite ENOENT -> shell fallback retry loops. */
+  shellFallbackAttempted?: boolean;
   /** Internal use: preserve fallback reason when forcing direct execution */
   fallbackReasonForDirectExecution?: ExecuteSearchMetadata["fallbackReason"];
   /** Tool call identifier used for live command progress projections. */
@@ -124,30 +132,22 @@ export interface ExecuteCommandToolOptions {
   onProgress?: (update: ExecuteCommandProgressUpdate) => void;
 }
 
-/**
- * Input schema for the executeCommand AI tool
- */
-export interface ExecuteCommandInput {
-  /** Command to execute */
-  command: string;
-  /** Command arguments */
-  args?: string[];
-  /** Working directory (must be within synced folders) */
-  cwd?: string;
-  /** Timeout in milliseconds */
+interface BashInput {
+  /** Shell command string to execute */
+  command?: string;
+  /** Maximum execution time in milliseconds */
   timeout?: number;
-  /** Run in background and return processId immediately */
-  background?: boolean;
-  /** Process ID to check status of a background process (instead of executing a new command) */
+  /** Optional note about why the command is running */
+  description?: string;
+  /** Run the command in the background */
+  run_in_background?: boolean;
+  /** Existing background process id */
   processId?: string;
-  /** Explicit confirmation required for removal commands (rm/rmdir/del/...) */
-  confirmRemoval?: boolean;
+  /** Background management action */
+  action?: "status" | "kill" | "list";
 }
 
-/**
- * Result type for the executeCommand AI tool
- */
-export interface ExecuteCommandToolResult {
+interface BashToolResult {
   /** Execution status */
   status: "success" | "error" | "no_folders" | "blocked" | "running" | "background_started";
   /** Standard output */
@@ -170,6 +170,80 @@ export interface ExecuteCommandToolResult {
   logId?: string;
   /** Whether the output was truncated in context */
   isTruncated?: boolean;
+}
+
+/**
+ * Input schema for the executeCommand AI tool
+ */
+export interface ExecuteCommandInput {
+  /** Command to execute */
+  command: string;
+  /** Command arguments */
+  args?: string[];
+  /** Optional raw stdin payload for commands that read from stdin */
+  stdin?: string;
+  /** Working directory (must be within synced folders) */
+  cwd?: string;
+  /** Timeout in milliseconds */
+  timeout?: number;
+  /** Run in background and return processId immediately */
+  background?: boolean;
+  /** Process ID to check status of a background process (instead of executing a new command) */
+  processId?: string;
+  /** Explicit confirmation required for removal commands (rm/rmdir/del/...) */
+  confirmRemoval?: boolean;
+}
+
+/**
+ * Result type for the executeCommand AI tool
+ */
+export interface ExecuteCommandToolResult {
+  /** Execution status */
+  status: "success" | "error" | "no_folders" | "blocked" | "running" | "background_started";
+  /** Standard output */
+  stdout?: string;
+  /** Standard error */
+  stderr?: string;
+  /** Optional apply_patch-style diff preview rendered inline by the UI */
+  inlineDiff?: string | InlineDiffPayload;
+  /** Exit code */
+  exitCode?: number | null;
+  /** Execution time in milliseconds */
+  executionTime?: number;
+  /** Timestamp captured when the command started. */
+  startedAt?: string;
+  /** User-friendly message */
+  message?: string;
+  /** Error details */
+  error?: string;
+  /** Process ID for background processes */
+  processId?: string;
+  /** Log ID for persistent storage */
+  logId?: string;
+  /** Whether the output was truncated in context */
+  isTruncated?: boolean;
+}
+
+/**
+ * A single file's diff within an apply_patch result
+ */
+export interface InlineDiffFile {
+  /** File path relative to cwd */
+  path: string;
+  /** Operation type parsed from patch header */
+  operation: "add" | "modify" | "delete";
+  /** Unified diff string (before vs after) */
+  diff: string;
+}
+
+/**
+ * Structured inline diff payload with per-file diffs
+ */
+export interface InlineDiffPayload {
+  /** Per-file computed diffs */
+  files: InlineDiffFile[];
+  /** Raw patch text as fallback */
+  rawPatch: string;
 }
 
 /**

@@ -11,15 +11,13 @@
  */
 
 import { tool, jsonSchema } from "ai";
-import { execFile } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { promisify } from "util";
 import { getSession, updateSession } from "@/lib/db/queries";
 import type { WorkspaceInfo } from "@/lib/workspace/types";
 import { getWorkspaceInfo } from "@/lib/workspace/types";
 import { addSyncFolder, removeSyncFolder, setSyncFolderStatus } from "@/lib/vectordb/sync-service";
-import { isEBADFError, spawnWithFileCapture } from "@/lib/spawn-utils";
+import { runGitCommand } from "@/lib/workspace/git-runner";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,69 +91,6 @@ function isValidBranchName(name: string): boolean {
     name.length < 256 &&
     /^[a-zA-Z0-9._\-/]+$/.test(name)
   );
-}
-
-const execFileAsync = promisify(execFile);
-const GIT_TIMEOUT_MS = 30_000;
-const GIT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
-
-function gitExecOptions(cwd: string) {
-  return {
-    cwd,
-    encoding: "utf-8" as const,
-    timeout: GIT_TIMEOUT_MS,
-    maxBuffer: GIT_MAX_OUTPUT_BYTES,
-  };
-}
-
-async function runGitCommand(cwd: string, args: string[], input?: string): Promise<string> {
-  if (typeof input === "string") {
-    const fb = await spawnWithFileCapture(
-      "git",
-      args,
-      cwd,
-      process.env as NodeJS.ProcessEnv,
-      GIT_TIMEOUT_MS,
-      GIT_MAX_OUTPUT_BYTES,
-      input,
-    );
-    const exitCode = fb.exitCode ?? 1;
-    if (fb.timedOut) {
-      throw new Error(`Git command timed out after ${GIT_TIMEOUT_MS}ms`);
-    }
-    if (exitCode !== 0) {
-      const detail = fb.stderr.trim() || fb.stdout.trim() || `exit code ${exitCode}`;
-      throw new Error(`Git command failed: ${detail}`);
-    }
-    return fb.stdout;
-  }
-
-  try {
-    const { stdout } = await execFileAsync("git", args, gitExecOptions(cwd));
-    return stdout;
-  } catch (error) {
-    if (isEBADFError(error) && process.platform === "darwin") {
-      console.warn("[workspace tool] git execFile EBADF - retrying with file-capture fallback");
-      const fb = await spawnWithFileCapture(
-        "git",
-        args,
-        cwd,
-        process.env as NodeJS.ProcessEnv,
-        GIT_TIMEOUT_MS,
-        GIT_MAX_OUTPUT_BYTES,
-      );
-      const exitCode = fb.exitCode ?? 1;
-      if (fb.timedOut) {
-        throw new Error(`Git command timed out after ${GIT_TIMEOUT_MS}ms`);
-      }
-      if (exitCode !== 0) {
-        const detail = fb.stderr.trim() || fb.stdout.trim() || `exit code ${exitCode}`;
-        throw new Error(`Git command failed: ${detail}`);
-      }
-      return fb.stdout;
-    }
-    throw error;
-  }
 }
 
 async function verifyGitRepository(repoPath: string): Promise<{ ok: true } | { ok: false; reason: string }> {

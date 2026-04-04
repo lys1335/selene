@@ -1,9 +1,10 @@
 import { ipcMain, screen } from "electron";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { IpcHandlerContext } from "./ipc-handlers";
-import { captureDisplay, getScreenCapturePermissionStatus, type ScreenCapturePermissionStatus } from "./screen-capture";
-import { collectMetadata, type ScreenCaptureMetadata } from "./metadata-collector";
+import type { IpcHandlerContext } from "./ipc-context";
+import { captureDisplay, getScreenCapturePermissionStatus } from "./screen-capture";
+import { collectMetadata } from "./metadata-collector";
+import type { UnifiedCaptureTriggerPayload } from "../lib/electron/types";
 import {
   registerUnifiedCaptureHotkey,
   registerUnifiedCaptureHotkeyFromSettings,
@@ -14,20 +15,6 @@ import { getOverlay, showOverlay } from "./mini-overlay-window";
 import { debugLog, debugError } from "./debug-logger";
 import { UNIFIED_CAPTURE_DEBOUNCE_MARKER } from "../lib/electron/types";
 import { loadSettings } from "../lib/settings/settings-manager";
-
-export interface UnifiedCaptureTriggerPayload {
-  mode: "voice+screen" | "voice-only" | "screen-only";
-  screenshot?: {
-    url: string;
-    filePath: string;
-  };
-  metadata?: ScreenCaptureMetadata;
-  startVoice: boolean;
-  screenshotError?: string;
-  /** Permission status at capture time — allows renderer to show actionable prompts. */
-  permissionStatus?: ScreenCapturePermissionStatus;
-  traceId: string;
-}
 
 // Debounce: prevent rapid successive triggers
 let lastTriggerTime = 0;

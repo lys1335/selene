@@ -13,7 +13,7 @@
 
 import { generateText } from "ai";
 import { getSessionContent, getContentByUrls } from "./session-store";
-import type { SynthesisRequest, SynthesisResult, WebContentEntry } from "./types";
+import type { WebBrowseSynthesisRequest, WebBrowseSynthesisResult, WebContentEntry } from "./types";
 import { logToolEvent } from "@/lib/ai/tool-registry/logging";
 import {
   getSessionProviderTemperatureForSession,
@@ -203,8 +203,8 @@ function enhanceQueryForShopping(query: string, hasImages: boolean): string {
  * Synthesize an answer from session web content
  */
 export async function synthesizeWebContent(
-  request: SynthesisRequest
-): Promise<SynthesisResult> {
+  request: WebBrowseSynthesisRequest
+): Promise<WebBrowseSynthesisResult> {
   const { sessionId, query, urls, sessionMetadata, abortSignal } = request;
   const startTime = Date.now();
 

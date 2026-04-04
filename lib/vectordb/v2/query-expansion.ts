@@ -64,6 +64,6 @@ function getCodeExpansions(query: string): string[] {
 /**
  * Clear expansion cache
  */
-export function clearExpansionCache(): void {
+function clearExpansionCache(): void {
   expansionCache.clear();
 }

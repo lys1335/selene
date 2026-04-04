@@ -32,8 +32,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { GradientBackground } from "@/components/ui/noisy-gradient-backgrounds";
-import type { GradientColor } from "@/components/ui/noisy-gradient-backgrounds";
-import { getAgentAccentColor } from "@/lib/personalization/accent-colors";
+import { getAgentAccentColor, buildAgentGradientColors } from "@/lib/personalization/accent-colors";
 import { MarkdownText, UserMarkdownText } from "./markdown-text";
 import { ToolFallback } from "./tool-fallback";
 import { ToolCallGroup } from "./tool-call-group";
@@ -361,7 +360,7 @@ export const UserMessage: FC = () => {
   );
 };
 
-export const UserAttachment: FC = () => {
+const UserAttachment: FC = () => {
   const attachment = useMessageAttachment((a: { id: string; name?: string; contentType?: string; content?: Array<{ type?: string; image?: string; mimeType?: string }> }) => a);
 
   return (
@@ -384,7 +383,7 @@ export const SystemMessage: FC = () => {
   );
 };
 
-export const UserActionBar: FC = () => {
+const UserActionBar: FC = () => {
   const t = useTranslations("assistantUi");
   return (
     <ActionBarPrimitive.Root
@@ -453,20 +452,7 @@ export const AssistantMessage: FC<{ ttsEnabled?: boolean }> = ({ ttsEnabled = fa
     [displayChar.id]
   );
 
-  const assistantGradientColors = useMemo((): GradientColor[] => {
-    const hex = accentColor.hex;
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    const dr = Math.max(0, Math.round(r * 0.3));
-    const dg = Math.max(0, Math.round(g * 0.3));
-    const db = Math.max(0, Math.round(b * 0.3));
-    return [
-      { color: `rgba(${dr},${dg},${db},1)`, stop: "0%" },
-      { color: `rgba(${r},${g},${b},1)`, stop: "60%" },
-      { color: `rgba(${Math.min(255, r + 30)},${Math.min(255, g + 30)},${Math.min(255, b + 30)},1)`, stop: "100%" },
-    ];
-  }, [accentColor.hex]);
+  const assistantGradientColors = useMemo(() => buildAgentGradientColors(accentColor.hex), [accentColor.hex]);
 
   // Access message metadata for token usage
   // assistant-ui stores custom metadata in message.metadata.custom
@@ -652,7 +638,7 @@ export const AssistantMessage: FC<{ ttsEnabled?: boolean }> = ({ ttsEnabled = fa
   );
 };
 
-export const BranchPicker: FC = () => {
+const BranchPicker: FC = () => {
   const t = useTranslations("assistantUi");
   return (
     <BranchPickerPrimitive.Root
@@ -674,7 +660,7 @@ export const BranchPicker: FC = () => {
   );
 };
 
-export const AssistantActionBar: FC<{ ttsEnabled?: boolean; messageText?: string }> = ({
+const AssistantActionBar: FC<{ ttsEnabled?: boolean; messageText?: string }> = ({
   ttsEnabled = false,
   messageText,
 }) => {

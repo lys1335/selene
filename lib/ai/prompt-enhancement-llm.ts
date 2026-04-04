@@ -13,7 +13,7 @@ import { nanoid } from "nanoid";
 // Types
 // =============================================================================
 
-export interface EnhancementSession {
+interface EnhancementSession {
   id: string;
   sessionKey: string;
   messages: ModelMessage[];
@@ -22,7 +22,7 @@ export interface EnhancementSession {
   lastMemorySignature: string | null;
 }
 
-export interface EnhancementRequestContext {
+interface EnhancementRequestContext {
   originalQuery: string;
   searchResults: string;
   fileTree: string;
@@ -100,7 +100,7 @@ export function setSessionMemorySignature(sessionKey: string, signature: string 
 /**
  * Clear session for a session key
  */
-export function clearSession(sessionKey: string): void {
+export function clearPromptEnhancementSession(sessionKey: string): void {
   sessionStore.delete(sessionKey);
   console.log(`[EnhancementSession] Cleared session for ${sessionKey}`);
 }
@@ -108,7 +108,7 @@ export function clearSession(sessionKey: string): void {
 /**
  * Clean up stale sessions (older than TTL)
  */
-export function cleanupStaleSessions(): number {
+function cleanupStaleSessions(): number {
   const now = Date.now();
   let cleaned = 0;
 

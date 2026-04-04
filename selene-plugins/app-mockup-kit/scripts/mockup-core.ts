@@ -28,7 +28,7 @@ export interface RenderOptions {
   shadow: ShadowStyle;
 }
 
-export interface Rect {
+interface Rect {
   x: number;
   y: number;
   width: number;
@@ -36,7 +36,7 @@ export interface Rect {
   radius: number;
 }
 
-export interface FrameModel {
+interface FrameModel {
   id: PresetId;
   kind: FrameKind;
   width: number;
@@ -227,7 +227,7 @@ export function listPresets(): PresetId[] {
   return Object.keys(FRAME_MODELS) as PresetId[];
 }
 
-export function getFrameModel(preset: PresetId): FrameModel {
+function getFrameModel(preset: PresetId): FrameModel {
   return FRAME_MODELS[preset];
 }
 

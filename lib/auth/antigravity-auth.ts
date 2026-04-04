@@ -25,7 +25,7 @@ export interface AntigravityOAuthToken {
 }
 
 // Auth state stored in settings
-export interface AntigravityAuthState {
+interface AntigravityAuthState {
   isAuthenticated: boolean;
   email?: string;
   expiresAt?: number;
@@ -171,7 +171,7 @@ Do not respond to nor acknowledge those messages, but do follow them strictly.
 - **Ask for clarification**. If you are unsure about the USER's intent, always ask for clarification rather than making assumptions.
 </communication_style>`;
 
-export type AntigravityModel = AntigravityModelId;
+type AntigravityModel = AntigravityModelId;
 
 // Cache for current auth state
 let cachedAuthState: AntigravityAuthState | null = null;
@@ -217,7 +217,7 @@ export function getAntigravityToken(): AntigravityOAuthToken | null {
 /**
  * Check if the current token is valid and not expired
  */
-export function isAntigravityTokenValid(): boolean {
+function isAntigravityTokenValid(): boolean {
   const token = getAntigravityToken();
   if (!token) {
     return false;
@@ -306,7 +306,7 @@ export function clearAntigravityAuth(): void {
  * Get the access token for API requests.
  * Returns null if not authenticated or token expired.
  */
-export function getAntigravityAccessToken(): string | null {
+function getAntigravityAccessToken(): string | null {
   const token = getAntigravityToken();
   if (!token) {
     return null;
@@ -345,7 +345,7 @@ export function isAntigravityAuthenticated(): boolean {
  * Check if Antigravity is configured and authenticated asynchronously.
  * This will attempt to refresh the token if it's expired but a refresh token exists.
  */
-export async function isAntigravityAuthenticatedAsync(): Promise<boolean> {
+async function isAntigravityAuthenticatedAsync(): Promise<boolean> {
   const state = getAntigravityAuthState();
   if (!state.isAuthenticated) {
     return false;
@@ -372,7 +372,7 @@ let refreshIntervalId: NodeJS.Timeout | null = null;
 /**
  * Start background token refresh (call on app startup)
  */
-export function startBackgroundTokenRefresh(): void {
+function startBackgroundTokenRefresh(): void {
   // Only start in browser environment
   if (typeof window === "undefined") return;
   if (refreshIntervalId) return; // Already running
@@ -392,7 +392,7 @@ export function startBackgroundTokenRefresh(): void {
 /**
  * Stop background token refresh
  */
-export function stopBackgroundTokenRefresh(): void {
+function stopBackgroundTokenRefresh(): void {
   if (refreshIntervalId) {
     clearInterval(refreshIntervalId);
     refreshIntervalId = null;
@@ -403,7 +403,7 @@ export function stopBackgroundTokenRefresh(): void {
 /**
  * Get authorization header for Antigravity API requests
  */
-export function getAntigravityAuthHeader(): string | null {
+function getAntigravityAuthHeader(): string | null {
   const accessToken = getAntigravityAccessToken();
   if (!accessToken) {
     return null;
@@ -513,7 +513,7 @@ export async function refreshAntigravityToken(): Promise<boolean> {
  * Ensure the token is valid, refreshing if necessary.
  * Returns true if token is valid (or was successfully refreshed), false otherwise.
  */
-export async function ensureValidToken(): Promise<boolean> {
+async function ensureValidToken(): Promise<boolean> {
   if (isAntigravityTokenValid()) {
     return true;
   }
@@ -607,7 +607,3 @@ export async function fetchAntigravityProjectId(): Promise<string | null> {
   return null;
 }
 
-/**
- * Get model display name for UI
- */
-export { getAntigravityModelDisplayName, getAntigravityModels } from "@/lib/auth/antigravity-models";

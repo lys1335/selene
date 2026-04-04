@@ -7,7 +7,7 @@ export interface CodexOAuthToken {
   expires_at: number;
 }
 
-export interface CodexAuthState {
+interface CodexAuthState {
   isAuthenticated: boolean;
   email?: string;
   accountId?: string;
@@ -82,7 +82,7 @@ export function getCodexToken(): CodexOAuthToken | null {
   return cachedToken;
 }
 
-export function isCodexTokenValid(): boolean {
+function isCodexTokenValid(): boolean {
   const token = getCodexToken();
   if (!token) return false;
 

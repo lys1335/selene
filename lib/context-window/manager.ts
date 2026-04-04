@@ -15,7 +15,7 @@ import {
   type ContextWindowConfig,
 } from "./provider-limits";
 import { CompactionService, type CompactionResult } from "./compaction-service";
-import type { LLMProvider } from "@/components/model-bag/model-bag.types";
+import type { LLMProvider } from "@/lib/ai/providers";
 import {
   getScopedFallbackMinConfidence,
   isScopedFallbackEnabled,
@@ -62,7 +62,7 @@ function hasDelegatedAnnotations(messages: Message[]): boolean {
 // Types
 // ---------------------------------------------------------------------------
 
-export type ContextStatus = "safe" | "warning" | "critical" | "exceeded";
+type ContextStatus = "safe" | "warning" | "critical" | "exceeded";
 
 export interface ContextWindowStatus {
   /** Current total tokens in context */
@@ -93,7 +93,7 @@ export interface ContextWindowStatus {
   };
 }
 
-export interface ContextCheckResult {
+interface ContextCheckResult {
   /** Whether the request can proceed */
   canProceed: boolean;
   /** Context window status */
@@ -466,6 +466,7 @@ export class ContextWindowManager {
    * @param provider - Optional provider
    * @returns Whether compaction was performed
    */
+  // fallow-ignore-next-line unused-class-member
   static async compactIfNeeded(
     sessionId: string,
     modelId: string,
@@ -638,6 +639,7 @@ export class ContextWindowManager {
    * @param status - Context status
    * @returns CSS color class or hex color
    */
+  // fallow-ignore-next-line unused-class-member
   static getStatusColor(status: ContextStatus): string {
     switch (status) {
       case "safe":
@@ -713,6 +715,4 @@ export class ContextWindowManager {
 // Convenience Exports
 // ---------------------------------------------------------------------------
 
-export { formatTokenCount } from "./token-tracker";
-export { getContextWindowConfig, getTokenThresholds } from "./provider-limits";
-export { CompactionService, type CompactionResult } from "./compaction-service";
+export { type CompactionResult } from "./compaction-service";

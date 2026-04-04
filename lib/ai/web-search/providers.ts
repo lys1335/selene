@@ -9,15 +9,25 @@
  * It returns { title, href, body } per result — no relevance scores or AI answers.
  */
 
-import type { WebSearchSource } from "./index";
 import { loadSettings } from "@/lib/settings/settings-manager";
 import { createDDGS } from "./ddgs";
+
+// ============================================================================
+// Shared Types
+// ============================================================================
+
+export interface WebSearchSource {
+  url: string;
+  title: string;
+  snippet: string;
+  relevanceScore: number;
+}
 
 // ============================================================================
 // Provider Interface
 // ============================================================================
 
-export interface WebSearchProviderResult {
+interface WebSearchProviderResult {
   sources: WebSearchSource[];
   /** AI-generated answer summary (Tavily only) */
   answer?: string;
@@ -27,19 +37,19 @@ export interface WebSearchProviderResult {
   error?: string;
 }
 
-export interface WebSearchProviderOptions {
+interface WebSearchProviderOptions {
   maxResults?: number;
   searchDepth?: "basic" | "advanced";
   includeAnswer?: boolean;
 }
 
-export interface WebSearchProvider {
+interface WebSearchProvider {
   name: string;
   search(query: string, options?: WebSearchProviderOptions): Promise<WebSearchProviderResult>;
   isAvailable(): boolean;
 }
 
-export interface WebSearchProviderStatus {
+interface WebSearchProviderStatus {
   configuredProvider: WebSearchProviderType;
   activeProvider: "tavily" | "duckduckgo";
   available: boolean;
@@ -73,9 +83,11 @@ function getTavilyApiKey(): string | undefined {
   return process.env.TAVILY_API_KEY;
 }
 
-export class TavilyProvider implements WebSearchProvider {
+class TavilyProvider implements WebSearchProvider {
+  // fallow-ignore-next-line unused-class-member
   name = "tavily";
 
+  // fallow-ignore-next-line unused-class-member
   isAvailable(): boolean {
     return !!getTavilyApiKey();
   }
@@ -201,8 +213,10 @@ function normalizeDuckDuckGoResults(raw: DuckDuckGoRawResult[]): WebSearchSource
 }
 
 export class DuckDuckGoProvider implements WebSearchProvider {
+  // fallow-ignore-next-line unused-class-member
   name = "duckduckgo";
 
+  // fallow-ignore-next-line unused-class-member
   isAvailable(): boolean {
     // DDG is always available (no API key needed)
     return true;
@@ -278,7 +292,7 @@ export class DuckDuckGoProvider implements WebSearchProvider {
 // Provider Selection
 // ============================================================================
 
-export type WebSearchProviderType = "tavily" | "duckduckgo" | "auto";
+type WebSearchProviderType = "tavily" | "duckduckgo" | "auto";
 
 /**
  * Get the runtime search provider based on settings and availability.

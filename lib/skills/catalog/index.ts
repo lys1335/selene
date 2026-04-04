@@ -1,8 +1,8 @@
 import type { CatalogSkill, CatalogSkillCollection } from "./types";
-import { AGENCY_AGENTS_COLLECTION, AGENCY_AGENTS_SKILLS } from "./agency-agents";
+
 import { SYSTEM_SKILLS } from "./system-skills";
 
-export const SKILL_CATALOG: CatalogSkill[] = [
+const SKILL_CATALOG: CatalogSkill[] = [
   {
     id: "prompt-enhancer",
     displayName: "Prompt Enhancer",
@@ -359,9 +359,7 @@ export const SKILL_CATALOG: CatalogSkill[] = [
   },
 ];
 
-export const CATALOG_COLLECTIONS: CatalogSkillCollection[] = [];
-
-export { AGENCY_AGENTS_COLLECTION, SYSTEM_SKILLS };
+const CATALOG_COLLECTIONS: CatalogSkillCollection[] = [];
 
 export function getAllCatalogSkills(): CatalogSkill[] {
   // Agency agents are now surfaced in the agent creation wizard (template picker),

@@ -6,12 +6,10 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth/local-auth";
-import { getOrCreateLocalUser } from "@/lib/db/queries";
-import { loadSettings } from "@/lib/settings/settings-manager";
+import { resolveAuthUser, resolveScheduleOwnership } from "@/lib/api/shared-handlers";
 import { db } from "@/lib/db/sqlite-client";
 import { scheduledTasks } from "@/lib/db/sqlite-schedule-schema";
-import { eq, and } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { getScheduler } from "@/lib/scheduler";
 
 export async function POST(
@@ -19,22 +17,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = await requireAuth(req);
-    const settings = loadSettings();
-    const dbUser = await getOrCreateLocalUser(userId, settings.localUserEmail);
-
+    const dbUser = await resolveAuthUser(req);
     const { id } = await params;
 
-    // Verify ownership
-    const task = await db.query.scheduledTasks.findFirst({
-      where: and(
-        eq(scheduledTasks.id, id),
-        eq(scheduledTasks.userId, dbUser.id)
-      ),
-    });
-
-    if (!task) {
-      return NextResponse.json({ error: "Schedule not found" }, { status: 404 });
+    const ownershipResult = await resolveScheduleOwnership(id, dbUser.id);
+    if ("errorResponse" in ownershipResult) {
+      return ownershipResult.errorResponse;
     }
 
     // Resume the schedule
@@ -63,4 +51,3 @@ export async function POST(
     );
   }
 }
-

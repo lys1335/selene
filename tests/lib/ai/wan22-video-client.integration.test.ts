@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import {
   callWan22Video,
-  isAsyncResult,
+  isVideoAsyncResult,
   type Wan22VideoInput,
 } from "@/lib/ai/wan22-video-client";
 
@@ -42,8 +42,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Video Client - Integration Tests"
 
       const result = await callWan22Video(input, "integration-test-session");
 
-      expect(isAsyncResult(result)).toBe(false);
-      if (!isAsyncResult(result)) {
+      expect(isVideoAsyncResult(result)).toBe(false);
+      if (!isVideoAsyncResult(result)) {
         expect(result.videos).toHaveLength(1);
         expect(result.videos[0].url).toMatch(/^https?:\/\//);
         expect(result.videos[0].format).toBe("mp4");
@@ -62,8 +62,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Video Client - Integration Tests"
 
       const result = await callWan22Video(input, "integration-test-session");
 
-      expect(isAsyncResult(result)).toBe(false);
-      if (!isAsyncResult(result)) {
+      expect(isVideoAsyncResult(result)).toBe(false);
+      if (!isVideoAsyncResult(result)) {
         expect(result.videos[0].fps).toBe(30);
         console.log("Generated 30fps video:", result.videos[0].url);
       }
@@ -81,8 +81,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Video Client - Integration Tests"
 
         const result = await callWan22Video(input, "integration-test-session");
 
-        expect(isAsyncResult(result)).toBe(false);
-        if (!isAsyncResult(result)) {
+        expect(isVideoAsyncResult(result)).toBe(false);
+        if (!isVideoAsyncResult(result)) {
           expect(result.videos[0].duration).toBe(duration);
           console.log(`Generated ${duration}s video:`, result.videos[0].url);
         }
@@ -99,8 +99,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Video Client - Integration Tests"
 
       const result = await callWan22Video(input, "integration-test-session");
 
-      expect(isAsyncResult(result)).toBe(false);
-      if (!isAsyncResult(result)) {
+      expect(isVideoAsyncResult(result)).toBe(false);
+      if (!isVideoAsyncResult(result)) {
         expect(result.videos).toHaveLength(1);
         console.log("Generated high-amplitude video:", result.videos[0].url);
       }
@@ -117,8 +117,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Video Client - Integration Tests"
       const result1 = await callWan22Video(input, "integration-test-session");
       const result2 = await callWan22Video(input, "integration-test-session");
 
-      expect(isAsyncResult(result1)).toBe(false);
-      expect(isAsyncResult(result2)).toBe(false);
+      expect(isVideoAsyncResult(result1)).toBe(false);
+      expect(isVideoAsyncResult(result2)).toBe(false);
       console.log("Seed test - both video requests completed successfully");
     }, 240000);
   });
@@ -134,8 +134,8 @@ describe.skipIf(!runIntegrationTests)("WAN 2.2 Video Client - Integration Tests"
 
       const result = await callWan22Video(input, "integration-test-session");
 
-      expect(isAsyncResult(result)).toBe(true);
-      if (isAsyncResult(result)) {
+      expect(isVideoAsyncResult(result)).toBe(true);
+      if (isVideoAsyncResult(result)) {
         expect(result.jobId).toBeDefined();
         expect(result.status).toBeDefined();
         expect(result.statusUrl).toBeDefined();

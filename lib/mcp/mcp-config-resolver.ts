@@ -11,7 +11,7 @@ import type { MCPServerConfig, ResolvedMCPServer } from "./types";
 
 // ── Path validation ───────────────────────────────────────────────────────────
 
-export function validateFolderPath(folderPath: string): boolean {
+function validateFolderPath(folderPath: string): boolean {
     const resolved = path.resolve(folderPath);
     const allowedBases = [
         process.env.USER_DATA_DIR,
@@ -22,7 +22,7 @@ export function validateFolderPath(folderPath: string): boolean {
     return allowedBases.some(base => resolved.startsWith(path.resolve(base)));
 }
 
-export function isFilesystemPathArg(arg: string): boolean {
+function isFilesystemPathArg(arg: string): boolean {
     if (!arg || arg.startsWith("-")) return false;
     if (arg === "@modelcontextprotocol/server-filesystem" || arg === "server-filesystem") return false;
     if (arg.startsWith("http://") || arg.startsWith("https://")) return false;

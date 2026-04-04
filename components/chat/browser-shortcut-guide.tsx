@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Keyboard } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -9,21 +10,22 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 
-function buildShortcuts(mod: string) {
+function buildShortcuts(mod: string, t: (key: string) => string) {
   return [
-    { label: "New tab", keys: `${mod}+T` },
-    { label: "Close tab", keys: `${mod}+W` },
-    { label: "Reopen tab", keys: `${mod}+⇧+T` },
-    { label: "Next tab", keys: "Ctrl+Tab" },
-    { label: "Prev tab", keys: "Ctrl+⇧+Tab" },
-    { label: "Tab 1–9", keys: `${mod}+1–9` },
+    { label: t("newTab"), keys: `${mod}+T` },
+    { label: t("closeTab"), keys: `${mod}+W` },
+    { label: t("reopenTab"), keys: `${mod}+⇧+T` },
+    { label: t("nextTab"), keys: "Ctrl+Tab" },
+    { label: t("prevTab"), keys: "Ctrl+⇧+Tab" },
+    { label: t("tab19"), keys: `${mod}+1–9` },
     { divider: true } as const,
-    { label: "Focus composer", keys: `/ or ${mod}+L` },
-    { label: "Library", keys: `${mod}+K` },
+    { label: t("focusComposer"), keys: `/ or ${mod}+L` },
+    { label: t("library"), keys: `${mod}+K` },
   ] satisfies ReadonlyArray<{ label: string; keys: string } | { divider: true }>;
 }
 
 export function BrowserShortcutGuide() {
+  const t = useTranslations("chat.browserWorkspace.shortcuts");
   const [open, setOpen] = useState(false);
   const [mod, setMod] = useState("Ctrl"); // SSR-safe default
 
@@ -33,7 +35,7 @@ export function BrowserShortcutGuide() {
     }
   }, []);
 
-  const shortcuts = buildShortcuts(mod);
+  const shortcuts = buildShortcuts(mod, t);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -43,8 +45,8 @@ export function BrowserShortcutGuide() {
           variant="ghost"
           size="icon"
           className="h-7 w-7 shrink-0 rounded-full text-muted-foreground/50 hover:text-muted-foreground"
-          title="Keyboard shortcuts"
-          aria-label="Keyboard shortcuts"
+          title={t("keyboardShortcuts")}
+          aria-label={t("keyboardShortcuts")}
         >
           <Keyboard className="h-3.5 w-3.5" />
         </Button>
@@ -55,7 +57,7 @@ export function BrowserShortcutGuide() {
         className="w-52 rounded-lg border border-border bg-popover p-0 shadow-xl data-[state=closed]:animate-none data-[state=open]:animate-none"
       >
         <div className="border-b border-border/50 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          Shortcuts
+          {t("heading")}
         </div>
         <div className="flex flex-col py-1">
           {shortcuts.map((item, i) =>

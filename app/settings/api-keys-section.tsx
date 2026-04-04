@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { AlertTriangle, Info } from "lucide-react";
 import { settingsSectionShellClassName } from "@/components/settings/settings-form-layout";
 import type { FormState } from "./settings-types";
-import { ClaudeCodeAuthFlow } from "./settings-panel";
+import { ClaudeCodeAuthFlow } from "./claude-code-auth-flow";
 
 interface ApiKeysSectionProps {
   formState: FormState;

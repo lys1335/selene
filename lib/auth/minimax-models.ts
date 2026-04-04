@@ -17,7 +17,7 @@ export const MINIMAX_MODEL_IDS = [
   "MiniMax-M2",
 ] as const;
 
-export type MiniMaxModelId = (typeof MINIMAX_MODEL_IDS)[number];
+type MiniMaxModelId = (typeof MINIMAX_MODEL_IDS)[number];
 
 // Default models for different roles
 export const MINIMAX_DEFAULT_MODELS = {

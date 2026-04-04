@@ -2,13 +2,16 @@ import { loadSettings } from "@/lib/settings/settings-manager";
 import type { TTSOptions, TTSProvider, TTSResult } from "../types";
 
 export class OpenAITTSProvider implements TTSProvider {
+  // fallow-ignore-next-line unused-class-member
   name = "openai";
 
+  // fallow-ignore-next-line unused-class-member
   isAvailable(): boolean {
     const settings = loadSettings();
     return !!(settings.openaiApiKey || process.env.OPENAI_API_KEY);
   }
 
+  // fallow-ignore-next-line unused-class-member
   async synthesize(options: TTSOptions): Promise<TTSResult> {
     const settings = loadSettings();
     const apiKey = settings.openaiApiKey || process.env.OPENAI_API_KEY;

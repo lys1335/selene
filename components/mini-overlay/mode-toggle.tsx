@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Zap, PenLine } from "lucide-react";
 
 interface ModeToggleProps {
@@ -9,6 +10,7 @@ interface ModeToggleProps {
 }
 
 export function ModeToggle({ mode, onChange, disabled }: ModeToggleProps) {
+  const t = useTranslations("miniOverlay.modeToggle");
   return (
     <div className="flex flex-col items-center gap-1">
       <div
@@ -31,7 +33,7 @@ export function ModeToggle({ mode, onChange, disabled }: ModeToggleProps) {
           ].join(" ")}
         >
           <Zap className="h-3 w-3" />
-          Direct
+          {t("direct")}
         </button>
         <button
           type="button"
@@ -46,11 +48,11 @@ export function ModeToggle({ mode, onChange, disabled }: ModeToggleProps) {
           ].join(" ")}
         >
           <PenLine className="h-3 w-3" />
-          Compose
+          {t("compose")}
         </button>
       </div>
       <span className="text-[10px] text-muted-foreground/70 leading-tight">
-        {mode === "direct" ? "Send now and speak back" : "Refine, then open in Selene"}
+        {mode === "direct" ? t("directHint") : t("composeHint")}
       </span>
     </div>
   );

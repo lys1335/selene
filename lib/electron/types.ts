@@ -9,7 +9,7 @@
  */
 export const UNIFIED_CAPTURE_DEBOUNCE_MARKER = "debounced";
 
-export interface ElectronWindowAPI {
+interface ElectronWindowAPI {
   minimize: () => void;
   maximize: () => void;
   close: () => void;
@@ -18,23 +18,41 @@ export interface ElectronWindowAPI {
   onFullscreenChanged: (callback: (isFullScreen: boolean) => void) => () => void;
 }
 
-export interface ElectronAppAPI {
+interface ElectronAppAPI {
   getVersion: () => Promise<string>;
   getName: () => Promise<string>;
+  getDataPath: () => Promise<string>;
+  getMediaPath: () => Promise<string>;
 }
 
-export interface ElectronShellAPI {
+interface ElectronShellAPI {
   openExternal: (url: string) => Promise<void>;
 }
 
-export interface ElectronIpcAPI {
+interface ElectronDialogAPI {
+  selectFolder: () => Promise<string | null>;
+}
+
+interface ElectronSettingsAPI {
+  get: () => Promise<Record<string, unknown> | null>;
+  save: (settings: Record<string, unknown>) => Promise<boolean>;
+}
+
+interface ElectronFileAPI {
+  read: (filePath: string) => Promise<Buffer | null>;
+  write: (filePath: string, data: Buffer | string) => Promise<boolean>;
+  delete: (filePath: string) => Promise<boolean>;
+  exists: (filePath: string) => Promise<boolean>;
+}
+
+interface ElectronIpcAPI {
   send: (channel: string, ...args: unknown[]) => void;
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
   on: (channel: string, callback: (...args: unknown[]) => void) => void;
   removeAllListeners: (channel: string) => void;
 }
 
-export interface ModelDownloadProgress {
+interface ModelDownloadProgress {
   modelId: string;
   status: "downloading" | "completed" | "error";
   progress?: number;
@@ -44,7 +62,7 @@ export interface ModelDownloadProgress {
   error?: string;
 }
 
-export interface ElectronModelAPI {
+interface ElectronModelAPI {
   getModelsDir: () => Promise<string>;
   checkExists: (modelId: string) => Promise<boolean>;
   download: (modelId: string) => Promise<{ success: boolean; error?: string }>;
@@ -80,14 +98,14 @@ export interface ElectronModelAPI {
   }>;
 }
 
-export interface ElectronBrowserSessionAPI {
+interface ElectronBrowserSessionAPI {
   open: (sessionId: string) => Promise<{ success: boolean; reused?: boolean; error?: string }>;
   close: (sessionId: string) => Promise<{ success: boolean; error?: string }>;
   isOpen: (sessionId: string) => Promise<{ open: boolean }>;
   saveRecording: (options?: { defaultPath?: string }) => Promise<{ success: boolean; filePath?: string; canceled?: boolean }>;
 }
 
-export interface ElectronLogsAPI {
+interface ElectronLogsAPI {
   subscribe: () => void;
   unsubscribe: () => void;
   getBuffer: () => Promise<{ timestamp: string; level: string; message: string }[]>;
@@ -107,7 +125,7 @@ export interface ScreenCaptureResult {
   permissionStatus: "granted" | "denied" | "restricted" | "not-determined" | "unknown";
 }
 
-export interface ElectronScreenCaptureAPI {
+interface ElectronScreenCaptureAPI {
   onCaptured: (callback: (result: ScreenCaptureResult) => void) => (() => void) | undefined;
   capture: () => Promise<ScreenCaptureResult>;
   register: (accelerator: string, enabled?: boolean) => Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }>;
@@ -143,7 +161,7 @@ export interface UnifiedCaptureTriggerPayload {
   traceId: string;
 }
 
-export interface ElectronUnifiedCaptureAPI {
+interface ElectronUnifiedCaptureAPI {
   onTriggered: (callback: (payload: UnifiedCaptureTriggerPayload) => void) => (() => void) | undefined;
   trigger: (mode?: "voice+screen" | "voice-only" | "screen-only") => Promise<UnifiedCaptureTriggerPayload>;
   register: (accelerator: string, enabled?: boolean) => Promise<{ success: boolean; accelerator: string; error?: string; disabled?: boolean }>;
@@ -152,7 +170,7 @@ export interface ElectronUnifiedCaptureAPI {
   clear: () => Promise<{ success: boolean }>;
 }
 
-export interface ElectronVoiceHotkeyAPI {
+interface ElectronVoiceHotkeyAPI {
   onTriggered: (callback: () => void) => (() => void) | undefined;
   register: (accelerator: string) => Promise<{ success: boolean; accelerator: string; error?: string }>;
   registerFromSettings: () => Promise<{ success: boolean; accelerator: string; error?: string }>;
@@ -173,7 +191,7 @@ export interface PermissionCheckResult {
   accessibility: PermissionStatus;
 }
 
-export interface ElectronPermissionsAPI {
+interface ElectronPermissionsAPI {
   check: () => Promise<PermissionCheckResult>;
   requestScreen: () => Promise<void>;
   requestMic: () => Promise<boolean>;
@@ -182,7 +200,7 @@ export interface ElectronPermissionsAPI {
   onScreenPermissionRequired: (callback: () => void) => (() => void) | undefined;
 }
 
-export interface ElectronGhostOsAPI {
+interface ElectronGhostOsAPI {
   getStatus: () => Promise<{
     installed: boolean;
     version?: string;
@@ -211,9 +229,12 @@ export interface ElectronAPI {
   window: ElectronWindowAPI;
   app: ElectronAppAPI;
   shell: ElectronShellAPI;
+  dialog: ElectronDialogAPI;
+  settings: ElectronSettingsAPI;
+  file: ElectronFileAPI;
   ipc: ElectronIpcAPI;
   model: ElectronModelAPI;
-  logs?: ElectronLogsAPI;
+  logs: ElectronLogsAPI;
   browserSession?: ElectronBrowserSessionAPI;
   voiceHotkey?: ElectronVoiceHotkeyAPI;
   screenCapture?: ElectronScreenCaptureAPI;
@@ -252,5 +273,4 @@ export async function openExternalUrl(url: string): Promise<void> {
   }
 }
 
-// Note: Window.electronAPI is declared in electron/preload.ts
-// This file only provides type definitions for use in the renderer process
+// This file provides type definitions for use in the renderer process

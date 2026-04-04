@@ -3,7 +3,7 @@
  * Reference: docs/vector-search-v2-analysis.md Section 6.2
  */
 
-import { searchVectorDB, type VectorSearchHit, type VectorSearchOptions } from "./search";
+import { searchVectorDB, type VectorSearchHit, type VectorDBSearchOptions } from "./search";
 import { hybridSearchV2 } from "./v2/hybrid-search";
 import { getVectorSearchConfig } from "@/lib/config/vector-search";
 
@@ -14,7 +14,7 @@ import { getVectorSearchConfig } from "@/lib/config/vector-search";
 export async function searchWithRouter(params: {
   characterId: string;
   query: string;
-  options?: VectorSearchOptions;
+  options?: VectorDBSearchOptions;
 }): Promise<VectorSearchHit[]> {
   const config = getVectorSearchConfig();
 

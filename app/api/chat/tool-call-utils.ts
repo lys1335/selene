@@ -257,4 +257,4 @@ export function attemptJsonRepair(malformedJson: string): Record<string, unknown
 }
 
 // Re-export normalizeToolResultOutput so content-extractor.ts can import from one place
-export { normalizeToolResultOutput };
+{ normalizeToolResultOutput };

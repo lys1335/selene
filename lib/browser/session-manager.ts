@@ -598,7 +598,7 @@ export async function getOrCreateSession(sessionId: string): Promise<BrowserSess
 /**
  * Get a session without creating one. Returns null if not found.
  */
-export function getSession(sessionId: string): BrowserSession | null {
+export function getBrowserSession(sessionId: string): BrowserSession | null {
   const state = getState();
   const session = state.sessions.get(sessionId) ?? null;
   if (session) session.lastAccessedAt = Date.now();

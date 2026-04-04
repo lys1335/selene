@@ -42,7 +42,7 @@ import { seedPluginSkillRevisions } from "./skill-revision-queries";
 // Plugin Installation
 // =============================================================================
 
-export interface InstallPluginInput {
+interface InstallPluginInput {
   userId: string;
   characterId?: string;
   parsed: PluginParseResult;
@@ -274,7 +274,7 @@ export async function getInstalledPlugins(
 /**
  * Get a single installed plugin by ID.
  */
-export async function getPluginById(pluginId: string): Promise<InstalledPlugin | null> {
+async function getPluginById(pluginId: string): Promise<InstalledPlugin | null> {
   const [row] = await db.select().from(plugins).where(eq(plugins.id, pluginId));
   return row ? mapInstalledPlugin(row) : null;
 }
@@ -296,7 +296,7 @@ export async function getPluginByIdForUser(
 /**
  * Get a plugin by name and marketplace for a user.
  */
-export async function getPluginByName(
+async function getPluginByName(
   userId: string,
   name: string,
   marketplaceName?: string
@@ -396,7 +396,7 @@ export async function updatePluginMCPServerConfig(
 /**
  * Update a plugin's status.
  */
-export async function updatePluginStatus(
+async function updatePluginStatus(
   pluginId: string,
   status: PluginStatus,
   lastError?: string
@@ -454,7 +454,7 @@ export async function updatePluginStatusForUser(
  * Uninstall a plugin — removes DB records and unregisters hooks.
  * CASCADE handles hook/mcp/lsp/file deletion.
  */
-export async function uninstallPlugin(pluginId: string): Promise<void> {
+async function uninstallPlugin(pluginId: string): Promise<void> {
   const plugin = await getPluginById(pluginId);
   if (plugin) {
     unregisterPluginHooks(plugin.name);
@@ -541,7 +541,7 @@ export async function removeMarketplace(
   return true;
 }
 
-export async function updateMarketplaceCatalog(
+async function updateMarketplaceCatalog(
   marketplaceId: string,
   catalog: MarketplaceManifest
 ): Promise<void> {
@@ -560,7 +560,7 @@ export async function updateMarketplaceCatalog(
 // Per-Agent Plugin Assignment
 // =============================================================================
 
-export interface AgentPluginAssignment {
+interface AgentPluginAssignment {
   plugin: InstalledPlugin;
   enabledForAgent: boolean;
 }
@@ -677,7 +677,7 @@ export async function enablePluginForAgent(agentId: string, pluginId: string): P
 /**
  * Disable a plugin for an agent (upsert).
  */
-export async function disablePluginForAgent(agentId: string, pluginId: string): Promise<void> {
+async function disablePluginForAgent(agentId: string, pluginId: string): Promise<void> {
   const existing = await db
     .select({ id: agentPlugins.id })
     .from(agentPlugins)
@@ -738,7 +738,7 @@ export function loadPluginHooks(pluginsToLoad: InstalledPlugin[]): number {
  * When allowedPluginNames is provided, only loads hooks for plugins in the allowed set
  * (per-agent scoping). When omitted, loads all active plugins (backward compatible).
  */
-export async function loadActivePluginHooks(
+async function loadActivePluginHooks(
   userId: string,
   allowedPluginNames?: Set<string>,
 ): Promise<number> {

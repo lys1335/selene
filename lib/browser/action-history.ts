@@ -79,7 +79,7 @@ export interface ReplayResult {
   error?: string;
 }
 
-export interface ReplayOptions {
+interface ReplayOptions {
   /** Max retries per failed action (default: 1) */
   maxRetries?: number;
 
@@ -95,8 +95,8 @@ export interface ReplayOptions {
 
 // ─── Action event pub/sub types ──────────────────────────────────────────────
 
-export type ActionEvent = { sessionId: string; record: ActionRecord };
-export type ActionEventListener = (event: ActionEvent) => void;
+type ActionEvent = { sessionId: string; record: ActionRecord };
+type ActionEventListener = (event: ActionEvent) => void;
 
 // ─── Global singleton state ───────────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ export function subscribeToActions(
 /**
  * Remove all action event listeners for a session.
  */
-export function cleanupActionListeners(sessionId: string): void {
+function cleanupActionListeners(sessionId: string): void {
   getListenerStore().delete(sessionId);
 }
 

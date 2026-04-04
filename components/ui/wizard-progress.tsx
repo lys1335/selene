@@ -3,6 +3,7 @@
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { Check, Sparkles, User, Wrench, BookOpen, Database, Eye, Plug } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useReducedMotion } from "@/components/character-creation/hooks/use-reduced-motion";
 
 export interface WizardStep {
@@ -18,7 +19,7 @@ interface WizardProgressProps {
   className?: string;
 }
 
-/** Default wizard steps for agent creation */
+/** Default wizard steps for agent creation (labels are overridden with translations at runtime) */
 export const WIZARD_STEPS: WizardStep[] = [
   { id: "intro", label: "Start", icon: <Sparkles className="w-4 h-4" /> },
   { id: "identity", label: "Identity", icon: <User className="w-4 h-4" /> },
@@ -41,6 +42,7 @@ export function WizardProgress({
   className,
 }: WizardProgressProps) {
   const prefersReducedMotion = useReducedMotion();
+  const t = useTranslations("characterCreation.wizardProgress");
   const currentIndex = steps.findIndex((s) => s.id === currentStep);
 
   return (
@@ -84,7 +86,7 @@ export function WizardProgress({
                     canClick && "cursor-pointer",
                     !canClick && "cursor-default"
                   )}
-                  title={canClick ? `Go back to ${step.label}` : undefined}
+                  title={canClick ? t("goBackTo", { step: step.label }) : undefined}
                 >
                   {/* Step circle */}
                   <motion.div

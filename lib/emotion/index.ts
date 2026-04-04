@@ -34,6 +34,4 @@ export {
   updateEmotionContext,
   getEmotionContext,
   clearEmotionContext,
-  cleanupStaleContexts,
-  setMaxAge,
 } from "./context";

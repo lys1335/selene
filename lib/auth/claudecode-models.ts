@@ -5,7 +5,7 @@ export const CLAUDECODE_MODEL_IDS = [
   "claude-haiku-4-5-20251001",
 ] as const;
 
-export type ClaudeCodeModelId = (typeof CLAUDECODE_MODEL_IDS)[number];
+type ClaudeCodeModelId = (typeof CLAUDECODE_MODEL_IDS)[number];
 
 const MODEL_LABELS: Record<string, string> = {
   "claude-opus-4-6": "Claude Opus 4.6",
@@ -14,7 +14,7 @@ const MODEL_LABELS: Record<string, string> = {
   "claude-haiku-4-5-20251001": "Claude Haiku 4.5",
 };
 
-export function getClaudeCodeModelDisplayName(modelId: string): string {
+function getClaudeCodeModelDisplayName(modelId: string): string {
   return MODEL_LABELS[modelId] || modelId;
 }
 

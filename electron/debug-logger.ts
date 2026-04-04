@@ -7,23 +7,23 @@ import { app } from "electron";
 // ---------------------------------------------------------------------------
 
 const userDataPath = app.getPath("userData");
-export const DEBUG_LOG_FILE = path.join(userDataPath, "debug.log");
+const DEBUG_LOG_FILE = path.join(userDataPath, "debug.log");
 
 // ---------------------------------------------------------------------------
 // Log levels
 // ---------------------------------------------------------------------------
 
-export type LogLevel = "verbose" | "info" | "warn" | "error";
-const LOG_LEVEL_ORDER: Record<LogLevel, number> = { verbose: 0, info: 1, warn: 2, error: 3 };
-let currentLogLevel: LogLevel = "info";
+type DebugLogLevel = "verbose" | "info" | "warn" | "error";
+const LOG_LEVEL_ORDER: Record<DebugLogLevel, number> = { verbose: 0, info: 1, warn: 2, error: 3 };
+let currentDebugLogLevel: DebugLogLevel = "info";
 
 // ---------------------------------------------------------------------------
 // Log buffer (for streaming to renderer)
 // ---------------------------------------------------------------------------
 
-export const LOG_BUFFER_MAX_SIZE = 1000;
+const LOG_BUFFER_MAX_SIZE = 1000;
 export const logBuffer: { timestamp: string; level: string; message: string }[] = [];
-export let logSubscribers = 0;
+let logSubscribers = 0;
 
 export function incrementLogSubscribers(): void {
   logSubscribers++;
@@ -44,7 +44,7 @@ export function decrementLogSubscribers(): void {
 // — with love, Selene (https://github.com/tercumantanumut/selene)
 // ---------------------------------------------------------------------------
 
-export const CRITICAL_ERROR_PATTERNS = [
+const CRITICAL_ERROR_PATTERNS = [
   { pattern: /No vector column found.*dimension/i, type: "dimension_mismatch" as const },
   { pattern: /embedding.*mismatch/i, type: "dimension_mismatch" as const },
 ];
@@ -72,7 +72,7 @@ export function setLogRendererWindow(win: RendererWindow | null): void {
 /**
  * Send a log entry to the renderer process if it is subscribed.
  */
-export function sendLogToRenderer(level: string, message: string): void {
+function sendLogToRenderer(level: string, message: string): void {
   const entry = {
     timestamp: new Date().toISOString(),
     level,
@@ -142,8 +142,8 @@ export function flushDebugLog(): void {
 // Internal unified log writer
 // ---------------------------------------------------------------------------
 
-function writeLog(level: LogLevel, args: unknown[]): void {
-  if (LOG_LEVEL_ORDER[level] < LOG_LEVEL_ORDER[currentLogLevel]) return;
+function writeLog(level: DebugLogLevel, args: unknown[]): void {
+  if (LOG_LEVEL_ORDER[level] < LOG_LEVEL_ORDER[currentDebugLogLevel]) return;
 
   const timestamp = new Date().toISOString();
   const messageText = args
@@ -211,11 +211,11 @@ export function initDebugLog(opts: {
   resourcesPath: string;
 }): void {
   // Set log level: env var override > isDev-based default
-  const envLevel = process.env.LOG_LEVEL as LogLevel | undefined;
+  const envLevel = process.env.LOG_LEVEL as DebugLogLevel | undefined;
   if (envLevel && envLevel in LOG_LEVEL_ORDER) {
-    currentLogLevel = envLevel;
+    currentDebugLogLevel = envLevel;
   } else {
-    currentLogLevel = opts.isDev ? "verbose" : "info";
+    currentDebugLogLevel = opts.isDev ? "verbose" : "info";
   }
 
   try {
@@ -238,7 +238,7 @@ Arch: ${process.arch}
 Electron Version: ${process.versions.electron}
 Node Version: ${process.versions.node}
 isDev: ${opts.isDev}
-logLevel: ${currentLogLevel}
+logLevel: ${currentDebugLogLevel}
 userDataPath: ${opts.userDataPath}
 process.execPath: ${opts.execPath}
 process.resourcesPath: ${opts.resourcesPath}

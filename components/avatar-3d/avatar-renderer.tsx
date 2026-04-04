@@ -6,6 +6,7 @@ import {
   useImperativeHandle,
   type ReactNode,
 } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useAvatar } from "./use-avatar";
 import type { Avatar3DConfig, Avatar3DRef } from "./types";
@@ -28,18 +29,19 @@ interface AvatarRendererProps {
 // =============================================================================
 
 function AvatarLoadingSkeleton() {
+  const t = useTranslations("avatar3d");
   return (
     <div
       className="absolute inset-0 flex flex-col items-center justify-center gap-3"
       role="status"
-      aria-label="Loading 3D avatar"
+      aria-label={t("loadingAria")}
     >
       <div className="relative size-12">
         <div className="absolute inset-0 rounded-full border-2 border-muted" />
         <div className="absolute inset-0 rounded-full border-2 border-t-primary animate-spin" />
       </div>
       <span className="text-xs font-mono text-muted-foreground">
-        Loading model...
+        {t("loadingModel")}
       </span>
     </div>
   );
@@ -50,6 +52,7 @@ function AvatarLoadingSkeleton() {
 // =============================================================================
 
 function AvatarFallbackContent({ children }: { children?: ReactNode }) {
+  const t = useTranslations("avatar3d");
   if (children) {
     return <>{children}</>;
   }
@@ -68,7 +71,7 @@ function AvatarFallbackContent({ children }: { children?: ReactNode }) {
           <circle cx="12" cy="8" r="4" />
           <path d="M5.5 21a6.5 6.5 0 0 1 13 0" />
         </svg>
-        <span className="text-xs font-mono">3D unavailable</span>
+        <span className="text-xs font-mono">{t("unavailable")}</span>
       </div>
     </div>
   );

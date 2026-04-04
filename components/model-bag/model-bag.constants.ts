@@ -4,7 +4,8 @@
  * Visual identity for providers and roles used throughout the bag UI.
  */
 
-import type { LLMProvider, ModelRole } from "./model-bag.types";
+import type { LLMProvider } from "@/lib/ai/providers";
+import type { ModelRole } from "./model-bag.types";
 
 /** Visual theme per provider */
 export const PROVIDER_THEME: Record<
@@ -104,7 +105,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<LLMProvider, string> = {
 };
 
 /** Role display metadata */
-export const ROLE_THEME: Record<
+const ROLE_THEME: Record<
   ModelRole,
   {
     label: string;

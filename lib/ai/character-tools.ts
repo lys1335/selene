@@ -1,10 +1,8 @@
 import { tool, jsonSchema } from "ai";
 import { callFlux2Generate } from "@/lib/ai/flux2-client";
-import { createToolRun, updateToolRun, createImage } from "@/lib/db/queries";
+import { createToolRun } from "@/lib/db/queries";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
-
-// Helper to get current timestamp as ISO string for SQLite
-const now = () => new Date().toISOString();
+import { failToolRun, saveGeneratedImages } from "@/lib/ai/tools/tool-run-utils";
 
 // Character draft type for image generation
 export interface CharacterDraft {
@@ -120,49 +118,13 @@ async function executeCharacterImage(sessionId: string, args: CharacterImageArgs
       sessionId
     );
 
-    // Save generated image to database
-    for (const img of result.images) {
-      await createImage({
-        sessionId,
-        toolRunId: toolRun.id,
-        role: "generated",
-        localPath: img.localPath || img.url.split("/").slice(-3).join("/"),
-        url: img.url,
-        width: img.width,
-        height: img.height,
-        format: img.format,
-        metadata: { prompt: fullPrompt, seed: result.seed, imageType },
-      });
-    }
-
-    await updateToolRun(toolRun.id, {
-      status: "succeeded",
-      result: { images: result.images, seed: result.seed },
-      completedAt: now(),
-    });
-
-    return {
-      status: "completed",
-      images: result.images,
-      seed: result.seed,
-      timeTaken: result.timeTaken,
-    };
+    return await saveGeneratedImages(sessionId, toolRun.id, result, fullPrompt, { imageType });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    await updateToolRun(toolRun.id, {
-      status: "failed",
-      error: errorMessage,
-      completedAt: now(),
-    });
-
-    return {
-      status: "error",
-      error: errorMessage,
-    };
+    return failToolRun(toolRun.id, error);
   }
 }
 
-export function createCharacterImageTool(sessionId: string) {
+function createCharacterImageTool(sessionId: string) {
   // Wrap the execute function with logging
   const executeWithLogging = withToolLogging(
     "generateCharacterImage",

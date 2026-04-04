@@ -2,6 +2,7 @@
 
 import { type FC, useCallback, useEffect, useState } from "react";
 import { CircleNotch, ChatCircleDots, CheckCircle, Check } from "@phosphor-icons/react";
+import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { parseNestedJsonString } from "@/lib/utils/parse-nested-json";
 import { useChatSessionId } from "@/components/chat-provider";
@@ -116,6 +117,7 @@ export const AskFollowupQuestionToolUI: ToolCallContentPartComponent = ({
   addResult,
 }) => {
   const sessionId = useChatSessionId();
+  const t = useTranslations("assistantUi.askQuestion");
   const args = normalizeArgs(rawArgs);
   const questions = getQuestions(args);
 
@@ -232,7 +234,7 @@ export const AskFollowupQuestionToolUI: ToolCallContentPartComponent = ({
     return (
       <div className="my-2 inline-flex items-center gap-2 px-3 py-1.5 rounded border border-terminal-border/40 bg-terminal-bg/20 font-mono text-xs text-terminal-muted">
         <ChatCircleDots className="w-4 h-4 animate-pulse text-terminal-amber" weight="duotone" />
-        <span>Preparing question...</span>
+        <span>{t("preparing")}</span>
         <CircleNotch className="w-3.5 h-3.5 animate-spin text-terminal-amber" />
       </div>
     );
@@ -271,7 +273,7 @@ export const AskFollowupQuestionToolUI: ToolCallContentPartComponent = ({
             )}
             {q.multiSelect && !isAnswered && (
               <span className="ml-auto text-[10px] font-mono text-muted-foreground">
-                Select multiple
+                {t("selectMultiple")}
               </span>
             )}
           </div>
@@ -337,7 +339,7 @@ export const AskFollowupQuestionToolUI: ToolCallContentPartComponent = ({
           {isAnswered && (
             <div className="px-3 pb-3 border-t border-terminal-green/20">
               <div className="mt-2 text-xs font-mono text-terminal-green">
-                Answered
+                {t("answered")}
               </div>
             </div>
           )}
@@ -360,10 +362,10 @@ export const AskFollowupQuestionToolUI: ToolCallContentPartComponent = ({
           {submitting ? (
             <span className="inline-flex items-center gap-2">
               <CircleNotch className="w-3.5 h-3.5 animate-spin" />
-              Submitting...
+              {t("submitting")}
             </span>
           ) : (
-            "Submit"
+            t("submit")
           )}
         </button>
       )}

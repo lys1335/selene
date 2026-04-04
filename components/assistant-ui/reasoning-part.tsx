@@ -4,6 +4,7 @@ import { type FC, useState, useEffect, useRef, useCallback } from "react";
 import { ChevronRightIcon, BrainIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslations } from "next-intl";
 
 /**
  * Props passed by assistant-ui's MessagePrimitive.Content for reasoning parts.
@@ -25,6 +26,7 @@ interface ReasoningPartProps {
  * Uses the terminal design system (font-mono, terminal-* colors).
  */
 export const ReasoningPart: FC<ReasoningPartProps> = ({ text, status }) => {
+  const t = useTranslations("assistantUi.reasoning");
   const isStreaming = status?.type === "in_progress" || status?.type === "running";
   const [isOpen, setIsOpen] = useState(true);
   const [thinkingDuration, setThinkingDuration] = useState(0);
@@ -63,10 +65,10 @@ export const ReasoningPart: FC<ReasoningPartProps> = ({ text, status }) => {
   }
 
   const headerLabel = isStreaming
-    ? "Thinking..."
+    ? t("thinking")
     : thinkingDuration > 0
-      ? `Thought for ${thinkingDuration}s`
-      : "Thought";
+      ? t("thoughtFor", { seconds: thinkingDuration })
+      : t("thought");
 
   return (
     <div className="my-1.5 rounded-lg border border-border/50 bg-muted/30">
@@ -117,7 +119,7 @@ export const ReasoningPart: FC<ReasoningPartProps> = ({ text, status }) => {
               )}
             >
               {text || (
-                <span className="italic opacity-60">Reasoning...</span>
+                <span className="italic opacity-60">{t("reasoning")}</span>
               )}
             </div>
           </motion.div>

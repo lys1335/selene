@@ -386,8 +386,8 @@ export function CapabilitiesPage({
               <AlertTriangleIcon className="w-4 h-4 text-terminal-amber mt-0.5 flex-shrink-0" />
               <p className="font-mono text-sm text-terminal-dark">
                 {resolutionWarnings.length === 1
-                  ? "1 tool is disabled due to missing configuration:"
-                  : `${resolutionWarnings.length} tools are disabled due to missing configuration:`}
+                  ? t("resolutionWarningSingular")
+                  : t("resolutionWarningPlural", { count: resolutionWarnings.length })}
               </p>
             </div>
             <div className="ml-6 space-y-1.5">
@@ -405,7 +405,7 @@ export function CapabilitiesPage({
                       window.open("/settings", "_blank");
                     }}
                   >
-                    Configure Now →
+                    {t("configureNow")}
                   </a>
                 </div>
               ))}
@@ -424,11 +424,11 @@ export function CapabilitiesPage({
             {/* Summary count */}
             <div className="flex items-center justify-between border-b border-terminal-border/50 px-5 py-3">
               <span className="font-mono text-sm text-terminal-dark/70">
-                {enabledTools.size} of {availableTools.length} tools enabled
+                {t("toolsSummary", { enabled: enabledTools.size, total: availableTools.length })}
               </span>
               {escapeFlash && (
                 <span className="font-mono text-xs text-terminal-amber animate-pulse">
-                  Unsaved changes — press Back to discard
+                  {t("unsavedChanges")}
                 </span>
               )}
             </div>
@@ -475,12 +475,12 @@ export function CapabilitiesPage({
                           type="button"
                           role="checkbox"
                           aria-checked={selectAllChecked === "mixed" ? "mixed" : selectAllChecked}
-                          aria-label={`${allToggleableEnabled ? "Deselect" : "Select"} all ${categoryLabel} tools`}
+                          aria-label={allToggleableEnabled ? t("deselectAllAria", { category: categoryLabel }) : t("selectAllAria", { category: categoryLabel })}
                           onClick={() => toggleCategorySelectAll(category, tools)}
                           disabled={toggleableTools.length === 0}
                           className="ml-auto font-mono text-xs text-terminal-green hover:text-terminal-green/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         >
-                          {allToggleableEnabled ? "Deselect all" : "Select all"}
+                          {allToggleableEnabled ? t("deselectAll") : t("selectAll")}
                         </button>
                       </div>
 
