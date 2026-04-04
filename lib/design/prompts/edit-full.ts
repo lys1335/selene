@@ -90,7 +90,7 @@ LAYOUT PRESERVATION (CRITICAL):
 - Example of what to preserve:
   <div className="w-full h-full min-h-screen bg-gray-50 flex items-center justify-center p-8">
     <div className="max-w-md w-full">
-      <!-- Only edit content here, not the wrapper -->
+      {/* Only edit content here, not the wrapper */}
     </div>
   </div>
 - For full-screen components, maintain that layout unless explicitly asked to change

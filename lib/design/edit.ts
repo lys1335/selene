@@ -154,18 +154,14 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
       }
 
       if (event.type === 'delta') {
-        fullResponse += event.content ?? '';
         // Forward deltas so the consumer can show progress (e.g. the raw @lines text)
-        yield {
-          type: 'delta',
-          content: event.content,
-          metadata: { isInlineEdit: true },
-        };
+        yield { type: 'delta', content: event.content };
         continue;
       }
 
+      // Provider complete event carries the authoritative full content
       if (event.type === 'complete') {
-        fullResponse = event.content ?? fullResponse;
+        fullResponse = event.content;
       }
     }
 
@@ -233,17 +229,13 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
       }
 
       if (event.type === 'delta') {
-        fullResponse += event.content ?? '';
-        yield {
-          type: 'delta',
-          content: event.content,
-          metadata: { isFullContent: true },
-        };
+        yield { type: 'delta', content: event.content };
         continue;
       }
 
+      // Provider complete event carries the authoritative full content
       if (event.type === 'complete') {
-        fullResponse = event.content ?? fullResponse;
+        fullResponse = event.content;
       }
     }
 

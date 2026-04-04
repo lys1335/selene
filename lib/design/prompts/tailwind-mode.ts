@@ -174,7 +174,7 @@ For mouse cursor animations in Tailwind mode:
    <div className="absolute w-5 h-5 pointer-events-none z-50 transition-all duration-700 ease-in-out"
         style={{ top: '10%', left: '10%', transform: 'translate(-50%, -50%)' }}>
      <svg className="w-full h-full text-white">
-       <!-- cursor shape -->
+       {/* cursor shape */}
      </svg>
    </div>
 4. For animated movement, use inline styles with CSS animations
@@ -183,15 +183,17 @@ For mouse cursor animations in Tailwind mode:
 JAVASCRIPT IN JSX:
 - When implementing interactive features, include JavaScript directly in the JSX
 - Use React hooks (useState, useEffect) for state management
+- NEVER call hooks inside IIFEs, loops, conditions, or nested functions
+- Hooks MUST be called at the top level of the component function body
 - Example interactive component:
-  {(() => {
+  function Counter() {
     const [count, setCount] = React.useState(0);
     return (
       <button onClick={() => setCount(count + 1)}>
         Clicked {count} times
       </button>
     );
-  })()}
+  }
 
 ANIMATIONS WITH TAILWIND:
 - Use Tailwind's animation utilities for simple animations

@@ -4,7 +4,7 @@ import { memo, useEffect, useMemo, useRef } from "react";
 import type { FC } from "react";
 import { Sparkles, PenSquare, Save, RotateCcw, Download, PanelRightOpen, PanelRightClose, AlertCircle, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { applyDesignToolResultToStore, dispatchDesignToolResult } from "@/components/design";
+import { dispatchDesignToolResult } from "@/components/design";
 import { useChatSessionId } from "@/components/chat-provider";
 import { parseNestedJsonString } from "@/lib/utils/parse-nested-json";
 
@@ -243,9 +243,7 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
       data: resolvedResult.data,
       error: resolvedResult.error,
     };
-    // Apply immediately so the workspace updates even if the bridge listener
-    // is not the component path that rendered this tool result instance.
-    applyDesignToolResultToStore(detail);
+    // Unidirectional flow: ToolUI → CustomEvent → Bridge → Store
     dispatchDesignToolResult(detail);
   }, [action, resolvedResult, sessionId, toolCallId]);
 

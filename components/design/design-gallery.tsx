@@ -47,12 +47,14 @@ type FilterMode = "all" | "favorites";
 
 async function fetchGalleryApi(
   action: string,
-  params: Record<string, unknown> = {}
+  params: Record<string, unknown> = {},
+  signal?: AbortSignal
 ): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
   const response = await fetch("/api/design/gallery", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...params }),
+    signal,
   });
   return response.json();
 }
@@ -65,21 +67,38 @@ export function DesignGallery({ onLoadComponent, className }: DesignGalleryProps
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const abortRef = useRef<AbortController | null>(null);
 
   const loadComponents = useCallback(async (searchQuery?: string, favoritesOnly?: boolean) => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setLoading(true);
     try {
       const result = await fetchGalleryApi("search", {
         query: searchQuery || undefined,
         favoritesOnly: favoritesOnly === true,
         limit: 60,
-      });
-      if (result.success && result.data?.components) {
+      }, controller.signal);
+      if (!controller.signal.aborted && result.success && result.data?.components) {
         setComponents(result.data.components as unknown as GalleryComponent[]);
       }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      throw err;
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(searchTimeout.current);
+      abortRef.current?.abort();
+    };
   }, []);
 
   // Initial load + filter changes trigger immediately
@@ -131,11 +150,13 @@ export function DesignGallery({ onLoadComponent, className }: DesignGalleryProps
             className="h-8 pl-8 text-xs"
           />
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-1" role="tablist" aria-label="Gallery filter">
           <Button
             variant={filter === "all" ? "secondary" : "ghost"}
             size="sm"
             className="h-6 px-2 text-xs"
+            role="tab"
+            aria-selected={filter === "all"}
             onClick={() => setFilter("all")}
           >
             <Clock className="mr-1 h-3 w-3" />
@@ -145,6 +166,8 @@ export function DesignGallery({ onLoadComponent, className }: DesignGalleryProps
             variant={filter === "favorites" ? "secondary" : "ghost"}
             size="sm"
             className="h-6 px-2 text-xs"
+            role="tab"
+            aria-selected={filter === "favorites"}
             onClick={() => setFilter("favorites")}
           >
             <Star className="mr-1 h-3 w-3" />
@@ -170,11 +193,13 @@ export function DesignGallery({ onLoadComponent, className }: DesignGalleryProps
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2 p-3">
+          <div className="grid grid-cols-2 gap-2 p-3" role="listbox" aria-label="Gallery components">
             {components.map((component) => (
               <button
                 key={component.id}
                 type="button"
+                role="option"
+                aria-selected={selectedId === component.id}
                 onClick={() => setSelectedId(selectedId === component.id ? null : component.id)}
                 className={cn(
                   "group relative flex flex-col overflow-hidden rounded-lg border text-left transition-colors",
@@ -243,6 +268,7 @@ export function DesignGallery({ onLoadComponent, className }: DesignGalleryProps
               variant="ghost"
               size="sm"
               className="h-7 w-7 p-0"
+              aria-label={selected.isFavorite ? "Remove from favorites" : "Add to favorites"}
               onClick={() => handleFavorite(selected.id)}
             >
               <Star
@@ -259,6 +285,7 @@ export function DesignGallery({ onLoadComponent, className }: DesignGalleryProps
                 "h-7 w-7 p-0",
                 confirmDeleteId === selected.id && "text-destructive"
               )}
+              aria-label={confirmDeleteId === selected.id ? "Confirm delete" : "Delete component"}
               onClick={() => handleDelete(selected.id)}
               onBlur={() => setConfirmDeleteId(null)}
             >

@@ -107,7 +107,8 @@ export async function toggleGalleryFavoriteForUser(
   userId: string,
   id: string
 ): Promise<DesignGalleryItem | null> {
-  await toggleDesignFavorite(userId, id);
+  const newValue = await toggleDesignFavorite(userId, id);
+  if (newValue === null) return null;
   const row = await getDesignComponent(userId, id);
   return row ? toDesignGalleryItem(row) : null;
 }

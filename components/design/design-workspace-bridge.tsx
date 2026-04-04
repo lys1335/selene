@@ -13,9 +13,9 @@
  * Events are filtered by sessionId so design components don't leak between chats.
  *
  * Race condition fix: Events dispatched before the bridge mounts are queued
- * globally and replayed on first mount. This handles the case where tool UI
- * components in chat history fire events during render before the bridge's
- * useEffect registers its listener.
+ * globally (keyed by sessionId) and replayed on first mount. This handles the
+ * case where tool UI components in chat history fire events during render before
+ * the bridge's useEffect registers its listener.
  */
 
 import { useEffect, useRef } from "react";
@@ -113,32 +113,49 @@ const EVENT_NAME = "design-workspace-tool-result";
 
 /**
  * Global queue for events dispatched before any bridge mounts.
- * Once a bridge mounts, it drains this queue and sets `bridgeReady` to true
- * so subsequent events go directly through the DOM listener.
+ * Keyed by sessionId so each session accumulates its own queue.
  *
- * Capped at MAX_PENDING to prevent unbounded growth if the bridge never mounts
- * (e.g. workspace feature disabled, render error).
+ * Once a bridge mounts for a session, it drains only that session's events
+ * and sets `bridgeReady` to true so subsequent events go directly through
+ * the DOM listener.
+ *
+ * Events without a sessionId are keyed under "__nosession__".
+ *
+ * Capped at MAX_PENDING per session to prevent unbounded growth if the
+ * bridge never mounts (e.g. workspace feature disabled, render error).
  */
 const MAX_PENDING = 50;
 let bridgeReady = false;
-const pendingEvents: DesignToolEvent[] = [];
+const pendingEvents = new Map<string, DesignToolEvent[]>();
+
+const NO_SESSION_KEY = "__nosession__";
+
+function getSessionKey(event: DesignToolEvent): string {
+  return event.sessionId || NO_SESSION_KEY;
+}
 
 /**
  * Dispatch a design workspace tool result as a CustomEvent.
  * Call this from the tool UI component when a tool result arrives.
  *
- * If no bridge is mounted yet, the event is queued for replay on mount.
+ * If no bridge is mounted yet, the event is queued (by session) for replay on mount.
  * Events are ALWAYS queued (in addition to dispatching) because the bridge
  * may be in the brief gap between effect cleanup and re-setup during a
  * session switch — the DOM listener is detached but bridgeReady hasn't
  * been set to false yet. The bridge deduplicates on drain.
  */
 export function dispatchDesignToolResult(detail: DesignToolEvent): void {
-  // Always queue so the bridge can drain on mount/re-bind, regardless of
-  // whether a listener is currently attached. The bridge deduplicates.
-  if (pendingEvents.length < MAX_PENDING) {
-    pendingEvents.push(detail);
+  // Queue by session so the correct bridge mount drains the right events
+  const key = getSessionKey(detail);
+  let queue = pendingEvents.get(key);
+  if (!queue) {
+    queue = [];
+    pendingEvents.set(key, queue);
   }
+  if (queue.length < MAX_PENDING) {
+    queue.push(detail);
+  }
+
   // Also dispatch live in case a listener is already attached
   if (bridgeReady) {
     window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail }));
@@ -151,19 +168,23 @@ interface DesignWorkspaceBridgeProps {
 }
 
 export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps) {
-  // Start as null (not sessionId!) so the first mount ALWAYS triggers a reset.
+  // Start as null (not sessionId!) so the first mount ALWAYS triggers a session switch.
   // This prevents stale isOpen:true from leaking when the component remounts
   // (e.g., parent key change, route navigation) — the ref would otherwise
   // re-initialize to the current sessionId, making prev === current, skipping reset.
   const prevSessionIdRef = useRef<string | undefined | null>(null);
 
-  // Single merged effect: reset store on session change, drain queue, bind listener.
-  // Merged to guarantee ordering — reset MUST happen before queue drain.
+  // Single merged effect: switch session on change, drain queue, bind listener.
+  // Merged to guarantee ordering — session switch MUST happen before queue drain.
   useEffect(() => {
-    // Reset store when session changes (or on first mount) so components don't leak
+    // Switch session when session changes (or on first mount)
     if (prevSessionIdRef.current !== sessionId) {
       prevSessionIdRef.current = sessionId;
-      useDesignWorkspaceStore.getState().reset();
+      if (sessionId) {
+        useDesignWorkspaceStore.getState().setActiveSession(sessionId);
+      } else {
+        useDesignWorkspaceStore.getState().reset();
+      }
     }
 
     function processEvent(detail: DesignToolEvent) {
@@ -189,18 +210,23 @@ export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps)
       processEvent(detail);
     }
 
-    // Drain queued events that arrived before this bridge mounted (or during re-bind gap)
+    // Drain only this session's queued events
     bridgeReady = true;
-    const toDrain = pendingEvents.splice(0);
-    for (const queued of toDrain) {
-      if (processed.has(queued)) continue;
-      processed.add(queued);
-      processEvent(queued);
+    const queueKey = sessionId || NO_SESSION_KEY;
+    const toDrain = pendingEvents.get(queueKey);
+    if (toDrain) {
+      pendingEvents.delete(queueKey);
+      for (const queued of toDrain) {
+        if (processed.has(queued)) continue;
+        processed.add(queued);
+        processEvent(queued);
+      }
     }
 
     window.addEventListener(EVENT_NAME, handleToolResult);
     return () => {
       window.removeEventListener(EVENT_NAME, handleToolResult);
+      // Set bridgeReady to false but DON'T drain — events accumulate until next mount
       bridgeReady = false;
     };
   }, [sessionId]); // re-bind when session changes

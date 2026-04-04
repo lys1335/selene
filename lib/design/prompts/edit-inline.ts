@@ -156,11 +156,10 @@ IMPORTANT:
 - When adding new imports to existing ones, include the full import block
 
 ASSET HANDLING:
-- When you have image assets, use them by embedding the URLs directly in img tags
-- Asset URLs are provided in the format: https://[domain]/storage/v1/object/public/user-assets/[path]
-- In HTML templates (cardHTML), use inline styles or class with CSS
-- HTML example: <img src="[url]" alt="desc" style="width: 120px; height: 120px; object-fit: contain;" />
-- React JSX example: <img src="[url]" alt="desc" className="w-32 h-32 object-cover" />
+- Use the __ASSET_N__ placeholder tokens exactly as they appear in asset references
+- Do NOT replace or expand __ASSET_N__ tokens — they are resolved automatically after generation
+- React JSX example: <img src="__ASSET_1__" alt="desc" className="w-32 h-32 object-cover" />
+- Style example: style={{backgroundImage: "url('__ASSET_1__')"}}
 - ALWAYS ensure proper self-closing: /> (NOT / />)
 `;
 

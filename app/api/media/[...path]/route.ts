@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readLocalFile, fileExists, getFullPath } from "@/lib/storage/local-storage";
+import { requireAuth } from "@/lib/auth/local-auth";
 import { createReadStream, statSync } from "fs";
 import { Readable } from "stream";
 
@@ -19,9 +20,8 @@ const contentTypes: Record<string, string> = {
 // Video extensions that need Range request support
 const videoExtensions = new Set(["mp4", "webm", "mov"]);
 
-// Common CORS headers for cross-origin access (needed by Remotion's bundler server)
+// CORS headers scoped to same-origin only (no wildcard)
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
   "Access-Control-Allow-Headers": "Range, Content-Type",
   "Access-Control-Expose-Headers": "Content-Length, Content-Range, Accept-Ranges",
@@ -52,6 +52,13 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   try {
+    // Require authentication before serving any media files
+    try {
+      await requireAuth(request);
+    } catch {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401, headers: corsHeaders });
+    }
+
     const { path: pathParts } = await params;
 
     if (!pathParts || pathParts.length === 0) {

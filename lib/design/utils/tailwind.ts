@@ -377,7 +377,8 @@ export function tailwindToStyles(className: string): CSSProperties {
       styles['--tw-gradient-stops'] = 'var(--tw-gradient-from), var(--tw-gradient-to)';
     }
     else if (cls.startsWith('via-') && colorMap[cls.substring(4)]) {
-      styles['--tw-gradient-to'] = colorMap[cls.substring(4)];
+      styles['--tw-gradient-via'] = colorMap[cls.substring(4)];
+      styles['--tw-gradient-stops'] = 'var(--tw-gradient-from), var(--tw-gradient-via), var(--tw-gradient-to)';
     }
     else if (cls.startsWith('to-') && colorMap[cls.substring(3)]) {
       styles['--tw-gradient-to'] = colorMap[cls.substring(3)];

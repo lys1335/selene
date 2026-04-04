@@ -63,6 +63,24 @@ function formatElapsed(ms: number): string {
 }
 
 const toolGroupExpansionState = new Map<string, boolean>();
+const TOOL_GROUP_EXPANSION_MAX_SIZE = 500;
+
+/** Clear all stored expansion state. Call on thread/conversation change. */
+export function resetToolGroupExpansion() {
+  toolGroupExpansionState.clear();
+}
+
+/** Prune oldest entries when the map exceeds the max size threshold. */
+function pruneExpansionState() {
+  if (toolGroupExpansionState.size <= TOOL_GROUP_EXPANSION_MAX_SIZE) return;
+  const excess = toolGroupExpansionState.size - TOOL_GROUP_EXPANSION_MAX_SIZE;
+  const iter = toolGroupExpansionState.keys();
+  for (let i = 0; i < excess; i++) {
+    const next = iter.next();
+    if (next.done) break;
+    toolGroupExpansionState.delete(next.value);
+  }
+}
 
 /**
  * Tools whose custom UI is the primary content and should auto-expand.
@@ -327,6 +345,7 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
     if ((isDetailedMode || hasMedia || hasInteractiveUI) && !toolGroupExpansionState.has(expansionKey)) {
       setIsExpanded(true);
       toolGroupExpansionState.set(expansionKey, true);
+      pruneExpansionState();
     }
   }, [expansionKey, hasInteractiveUI, hasMedia, isDetailedMode]);
 
@@ -339,6 +358,7 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
     const next = expansionCtx.signal.mode === "expand";
     setIsExpanded(next);
     toolGroupExpansionState.set(expansionKey, next);
+    pruneExpansionState();
   }, [expansionCtx?.signal, expansionKey]);
 
   useEffect(() => {
@@ -352,6 +372,7 @@ export const ToolCallGroup: FC<ToolCallGroupProps> = ({
     setIsExpanded((previous) => {
       const next = !previous;
       toolGroupExpansionState.set(expansionKey, next);
+      pruneExpansionState();
       return next;
     });
   };

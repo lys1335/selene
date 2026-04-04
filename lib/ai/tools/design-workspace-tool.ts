@@ -191,6 +191,20 @@ async function resolveAssets(
       const mediaRef = ctx.url.startsWith("/api/media/") ? ctx.url : asset.url;
       const fullPath = getFullPathFromMediaRef(mediaRef);
       if (fullPath) {
+        // Path traversal protection: resolved path must live under the storage root.
+        // getFullPathFromMediaRef already validates via resolveUnderStorage, but we
+        // add an explicit check here as defense-in-depth against any future changes.
+        const storageRoot = path.resolve(
+          process.env.LOCAL_DATA_PATH
+            ? path.resolve(process.env.LOCAL_DATA_PATH, "media")
+            : path.resolve(process.cwd(), ".local-data", "media")
+        );
+        const resolvedFull = path.resolve(fullPath);
+        if (!resolvedFull.startsWith(storageRoot + path.sep) && resolvedFull !== storageRoot) {
+          // Path escapes media storage directory — skip this asset
+          return ctx;
+        }
+
         try {
           const buffer = await fs.readFile(fullPath);
           const ext = path.extname(fullPath).toLowerCase();
@@ -439,10 +453,10 @@ async function handleGenerate(options: DesignWorkspaceToolOptions, input: Design
 
   for await (const event of generateCard({ prompt, mode, style, assets })) {
     if (event.type === "complete") {
-      finalCode = event.content ?? "";
+      finalCode = event.content;
     }
     if (event.type === "error") {
-      generationError = event.error?.message ?? "Generation failed";
+      generationError = event.error.message;
     }
   }
 
@@ -508,10 +522,10 @@ async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWork
 
   for await (const event of editCard({ code, editPrompt, inlineMode, assets })) {
     if (event.type === "complete") {
-      finalCode = event.content ?? "";
+      finalCode = event.content;
     }
     if (event.type === "error") {
-      editError = event.error?.message ?? "Edit failed";
+      editError = event.error.message;
     }
   }
 

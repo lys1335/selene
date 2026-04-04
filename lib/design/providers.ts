@@ -147,10 +147,10 @@ export async function generateDesignText(
 ): Promise<string> {
   for await (const event of streamDesignGeneration(opts)) {
     if (event.type === "complete") {
-      return event.content ?? "";
+      return event.content;
     }
     if (event.type === "error") {
-      throw new Error(`[${event.error?.code}] ${event.error?.message}`);
+      throw new Error(`[${event.error.code}] ${event.error.message}`);
     }
   }
   throw new Error("Design generation stream ended without a complete event");

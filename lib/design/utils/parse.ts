@@ -5,6 +5,8 @@
  * All functions are pure -- no side effects, no external dependencies.
  */
 
+import { repairInlineEditJSX } from './jsx';
+
 
 /** Result of parsing an AI response that may contain code + description */
 export interface ParsedAIResponse {
@@ -120,7 +122,7 @@ export function applyInlineEdits(originalCode: string, editResponse: string): st
   while ((match = editPattern.exec(editResponse)) !== null) {
     const start = parseInt(match[1], 10) - 1; // convert to 0-based
     const end = parseInt(match[2], 10) - 1;
-    const content = match[3].trim();
+    const content = match[3].replace(/^\r?\n/, '').replace(/\r?\n$/, '');
     edits.push({ start, end, content });
   }
 
@@ -162,5 +164,8 @@ export function applyInlineEdits(originalCode: string, editResponse: string): st
     lines.splice(edit.start, edit.end - edit.start + 1, ...newLines);
   }
 
-  return lines.join('\n');
+  const patched = lines.join('\n');
+
+  // Run repairInlineEditJSX to fix structural issues introduced by merging chunks
+  return repairInlineEditJSX(patched);
 }

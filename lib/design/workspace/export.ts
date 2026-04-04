@@ -16,6 +16,7 @@ import {
   type DesignExportMode,
 } from "./preview";
 import { buildTailwindPreviewAsync } from "./compiler";
+import { sanitizeHTML } from "@/lib/design/utils/sanitize";
 
 export type DesignExportFormat = "html" | "react" | "png" | "video";
 export type { DesignExportMode } from "./preview";
@@ -56,6 +57,9 @@ const DEFAULT_PNG_EXPORT_PROGRESS = 0.68;
 const MAX_VIDEO_FRAMES = 96;
 const DEFAULT_COMPONENT_NAME = "Design Component";
 const PREVIEW_READY_TIMEOUT_MS = 30_000;
+const VIDEO_EXPORT_TIMEOUT_MS = 5 * 60_000; // 5 minutes
+
+const PUPPETEER_CSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; script-src 'unsafe-inline'">`;
 
 /**
  * Build export-ready preview HTML for any mode.
@@ -74,6 +78,19 @@ async function buildExportPreviewHtml(opts: {
     return buildTailwindPreviewAsync(opts.code, opts.componentName || DEFAULT_COMPONENT_NAME);
   }
   return buildDesignPreviewHtml(opts);
+}
+
+/**
+ * Inject a CSP meta tag into the HTML <head> so it applies to page.setContent() calls.
+ * setExtraHTTPHeaders CSP is a no-op for setContent since there's no network request.
+ */
+function injectCspMeta(html: string): string {
+  const headIdx = html.indexOf("<head>");
+  if (headIdx !== -1) {
+    return html.slice(0, headIdx + 6) + "\n" + PUPPETEER_CSP + "\n" + html.slice(headIdx + 6);
+  }
+  // No <head> tag — prepend CSP + wrap
+  return `<head>${PUPPETEER_CSP}</head>\n${html}`;
 }
 
 function sanitizeComponentName(name?: string): string {
@@ -110,10 +127,19 @@ async function waitForPageReady(page: import("puppeteer").Page): Promise<void> {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
 }
 
+const PUPPETEER_TIMEOUT_MS = 60_000;
+
 async function createBrowser() {
   return puppeteer.launch({
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+    args: [
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--disable-extensions",
+      "--disable-background-networking",
+      "--disable-default-apps",
+    ],
   });
 }
 
@@ -176,17 +202,27 @@ async function renderPngExport(
     animated: true,
     exportProgress: DEFAULT_PNG_EXPORT_PROGRESS,
   });
+  // Sanitize HTML as defense-in-depth before passing to Puppeteer
+  const sanitizedHtml = injectCspMeta(sanitizeHTML(renderedHtml, { allowStyles: true, allowDataUrls: true }));
   const browser = await createBrowser();
 
   try {
-    const page = await browser.newPage();
-    await page.setViewport({ width, height, deviceScaleFactor: scale });
-    await page.setContent(renderedHtml, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    await waitForPageReady(page);
+    const renderTask = async () => {
+      const page = await browser.newPage();
+      await page.setViewport({ width, height, deviceScaleFactor: scale });
+      await page.setContent(sanitizedHtml, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await waitForPageReady(page);
 
-    const screenshot = await page.screenshot({ type: "png", captureBeyondViewport: false });
-    const buffer = Buffer.isBuffer(screenshot) ? screenshot : Buffer.from(screenshot);
-    const stored = await saveFile(buffer, opts.sessionId, fileName, "generated");
+      const screenshot = await page.screenshot({ type: "png", captureBeyondViewport: false });
+      const buffer = Buffer.isBuffer(screenshot) ? screenshot : Buffer.from(screenshot);
+      return saveFile(buffer, opts.sessionId, fileName, "generated");
+    };
+
+    const timeoutTask = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("PNG export timed out")), PUPPETEER_TIMEOUT_MS)
+    );
+
+    const stored = await Promise.race([renderTask(), timeoutTask]);
 
     return {
       format: "png",
@@ -223,67 +259,77 @@ async function renderVideoExport(
   const tempDir = mkdtempSync(join(tmpdir(), "selene-design-video-"));
   const framePattern = join(tempDir, "frame-%03d.png");
   const outputPath = join(tempDir, fileName);
+  // Sanitize HTML as defense-in-depth before passing to Puppeteer
+  const sanitizedHtml = injectCspMeta(sanitizeHTML(renderedHtml, { allowStyles: true, allowDataUrls: true }));
   const ffmpeg = resolveFfmpegCommand();
   await assertFfmpegAvailable(ffmpeg);
   const browser = await createBrowser();
 
   try {
-    const page = await browser.newPage();
-    await page.setViewport({ width, height, deviceScaleFactor: scale });
-    await page.setContent(renderedHtml, { waitUntil: "domcontentloaded", timeout: 30_000 });
-    await waitForPageReady(page);
+    const renderTask = async (): Promise<DesignExportResult> => {
+      const page = await browser.newPage();
+      await page.setViewport({ width, height, deviceScaleFactor: scale });
+      await page.setContent(sanitizedHtml, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      await waitForPageReady(page);
 
-    for (let index = 0; index < frameCount; index += 1) {
-      const progress = frameCount === 1 ? 1 : index / (frameCount - 1);
-      const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
-      await page.evaluate((value) => {
-        document.documentElement.style.setProperty("--export-progress", value.toFixed(4));
-      }, eased);
-      await page.screenshot({
-        path: join(tempDir, `frame-${String(index).padStart(3, "0")}.png`),
-        type: "png",
-        captureBeyondViewport: false,
-      });
-    }
-
-    await execFileAsync(
-      ffmpeg.command,
-      [
-        ...ffmpeg.args,
-        "-y",
-        "-framerate",
-        String(fps),
-        "-i",
-        framePattern,
-        "-c:v",
-        "libx264",
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
-        outputPath,
-      ],
-      {
-        env: ffmpeg.env,
-        timeout: 120_000,
-        maxBuffer: 8 * 1024 * 1024,
+      for (let index = 0; index < frameCount; index += 1) {
+        const progress = frameCount === 1 ? 1 : index / (frameCount - 1);
+        const eased = 0.5 - 0.5 * Math.cos(progress * Math.PI);
+        await page.evaluate((value) => {
+          document.documentElement.style.setProperty("--export-progress", value.toFixed(4));
+        }, eased);
+        await page.screenshot({
+          path: join(tempDir, `frame-${String(index).padStart(3, "0")}.png`),
+          type: "png",
+          captureBeyondViewport: false,
+        });
       }
+
+      await execFileAsync(
+        ffmpeg.command,
+        [
+          ...ffmpeg.args,
+          "-y",
+          "-framerate",
+          String(fps),
+          "-i",
+          framePattern,
+          "-c:v",
+          "libx264",
+          "-pix_fmt",
+          "yuv420p",
+          "-movflags",
+          "+faststart",
+          outputPath,
+        ],
+        {
+          env: ffmpeg.env,
+          timeout: 120_000,
+          maxBuffer: 8 * 1024 * 1024,
+        }
+      );
+
+      const stored = await saveFile(readFileSync(outputPath), opts.sessionId, fileName, "generated");
+
+      return {
+        format: "video",
+        renderedHtml,
+        url: stored.url,
+        localPath: stored.localPath,
+        filePath: stored.filePath,
+        fileName,
+        width,
+        height,
+        durationMs,
+        fps,
+      };
+    };
+
+    const timeoutTask = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Video export timed out")), VIDEO_EXPORT_TIMEOUT_MS)
     );
 
-    const stored = await saveFile(readFileSync(outputPath), opts.sessionId, fileName, "generated");
-
-    return {
-      format: "video",
-      renderedHtml,
-      url: stored.url,
-      localPath: stored.localPath,
-      filePath: stored.filePath,
-      fileName,
-      width,
-      height,
-      durationMs,
-      fps,
-    };
+    return await Promise.race([renderTask(), timeoutTask]);
   } finally {
     await browser.close();
     rmSync(tempDir, { recursive: true, force: true });

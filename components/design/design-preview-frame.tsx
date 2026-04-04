@@ -179,12 +179,15 @@ export function DesignPreviewFrame() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Breakpoint toolbar */}
-      <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2" role="tablist" aria-label="Preview breakpoints">
         {DESIGN_BREAKPOINTS.map((bp) => (
           <Button
             key={bp.name}
             variant={selectedBreakpoint.name === bp.name ? "default" : "ghost"}
             size="sm"
+            role="tab"
+            aria-selected={selectedBreakpoint.name === bp.name}
+            aria-label={`${bp.name} breakpoint (${bp.width}px)`}
             onClick={() => setBreakpoint(bp)}
             className="gap-1.5"
           >
@@ -220,7 +223,7 @@ export function DesignPreviewFrame() {
           >
             <iframe
               srcDoc={previewHtml}
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts"
               className="h-full w-full border-0"
               title="Design preview"
             />

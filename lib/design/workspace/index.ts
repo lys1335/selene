@@ -5,6 +5,7 @@ export type {
   DesignSnapshot,
   DesignBreakpoint,
   DesignWorkspaceState,
+  DesignWorkspaceSessionState,
   DesignWorkspaceStatus,
 } from "./types";
 export type { DesignExportMode } from "./preview";

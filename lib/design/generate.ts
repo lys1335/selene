@@ -148,17 +148,15 @@ export async function* generateCard(opts: GenerateOpts): AsyncGenerator<StreamEv
       return;
     }
 
-    // Accumulate content from deltas
+    // Forward deltas for real-time streaming
     if (event.type === 'delta') {
-      fullContent += event.content ?? '';
       yield event;
       continue;
     }
 
-    // Provider complete -- fullContent is now the raw AI output.
-    // Use the provider's complete content which is authoritative.
+    // Provider complete event carries the authoritative full content
     if (event.type === 'complete') {
-      fullContent = event.content ?? fullContent;
+      fullContent = event.content;
     }
   }
 

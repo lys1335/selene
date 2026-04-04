@@ -31,20 +31,6 @@ export interface BuildDesignPreviewOptions {
 
 const DEFAULT_COMPONENT_NAME = "Design Component";
 
-/** CSP for HTML previews — allows inline scripts for interactive components. */
-const HTML_PREVIEW_CSP = [
-  "default-src 'none'",
-  "base-uri 'none'",
-  "frame-src 'none'",
-  "object-src 'none'",
-  "form-action 'none'",
-  "img-src https: http: data: blob:",
-  "media-src https: http: data: blob:",
-  "font-src https: http: data:",
-  "style-src 'unsafe-inline'",
-  "script-src 'unsafe-inline'",
-].join("; ");
-
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -130,6 +116,9 @@ function buildAnimatedRootStyles(animated?: boolean): string[] {
   ];
 }
 
+/** CSP for iframe srcdoc previews — blocks all network access (opaque origin). */
+const IFRAME_PREVIEW_CSP = "default-src 'self' 'unsafe-inline' data: blob:; connect-src 'none'";
+
 function buildHead(title: string, csp: string, animated?: boolean, exportProgress?: number): string[] {
   return [
     "<head>",
@@ -149,7 +138,7 @@ function buildHtmlPreviewHtml(code: string, title: string, animated?: boolean, e
   return [
     "<!DOCTYPE html>",
     '<html lang="en">',
-    ...buildHead(title, HTML_PREVIEW_CSP, animated, exportProgress),
+    ...buildHead(title, IFRAME_PREVIEW_CSP, animated, exportProgress),
     "</head>",
     "<body>",
     '  <div id="selene-design-preview-root" data-preview-ready="true">',

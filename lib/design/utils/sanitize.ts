@@ -113,12 +113,15 @@ function regexSanitize(
       if (stripStyles) {
         cleaned = cleaned.replace(/\s+style\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
       }
-      // Sanitize URL-bearing attributes -- remove attr if protocol is dangerous
+      // Sanitize URL-bearing attributes -- remove attr if protocol is dangerous.
+      // This regex sanitizer is a defense-in-depth layer; it handles quoted
+      // (double and single) as well as unquoted attribute values to prevent
+      // bypasses via attr=javascript:... without quotes.
       cleaned = cleaned.replace(
-        /\s+([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi,
-        (attrMatch, attrName: string, doubleVal?: string, singleVal?: string) => {
+        /\s+([\w:.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
+        (attrMatch, attrName: string, doubleVal?: string, singleVal?: string, unquotedVal?: string) => {
           if (URL_ATTRIBUTES.has(attrName.toLowerCase())) {
-            const rawValue = doubleVal ?? singleVal ?? '';
+            const rawValue = doubleVal ?? singleVal ?? unquotedVal ?? '';
             // Never allow data:/blob: in navigation attributes (href, action, etc.)
             const attrAllowData = allowDataUrls && !NAVIGATION_ATTRS.has(attrName.toLowerCase());
             const safe = sanitizeURL(rawValue, { allowDataUrls: attrAllowData });

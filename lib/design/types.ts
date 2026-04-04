@@ -7,17 +7,11 @@
 
 // -- Stream events for the generate/edit pipeline --------------------------
 
-export type StreamEventType = "start" | "delta" | "complete" | "error";
-
-export interface StreamEvent {
-  type: StreamEventType;
-  /** Partial or full content depending on event type */
-  content?: string;
-  /** Arbitrary metadata attached to the event (e.g. token counts, model info) */
-  metadata?: Record<string, unknown>;
-  /** Present only on error events */
-  error?: { code: string; message: string };
-}
+export type StreamEvent =
+  | { type: "start"; metadata?: Record<string, unknown> }
+  | { type: "delta"; content: string }
+  | { type: "complete"; content: string; metadata?: Record<string, unknown> }
+  | { type: "error"; error: { code: string; message: string } };
 
 // -- Generation options ----------------------------------------------------
 

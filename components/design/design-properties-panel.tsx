@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useDesignWorkspaceStore } from "@/lib/design/workspace";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -77,8 +77,32 @@ export function DesignPropertiesPanel() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  const timeoutIds = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const component = components.find((c) => c.id === activeComponentId);
+
+  // Reset transient state when switching components
+  useEffect(() => {
+    setExportResult(null);
+    setSaved(false);
+    setCopySuccess(false);
+    setConfirmDelete(false);
+    setExportingFormat(null);
+    // Clear any pending timeouts from previous component
+    for (const id of timeoutIds.current) {
+      clearTimeout(id);
+    }
+    timeoutIds.current = [];
+  }, [component?.id]);
+
+  // Cleanup timeouts on unmount
+  useEffect(() => {
+    return () => {
+      for (const id of timeoutIds.current) {
+        clearTimeout(id);
+      }
+    };
+  }, []);
 
   const handleExport = useCallback(async (format: ExportFormat) => {
     if (!component || exportingFormat) return;
@@ -125,7 +149,8 @@ export function DesignPropertiesPanel() {
       });
       if (result.success) {
         setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
+        const id = setTimeout(() => setSaved(false), 2000);
+        timeoutIds.current.push(id);
       }
     } finally {
       setSaving(false);
@@ -138,7 +163,8 @@ export function DesignPropertiesPanel() {
       const textToCopy = exportResult?.code || component.code;
       await navigator.clipboard.writeText(textToCopy);
       setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 1500);
+      const id = setTimeout(() => setCopySuccess(false), 1500);
+      timeoutIds.current.push(id);
     } catch {
       // Clipboard API may be unavailable in non-secure contexts
     }
@@ -210,7 +236,7 @@ export function DesignPropertiesPanel() {
               <Code className="h-4 w-4" />
               {showCode ? "Hide Code" : "Show Code"}
             </Button>
-            <Button variant="outline" size="sm" onClick={handleCopyCode} className="gap-1.5">
+            <Button variant="outline" size="sm" onClick={handleCopyCode} className="gap-1.5" aria-label="Copy code">
               {copySuccess ? <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
             </Button>
           </div>

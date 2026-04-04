@@ -31,8 +31,8 @@ export const DESIGN_BREAKPOINTS: DesignBreakpoint[] = [
 
 export type DesignWorkspaceStatus = "idle" | "generating" | "editing" | "exporting";
 
-export interface DesignWorkspaceState {
-  // State
+/** Serialisable session state that gets cached when switching sessions. */
+export interface DesignWorkspaceSessionState {
   isOpen: boolean;
   status: DesignWorkspaceStatus;
   components: DesignComponent[];
@@ -42,6 +42,11 @@ export interface DesignWorkspaceState {
   previewHtml: string;
   showCode: boolean;
   error: string | null;
+}
+
+export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
+  // Session tracking
+  sessionId: string | null;
 
   // Actions
   open: () => void;
@@ -58,5 +63,6 @@ export interface DesignWorkspaceState {
   restoreSnapshot: (snapshotId: string) => void;
   clearError: () => void;
   setError: (error: string) => void;
+  setActiveSession: (sessionId: string) => void;
   reset: () => void;
 }

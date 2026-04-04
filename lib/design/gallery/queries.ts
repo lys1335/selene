@@ -163,20 +163,18 @@ export async function deleteDesignComponent(userId: string, id: string): Promise
 // Convenience helpers
 // ---------------------------------------------------------------------------
 
-/** Toggle the favorite flag scoped to a user, returning the new state. */
-export async function toggleDesignFavorite(userId: string, id: string): Promise<boolean> {
-  const existing = await db.query.designComponents.findFirst({
-    where: and(eq(designComponents.userId, userId), eq(designComponents.id, id)),
-  });
-  if (!existing) return false;
-
-  const newValue = !existing.isFavorite;
-  await db
+/** Toggle the favorite flag atomically, returning the new state or null if not found. */
+export async function toggleDesignFavorite(userId: string, id: string): Promise<boolean | null> {
+  const [updated] = await db
     .update(designComponents)
-    .set({ isFavorite: newValue, updatedAt: now() })
-    .where(and(eq(designComponents.userId, userId), eq(designComponents.id, id)));
+    .set({
+      isFavorite: sql`NOT ${designComponents.isFavorite}`,
+      updatedAt: now(),
+    })
+    .where(and(eq(designComponents.userId, userId), eq(designComponents.id, id)))
+    .returning({ isFavorite: designComponents.isFavorite });
 
-  return newValue;
+  return updated ? Boolean(updated.isFavorite) : null;
 }
 
 /** Increment the use count and update lastUsedAt, scoped to a user. */

@@ -4,6 +4,7 @@ import { create } from "zustand";
 import {
   DESIGN_BREAKPOINTS,
   type DesignWorkspaceState,
+  type DesignWorkspaceSessionState,
   type DesignWorkspaceStatus,
   type DesignComponent,
   type DesignBreakpoint,
@@ -24,7 +25,40 @@ function buildPreviewMarkup(component: Pick<DesignComponent, "code" | "mode" | "
   }
 }
 
-const initialState = {
+// ---------------------------------------------------------------------------
+// Session cache (module-level, NOT in the store)
+// ---------------------------------------------------------------------------
+const MAX_CACHED_SESSIONS = 10;
+const sessionCache = new Map<string, DesignWorkspaceSessionState>();
+
+/** Basic LRU eviction: delete the oldest entry when the cache exceeds max. */
+function cacheSessionState(sessionId: string, state: DesignWorkspaceSessionState): void {
+  // Re-insert to move to "newest" position (Map preserves insertion order)
+  sessionCache.delete(sessionId);
+  sessionCache.set(sessionId, state);
+
+  if (sessionCache.size > MAX_CACHED_SESSIONS) {
+    // Delete the oldest (first) key
+    const oldest = sessionCache.keys().next().value;
+    if (oldest !== undefined) sessionCache.delete(oldest);
+  }
+}
+
+function extractSessionState(store: DesignWorkspaceState): DesignWorkspaceSessionState {
+  return {
+    isOpen: store.isOpen,
+    status: store.status,
+    components: store.components,
+    activeComponentId: store.activeComponentId,
+    snapshots: store.snapshots,
+    selectedBreakpoint: store.selectedBreakpoint,
+    previewHtml: store.previewHtml,
+    showCode: store.showCode,
+    error: store.error,
+  };
+}
+
+const initialSessionState: DesignWorkspaceSessionState = {
   isOpen: false,
   status: "idle" as DesignWorkspaceStatus,
   components: [] as DesignComponent[],
@@ -34,6 +68,11 @@ const initialState = {
   previewHtml: "",
   showCode: false,
   error: null as string | null,
+};
+
+const initialState = {
+  ...initialSessionState,
+  sessionId: null as string | null,
 };
 
 export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) => ({
@@ -142,6 +181,14 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
       return;
     }
 
+    // Dedup: skip if the last snapshot for this component has identical code
+    const lastForComponent = [...current.snapshots]
+      .reverse()
+      .find((s) => s.componentId === component.id);
+    if (lastForComponent && lastForComponent.code === component.code) {
+      return;
+    }
+
     const snapshot: DesignSnapshot = {
       id: id ?? crypto.randomUUID(),
       componentId: component.id,
@@ -188,6 +235,29 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
 
   setError: (error: string) => {
     set({ error });
+  },
+
+  setActiveSession: (sessionId: string) => {
+    const current = get();
+
+    // Save current session state to cache (if we have a session)
+    if (current.sessionId) {
+      cacheSessionState(current.sessionId, extractSessionState(current));
+    }
+
+    // Restore target session from cache, or initialize fresh
+    const cached = sessionCache.get(sessionId);
+    if (cached) {
+      // Move to newest position in cache
+      sessionCache.delete(sessionId);
+      set({ ...cached, sessionId });
+    } else {
+      set({
+        ...initialSessionState,
+        selectedBreakpoint: { ...DESIGN_BREAKPOINTS[2] },
+        sessionId,
+      });
+    }
   },
 
   reset: () => {

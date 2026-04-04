@@ -36,7 +36,7 @@ import type { GradientColor } from "@/components/ui/noisy-gradient-backgrounds";
 import { getAgentAccentColor } from "@/lib/personalization/accent-colors";
 import { MarkdownText, UserMarkdownText } from "./markdown-text";
 import { ToolFallback } from "./tool-fallback";
-import { ToolCallGroup } from "./tool-call-group";
+import { ToolCallGroup, resetToolGroupExpansion } from "./tool-call-group";
 import { VectorSearchToolUI } from "./vector-search-inline";
 import { ProductGalleryToolUI } from "./product-gallery-inline";
 import { ExecuteCommandToolUI } from "./execute-command-tool-ui";
@@ -112,6 +112,49 @@ function mcpAwareToolMap(map: Record<string, FC<any>>): Record<string, FC<any>> 
     },
   });
 }
+
+// Static tool map — all values are stable component references, no render-time closures.
+// Hoisted to module scope to avoid rebuilding the Proxy on every render.
+const TOOL_BY_NAME_MAP = mcpAwareToolMap({
+  // Selene MCP tools
+  vectorSearch: VectorSearchToolUI,
+  showProductImages: ProductGalleryToolUI,
+  executeCommand: ExecuteCommandToolUI,
+  editFile: EditFileToolUI,
+  writeFile: EditFileToolUI,
+  patchFile: PatchFileToolUI,
+  calculator: CalculatorToolUI,
+  updatePlan: PlanToolUI,
+  speakAloud: SpeakAloudToolUI,
+  transcribe: TranscribeToolUI,
+  chromiumWorkspace: ChromiumWorkspaceToolUI,
+  designWorkspace: DesignWorkspaceToolUI,
+  designGallery: DesignGalleryToolUI,
+  askUserQuestion: AskFollowupQuestionToolUI,
+  askFollowupQuestion: AskFollowupQuestionToolUI,
+  AskFollowupQuestion: AskFollowupQuestionToolUI,
+  AskUserQuestion: AskFollowupQuestionToolUI,
+  ExitPlanMode: PlanApprovalToolUI,
+  promptLibrary: PromptLibraryToolUI,
+  // Claude Code native tools
+  Edit: ClaudeEditToolUI,
+  Bash: ClaudeBashToolUI,
+  Read: ClaudeReadToolUI,
+  Write: ClaudeWriteToolUI,
+  Glob: ClaudeGlobToolUI,
+  Grep: ClaudeGrepToolUI,
+  Agent: ClaudeAgentToolUI,
+  WebFetch: ClaudeWebFetchToolUI,
+  WebSearch: ClaudeWebSearchToolUI,
+  NotebookEdit: ClaudeNotebookEditToolUI,
+  TodoWrite: ClaudeTodoWriteToolUI,
+  EnterPlanMode: ClaudeEnterPlanModeToolUI,
+  EnterWorktree: ClaudeEnterWorktreeToolUI,
+  Skill: ClaudeSkillToolUI,
+  TaskOutput: ClaudeTaskOutputToolUI,
+  TaskStop: ClaudeTaskStopToolUI,
+  delegateToSubagent: DelegationToolUI,
+});
 
 export function getAttachmentImageUrl(attachment: {
   contentType?: string;
@@ -450,6 +493,11 @@ export const AssistantMessage: FC<{ ttsEnabled?: boolean }> = ({ ttsEnabled = fa
   const liveStatuses = useLiveToolStatuses(sessionId);
   const [isIdleThinking, setIsIdleThinking] = useState(false);
 
+  // Clear stale tool-group expansion state on session/thread change
+  useEffect(() => {
+    resetToolGroupExpansion();
+  }, [sessionId]);
+
   const accentColor = useMemo(
     () => getAgentAccentColor(displayChar.id),
     [displayChar.id]
@@ -593,46 +641,7 @@ export const AssistantMessage: FC<{ ttsEnabled?: boolean }> = ({ ttsEnabled = fa
               Reasoning: ReasoningPart,
               ToolGroup: ToolCallGroup,
               tools: {
-                by_name: mcpAwareToolMap({
-                  // Selene MCP tools
-                  vectorSearch: VectorSearchToolUI,
-                  showProductImages: ProductGalleryToolUI,
-                  executeCommand: ExecuteCommandToolUI,
-                  editFile: EditFileToolUI,
-                  writeFile: EditFileToolUI,
-                  patchFile: PatchFileToolUI,
-                  calculator: CalculatorToolUI,
-                  updatePlan: PlanToolUI,
-                  speakAloud: SpeakAloudToolUI,
-                  transcribe: TranscribeToolUI,
-                  chromiumWorkspace: ChromiumWorkspaceToolUI,
-                  designWorkspace: DesignWorkspaceToolUI,
-                  designGallery: DesignGalleryToolUI,
-                  askUserQuestion: AskFollowupQuestionToolUI,
-                  askFollowupQuestion: AskFollowupQuestionToolUI,
-                  AskFollowupQuestion: AskFollowupQuestionToolUI,
-                  AskUserQuestion: AskFollowupQuestionToolUI,
-                  ExitPlanMode: PlanApprovalToolUI,
-                  promptLibrary: PromptLibraryToolUI,
-                  // Claude Code native tools
-                  Edit: ClaudeEditToolUI,
-                  Bash: ClaudeBashToolUI,
-                  Read: ClaudeReadToolUI,
-                  Write: ClaudeWriteToolUI,
-                  Glob: ClaudeGlobToolUI,
-                  Grep: ClaudeGrepToolUI,
-                  Agent: ClaudeAgentToolUI,
-                  WebFetch: ClaudeWebFetchToolUI,
-                  WebSearch: ClaudeWebSearchToolUI,
-                  NotebookEdit: ClaudeNotebookEditToolUI,
-                  TodoWrite: ClaudeTodoWriteToolUI,
-                  EnterPlanMode: ClaudeEnterPlanModeToolUI,
-                  EnterWorktree: ClaudeEnterWorktreeToolUI,
-                  Skill: ClaudeSkillToolUI,
-                  TaskOutput: ClaudeTaskOutputToolUI,
-                  TaskStop: ClaudeTaskStopToolUI,
-                  delegateToSubagent: DelegationToolUI,
-                }),
+                by_name: TOOL_BY_NAME_MAP,
                 Fallback: ToolFallback,
               },
             }}
