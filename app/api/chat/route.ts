@@ -1012,10 +1012,42 @@ export async function POST(req: Request) {
             });
           }
 
+          // OpenRouter forwards to providers like Qwen/Alibaba that reject
+          // multiple system messages. Flatten CacheableSystemBlock[] into a
+          // single string so only one {role:"system"} is sent upstream.
+          // Also absorb any session-summary system message from cachedMessages
+          // so the final request has exactly one system message total.
+          // Cache control markers are Anthropic-specific anyway, so no loss.
+          let finalSystemPrompt: typeof systemPromptValue = systemPromptValue;
+          let finalMessages = cachedMessages;
+          if (provider === "openrouter") {
+            if (Array.isArray(systemPromptValue)) {
+              const parts = systemPromptValue.map((block) => block.content);
+              // Absorb leading system messages from cachedMessages into the prompt
+              const msgs = [...cachedMessages];
+              while (msgs.length > 0 && msgs[0].role === "system") {
+                parts.push(msgs[0].content as string);
+                msgs.shift();
+              }
+              finalSystemPrompt = parts.join("\n\n");
+              finalMessages = msgs;
+            } else if (typeof systemPromptValue === "string") {
+              // Even when not cached, absorb leading system messages
+              const parts = [systemPromptValue];
+              const msgs = [...cachedMessages];
+              while (msgs.length > 0 && msgs[0].role === "system") {
+                parts.push(msgs[0].content as string);
+                msgs.shift();
+              }
+              finalSystemPrompt = parts.join("\n\n");
+              finalMessages = msgs;
+            }
+          }
+
           return streamText({
             model: resolvedModel,
-            ...(injectContext && { system: systemPromptValue }),
-          messages: cachedMessages,
+            ...(injectContext && { system: finalSystemPrompt }),
+          messages: finalMessages,
           ...(providerSupportsFeature("tools", provider) ? {
             tools: allToolsWithMCP,
             activeTools: initialActiveToolNames as (keyof typeof allToolsWithMCP)[],
