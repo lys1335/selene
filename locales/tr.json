@@ -1045,7 +1045,6 @@
     },
     "tools": {
       "searchTools": "Araç Arama",
-      "listAllTools": "Araçları Listele",
       "webSearch": "Web Arama",
       "firecrawlCrawl": "Web Sitesini Tara",
       "vectorSearch": "Vektör Arama",

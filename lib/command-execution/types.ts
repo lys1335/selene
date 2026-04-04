@@ -132,6 +132,46 @@ export interface ExecuteCommandToolOptions {
   onProgress?: (update: ExecuteCommandProgressUpdate) => void;
 }
 
+interface BashInput {
+  /** Shell command string to execute */
+  command?: string;
+  /** Maximum execution time in milliseconds */
+  timeout?: number;
+  /** Optional note about why the command is running */
+  description?: string;
+  /** Run the command in the background */
+  run_in_background?: boolean;
+  /** Existing background process id */
+  processId?: string;
+  /** Background management action */
+  action?: "status" | "kill" | "list";
+}
+
+interface BashToolResult {
+  /** Execution status */
+  status: "success" | "error" | "no_folders" | "blocked" | "running" | "background_started";
+  /** Standard output */
+  stdout?: string;
+  /** Standard error */
+  stderr?: string;
+  /** Exit code */
+  exitCode?: number | null;
+  /** Execution time in milliseconds */
+  executionTime?: number;
+  /** Timestamp captured when the command started. */
+  startedAt?: string;
+  /** User-friendly message */
+  message?: string;
+  /** Error details */
+  error?: string;
+  /** Process ID for background processes */
+  processId?: string;
+  /** Log ID for persistent storage */
+  logId?: string;
+  /** Whether the output was truncated in context */
+  isTruncated?: boolean;
+}
+
 /**
  * Input schema for the executeCommand AI tool
  */

@@ -63,6 +63,12 @@ export interface ToolMetadata {
   shortDescription: string;
 
   /**
+   * High-signal capability phrase used by searchTools ranking.
+   * Example: "search the web" or "edit files in the codebase".
+   */
+  searchHint?: string;
+
+  /**
    * Full usage instructions returned by searchTools.
    * Contains detailed parameter docs, usage examples, and guidelines.
    * This replaces verbose tool descriptions and system prompt instructions.
@@ -199,53 +205,5 @@ export interface ToolSearchResult {
   fullInstructions?: string;
 }
 
-/**
- * Context for tool search/discovery. Extracted here (rather than in search-tool.ts)
- * to avoid a circular dependency: selene-sdk-mcp-server → search-tool → providers.
- */
-export interface ToolSearchContext {
-  /**
-   * Set of tool names that are initially active (non-deferred tools).
-   * These tools are available for immediate use.
-   */
-  initialActiveTools?: Set<string>;
-
-  /**
-   * Mutable set of tool names that have been discovered via searchTools.
-   * When searchTools finds a deferred tool, it adds the tool name here.
-   * The prepareStep callback reads this to dynamically enable discovered tools.
-   */
-  discoveredTools?: Set<string>;
-
-  /**
-   * Enables Anthropic tool-reference output bridging for deferred tools.
-   * When enabled, searchTools emits tool_reference blocks via toModelOutput
-   * so Anthropic can load deferred schemas server-side.
-   */
-  enableAnthropicToolReferences?: boolean;
-
-  /**
-   * Set of tool names that are enabled for this specific agent/character.
-   * If provided, search results are filtered to only show tools in this set
-   * (plus tools with alwaysLoad: true like searchTools/listAllTools).
-   * If undefined, all enabled tools are shown (for agents without tool restrictions).
-   */
-  enabledTools?: Set<string>;
-
-  /**
-   * @deprecated Use initialActiveTools instead
-   * Set of tool names that are actually loaded in the current session.
-   * If provided, only these tools will be reported as available.
-   * If undefined, all enabled tools are shown (legacy behavior).
-   */
-  loadedTools?: Set<string>;
-
-  /**
-   * Workflow subagent directory for subagent discovery.
-   * When provided, searchTools will also search available subagents
-   * by matching query against subagent names and purposes.
-   * Format: ["- AgentName (id: agent-id): Purpose description", ...]
-   */
-  subagentDirectory?: string[];
-}
+// ToolSearchContext is now defined in search-tool.ts and re-exported from index.ts
 

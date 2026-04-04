@@ -4,12 +4,17 @@
     "@nx-js/observer-util",
     "@risingstack/react-easy-state",
     "tailwindcss-animate",
-    "dotenv"
+    "dotenv",
+    "zlib-sync"
   ],
   "ignorePatterns": [
     "selene-plugins/_vendor_screenshot_rocks/**"
   ],
   "ignoreExports": [
+    {
+      "file": "lib/command-execution/validator.ts",
+      "exports": ["isCommandBlocked", "validateShellCommand"]
+    },
     {
       "file": "components/avatar-3d/avatar-pip-widget.tsx",
       "exports": [

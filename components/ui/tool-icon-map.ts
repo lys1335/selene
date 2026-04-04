@@ -16,6 +16,7 @@ import {
   FileText,
   PencilSimple,
   Terminal,
+  TerminalWindow,
   Image,
   PaintBrush,
   VideoCamera,
@@ -81,7 +82,6 @@ const TOOL_ICON_MAP: Record<string, ToolIconConfig> = {
   vectorSearch: { icon: Database, weight: "duotone" },
   webSearch: { icon: Globe, weight: "duotone" },
   searchTools: { icon: Binoculars, weight: "duotone" },
-  listAllTools: { icon: ListBullets, weight: "regular" },
   localGrep: { icon: MagnifyingGlass, weight: "bold" },
   
   // File Operations
@@ -92,6 +92,7 @@ const TOOL_ICON_MAP: Record<string, ToolIconConfig> = {
   createFile: { icon: FilePlus, weight: "bold" },
   
   // Execution & Terminal
+  bash: { icon: TerminalWindow, weight: "fill" },
   executeCommand: { icon: Terminal, weight: "fill" },
   
   // Planning & Memory

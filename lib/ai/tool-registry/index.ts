@@ -12,6 +12,6 @@
 
 // Core registry
 export { ToolRegistry } from "./registry";
-export { createToolSearchTool, createListToolsTool, type ToolSearchContext } from "./search-tool";
+export { createToolSearchTool, type ToolSearchContext } from "./search-tool";
 export { registerAllTools } from "./tool-definitions";
 

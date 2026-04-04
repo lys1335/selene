@@ -1181,7 +1181,7 @@ export async function POST(req: Request) {
               const hasDelegations = hasRunningDelegationsForSession(characterId, sessionId);
               const systemMsg = hasDelegations
                 ? "You have active delegations still running. You MUST call observe() or delegateToSubagent with action='observe' to wait for and collect their results. Do NOT respond to the user until all delegations have completed and you have processed their results."
-                : "You have background processes still running. You MUST call executeCommand with the processId to check their status, or wait for them to complete. Do NOT respond to the user until you have checked on all running processes.";
+                : "You have background processes still running. You MUST call bash or executeCommand with the processId to check their status, or wait for them to complete. Do NOT respond to the user until you have checked on all running processes.";
               return {
                 activeTools: currentActiveTools as string[],
                 toolChoice: "required" as const,
