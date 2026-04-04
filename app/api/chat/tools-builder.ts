@@ -26,6 +26,7 @@ import { createVectorSearchToolV2 } from "@/lib/ai/vector-search";
 import { createReadFileTool } from "@/lib/ai/tools/read-file-tool";
 import { createLocalGrepTool } from "@/lib/ai/ripgrep";
 import { createExecuteCommandTool } from "@/lib/ai/tools/execute-command-tool";
+import { createBashTool } from "@/lib/ai/tools/bash-tool";
 import { createEditFileTool } from "@/lib/ai/tools/edit-file-tool";
 import { createWriteFileTool } from "@/lib/ai/tools/write-file-tool";
 import { createPatchFileTool } from "@/lib/ai/tools/patch-file-tool";
@@ -38,7 +39,6 @@ import { createWorkspaceTool } from "@/lib/ai/tools/workspace-tool";
 import {
   ToolRegistry,
   createToolSearchTool,
-  createListToolsTool,
 } from "@/lib/ai/tool-registry";
 import { getCharacterFull } from "@/lib/characters/queries";
 import { getRegisteredHooks } from "@/lib/plugins/hooks-engine";
@@ -192,9 +192,8 @@ export async function buildToolsForRequest(
         sessionMetadata,
       }),
     }),
-    // searchTools and listAllTools ALWAYS override (they're alwaysLoad: true)
+    // searchTools ALWAYS overrides (alwaysLoad: true)
     searchTools: createToolSearchTool(toolSearchContext),
-    listAllTools: createListToolsTool(toolSearchContext),
     // retrieveFullContent ALWAYS overrides (alwaysLoad: true)
     retrieveFullContent: createRetrieveFullContentTool({ sessionId }),
     ...(allTools.docsSearch && {
@@ -233,6 +232,13 @@ export async function buildToolsForRequest(
     }),
     ...(allTools.executeCommand && {
       executeCommand: createExecuteCommandTool({
+        sessionId,
+        characterId: characterId || null,
+        onProgress: onExecuteCommandProgress,
+      }),
+    }),
+    ...(allTools.bash && {
+      bash: createBashTool({
         sessionId,
         characterId: characterId || null,
         onProgress: onExecuteCommandProgress,
@@ -590,14 +596,14 @@ export async function buildToolsForRequest(
         }
 
         // executeCommand oversized-output loop guard (pre-execution check)
-        if (toolId === "executeCommand" && execCommandDisabledByLoopGuard) {
+        if ((toolId === "executeCommand" || toolId === "bash") && execCommandDisabledByLoopGuard) {
           console.warn(
-            `[CHAT API] executeCommand disabled for remaining response (${execCommandDisableReason ?? "unknown reason"})`
+            `[CHAT API] ${toolId} disabled for remaining response (${execCommandDisableReason ?? "unknown reason"})`
           );
           return {
             status: "error",
             error:
-              `executeCommand has been temporarily disabled for this response ` +
+              `${toolId} has been temporarily disabled for this response ` +
               `(${execCommandDisableReason}). ` +
               `The previous commands produced output too large for the context window. ` +
               `To recover: run specific test files (e.g., npm test -- path/to/file.test.ts), ` +
@@ -711,16 +717,16 @@ export async function buildToolsForRequest(
             consecutiveZeroResultWebSearches = 0;
           }
 
-          // executeCommand oversized-output loop guard (post-execution tracking)
-          if (toolId === "executeCommand") {
+          // Shell-command oversized-output loop guard (executeCommand + bash)
+          if (toolId === "executeCommand" || toolId === "bash") {
             if (guardedResult.blocked) {
               consecutiveOversizedExecCommands += 1;
               if (consecutiveOversizedExecCommands >= EXEC_COMMAND_OVERSIZED_LIMIT) {
                 execCommandDisableReason =
-                  `${consecutiveOversizedExecCommands} consecutive oversized results`;
+                  `${consecutiveOversizedExecCommands} consecutive oversized shell command results`;
                 execCommandDisabledByLoopGuard = true;
                 console.warn(
-                  `[CHAT API] executeCommand loop guard triggered (${execCommandDisableReason})`
+                  `[CHAT API] ${toolId} loop guard triggered (${execCommandDisableReason})`
                 );
               }
             } else {

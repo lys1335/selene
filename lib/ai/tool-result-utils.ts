@@ -241,16 +241,19 @@ export function buildToolSummary(toolName: string, input?: unknown, output?: unk
       const exitText = exitCode !== undefined ? ` (exit ${exitCode})` : "";
       return `Command "${command}":${statusTag}${exitText}, stdout ${stdoutLen} chars, stderr ${stderrLen} chars`;
     }
+    case "bash": {
+      const command = getString(inputObj?.command) || getString(result.command) || "command";
+      const exitCode = getNumber(result.exitCode);
+      const stdoutLen = getString(result.stdout)?.length || 0;
+      const stderrLen = getString(result.stderr)?.length || 0;
+      const statusTag = status ? ` ${status}` : "";
+      const exitText = exitCode !== undefined ? ` (exit ${exitCode})` : "";
+      return `Bash "${command}":${statusTag}${exitText}, stdout ${stdoutLen} chars, stderr ${stderrLen} chars`;
+    }
     case "searchTools": {
       const query = getString(result.query) || getString(inputObj?.query) || "query";
       const results = Array.isArray(result.results) ? result.results.length : 0;
       return `Tool search "${query}": ${results} result${results === 1 ? "" : "s"}`;
-    }
-    case "listAllTools": {
-      const results = Array.isArray(result.results) ? result.results.length : undefined;
-      return results !== undefined
-        ? `Tool list: ${results} tool${results === 1 ? "" : "s"}`
-        : "Tool list returned";
     }
     case "retrieveFullContent": {
       const contentId = getString(result.contentId) || getString(inputObj?.contentId);

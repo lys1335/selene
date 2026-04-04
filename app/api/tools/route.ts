@@ -36,7 +36,7 @@ export interface ConfigurableTool {
  * GET /api/tools
  *
  * Returns the list of configurable tools from the registry.
- * Excludes utility tools and always-load tools (like searchTools, listAllTools)
+ * Excludes utility tools and always-load tools (like searchTools)
  * since those are not meant to be configured per character.
  *
  * Query params:
@@ -65,7 +65,6 @@ export async function GET(request: Request) {
     const configurableTools: ConfigurableTool[] = [];
     const NON_CONFIGURABLE_TOOL_IDS = new Set([
       "searchTools",
-      "listAllTools",
       "retrieveFullContent",
     ]);
 

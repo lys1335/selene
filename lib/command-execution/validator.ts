@@ -12,6 +12,15 @@ import type { ValidationResult } from "./types";
 
 const REMOVAL_COMMANDS = ["rm", "rmdir", "del", "erase", "rd"];
 
+const SHELL_REMOVAL_PATTERNS = [
+    /(?:^|[;&|()\s])rm\s+(?:-[^\s]+\s+)*(?:-rf|-fr|--recursive\b|--force\b)/i,
+    /(?:^|[;&|()\s])rm\s+/i,
+    /(?:^|[;&|()\s])rmdir\s+/i,
+    /(?:^|[;&|()\s])del\s+/i,
+    /(?:^|[;&|()\s])erase\s+/i,
+    /(?:^|[;&|()\s])rd\s+/i,
+];
+
 const NETWORK_COMMANDS: string[] = [];
 
 /**
@@ -160,6 +169,35 @@ export function validateCommand(
 /**
  * Check if a command is in the blocklist (for quick checks)
  */
+export function validateShellCommand(command: string): ValidationResult {
+    const trimmed = command.trim();
+    if (!trimmed) {
+        return {
+            valid: false,
+            error: "Command cannot be empty.",
+        };
+    }
+
+    if (PATH_TRAVERSAL_PATTERN.test(trimmed)) {
+        return {
+            valid: false,
+            error: "Shell command contains a path traversal pattern.",
+        };
+    }
+
+    for (const pattern of SHELL_REMOVAL_PATTERNS) {
+        if (pattern.test(trimmed)) {
+            return {
+                valid: false,
+                error:
+                    "Shell command contains a removal command. Use edit/write/file tools instead, or run a safer scoped command.",
+            };
+        }
+    }
+
+    return { valid: true };
+}
+
 export function isCommandBlocked(command: string): boolean {
     const baseCommand = getBaseCommand(command);
     return (

@@ -333,15 +333,6 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
     );
   }
 
-  // Handle listAllTools results
-  if (canonicalToolName === "listAllTools") {
-    return (
-      <div className={TOOL_RESULT_TEXT_CLASS}>
-        {normalizedResult.message || tResults("toolsListedSuccessfully")}
-      </div>
-    );
-  }
-
   // Handle webSearch results
   if (canonicalToolName === "webSearch") {
     const action = typeof (normalizedResult as { action?: unknown }).action === "string"

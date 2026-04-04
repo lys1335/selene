@@ -62,6 +62,12 @@ export interface ToolMetadata {
   shortDescription: string;
 
   /**
+   * High-signal capability phrase used by searchTools ranking.
+   * Example: "search the web" or "edit files in the codebase".
+   */
+  searchHint?: string;
+
+  /**
    * Full usage instructions returned by searchTools.
    * Contains detailed parameter docs, usage examples, and guidelines.
    * This replaces verbose tool descriptions and system prompt instructions.
