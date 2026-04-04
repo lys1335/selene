@@ -255,9 +255,34 @@ copyNodeDependencies([
 ]);
 
 // 8. Copy npm CLI for bundled npx/npm support in production
-copyNodeDependencies([
-    { name: 'npm', src: 'npm', dest: 'npm' },
-]);
+// npm is bundled with Node.js, not in project node_modules.
+// Look for it in the system Node.js installation first.
+const systemNpmPath = (() => {
+    try {
+        const npmBin = require('child_process').execSync('which npm', { encoding: 'utf8' }).trim();
+        // npm binary is at <prefix>/bin/npm, package is at <prefix>/lib/node_modules/npm
+        const prefix = path.resolve(path.dirname(npmBin), '..');
+        const npmPkg = path.join(prefix, 'lib', 'node_modules', 'npm');
+        if (fs.existsSync(npmPkg)) return npmPkg;
+    } catch {}
+    return null;
+})();
+
+if (systemNpmPath) {
+    console.log('Copying npm folder...');
+    const npmDest = path.join(standaloneDir, 'node_modules', 'npm');
+    ensureDir(path.dirname(npmDest));
+    if (fs.existsSync(npmDest)) {
+        fs.rmSync(npmDest, { recursive: true, force: true });
+    }
+    copyRecursive(systemNpmPath, npmDest);
+    console.log(`  Bundled npm from ${systemNpmPath}`);
+} else {
+    // Fallback: try project node_modules
+    copyNodeDependencies([
+        { name: 'npm', src: 'npm', dest: 'npm' },
+    ]);
+}
 
 // 9. Copy local embedding dependencies for offline Transformers.js support
 copyNodeDependencies([
