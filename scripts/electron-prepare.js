@@ -28,6 +28,14 @@ function copyRecursive(src, dest) {
         });
     } else {
         fs.copyFileSync(src, dest);
+        // Ensure copied files are writable (system files like npm may be read-only,
+        // which causes codesign to fail with "Permission denied")
+        try {
+            const destStats = fs.statSync(dest);
+            if (!(destStats.mode & 0o200)) {
+                fs.chmodSync(dest, destStats.mode | 0o644);
+            }
+        } catch {}
     }
 }
 
