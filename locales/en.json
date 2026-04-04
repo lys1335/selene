@@ -840,10 +840,6 @@
         "name": "Reference (Gemini 3 Pro)",
         "description": "Advanced style transfer with multiple reference images"
       },
-      "generateImageZImage": {
-        "name": "Generate (Z-Image Local)",
-        "description": "Local image generation via ComfyUI (requires Docker)"
-      },
       "generateImageFlux2Klein4B": {
         "name": "Generate (FLUX.2 Klein 4B)",
         "description": "Fast local FLUX.2 Klein 4B image generation (requires Docker)"
@@ -1082,7 +1078,6 @@
       "generateImageGemini3Pro": "Generate (Gemini 3 Pro)",
       "editImageGemini3Pro": "Edit (Gemini 3 Pro)",
       "referenceImageGemini3Pro": "Reference (Gemini 3 Pro)",
-      "generateImageZImage": "Generate (Z-Image Local)",
       "generateImageFlux2Klein4B": "Generate (FLUX.2 Klein 4B)",
       "editImageFlux2Klein4B": "Edit (FLUX.2 Klein 4B)",
       "referenceImageFlux2Klein4B": "Reference (FLUX.2 Klein 4B)",
@@ -1829,8 +1824,6 @@
         "editImageGemini3ProDesc": "Advanced editing of one or more images with Gemini 3 Pro",
         "referenceImageGemini3Pro": "Reference (Gemini 3 Pro)",
         "referenceImageGemini3ProDesc": "Advanced style transfer with multiple reference images",
-        "generateImageZImage": "Generate (Z-Image Local)",
-        "generateImageZImageDesc": "Local image generation via ComfyUI (requires Docker)",
         "generateImageFlux2Klein4B": "Generate (FLUX.2 Klein 4B)",
         "generateImageFlux2Klein4BDesc": "Fast local FLUX.2 Klein 4B image generation (requires Docker)",
         "editImageFlux2Klein4B": "Edit (FLUX.2 Klein 4B)",
@@ -3068,33 +3061,6 @@
       "advanced": "Advanced",
       "backendPathLabel": "Backend Path",
       "backendPathPlaceholder": "Auto-detected path"
-    },
-    "installer": {
-      "title": "Local Image Generation (Z-Image Turbo FP8)",
-      "titleSimple": "Local Image Generation (Z-Image)",
-      "description": "Generate images locally using ComfyUI with the Z-Image Turbo FP8 model. Requires Docker and an NVIDIA GPU with ~12GB VRAM.",
-      "webOnlyNote": "Local ComfyUI backend is only available in the desktop app.",
-      "enableLabel": "Enable Local Image Generation",
-      "enableDesc": "Use local ComfyUI instead of cloud APIs",
-      "dockerInstalled": "Docker Installed",
-      "imageBuilt": "Docker Image Built",
-      "modelsDownloaded": "Models Downloaded",
-      "containerRunning": "Container Running",
-      "apiHealthy": "API Healthy",
-      "refreshStatus": "Refresh Status",
-      "setupButton": "Setup ComfyUI (Build + Download ~12GB Models)",
-      "dockerRequired": "Docker is required. Please install Docker Desktop first.",
-      "stopComfyUI": "Stop ComfyUI",
-      "startComfyUI": "Start ComfyUI",
-      "setupWillTitle": "One-click setup will:",
-      "setupStep1": "Build Docker images (~10-20 min first time)",
-      "setupStep2": "Download z-image-turbo-fp8-aio.safetensors (~11GB)",
-      "setupStep3": "Download z-image-detailer.safetensors (~1.2GB)",
-      "setupStep4": "Start ComfyUI containers",
-      "advancedSettings": "Advanced Settings",
-      "backendPath": "ComfyUI Backend Path",
-      "backendPathPlaceholder": "Auto-detected path or custom location",
-      "backendPathDesc": "Override the default location for ComfyUI backend files and models."
     }
   },
   "vectorSearch": {

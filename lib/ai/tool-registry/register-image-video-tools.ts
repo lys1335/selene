@@ -22,7 +22,6 @@ import {
   createWan22PixelVideoTool,
   createWan22VideoTool,
 } from "../tools";
-import { createZImageGenerateTool } from "../tools/zimage-generate-tool";
 import { createRunwayVideoTool } from "../tools/runway-video-tool";
 import { createVertexAIVideoTool } from "../tools/vertex-ai-video-tool";
 
@@ -30,34 +29,6 @@ export function registerImageAndVideoTools(registry: ToolRegistry): void {
 // ============================================================
 // DEFERRED TOOLS - AI Model Pipelines (require searchTools to discover)
 // ============================================================
-
-// ============================================================================
-// LOCAL COMFYUI IMAGE GENERATION TOOLS
-// These tools use the local ComfyUI backend for image generation
-// Enable via Settings > ComfyUI Settings
-// ============================================================================
-
-// Z-Image Turbo FP8 - Local Generation
-registry.register(
-  "generateImageZImage",
-  {
-    displayName: "Generate Image (Z-Image Local)",
-    category: "image-generation",
-    keywords: [
-      "generate", "create", "image", "local", "comfyui", "z-image", "turbo", "fp8",
-      "text-to-image", "fast", "offline", "private", "local image", "generate locally",
-    ],
-    shortDescription: "Generate images locally using Z-Image Turbo FP8 via ComfyUI",
-    fullInstructions: `## Z-Image Turbo FP8 (Local ComfyUI)
-
-Fast local image generation. Defaults optimized (steps=9, cfg=1.0). Seed=-1 for random.`,
-    loading: { deferLoading: true },
-    requiresSession: false,
-    // Only available when local ComfyUI is enabled
-    enableEnvVar: "COMFYUI_LOCAL_ENABLED",
-  } satisfies ToolMetadata,
-  () => createZImageGenerateTool()
-);
 
 // ============================================================================
 // LEGACY STYLY IO API TOOLS

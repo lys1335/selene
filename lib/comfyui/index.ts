@@ -1,8 +1,6 @@
 /**
- * ComfyUI Local Backend - Index
- * Re-exports all ComfyUI utilities
+ * ComfyUI - Index
+ * Re-exports custom workflow utilities
  */
 
-export * from "./types";
-export { generateImage, checkStatus } from "./client";
-
+export * from "./custom";
