@@ -1,5 +1,5 @@
 /**
- * POST /api/ollama/test
+ * POST /api/ollama/check
  *
  * Tests Ollama connectivity by hitting /api/tags and /api/version.
  * Accepts an optional `{ baseUrl }` in the request body; falls back
@@ -8,20 +8,21 @@
 
 import { NextResponse } from "next/server";
 import { loadSettings } from "@/lib/settings/settings-manager";
+import { validateOllamaUrl } from "../validate-url";
 
 const OLLAMA_DEFAULT_BASE_URL = "http://localhost:11434";
 const REQUEST_TIMEOUT_MS = 5000;
 
 function resolveBaseUrl(override?: string): string {
   if (override) {
-    return override.replace(/\/v1\/?$/, "");
+    return validateOllamaUrl(override);
   }
   const settings = loadSettings();
-  const url =
+  return validateOllamaUrl(
     settings.ollamaBaseUrl ||
     process.env.OLLAMA_BASE_URL ||
-    OLLAMA_DEFAULT_BASE_URL;
-  return url.replace(/\/v1\/?$/, "");
+    OLLAMA_DEFAULT_BASE_URL,
+  );
 }
 
 export async function POST(request: Request) {

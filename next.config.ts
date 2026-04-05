@@ -282,13 +282,6 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // Next.js auto-hashed assets are safe to cache immutably
-        source: "/_next/static/:path*",
-        headers: [
-          { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-        ],
-      },
-      {
         // Mutable public assets — short cache with revalidation
         source: "/:path(.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf))",
         headers: [

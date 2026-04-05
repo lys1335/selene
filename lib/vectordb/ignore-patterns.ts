@@ -9,7 +9,6 @@ const DEFAULT_IGNORED_DIRECTORY_NAMES = [
   "coverage",
   ".local-data",
   "dist-electron",
-  "comfyui_backend",
   ".vscode",
   ".idea",
   "tmp",
@@ -24,6 +23,14 @@ const DEFAULT_IGNORED_DIRECTORY_NAMES = [
   ".mypy_cache",
   ".ruff_cache",
   ".tox",
+  // PHP Composer / Go vendor (equivalent of node_modules)
+  "vendor",
+  // Ruby Bundler
+  ".bundle",
+  // iOS CocoaPods
+  "Pods",
+  // Dart/Flutter pub cache
+  ".dart_tool",
 ];
 
 const DEFAULT_IGNORED_FILE_NAMES = [

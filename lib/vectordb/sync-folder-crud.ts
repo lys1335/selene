@@ -49,6 +49,11 @@ export async function addSyncFolder(config: SyncFolderConfig): Promise<string> {
       "pnpm-lock.yaml",
       "yarn.lock",
       "*.lock",
+      // Package manager vendor dirs for non-JS ecosystems
+      "vendor",     // PHP Composer / Go
+      ".bundle",    // Ruby Bundler
+      "Pods",       // iOS CocoaPods
+      ".dart_tool", // Dart/Flutter
     ],
     indexingMode = "auto",
     syncMode = "auto",

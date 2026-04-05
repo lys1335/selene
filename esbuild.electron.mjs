@@ -3,8 +3,9 @@ import * as esbuild from "esbuild";
 const isDev = process.argv.includes("--dev");
 
 // Bundle the Electron main process
-// This inlines dependencies like @huggingface/hub that aren't available
-// in the packaged app's ASAR archive (which excludes node_modules)
+// Native modules must stay external (they contain .node binaries that can't
+// be bundled). All pure-JS deps are inlined — esbuild handles ESM→CJS
+// transpilation, which is required for ESM-only packages like @huggingface/transformers.
 // ---------------------------------------------------------------------------
 // Banner: native module resolution for packaged builds
 // This MUST run before any require() in the bundle because esbuild evaluates

@@ -183,7 +183,6 @@ const standaloneJunk = [
     '.env.local',
     '.env.example',
     '.local-data',
-    'comfyui_backend',
     'models',
     'binaries',
     // Source code directories - Next.js standalone copies the project root,
@@ -267,11 +266,19 @@ copyNodeDependencies([
 // Look for it in the system Node.js installation first.
 const systemNpmPath = (() => {
     try {
-        const npmBin = require('child_process').execSync('which npm', { encoding: 'utf8' }).trim();
-        // npm binary is at <prefix>/bin/npm, package is at <prefix>/lib/node_modules/npm
+        const lookupCmd = process.platform === 'win32' ? 'where npm' : 'which npm';
+        const npmBin = require('child_process').execSync(lookupCmd, { encoding: 'utf8' }).trim().split(/\r?\n/)[0];
+        // Unix: npm binary at <prefix>/bin/npm, package at <prefix>/lib/node_modules/npm
+        // Windows: npm.cmd at <prefix>/npm.cmd, package at <prefix>/node_modules/npm
         const prefix = path.resolve(path.dirname(npmBin), '..');
-        const npmPkg = path.join(prefix, 'lib', 'node_modules', 'npm');
-        if (fs.existsSync(npmPkg)) return npmPkg;
+        const candidates = [
+            path.join(prefix, 'lib', 'node_modules', 'npm'),
+            path.join(prefix, 'node_modules', 'npm'),
+            // Windows: where returns <prefix>/npm.cmd directly (no bin/ subdir)
+            path.join(path.dirname(npmBin), 'node_modules', 'npm'),
+        ];
+        const found = candidates.find(p => fs.existsSync(p));
+        if (found) return found;
     } catch {}
     return null;
 })();
@@ -310,6 +317,27 @@ const nativeModuleBinaries = [
         dest: 'better-sqlite3/build/Release/better_sqlite3.node'
     },
 ];
+
+// 10a. Copy sharp's native DLLs that Next.js file tracing misses
+// The .node addon is traced, but libvips DLLs are loaded dynamically at runtime
+// and won't be picked up by static analysis.
+console.log('Copying sharp native DLLs...');
+const sharpPlatformDir = `sharp-${process.platform}-${process.arch === 'arm64' ? 'arm64' : 'x64'}`;
+const sharpLibSrc = path.join(rootDir, 'node_modules', '@img', sharpPlatformDir, 'lib');
+const sharpLibDest = path.join(standaloneDir, 'node_modules', '@img', sharpPlatformDir, 'lib');
+if (fs.existsSync(sharpLibSrc)) {
+    ensureDir(sharpLibDest);
+    for (const file of fs.readdirSync(sharpLibSrc)) {
+        const src = path.join(sharpLibSrc, file);
+        const dest = path.join(sharpLibDest, file);
+        if (!fs.existsSync(dest)) {
+            fs.copyFileSync(src, dest);
+            console.log(`  Copied ${file}`);
+        }
+    }
+} else {
+    console.log(`  Sharp platform package not found at ${sharpLibSrc} — skipping`);
+}
 
 for (const mod of nativeModuleBinaries) {
     const srcPath = path.join(rootDir, 'node_modules', mod.src);

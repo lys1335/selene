@@ -70,7 +70,7 @@ export function ApiKeysSection({
   const testOllamaConnection = useCallback(async (baseUrl: string) => {
     setOllamaTest({ status: "loading" });
     try {
-      const res = await fetch("/api/ollama/test", {
+      const res = await fetch("/api/ollama/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ baseUrl }),

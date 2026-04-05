@@ -37,8 +37,6 @@ extraResources:
     filter:
       - "**/*"
       - "!**/node_modules"
-      - "!**/comfyui_backend"
-      - "!**/comfyui_backend/**"
       - "!**/models"
       - "!**/models/**"
       - "!**/binaries"
@@ -112,16 +110,6 @@ extraResources:
     to: "binaries/rtk"
     filter:
       - "**/*"
-  # ComfyUI backend infrastructure (lightweight files only - no models)
-  - from: "comfyui_backend"
-    to: "comfyui_backend"
-    filter:
-      - "**/*"
-      - "!ComfyUI/models/**/*.safetensors"
-      - "!ComfyUI/models/**/*.ckpt"
-      - "!ComfyUI/models/**/*.pt"
-      - "!ComfyUI/models/**/*.bin"
-      - "!output/**"
       - "!images/**"
       - "!inputs/**"
       - "!**/*.png"

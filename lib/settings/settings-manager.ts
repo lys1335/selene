@@ -149,7 +149,6 @@ export interface AppSettings {
     comfyuiAutoStart?: boolean;      // Auto-start container on app launch
     comfyuiPort?: number;            // API port (default: 8000)
     comfyuiModelsDownloaded?: boolean; // Whether Z-Image models are downloaded
-    comfyuiBackendPath?: string;     // Path to comfyui_backend folder
     comfyuiCustomHost?: string;      // Host for external ComfyUI instance
     comfyuiCustomPort?: number;      // Port for external ComfyUI instance
     comfyuiCustomUseHttps?: boolean; // Use HTTPS for external ComfyUI
@@ -345,7 +344,6 @@ const DEFAULT_SETTINGS: AppSettings = {
     comfyuiAutoStart: false,
     comfyuiPort: 8000,
     comfyuiModelsDownloaded: false,
-    comfyuiBackendPath: "",
     comfyuiCustomHost: "127.0.0.1",
     comfyuiCustomPort: 8188,
     comfyuiCustomUseHttps: false,
@@ -702,9 +700,6 @@ function updateEnvFromSettings(settings: AppSettings): void {
     }
     if (settings.comfyuiPort) {
         process.env.COMFYUI_PORT = String(settings.comfyuiPort);
-    }
-    if (settings.comfyuiBackendPath) {
-        process.env.COMFYUI_BACKEND_PATH = settings.comfyuiBackendPath;
     }
     if (settings.comfyuiCustomHost) {
         process.env.COMFYUI_CUSTOM_HOST = settings.comfyuiCustomHost;
