@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useMemo } from "react";
+import { useUnifiedTasksStore } from "@/lib/stores/unified-tasks-store";
 
 interface DelegationInfo {
   delegationId: string;
@@ -16,50 +17,33 @@ interface DelegationStatus {
   error: string | null;
 }
 
-const POLL_INTERVAL_MS = 5000;
-
+/**
+ * Derives delegation status from the unified tasks store (SSE-fed)
+ * instead of polling /api/delegations/status every 5 seconds.
+ */
 export function useDelegationStatus(characterId: string | null): DelegationStatus {
-  const [delegations, setDelegations] = useState<DelegationInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const tasks = useUnifiedTasksStore((s) => s.tasks);
 
-  const fetchStatus = useCallback(async () => {
-    if (!characterId) return;
-    try {
-      const res = await fetch(`/api/delegations/status?characterId=${encodeURIComponent(characterId)}`);
-      if (!res.ok) {
-        setError(`Failed to fetch delegation status: ${res.status}`);
-        return;
-      }
-      const data = await res.json();
-      setDelegations(data.delegations ?? []);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [characterId]);
+  const delegations = useMemo(() => {
+    if (!characterId) return [];
+    return tasks
+      .filter((t) => {
+        const meta = t.metadata as Record<string, unknown> | undefined;
+        return meta?.isDelegation === true && meta?.parentAgentId === characterId;
+      })
+      .map((t) => {
+        const meta = t.metadata as Record<string, unknown> | undefined;
+        return {
+          delegationId: t.runId,
+          sessionId: t.sessionId ?? "",
+          delegateAgentId: t.characterId ?? "",
+          delegateAgent: (meta?.characterName as string) ?? "Agent",
+          task: "",
+          running: t.status === "running",
+          elapsed: Date.now() - new Date(t.startedAt).getTime(),
+        };
+      });
+  }, [characterId, tasks]);
 
-  useEffect(() => {
-    if (!characterId) {
-      setDelegations([]);
-      return;
-    }
-
-    setIsLoading(true);
-    fetchStatus();
-
-    intervalRef.current = setInterval(fetchStatus, POLL_INTERVAL_MS);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-    };
-  }, [characterId, fetchStatus]);
-
-  return { delegations, isLoading, error };
+  return { delegations, isLoading: false, error: null };
 }

@@ -8,6 +8,7 @@ import { TerminalPrompt } from "@/components/ui/terminal-prompt";
 import { useReducedMotion } from "../hooks/use-reduced-motion";
 import { useTranslations } from "next-intl";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
+import { useSettings } from "@/lib/hooks/use-settings";
 import {
     CloudIcon,
     HardDriveIcon,
@@ -61,18 +62,18 @@ export function EmbeddingSetupPage({
     const prefersReducedMotion = useReducedMotion();
     const hasAnimated = useRef(false);
 
-    // Check if OpenRouter API key is configured
+    // Check if OpenRouter API key is configured (shared cache)
+    const { settings: _cachedSettings } = useSettings();
     useEffect(() => {
-        resilientFetch<{ openrouterApiKey?: string }>("/api/settings")
-            .then(({ data }) => {
-                setHasOpenRouterKey(!!data?.openrouterApiKey);
-                // If no OpenRouter key, default to local
-                if (!data?.openrouterApiKey) {
-                    setProvider("local");
-                    setSelectedModel(LOCAL_MODELS[0].id);
-                }
-            });
-    }, []);
+        if (_cachedSettings) {
+            setHasOpenRouterKey(!!_cachedSettings.openrouterApiKey);
+            // If no OpenRouter key, default to local
+            if (!_cachedSettings.openrouterApiKey) {
+                setProvider("local");
+                setSelectedModel(LOCAL_MODELS[0].id);
+            }
+        }
+    }, [_cachedSettings]);
 
     // Check local model status in Electron
     useEffect(() => {

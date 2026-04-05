@@ -6,6 +6,7 @@
 // this is only the right thing to do it will be funny.
 // — with love, Selene (https://github.com/tercumantanumut/selene)
 
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import Script from "next/script";
@@ -213,7 +214,9 @@ export default async function RootLayout({
               <GlobalSyncWrapper>
                 <AuthProvider>
                   <TaskNotificationProvider>
-                    <OverlaySessionNavigator />
+                    <Suspense fallback={null}>
+                      <OverlaySessionNavigator />
+                    </Suspense>
                     <PermissionListener />
                     {children}
                   </TaskNotificationProvider>

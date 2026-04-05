@@ -7,7 +7,7 @@ import {
   type CharacterFull,
 } from "@/lib/db/sqlite-character-schema";
 import { skills } from "@/lib/db/sqlite-skills-schema";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, inArray } from "drizzle-orm";
 import type { AgentModelConfig } from "@/components/model-bag/model-bag.types";
 import type { LLMProvider } from "@/lib/ai/provider-types";
 
@@ -132,6 +132,66 @@ export async function getCharacterStats(userId: string, characterId: string): Pr
     lastActive: skillAgg?.lastRunAt || null,
     statsWarning: runCount === 0 ? "No runs recorded yet." : undefined,
   };
+}
+
+export async function getBatchCharacterStats(
+  userId: string,
+  characterIds: string[]
+): Promise<Record<string, CharacterStatsRecord>> {
+  if (characterIds.length === 0) return {};
+
+  const matchingChars = await db.query.characters.findMany({
+    where: and(
+      inArray(characters.id, characterIds),
+      eq(characters.userId, userId)
+    ),
+    columns: { id: true, createdAt: true },
+  });
+
+  if (matchingChars.length === 0) return {};
+
+  const validIds = matchingChars.map((c) => c.id);
+  const createdAtById = new Map(matchingChars.map((c) => [c.id, c.createdAt]));
+
+  const skillAggs = await db
+    .select({
+      characterId: skills.characterId,
+      skillCount: sql<number>`COALESCE(COUNT(*), 0)`,
+      runCount: sql<number>`COALESCE(SUM(${skills.runCount}), 0)`,
+      successCount: sql<number>`COALESCE(SUM(${skills.successCount}), 0)`,
+      lastRunAt: sql<string | null>`MAX(${skills.lastRunAt})`,
+    })
+    .from(skills)
+    .where(
+      and(
+        eq(skills.userId, userId),
+        inArray(skills.characterId, validIds),
+        eq(skills.status, "active")
+      )
+    )
+    .groupBy(skills.characterId);
+
+  const aggByCharId = new Map(skillAggs.map((a) => [a.characterId, a]));
+
+  const result: Record<string, CharacterStatsRecord> = {};
+  for (const charId of validIds) {
+    const agg = aggByCharId.get(charId);
+    const runCount = Number(agg?.runCount || 0);
+    const successCount = Number(agg?.successCount || 0);
+    const successRate = runCount > 0 ? Number(((successCount / runCount) * 100).toFixed(2)) : null;
+
+    result[charId] = {
+      characterId: charId,
+      skillCount: Number(agg?.skillCount || 0),
+      runCount,
+      successRate,
+      activeSince: createdAtById.get(charId) || null,
+      lastActive: agg?.lastRunAt || null,
+      statsWarning: runCount === 0 ? "No runs recorded yet." : undefined,
+    };
+  }
+
+  return result;
 }
 
 async function getUserActiveCharacters(userId: string) {

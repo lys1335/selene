@@ -20,6 +20,7 @@ import { useSessionSyncStore } from "@/lib/stores/session-sync-store";
 import { useShallow } from "zustand/react/shallow";
 import { toast } from "sonner";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
+import { useSettings } from "@/lib/hooks/use-settings";
 import {
   getWorkflowSectionState,
   shouldDisableWorkflowCreate,
@@ -107,21 +108,15 @@ export function CharacterPicker() {
           }))
           : activeChars;
 
-        const statsEntries = await Promise.all(
-          enrichedWithStatus.map(async (char) => {
-            try {
-              const { data } = await resilientFetch<{ stats?: { skillCount: number; runCount: number; successRate: number | null; lastActive: string | null } }>(`/api/characters/${char.id}/stats`);
-              return [char.id, data?.stats || null] as const;
-            } catch {
-              return [char.id, null] as const;
-            }
-          })
-        );
-        const statsById = new Map(statsEntries);
+        const statsIds = enrichedWithStatus.map((c) => c.id).join(",");
+        const { data: statsData } = await resilientFetch<{
+          stats: Record<string, { skillCount: number; runCount: number; successRate: number | null; lastActive: string | null }>;
+        }>(`/api/characters/batch-stats?ids=${statsIds}`).catch(() => ({ data: null }));
+
         setCharacters(
           enrichedWithStatus.map((char) => ({
             ...char,
-            stats: statsById.get(char.id) || undefined,
+            stats: statsData?.stats?.[char.id] ?? undefined,
           }))
         );
       } else {
@@ -199,17 +194,16 @@ export function CharacterPicker() {
     loadCharacters();
   }, [loadCharacters]);
 
+  const { settings: _cachedSettings } = useSettings();
   useEffect(() => {
-    resilientFetch<{ vectorDBEnabled?: boolean; devWorkspaceEnabled?: boolean; workspaceOnboardingSeen?: boolean }>("/api/settings").then(({ data }) => {
-      if (data) {
-        setVectorDBEnabled(data.vectorDBEnabled === true);
-        setDevWorkspaceEnabled(data.devWorkspaceEnabled === true);
-        if (data.devWorkspaceEnabled && !data.workspaceOnboardingSeen) {
-          setShowWorkspaceOnboarding(true);
-        }
+    if (_cachedSettings) {
+      setVectorDBEnabled(_cachedSettings.vectorDBEnabled === true);
+      setDevWorkspaceEnabled(_cachedSettings.devWorkspaceEnabled === true);
+      if (_cachedSettings.devWorkspaceEnabled && !_cachedSettings.workspaceOnboardingSeen) {
+        setShowWorkspaceOnboarding(true);
       }
-    });
-  }, []);
+    }
+  }, [_cachedSettings]);
 
   useEffect(() => {
     wfManager.syncDraftsToGroups(wfManager.workflowGroups);

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
+import { deduplicate } from "@/lib/utils/in-flight-cache";
 
 /**
  * Context window status as returned by the API.
@@ -86,9 +87,13 @@ export function useContextStatus({
     setIsLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await resilientFetch<ContextStatusInfo>(
-      `/api/sessions/${sessionId}/context-status`,
-      { signal: controller.signal, retries: 0 }
+    const { data, error: fetchError } = await deduplicate(
+      "context-status",
+      sessionId,
+      () => resilientFetch<ContextStatusInfo>(
+        `/api/sessions/${sessionId}/context-status`,
+        { signal: controller.signal, retries: 0 }
+      )
     );
 
     // Request was aborted (e.g., component unmounted or new request started)

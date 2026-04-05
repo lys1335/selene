@@ -18,6 +18,7 @@ import {
   CheckIcon,
 } from "lucide-react";
 import { resilientPatch } from "@/lib/utils/resilient-fetch";
+import { invalidateSettingsCache } from "@/lib/hooks/use-settings";
 
 interface WorkspaceOnboardingProps {
   open: boolean;
@@ -142,13 +143,13 @@ export function WorkspaceOnboarding({ open, onComplete }: WorkspaceOnboardingPro
       setStep((s) => s + 1);
     } else {
       // Mark onboarding as seen
-      resilientPatch("/api/settings", { workspaceOnboardingSeen: true }).catch(() => {});
+      resilientPatch("/api/settings", { workspaceOnboardingSeen: true }).then(() => invalidateSettingsCache()).catch(() => {});
       onComplete();
     }
   }, [step, onComplete]);
 
   const handleSkip = useCallback(() => {
-    resilientPatch("/api/settings", { workspaceOnboardingSeen: true }).catch(() => {});
+    resilientPatch("/api/settings", { workspaceOnboardingSeen: true }).then(() => invalidateSettingsCache()).catch(() => {});
     onComplete();
   }, [onComplete]);
 

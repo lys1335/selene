@@ -62,7 +62,6 @@ export default function SignUpPage() {
       }
 
       router.push("/");
-      router.refresh();
     } catch {
       setError(tc("error"));
       setLoading(false);

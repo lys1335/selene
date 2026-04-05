@@ -11,6 +11,7 @@ import {
 } from "@/lib/tts/edge-tts-voices";
 import { SettingsField } from "@/components/settings/settings-form-layout";
 import { useEdgeTtsPreview } from "@/hooks/use-edge-tts-preview";
+import { invalidateSettingsCache } from "@/lib/hooks/use-settings";
 
 interface EdgeTTSVoiceSelectorProps {
   value: string;
@@ -63,6 +64,7 @@ export function EdgeTTSVoiceSelector({ value, onChange }: EdgeTTSVoiceSelectorPr
           throw new Error(payload?.error || `Settings save failed (${res.status})`);
         }
 
+        invalidateSettingsCache();
         onChange(nextVoiceId);
       } catch (error) {
         toast.error(error instanceof Error ? error.message : t("voice.tts.saveFailed"));

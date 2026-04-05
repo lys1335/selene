@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { resilientFetch, resilientPut } from "@/lib/utils/resilient-fetch";
+import { useSettings, invalidateSettingsCache } from "@/lib/hooks/use-settings";
 import { buildModelCatalog } from "@/lib/config/model-catalog";
 import type { LLMProvider } from "@/lib/ai/providers";
 import type {
@@ -70,13 +71,20 @@ export function useModelBag() {
   // Fetch settings + build catalog
   // -----------------------------------------------------------------------
 
+  const { settings: _cachedSettings } = useSettings();
+
   const fetchSettings = useCallback(async () => {
     setState((prev) => ({ ...prev, isLoading: true }));
-    const { data, error } = await resilientFetch<SettingsData>("/api/settings");
-    if (error || !data) {
-      toast.error(t("loadFailed"));
-      setState((prev) => ({ ...prev, isLoading: false }));
-      return;
+    // Use module-level cached settings when available, otherwise fetch
+    let data: SettingsData | null = _cachedSettings as SettingsData | null;
+    if (!data) {
+      const result = await resilientFetch<SettingsData>("/api/settings");
+      data = result.data ?? null;
+      if (result.error || !data) {
+        toast.error(t("loadFailed"));
+        setState((prev) => ({ ...prev, isLoading: false }));
+        return;
+      }
     }
 
     const authStatus: Record<LLMProvider, boolean> = {
@@ -163,7 +171,8 @@ export function useModelBag() {
       },
       isLoading: false,
     }));
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_cachedSettings]);
 
   useEffect(() => {
     fetchSettings();
@@ -184,6 +193,7 @@ export function useModelBag() {
         return;
       }
 
+      invalidateSettingsCache();
       setState((prev) => ({
         ...prev,
         roleAssignments: { ...prev.roleAssignments, [role]: modelId },
@@ -221,6 +231,7 @@ export function useModelBag() {
         setState((prev) => ({ ...prev, isSaving: false }));
         return;
       }
+      invalidateSettingsCache();
       await fetchSettings();
       toast.success(t("providerSwitched", { name: PROVIDER_DISPLAY_NAMES[provider] }));
       window.dispatchEvent(new Event("seline:model-config-changed"));

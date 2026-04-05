@@ -171,10 +171,15 @@ export async function getUserByEmail(email: string): Promise<LocalUser | null> {
 }
 
 /**
- * Check if any users exist in the database
+ * Check if any users exist in the database.
+ * Cached as a one-way latch: once true, stays true (avoids repeated DB hits).
  */
+let usersExistCache: boolean | null = null;
+
 export async function hasAnyUsers(): Promise<boolean> {
-  const user = await db.query.users.findFirst();
+  if (usersExistCache === true) return true;
+  const user = await db.query.users.findFirst({ columns: { id: true } });
+  if (user) usersExistCache = true;
   return !!user;
 }
 

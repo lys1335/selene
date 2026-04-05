@@ -10,6 +10,7 @@ import { useTranslations } from "next-intl";
 import { ToolDependencyBadge } from "@/components/ui/tool-dependency-badge";
 import { AlertTriangleIcon, ChevronDownIcon, ChevronRightIcon, LockIcon } from "lucide-react";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { DEFAULT_ENABLED_TOOLS } from "@/lib/characters/templates/resolve-tools";
 import {
   CHARACTER_TOOL_CATALOG,
@@ -160,62 +161,56 @@ export function CapabilitiesPage({
 
   type CapabilityDependencyKey = keyof typeof dependencyStatus;
 
-  // Check dependencies on mount
+  // Check dependencies on mount (settings from shared cache, folders from API)
+  const { settings: _cachedSettings } = useSettings();
+
   useEffect(() => {
-    const checkDependencies = async () => {
-      // Fetch folder count — on failure, preserve previous state instead of
-      // resetting to 0 (which would lock all folder-dependent tools).
-      // A folder in any status (pending/syncing/synced) counts as configured.
-      let foldersCount: number | null = null; // null = unknown (fetch failed)
+    const checkFolders = async () => {
+      let foldersCount: number | null = null;
       if (agentId) {
         const { data } = await resilientFetch<{ folders?: unknown[] }>(
           `/api/vector-sync?characterId=${agentId}`
         );
         if (data) foldersCount = data.folders?.length ?? 0;
       }
-
-      try {
-        const { data: settingsData, error } = await resilientFetch<Record<string, unknown>>("/api/settings");
-        if (!settingsData || error) throw new Error(error || "Failed to load settings");
-
-        const webScraperReady = settingsData.webScraperProvider === "local"
-          || (typeof settingsData.firecrawlApiKey === "string" && settingsData.firecrawlApiKey.trim().length > 0);
-        const hasEmbeddingModel = typeof settingsData.embeddingModel === "string"
-          && settingsData.embeddingModel.trim().length > 0;
-        const hasOpenRouterKey = typeof settingsData.openrouterApiKey === "string"
-          && settingsData.openrouterApiKey.trim().length > 0;
-        const embeddingsReady = hasEmbeddingModel || settingsData.embeddingProvider === "local" || hasOpenRouterKey;
-
+      if (foldersCount !== null) {
         setDependencyStatus((prev) => ({
-          // If folder fetch failed, keep the previous value instead of resetting to false
-          syncedFolders: foldersCount !== null ? foldersCount > 0 : prev.syncedFolders,
-          embeddings: embeddingsReady,
-          vectorDbEnabled: settingsData.vectorDBEnabled === true,
-          webScraper: webScraperReady,
-          openrouterKey: typeof settingsData.openrouterApiKey === "string" && settingsData.openrouterApiKey.trim().length > 0,
-          comfyuiEnabled: settingsData.comfyuiEnabled === true,
-          flux2Klein4bEnabled: settingsData.flux2Klein4bEnabled === true,
-          flux2Klein9bEnabled: settingsData.flux2Klein9bEnabled === true,
-          localGrepEnabled: settingsData.localGrepEnabled !== false,
-          devWorkspaceEnabled: settingsData.devWorkspaceEnabled === true,
-          screenCaptureEnabled: settingsData.screenCaptureEnabled !== false,
-          runwayApiSecret: typeof settingsData.runwayApiSecret === "string" && settingsData.runwayApiSecret.trim().length > 0,
-          vertexAIProjectId: typeof settingsData.vertexAIProjectId === "string" && settingsData.vertexAIProjectId.trim().length > 0,
+          ...prev,
+          syncedFolders: foldersCount > 0,
         }));
-      } catch {
-        // Settings fetch failed — only update syncedFolders if we got a valid count
-        if (foldersCount !== null) {
-          setDependencyStatus((prev) => ({
-            ...prev,
-            syncedFolders: foldersCount > 0,
-          }));
-        }
-        // Otherwise preserve all previous state — don't reset to false
       }
     };
-
-    checkDependencies();
+    checkFolders();
   }, [agentId]);
+
+  useEffect(() => {
+    if (!_cachedSettings) return;
+    const settingsData = _cachedSettings;
+
+    const webScraperReady = settingsData.webScraperProvider === "local"
+      || (typeof settingsData.firecrawlApiKey === "string" && (settingsData.firecrawlApiKey as string).trim().length > 0);
+    const hasEmbeddingModel = typeof settingsData.embeddingModel === "string"
+      && (settingsData.embeddingModel as string).trim().length > 0;
+    const hasOpenRouterKey = typeof settingsData.openrouterApiKey === "string"
+      && (settingsData.openrouterApiKey as string).trim().length > 0;
+    const embeddingsReady = hasEmbeddingModel || settingsData.embeddingProvider === "local" || hasOpenRouterKey;
+
+    setDependencyStatus((prev) => ({
+      ...prev,
+      embeddings: embeddingsReady,
+      vectorDbEnabled: settingsData.vectorDBEnabled === true,
+      webScraper: webScraperReady,
+      openrouterKey: typeof settingsData.openrouterApiKey === "string" && (settingsData.openrouterApiKey as string).trim().length > 0,
+      comfyuiEnabled: settingsData.comfyuiEnabled === true,
+      flux2Klein4bEnabled: settingsData.flux2Klein4bEnabled === true,
+      flux2Klein9bEnabled: settingsData.flux2Klein9bEnabled === true,
+      localGrepEnabled: settingsData.localGrepEnabled !== false,
+      devWorkspaceEnabled: settingsData.devWorkspaceEnabled === true,
+      screenCaptureEnabled: settingsData.screenCaptureEnabled !== false,
+      runwayApiSecret: typeof settingsData.runwayApiSecret === "string" && (settingsData.runwayApiSecret as string).trim().length > 0,
+      vertexAIProjectId: typeof settingsData.vertexAIProjectId === "string" && (settingsData.vertexAIProjectId as string).trim().length > 0,
+    }));
+  }, [_cachedSettings]);
 
   // Fetch tool resolution warnings for Selene template
   useEffect(() => {
