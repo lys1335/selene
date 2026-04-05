@@ -1,11 +1,20 @@
 "use client";
 
+import { useState, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 import { AlertTriangle, Info } from "lucide-react";
 import { settingsSectionShellClassName } from "@/components/settings/settings-form-layout";
 import type { FormState } from "./settings-types";
 import { ClaudeCodeAuthFlow } from "./claude-code-auth-flow";
+
+type OllamaTestStatus = "untested" | "loading" | "success" | "error";
+
+interface OllamaTestResult {
+  status: OllamaTestStatus;
+  modelCount?: number;
+  error?: string;
+}
 
 interface ApiKeysSectionProps {
   formState: FormState;
@@ -55,6 +64,34 @@ export function ApiKeysSection({
   onClaudeCodeAuthComplete,
 }: ApiKeysSectionProps) {
   const t = useTranslations("settings");
+
+  const [ollamaTest, setOllamaTest] = useState<OllamaTestResult>({ status: "untested" });
+
+  const testOllamaConnection = useCallback(async (baseUrl: string) => {
+    setOllamaTest({ status: "loading" });
+    try {
+      const res = await fetch("/api/ollama/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setOllamaTest({ status: "success", modelCount: data.models?.length ?? 0 });
+      } else {
+        setOllamaTest({ status: "error", error: data.error || "Cannot reach Ollama" });
+      }
+    } catch {
+      setOllamaTest({ status: "error", error: "Cannot reach Ollama" });
+    }
+  }, []);
+
+  // Auto-test on mount when Ollama is the selected provider
+  useEffect(() => {
+    if (formState.llmProvider === "ollama" && ollamaTest.status === "untested") {
+      testOllamaConnection(formState.ollamaBaseUrl);
+    }
+  }, [formState.llmProvider]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={settingsSectionShellClassName}>
@@ -113,7 +150,27 @@ export function ApiKeysSection({
               }}
               className="size-4 accent-terminal-green"
             />
-            <span className="font-mono text-terminal-dark">{t("api.ollama")}</span>
+            <span className="font-mono text-terminal-dark">
+              {t("api.ollama")}
+              <span
+                className={cn(
+                  "ml-2 inline-block size-2 rounded-full",
+                  ollamaTest.status === "success" && "bg-green-500",
+                  ollamaTest.status === "error" && "bg-red-500",
+                  ollamaTest.status === "loading" && "bg-gray-400 animate-pulse",
+                  ollamaTest.status === "untested" && "bg-gray-400",
+                )}
+                title={
+                  ollamaTest.status === "success"
+                    ? `Connected (${ollamaTest.modelCount} models)`
+                    : ollamaTest.status === "error"
+                      ? ollamaTest.error
+                      : ollamaTest.status === "loading"
+                        ? "Testing..."
+                        : "Not tested"
+                }
+              />
+            </span>
           </label>
           <label className="flex items-center gap-3">
             <input
@@ -407,13 +464,33 @@ export function ApiKeysSection({
           <div className="space-y-3">
             <div>
               <label className="mb-1 block font-mono text-sm text-terminal-muted">{t("api.fields.ollama.label")}</label>
-              <input
-                type="text"
-                value={formState.ollamaBaseUrl}
-                onChange={(e) => updateField("ollamaBaseUrl", e.target.value)}
-                placeholder={t("api.fields.ollama.placeholder")}
-                className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formState.ollamaBaseUrl}
+                  onChange={(e) => updateField("ollamaBaseUrl", e.target.value)}
+                  placeholder={t("api.fields.ollama.placeholder")}
+                  className="flex-1 rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+                />
+                <button
+                  type="button"
+                  onClick={() => testOllamaConnection(formState.ollamaBaseUrl)}
+                  disabled={ollamaTest.status === "loading"}
+                  className="shrink-0 rounded border border-terminal-green bg-terminal-green/10 px-3 py-2 font-mono text-xs text-terminal-green hover:bg-terminal-green/20 disabled:opacity-50"
+                >
+                  {ollamaTest.status === "loading" ? "Testing..." : "Test Connection"}
+                </button>
+              </div>
+              {ollamaTest.status === "success" && (
+                <p className="mt-1 font-mono text-xs text-green-600">
+                  &#10003; Connected ({ollamaTest.modelCount} model{ollamaTest.modelCount !== 1 ? "s" : ""})
+                </p>
+              )}
+              {ollamaTest.status === "error" && (
+                <p className="mt-1 font-mono text-xs text-red-600">
+                  &#10007; {ollamaTest.error || "Cannot reach Ollama"}
+                </p>
+              )}
               <p className="mt-1 font-mono text-xs text-terminal-muted">
                 {t("api.fields.ollama.helper")}
               </p>

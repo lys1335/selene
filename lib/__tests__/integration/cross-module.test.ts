@@ -247,19 +247,19 @@ describe("Think-Tag Filter + Streaming", () => {
 
   describe("shouldFilterThinkTags provider detection", () => {
     it("returns false for anthropic provider", () => {
-      expect(shouldFilterThinkTags("anthropic")).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "anthropic" })).toBe(false);
     });
 
-    it("returns true for ollama provider", () => {
-      expect(shouldFilterThinkTags("ollama")).toBe(true);
+    it("returns true for ollama provider with known thinking model", () => {
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "deepseek-r1" })).toBe(true);
     });
 
     it("returns true for deepseek model on openrouter", () => {
-      expect(shouldFilterThinkTags("openrouter", "deepseek-chat-v3")).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "deepseek-chat-v3" })).toBe(true);
     });
 
     it("returns false for non-thinking model on openrouter", () => {
-      expect(shouldFilterThinkTags("openrouter", "gpt-4o")).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "gpt-4o" })).toBe(false);
     });
   });
 });

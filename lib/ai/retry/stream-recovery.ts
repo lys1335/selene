@@ -21,6 +21,7 @@ const TRANSIENT_PAYLOAD_PATTERNS = [
   /service unavailable/i,
   /bad gateway/i,
   /gateway timeout/i,
+  /econnrefused/i,
   /econnreset/i,
   /etimedout/i,
   /eai_again/i,
@@ -225,6 +226,20 @@ export function classifyRecoverability(input: unknown): RecoveryClassification {
   }
 
   return { recoverable: false, reason: "unknown", normalized };
+}
+
+export function getFriendlyErrorMessage(normalized: NormalizedStreamError): string | null {
+  const msg = normalized.message;
+
+  if (/econnrefused/i.test(msg) && /11434/.test(msg)) {
+    return "Ollama is not running. Start it with `ollama serve` and try again.";
+  }
+
+  if (normalized.statusCode === 404 && /model/i.test(msg)) {
+    return "Model not found. Run `ollama pull <model>` to download it first.";
+  }
+
+  return null;
 }
 
 export function getBackoffDelayMs(attempt: number, jitterRatio = 0.2): number {

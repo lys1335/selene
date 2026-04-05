@@ -287,84 +287,102 @@ describe("createThinkTagFilter", () => {
 describe("shouldFilterThinkTags", () => {
   describe("providers that should NOT filter", () => {
     it("returns false for anthropic", () => {
-      expect(shouldFilterThinkTags("anthropic")).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "anthropic" })).toBe(false);
     });
 
     it("returns false for claudecode", () => {
-      expect(shouldFilterThinkTags("claudecode")).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "claudecode" })).toBe(false);
     });
 
     it("returns false for codex", () => {
-      expect(shouldFilterThinkTags("codex")).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "codex" })).toBe(false);
     });
   });
 
   describe("Ollama — capability-aware filtering", () => {
-    it("returns true for ollama with no capability info (fallback)", () => {
-      expect(shouldFilterThinkTags("ollama")).toBe(true);
-      expect(shouldFilterThinkTags("ollama", "llama3.1:8b")).toBe(true);
-      expect(shouldFilterThinkTags("ollama", "deepseek-r1")).toBe(true);
+    it("returns false for ollama with no model info (safe default)", () => {
+      expect(shouldFilterThinkTags({ provider: "ollama" })).toBe(false);
     });
 
-    it("returns true when ollamaSupportsThinking is false (legacy Ollama)", () => {
-      expect(shouldFilterThinkTags("ollama", "deepseek-r1", false)).toBe(true);
-      expect(shouldFilterThinkTags("ollama", "qwen3:8b", false)).toBe(true);
+    it("returns false for ollama with non-thinking models", () => {
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "llama3.1:8b" })).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "gemma3:latest" })).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "mistral:7b" })).toBe(false);
+    });
+
+    it("returns true for ollama with known thinking models when not native", () => {
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "deepseek-r1" })).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "deepseek-r1", ollamaSupportsThinking: false })).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "qwen3:8b", ollamaSupportsThinking: false })).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "qwq:32b" })).toBe(true);
     });
 
     it("returns false when ollamaSupportsThinking is true (native thinking)", () => {
       // Ollama v0.9.0+ parses tags server-side — no client-side filtering needed
-      expect(shouldFilterThinkTags("ollama", "deepseek-r1", true)).toBe(false);
-      expect(shouldFilterThinkTags("ollama", "qwen3:8b", true)).toBe(false);
-      expect(shouldFilterThinkTags("ollama", "gemma4:12b", true)).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "deepseek-r1", ollamaSupportsThinking: true })).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "qwen3:8b", ollamaSupportsThinking: true })).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "ollama", modelId: "gemma4:12b", ollamaSupportsThinking: true })).toBe(false);
     });
   });
 
   describe("OpenRouter — model-dependent", () => {
     it("returns true for deepseek models", () => {
-      expect(shouldFilterThinkTags("openrouter", "deepseek/deepseek-chat")).toBe(true);
-      expect(shouldFilterThinkTags("openrouter", "deepseek/deepseek-r1")).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "deepseek/deepseek-chat" })).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "deepseek/deepseek-r1" })).toBe(true);
     });
 
     it("returns true for minimax models", () => {
-      expect(shouldFilterThinkTags("openrouter", "minimax/minimax-01")).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "minimax/minimax-01" })).toBe(true);
     });
 
     it("returns true for qwq models", () => {
-      expect(shouldFilterThinkTags("openrouter", "qwen/qwq-32b")).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "qwen/qwq-32b" })).toBe(true);
     });
 
     it("returns true for qwen models", () => {
-      expect(shouldFilterThinkTags("openrouter", "qwen/qwen-2.5-72b")).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "qwen/qwen-2.5-72b" })).toBe(true);
     });
 
     it("returns false for claude models via openrouter", () => {
-      expect(shouldFilterThinkTags("openrouter", "anthropic/claude-sonnet-4")).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "anthropic/claude-sonnet-4" })).toBe(false);
     });
 
     it("returns false for gpt models via openrouter", () => {
-      expect(shouldFilterThinkTags("openrouter", "openai/gpt-4")).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "openai/gpt-4" })).toBe(false);
     });
 
     it("returns true when no model ID provided (conservative)", () => {
-      expect(shouldFilterThinkTags("openrouter")).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "openrouter" })).toBe(true);
     });
   });
 
   describe("other providers with model patterns", () => {
     it("returns true for antigravity with deepseek model", () => {
-      expect(shouldFilterThinkTags("antigravity", "deepseek-v3")).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "antigravity", modelId: "deepseek-v3" })).toBe(true);
     });
 
     it("returns false for antigravity with non-thinking model", () => {
-      expect(shouldFilterThinkTags("antigravity", "gemini-3-flash")).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "antigravity", modelId: "gemini-3-flash" })).toBe(false);
     });
 
     it("returns true for kimi with r1 model pattern", () => {
-      expect(shouldFilterThinkTags("kimi", "kimi-r1-preview")).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "kimi", modelId: "kimi-r1-preview" })).toBe(true);
     });
 
     it("returns false for kimi without thinking model", () => {
-      expect(shouldFilterThinkTags("kimi", "kimi-k2.5")).toBe(false);
+      expect(shouldFilterThinkTags({ provider: "kimi", modelId: "kimi-k2.5" })).toBe(false);
+    });
+  });
+
+  describe("r1 pattern — word-boundary matching", () => {
+    it("matches r1 after word boundary separators", () => {
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "deepseek/deepseek-r1" })).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "kimi-r1-preview" })).toBe(true);
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "r1:14b" })).toBe(true);
+    });
+
+    it("does not match r1 embedded in another word", () => {
+      expect(shouldFilterThinkTags({ provider: "openrouter", modelId: "gpt4r1x" })).toBe(false);
     });
   });
 });

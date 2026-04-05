@@ -21,6 +21,13 @@ import { loadSettings } from "@/lib/settings/settings-manager";
 
 interface OllamaShowResponse {
   capabilities?: string[];
+  model_info?: Record<string, unknown>;
+  parameters?: string;
+}
+
+interface CachedContextWindow {
+  contextWindow: number | null;
+  timestamp: number;
 }
 
 interface CachedCapabilities {
@@ -48,6 +55,7 @@ const SHOW_REQUEST_TIMEOUT_MS = 3000;
 // ---------------------------------------------------------------------------
 
 const capabilityCache = new Map<string, CachedCapabilities>();
+const contextWindowCache = new Map<string, CachedContextWindow>();
 
 /**
  * In-flight request map to deduplicate concurrent calls for the same model.
@@ -203,5 +211,120 @@ export async function ollamaModelSupportsThinking(
  */
 export function clearOllamaCapabilityCache(): void {
   capabilityCache.clear();
+  contextWindowCache.clear();
   inflightRequests.clear();
+}
+
+// ---------------------------------------------------------------------------
+// Context Window Detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Query Ollama for a model's context window size.
+ *
+ * Uses `/api/show` and inspects:
+ * 1. `model_info` object for keys containing `context_length`
+ * 2. `parameters` string for `num_ctx` value
+ *
+ * Results are cached alongside capabilities with the same TTL.
+ *
+ * @returns The context window size in tokens, or null if unknown.
+ */
+export async function getOllamaModelContextWindow(
+  modelId: string,
+): Promise<number | null> {
+  const cacheKey = modelId.toLowerCase();
+
+  const cached = contextWindowCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.contextWindow;
+  }
+
+  try {
+    const baseUrl = getOllamaBaseUrl();
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      SHOW_REQUEST_TIMEOUT_MS,
+    );
+
+    const response = await fetch(`${baseUrl}/api/show`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: modelId }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      console.warn(
+        `[OLLAMA] /api/show failed for context window, model=${modelId}: ${response.status}`,
+      );
+      cacheContextWindow(cacheKey, null, true);
+      return null;
+    }
+
+    const data = (await response.json()) as OllamaShowResponse;
+    let contextWindow: number | null = null;
+
+    // Strategy 1: Check model_info for context_length keys
+    if (data.model_info) {
+      for (const [key, value] of Object.entries(data.model_info)) {
+        if (
+          key.toLowerCase().includes("context_length") &&
+          typeof value === "number" &&
+          value > 0
+        ) {
+          contextWindow = value;
+          break;
+        }
+      }
+    }
+
+    // Strategy 2: Parse parameters string for num_ctx
+    if (contextWindow === null && data.parameters) {
+      const match = data.parameters.match(/num_ctx\s+(\d+)/);
+      if (match) {
+        contextWindow = parseInt(match[1], 10);
+      }
+    }
+
+    cacheContextWindow(cacheKey, contextWindow, false);
+
+    console.debug(
+      `[OLLAMA] Model ${modelId} context window: ${contextWindow ?? "unknown"}`,
+    );
+
+    return contextWindow;
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      console.warn(
+        `[OLLAMA] /api/show timed out for context window, model=${modelId}`,
+      );
+    } else {
+      console.warn(
+        `[OLLAMA] Failed to fetch context window for model=${modelId}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+    cacheContextWindow(cacheKey, null, true);
+    return null;
+  }
+}
+
+/**
+ * Cache a context window result. Uses a shorter TTL for negative results.
+ */
+function cacheContextWindow(
+  cacheKey: string,
+  contextWindow: number | null,
+  isNegative: boolean,
+): void {
+  contextWindowCache.set(cacheKey, {
+    contextWindow,
+    timestamp: isNegative
+      ? Date.now() - CACHE_TTL_MS + NEGATIVE_CACHE_TTL_MS
+      : Date.now(),
+  });
 }

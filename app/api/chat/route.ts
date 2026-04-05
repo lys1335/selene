@@ -873,7 +873,7 @@ export async function POST(req: Request) {
     // as a TransformStream on the SSE response, or filtering client-side.
     let thinkTagFilter: ReturnType<typeof createThinkTagFilter> | null = null;
     const recreateThinkTagFilter = () => {
-      thinkTagFilter = shouldFilterThinkTags(provider, currentModelId, ollamaNativeThinking)
+      thinkTagFilter = shouldFilterThinkTags({ provider, modelId: currentModelId, ollamaSupportsThinking: ollamaNativeThinking })
         ? createThinkTagFilter()
         : null;
       if (thinkTagFilter) {
@@ -1024,7 +1024,7 @@ export async function POST(req: Request) {
                 settings: appSettings,
               });
 
-          if (hasThinkTags(provider, ollamaNativeThinking)) {
+          if (hasThinkTags({ provider, modelId: currentModelId, ollamaSupportsThinking: ollamaNativeThinking })) {
             // Cast needed: resolvers return LanguageModel (union), wrapLanguageModel expects LanguageModelV3.
             // Safe because resolvers always return actual model objects, never string IDs.
             resolvedModel = wrapLanguageModel({

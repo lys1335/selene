@@ -23,6 +23,8 @@
 import { extractReasoningMiddleware } from "ai";
 import type { LanguageModelMiddleware } from "ai";
 
+import { isThinkTagModel } from "./think-tag-patterns";
+
 /**
  * Language-model middleware that converts `<think>...</think>` text deltas
  * into `reasoning-start / reasoning-delta / reasoning-end` stream parts.
@@ -62,34 +64,41 @@ export const thinkTagMiddleware: LanguageModelMiddleware =
 const ALWAYS_THINK_TAG_PROVIDERS = new Set(["vllm"]);
 
 /**
+ * Options for checking whether a provider/model emits think tags.
+ */
+export interface ThinkTagCheckOptions {
+  provider: string;
+  modelId?: string;
+  ollamaSupportsThinking?: boolean;
+}
+
+/**
  * Returns `true` if the given provider is known to emit `<think>...</think>`
  * reasoning tags that should be intercepted by `thinkTagMiddleware`.
  *
  * For Ollama: returns `false` when the model supports native thinking
  * (Ollama v0.9.0+ parses tags server-side and sends structured
- * `delta.reasoning`). The AI SDK handles `delta.reasoning` natively,
- * so no middleware is needed. Pass `ollamaSupportsThinking` from the
- * capability check to control this.
- *
- * @param provider - The LLM provider identifier.
- * @param ollamaSupportsThinking - If the provider is "ollama", whether
- *   Ollama reported native thinking support for this model. When `undefined`
- *   and provider is "ollama", defaults to `true` (apply middleware as safety net).
+ * `delta.reasoning`). For models without native thinking, only applies
+ * the middleware when the model matches known think-tag patterns — wrapping
+ * arbitrary models with `startWithReasoning: true` would swallow their
+ * entire response as reasoning content, producing empty messages.
  */
-export function hasThinkTags(
-  provider: string,
-  ollamaSupportsThinking?: boolean,
-): boolean {
-  const p = provider.toLowerCase();
+export function hasThinkTags(options: ThinkTagCheckOptions): boolean {
+  const p = options.provider.toLowerCase();
 
   if (ALWAYS_THINK_TAG_PROVIDERS.has(p)) return true;
 
   if (p === "ollama") {
     // If Ollama supports native thinking for this model, it sends structured
     // delta.reasoning — no client-side <think> tag middleware needed.
-    // Default to true (apply middleware) when capability is unknown.
-    if (ollamaSupportsThinking === true) return false;
-    return true;
+    if (options.ollamaSupportsThinking === true) return false;
+    // Only apply middleware for models known to emit <think> tags.
+    // Wrapping non-thinking models with startWithReasoning: true would
+    // capture their entire output as reasoning, leaving no text parts.
+    if (options.modelId) {
+      return isThinkTagModel(options.modelId);
+    }
+    return false;
   }
 
   return false;

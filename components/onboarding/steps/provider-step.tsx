@@ -2,11 +2,11 @@
 
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { AlertTriangle, ArrowLeft, ArrowRight, Check, Info, Sparkles, Key, Globe, Zap, MessageSquare, Terminal } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Check, HardDrive, Info, Sparkles, Key, Globe, Zap, MessageSquare, Terminal } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
 
-export type OnboardingProvider = "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "claudecode";
+export type OnboardingProvider = "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "claudecode" | "ollama";
 
 interface ProviderStepProps {
     selectedProvider: OnboardingProvider;
@@ -44,6 +44,11 @@ const providers = [
     {
         id: "kimi" as const,
         icon: MessageSquare,
+        badgeType: null as null,
+    },
+    {
+        id: "ollama" as const,
+        icon: HardDrive,
         badgeType: null as null,
     },
 ];
