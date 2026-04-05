@@ -26,15 +26,6 @@ describe("createToolSearchTool utility routing", () => {
   });
 
   it("promotes router direct matches to the top", async () => {
-    mocks.generateObject.mockResolvedValue({
-      object: {
-        directToolNames: ["vectorSearch"],
-        normalizedQuery: "semantic search",
-        relatedTerms: ["vector", "codebase"],
-        rationale: "vector search is best",
-      },
-    });
-
     const { ToolRegistry } = await import("../registry");
     const { createToolSearchTool } = await import("../search-tool");
 
@@ -90,7 +81,7 @@ describe("createToolSearchTool utility routing", () => {
 
     expect(result.status).toBe("success");
     expect(result.results[0].name).toBe("vectorSearch");
-    expect(mocks.generateObject).toHaveBeenCalledTimes(1);
+    expect(mocks.generateObject).not.toHaveBeenCalled();
   });
 
   it("skips router model when TOOL_SEARCH_ROUTER_MODEL=false", async () => {

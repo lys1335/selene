@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, CheckCircle2, AlertCircle, Wifi, WifiOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { resilientFetch, resilientPut } from "@/lib/utils/resilient-fetch";
+import { invalidateSettingsCache } from "@/lib/hooks/use-settings";
 
 import type { OnboardingProvider } from "./provider-step";
 
@@ -27,6 +28,10 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
     const [claudeCodePasteValue, setClaudeCodePasteValue] = useState("");
     const [claudeCodeAutoChecking, setClaudeCodeAutoChecking] = useState(false);
     const [claudeCodeBrowserOpened, setClaudeCodeBrowserOpened] = useState(true);
+
+    // Ollama-specific state
+    const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
+    const [ollamaTestStatus, setOllamaTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
 
     // Check if already authenticated for OAuth providers
     useEffect(() => {
@@ -75,6 +80,40 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             setClaudeCodeAutoChecking(false);
         }
     };
+
+    const handleOllamaTest = useCallback(async () => {
+        setOllamaTestStatus("testing");
+        setError(null);
+
+        try {
+            const response = await fetch("/api/ollama/test", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ baseUrl: ollamaBaseUrl }),
+            });
+            const data = await response.json();
+
+            if (data.ok) {
+                setOllamaTestStatus("success");
+                // Save ollama settings
+                const { error: saveError } = await resilientPut("/api/settings", {
+                    llmProvider: "ollama",
+                    ollamaBaseUrl: ollamaBaseUrl.replace(/\/?$/, "/v1"),
+                });
+                if (saveError) {
+                    throw new Error("Failed to save Ollama settings");
+                }
+                invalidateSettingsCache();
+                setIsAuthenticated(true);
+            } else {
+                setOllamaTestStatus("error");
+                setError(data.error || t("ollama.cannotReach"));
+            }
+        } catch (err) {
+            setOllamaTestStatus("error");
+            setError(err instanceof Error ? err.message : t("ollama.cannotReach"));
+        }
+    }, [ollamaBaseUrl, t]);
 
     const handleOAuthLogin = async (config: {
         popupName: string;
@@ -312,6 +351,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                 throw new Error("Failed to save API key");
             }
 
+            invalidateSettingsCache();
             setIsAuthenticated(true);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save API key");
@@ -330,6 +370,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             return false;
         }
 
+        invalidateSettingsCache();
         return true;
     };
 
@@ -364,7 +405,62 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                     {t("title")}
                 </h1>
 
-                {provider === "antigravity" || provider === "codex" || provider === "claudecode" ? (
+                {provider === "ollama" ? (
+                    <div className="space-y-4 mt-8">
+                        {isAuthenticated ? (
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                className="p-6 rounded-xl bg-terminal-green/10 border border-terminal-green"
+                            >
+                                <CheckCircle2 className="w-12 h-12 text-terminal-green mx-auto mb-4" />
+                                <p className="font-mono text-terminal-green font-semibold">
+                                    {t("ollama.connected")}
+                                </p>
+                            </motion.div>
+                        ) : (
+                            <>
+                                <div className="text-left">
+                                    <label className="block font-mono text-sm text-terminal-muted mb-2">
+                                        {t("ollama.baseUrlLabel")}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={ollamaBaseUrl}
+                                        onChange={(e) => {
+                                            setOllamaBaseUrl(e.target.value);
+                                            setOllamaTestStatus("idle");
+                                        }}
+                                        placeholder="http://localhost:11434"
+                                        className="w-full rounded-lg border border-terminal-border bg-white px-4 py-3 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-2 focus:ring-terminal-green/20"
+                                    />
+                                </div>
+
+                                {error && (
+                                    <div className="flex items-center gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-red-600">
+                                        <WifiOff className="w-4 h-4 flex-shrink-0" />
+                                        <span className="text-sm font-mono">{error}</span>
+                                    </div>
+                                )}
+
+                                <Button
+                                    onClick={handleOllamaTest}
+                                    disabled={ollamaTestStatus === "testing" || !ollamaBaseUrl.trim()}
+                                    className="w-full gap-2 bg-terminal-green text-white hover:bg-terminal-green/90 font-mono"
+                                >
+                                    {ollamaTestStatus === "testing" ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            {t("connecting")}
+                                        </>
+                                    ) : (
+                                        t("ollama.testConnection")
+                                    )}
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                ) : provider === "antigravity" || provider === "codex" || provider === "claudecode" ? (
                     <div className="space-y-6 mt-8">
                         {isAuthenticated ? (
                             <motion.div

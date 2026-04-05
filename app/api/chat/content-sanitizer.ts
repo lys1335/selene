@@ -11,6 +11,12 @@ export const MAX_TOOL_REFETCH = 6;
 
 export const BASE64_IMAGE_PLACEHOLDER = "[Base64 image data removed - use image URL instead]";
 
+/** Locale-independent number formatter (always uses comma grouping). */
+const numberFormatter = new Intl.NumberFormat("en-US");
+function formatNumber(n: number): string {
+  return numberFormatter.format(n);
+}
+
 export const WEB_SEARCH_NO_RESULT_GUARD = {
   maxConsecutiveZeroResultCalls: 3,
   maxZeroResultRepeatsPerQuery: 2,
@@ -220,7 +226,7 @@ export function sanitizeTextContent(text: string, context: string, sessionId?: s
       const truncationNotice = `
 
 ---
-⚠️ CONTENT TRUNCATED: This content was truncated at ${MAX_TEXT_CONTENT_LENGTH.toLocaleString()} characters (original: ${text.length.toLocaleString()} chars).
+⚠️ CONTENT TRUNCATED: This content was truncated at ${formatNumber(MAX_TEXT_CONTENT_LENGTH)} characters (original: ${formatNumber(text.length)} chars).
 📦 FULL CONTENT AVAILABLE: Reference ID: ${contentId}
 🔧 TO RETRIEVE FULL CONTENT: Use the "retrieveFullContent" tool with contentId="${contentId}"
 💡 Only retrieve full content if the truncated portion above is insufficient for your task.
@@ -229,7 +235,7 @@ export function sanitizeTextContent(text: string, context: string, sessionId?: s
       return truncatedText + truncationNotice;
     } else {
       // No sessionId - simple truncation without storage (fallback behavior)
-      return text.slice(0, MAX_TEXT_CONTENT_LENGTH) + `\n\n[Content truncated at ${MAX_TEXT_CONTENT_LENGTH.toLocaleString()} chars - sessionId not available for full content retrieval]`;
+      return text.slice(0, MAX_TEXT_CONTENT_LENGTH) + `\n\n[Content truncated at ${formatNumber(MAX_TEXT_CONTENT_LENGTH)} chars - sessionId not available for full content retrieval]`;
     }
   }
 

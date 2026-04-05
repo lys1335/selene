@@ -13,6 +13,7 @@ import { DEFAULT_FORM_STATE, buildFormStateFromData } from "./settings-types";
 import { SettingsPanel } from "./settings-panel";
 import { getElectronAPI } from "@/lib/electron/types";
 import { OnboardingDialog } from "@/components/quick-capture/onboarding-dialog";
+import { useSettings, invalidateSettingsCache, fetchSettingsOnce } from "@/lib/hooks/use-settings";
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -74,11 +75,11 @@ export default function SettingsPage() {
     loadClaudeCodeAuth({ forceRefresh: true });
   }, []);
 
+  const { settings: _cachedSettings } = useSettings();
+
   const loadSettings = useCallback(async () => {
     try {
-      const response = await fetch("/api/settings");
-      if (!response.ok) throw new Error(t("errors.load"));
-      const data = await response.json();
+      const data = await fetchSettingsOnce();
       const nextFormState = buildFormStateFromData(data);
       setFormState(nextFormState);
       setLastSavedState(nextFormState);
@@ -551,6 +552,7 @@ export default function SettingsPage() {
           toast.warning(warning);
         }
       }
+      invalidateSettingsCache();
       if (saveResetTimeoutRef.current) {
         clearTimeout(saveResetTimeoutRef.current);
       }

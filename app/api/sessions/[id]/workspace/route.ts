@@ -563,6 +563,8 @@ async function getExistingPullRequest(
   }
 }
 
+const WORKSPACE_DETECT_CACHE_TTL_MS = 5 * 60 * 1000;
+
 /**
  * GET /api/sessions/[id]/workspace
  *
@@ -587,7 +589,35 @@ export async function GET(
     const wantDiff = url.searchParams.get("diff") === "true";
 
     if (!workspaceInfo && wantDetect) {
-      return NextResponse.json({ gitFolders: await listSessionGitFolders(session) });
+      // Return cached detection result if still fresh (unless ?refresh=true)
+      const cachedFolders = metadata?.detectedGitFolders;
+      const cachedAt = metadata?.detectedGitFoldersAt as string | undefined;
+
+      if (
+        cachedFolders &&
+        cachedAt &&
+        !url.searchParams.get("refresh") &&
+        Date.now() - new Date(cachedAt).getTime() < WORKSPACE_DETECT_CACHE_TTL_MS
+      ) {
+        return NextResponse.json({ gitFolders: cachedFolders });
+      }
+
+      const gitFolders = await listSessionGitFolders(session);
+
+      // Cache the detection result in session metadata
+      try {
+        await updateSession(id, {
+          metadata: {
+            ...(metadata || {}),
+            detectedGitFolders: gitFolders,
+            detectedGitFoldersAt: new Date().toISOString(),
+          },
+        });
+      } catch (cacheErr) {
+        console.warn("[workspace route] Failed to cache detection result:", cacheErr);
+      }
+
+      return NextResponse.json({ gitFolders });
     }
 
     if (!workspaceInfo) {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
+import { deduplicate } from "@/lib/utils/in-flight-cache";
 
 /**
  * Context window status as returned by the API.
@@ -29,6 +30,10 @@ export interface ContextStatusInfo {
     provider: string;
   };
 }
+
+/** Module-level cache to prevent redundant fetches (e.g. Strict Mode double-mount). */
+const statusCache = new Map<string, { data: ContextStatusInfo; timestamp: number }>();
+const STALE_TIME_MS = 10_000; // 10 seconds
 
 interface UseContextStatusOptions {
   /** Session ID to track. Null/undefined disables polling. */
@@ -78,6 +83,13 @@ export function useContextStatus({
   const fetchStatus = useCallback(async () => {
     if (!sessionId) return;
 
+    // Return cached data if it's still fresh (prevents Strict Mode double-mount re-fetches)
+    const cached = statusCache.get(sessionId);
+    if (cached && Date.now() - cached.timestamp < STALE_TIME_MS) {
+      setStatus(cached.data);
+      return;
+    }
+
     // Cancel any in-flight request
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -86,9 +98,13 @@ export function useContextStatus({
     setIsLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await resilientFetch<ContextStatusInfo>(
-      `/api/sessions/${sessionId}/context-status`,
-      { signal: controller.signal, retries: 0 }
+    const { data, error: fetchError } = await deduplicate(
+      "context-status",
+      sessionId,
+      () => resilientFetch<ContextStatusInfo>(
+        `/api/sessions/${sessionId}/context-status`,
+        { signal: controller.signal, retries: 0 }
+      )
     );
 
     // Request was aborted (e.g., component unmounted or new request started)
@@ -98,6 +114,9 @@ export function useContextStatus({
       setError(fetchError);
     } else {
       setStatus(data);
+      if (data) {
+        statusCache.set(sessionId, { data, timestamp: Date.now() });
+      }
     }
 
     setIsLoading(false);

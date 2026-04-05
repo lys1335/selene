@@ -61,6 +61,10 @@
         "kimi": {
           "title": "Moonshot Kimi",
           "desc": "Use Moonshot's Kimi K2.5 with 256K context and vision"
+        },
+        "ollama": {
+          "title": "Ollama",
+          "desc": "Run models locally — free, private, no API key needed"
         }
       },
       "back": "Back",
@@ -135,6 +139,12 @@
         "failedSaveProvider": "Failed to save provider selection",
         "manualLoginPre": "If the browser does not open automatically, visit",
         "manualLoginPost": "and paste the code below."
+      },
+      "ollama": {
+        "baseUrlLabel": "Base URL",
+        "testConnection": "Test Connection",
+        "connected": "Connected",
+        "cannotReach": "Cannot reach Ollama"
       }
     },
     "features": {
@@ -2764,7 +2774,15 @@
           "placeholderOpenRouter": "text-embedding-3-small",
           "placeholderLocal": "Xenova/bge-large-en-v1.5",
           "download": "Download",
-          "downloaded": "Downloaded"
+          "downloaded": "Downloaded",
+          "testModel": "Test Model",
+          "testing": "Testing…",
+          "openFolder": "Open Folder",
+          "validateRedownload": "Validate & Redownload",
+          "redownloadWorking": "Working…",
+          "redownloadStarting": "Starting…",
+          "validationSuccess": "✓ Model working — {dims}d embedding in {durationMs}ms",
+          "validationFailed": "✗ Validation failed — {error}"
         },
         "embeddingLocalPath": {
           "label": "Local Model Path",

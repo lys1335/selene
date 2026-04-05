@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { ComputerGraphic } from "../computer-graphic";
 import { TypewriterText } from "@/components/ui/typewriter-text";
@@ -8,6 +8,7 @@ import { TerminalPrompt } from "@/components/ui/terminal-prompt";
 import { useReducedMotion } from "../hooks/use-reduced-motion";
 import { useTranslations } from "next-intl";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
+import { useSettings } from "@/lib/hooks/use-settings";
 import {
     CloudIcon,
     HardDriveIcon,
@@ -20,6 +21,40 @@ import {
     LOCAL_EMBEDDING_MODELS,
     type EmbeddingModelInfo,
 } from "@/lib/config/embedding-models";
+
+/** Type-safe accessor for the Electron model API surface used on this page. */
+interface ElectronModelAPI {
+    checkExists: (id: string) => Promise<boolean>;
+    download: (id: string) => Promise<{ success: boolean; error?: string } | undefined>;
+    cancelDownload: (id: string) => Promise<void>;
+    getDownloadState: (id: string) => Promise<{
+        status: "downloading" | "error" | "idle";
+        progress: number;
+        downloadedBytes: number;
+        totalBytes: number;
+        currentFile: string;
+        error?: string;
+    } | null>;
+    onProgress: (cb: (data: DownloadProgressEvent) => void) => void;
+    removeProgressListener?: () => void;
+}
+
+interface DownloadProgressEvent {
+    modelId: string;
+    progress?: number;
+    downloadedBytes?: number;
+    totalBytes?: number;
+    speed?: number;
+    file?: string;
+    status?: "downloading" | "completed" | "error";
+    error?: string;
+}
+
+function getElectronModelAPI(): ElectronModelAPI | null {
+    if (typeof window === "undefined" || !("electronAPI" in window)) return null;
+    const api = (window as unknown as { electronAPI?: { model?: ElectronModelAPI } }).electronAPI;
+    return api?.model ?? null;
+}
 
 // Derive UI models from shared registry (single source of truth)
 const OPENROUTER_MODELS = OPENROUTER_EMBEDDING_MODELS.map((m: EmbeddingModelInfo) => ({
@@ -58,45 +93,109 @@ export function EmbeddingSetupPage({
     const [isDownloading, setIsDownloading] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(0);
     const [modelStatus, setModelStatus] = useState<Record<string, boolean>>({});
+    const [downloadError, setDownloadError] = useState<string | null>(null);
+    const [downloadSpeed, setDownloadSpeed] = useState(0);
+    const [downloadedBytes, setDownloadedBytes] = useState(0);
+    const [totalBytes, setTotalBytes] = useState(0);
+    const [currentFile, setCurrentFile] = useState("");
+    const [downloadingModelId, setDownloadingModelId] = useState<string | null>(null);
     const prefersReducedMotion = useReducedMotion();
     const hasAnimated = useRef(false);
 
-    // Check if OpenRouter API key is configured
+    // Check if OpenRouter API key is configured (shared cache)
+    const { settings: _cachedSettings } = useSettings();
     useEffect(() => {
-        resilientFetch<{ openrouterApiKey?: string }>("/api/settings")
-            .then(({ data }) => {
-                setHasOpenRouterKey(!!data?.openrouterApiKey);
-                // If no OpenRouter key, default to local
-                if (!data?.openrouterApiKey) {
-                    setProvider("local");
-                    setSelectedModel(LOCAL_MODELS[0].id);
-                }
-            });
-    }, []);
+        if (_cachedSettings) {
+            setHasOpenRouterKey(!!_cachedSettings.openrouterApiKey);
+            // If no OpenRouter key, default to local
+            if (!_cachedSettings.openrouterApiKey) {
+                setProvider("local");
+                setSelectedModel(LOCAL_MODELS[0].id);
+            }
+        }
+    }, [_cachedSettings]);
 
     // Check local model status in Electron
     useEffect(() => {
         const checkModels = async () => {
-            if (typeof window !== "undefined" && "electronAPI" in window) {
-                const electronAPI = (window as unknown as {
-                    electronAPI: { model: { checkExists: (id: string) => Promise<boolean> } };
-                }).electronAPI;
+            const modelAPI = getElectronModelAPI();
+            if (!modelAPI) return;
 
-                const status: Record<string, boolean> = {};
-                for (const model of LOCAL_MODELS) {
-                    try {
-                        status[model.id] = await electronAPI.model.checkExists(model.id);
-                    } catch {
-                        status[model.id] = false;
-                    }
+            const status: Record<string, boolean> = {};
+            for (const model of LOCAL_MODELS) {
+                try {
+                    status[model.id] = await modelAPI.checkExists(model.id);
+                } catch {
+                    status[model.id] = false;
                 }
-                setModelStatus(status);
             }
+            setModelStatus(status);
         };
         checkModels();
     }, []);
 
+    const attachProgressListener = useCallback((modelId: string) => {
+        const modelAPI = getElectronModelAPI();
+        if (!modelAPI?.onProgress) return;
+
+        // Remove any existing listener before attaching a new one
+        modelAPI.removeProgressListener?.();
+
+        modelAPI.onProgress((data: DownloadProgressEvent) => {
+            if (data.modelId !== modelId) return;
+            if (data.progress !== undefined) setDownloadProgress(data.progress);
+            if (data.downloadedBytes !== undefined) setDownloadedBytes(data.downloadedBytes);
+            if (data.totalBytes !== undefined) setTotalBytes(data.totalBytes);
+            if (data.speed !== undefined) setDownloadSpeed(data.speed);
+            if (data.file) setCurrentFile(data.file);
+            if (data.status === "completed") {
+                setIsDownloading(false);
+                setDownloadingModelId(null);
+                setDownloadError(null);
+                setModelStatus((prev) => ({ ...prev, [modelId]: true }));
+                modelAPI.removeProgressListener?.();
+            }
+            if (data.status === "error") {
+                setIsDownloading(false);
+                setDownloadingModelId(null);
+                setDownloadError(data.error || "Download failed");
+                modelAPI.removeProgressListener?.();
+            }
+        });
+    }, []);
+
+    // Check for active downloads on mount (survives navigation)
+    useEffect(() => {
+        const checkActiveDownloads = async () => {
+            const modelAPI = getElectronModelAPI();
+            if (!modelAPI?.getDownloadState) return;
+
+            for (const model of LOCAL_MODELS) {
+                try {
+                    const state = await modelAPI.getDownloadState(model.id);
+                    if (state && state.status === "downloading") {
+                        setIsDownloading(true);
+                        setDownloadingModelId(model.id);
+                        setSelectedModel(model.id);
+                        setProvider("local");
+                        setDownloadProgress(state.progress);
+                        setDownloadedBytes(state.downloadedBytes);
+                        setTotalBytes(state.totalBytes);
+                        setCurrentFile(state.currentFile);
+                        attachProgressListener(model.id);
+                        break;
+                    }
+                    if (state && state.status === "error") {
+                        setDownloadError(state.error || "Download failed");
+                    }
+                } catch { /* ignore */ }
+            }
+        };
+        checkActiveDownloads();
+    }, [attachProgressListener]);
+
     const handleProviderChange = (newProvider: "openrouter" | "local") => {
+        if (isDownloading) return; // Prevent switching providers during download
         setProvider(newProvider);
         setSelectedModel(
             newProvider === "openrouter" ? OPENROUTER_MODELS[0].id : LOCAL_MODELS[0].id
@@ -104,58 +203,55 @@ export function EmbeddingSetupPage({
     };
 
     const handleDownload = async (modelId: string) => {
-        if (typeof window === "undefined" || !("electronAPI" in window)) return;
+        const modelAPI = getElectronModelAPI();
+        if (!modelAPI?.download) return;
 
         setIsDownloading(true);
+        setDownloadingModelId(modelId);
         setDownloadProgress(0);
+        setDownloadError(null);
+        setDownloadedBytes(0);
+        setTotalBytes(0);
+        setCurrentFile("Preparing...");
+        setDownloadSpeed(0);
 
-        const electronAPI = (window as unknown as {
-            electronAPI?: {
-                model?: {
-                    download?: (id: string) => Promise<{ success: boolean; error?: string }>;
-                    onProgress?: (
-                        cb: (data: {
-                            modelId: string;
-                            status: string;
-                            progress?: number;
-                            error?: string;
-                        }) => void
-                    ) => void;
-                    removeProgressListener?: () => void;
-                };
-            };
-        }).electronAPI;
-
-        if (!electronAPI?.model?.download) {
-            setIsDownloading(false);
-            return;
-        }
-
-        // Set up progress listener
-        if (electronAPI.model.onProgress) {
-            electronAPI.model.onProgress((data) => {
-                if (data.modelId === modelId) {
-                    if (data.progress !== undefined) {
-                        setDownloadProgress(data.progress);
-                    }
-                    if (data.status === "completed") {
-                        setIsDownloading(false);
-                        setModelStatus((prev) => ({ ...prev, [modelId]: true }));
-                    }
-                    if (data.status === "error") {
-                        setIsDownloading(false);
-                    }
-                }
-            });
-        }
+        attachProgressListener(modelId);
 
         try {
-            await electronAPI.model.download(modelId);
-        } catch {
+            const result = await modelAPI.download(modelId);
+            if (result && !result.success && result.error) {
+                setDownloadError(result.error);
+                setIsDownloading(false);
+                setDownloadingModelId(null);
+            }
+        } catch (err) {
+            setDownloadError(err instanceof Error ? err.message : "Download failed");
             setIsDownloading(false);
-        } finally {
-            electronAPI.model.removeProgressListener?.();
+            setDownloadingModelId(null);
         }
+    };
+
+    const handleCancelDownload = async () => {
+        const modelAPI = getElectronModelAPI();
+        if (!modelAPI?.cancelDownload || !downloadingModelId) return;
+
+        modelAPI.removeProgressListener?.();
+        await modelAPI.cancelDownload(downloadingModelId);
+        setIsDownloading(false);
+        setDownloadingModelId(null);
+        setDownloadProgress(0);
+        setDownloadError("Download cancelled");
+    };
+
+    const formatBytes = (bytes: number): string => {
+        if (bytes <= 0) return "0 B";
+        const k = 1024;
+        const sizes = ["B", "KB", "MB", "GB", "TB"];
+        const i = Math.min(
+            Math.floor(Math.log(bytes) / Math.log(k)),
+            sizes.length - 1
+        );
+        return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
     };
 
     const handleSubmit = () => {
@@ -237,6 +333,7 @@ export function EmbeddingSetupPage({
                                     title={t("providers.openrouter.title")}
                                     description={t("providers.openrouter.description")}
                                     selected={provider === "openrouter"}
+                                    disabled={isDownloading}
                                     onClick={() => handleProviderChange("openrouter")}
                                 />
                                 <ProviderCard
@@ -244,6 +341,7 @@ export function EmbeddingSetupPage({
                                     title={t("providers.local.title")}
                                     description={t("providers.local.description")}
                                     selected={provider === "local"}
+                                    disabled={isDownloading}
                                     onClick={() => handleProviderChange("local")}
                                 />
                             </div>
@@ -299,14 +397,17 @@ export function EmbeddingSetupPage({
                                 <h3 className="text-sm font-mono font-semibold text-terminal-amber">
                                     {t("selectModel")}
                                 </h3>
-                                <div className="grid gap-2">
+                                <div className="grid gap-2" role="radiogroup" aria-label={t("selectModel")}>
                                     {models.map((model) => (
                                         <ModelCard
                                             key={model.id}
                                             model={model}
                                             selected={selectedModel === model.id}
                                             downloaded={modelStatus[model.id]}
-                                            onClick={() => setSelectedModel(model.id)}
+                                            disabled={isDownloading}
+                                            onClick={() => {
+                                                if (!isDownloading) setSelectedModel(model.id);
+                                            }}
                                             recommendedLabel={t("models.recommended")}
                                         />
                                     ))}
@@ -314,18 +415,86 @@ export function EmbeddingSetupPage({
                             </div>
                         </div>
 
+                        {/* Download Progress Bar (shown during/after download) */}
+                        {(isDownloading || downloadError) && provider === "local" && (
+                            <div className="border-t border-terminal-border/50 bg-terminal-bg/20 px-5 py-3">
+                                {isDownloading && (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between text-xs font-mono text-terminal-dark/70">
+                                            <span className="truncate max-w-[60%]">{currentFile}</span>
+                                            <span>
+                                                {formatBytes(downloadedBytes)} / {formatBytes(totalBytes)}
+                                                {downloadSpeed > 0 && ` · ${formatBytes(downloadSpeed)}/s`}
+                                            </span>
+                                        </div>
+                                        <div
+                                            className="h-2 w-full rounded-full bg-terminal-border/30 overflow-hidden"
+                                            role="progressbar"
+                                            aria-valuenow={Math.round(downloadProgress)}
+                                            aria-valuemin={0}
+                                            aria-valuemax={100}
+                                            aria-label={`Download progress: ${Math.round(downloadProgress)}%`}
+                                        >
+                                            <div
+                                                className="h-full rounded-full bg-terminal-amber transition-all duration-300 ease-out"
+                                                style={{ width: `${downloadProgress}%` }}
+                                            />
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-mono text-terminal-dark/50">
+                                                {Math.round(downloadProgress)}% complete
+                                            </span>
+                                            <button
+                                                onClick={handleCancelDownload}
+                                                aria-label="Cancel download"
+                                                className="text-xs font-mono text-red-500/70 hover:text-red-500 transition-colors"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                                {downloadError && !isDownloading && (
+                                    <div className="flex items-center gap-2 rounded border border-red-300/50 bg-red-50/50 px-3 py-2">
+                                        <AlertCircleIcon className="w-4 h-4 text-red-500 flex-shrink-0" />
+                                        <span className="text-xs font-mono text-red-600 flex-1">{downloadError}</span>
+                                        <button
+                                            onClick={() => {
+                                                setDownloadError(null);
+                                                handleDownload(selectedModel);
+                                            }}
+                                            aria-label="Retry download"
+                                            className="text-xs font-mono text-terminal-amber hover:text-terminal-amber/80 font-semibold flex-shrink-0"
+                                        >
+                                            Retry
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Navigation */}
                         <div className="flex flex-col gap-3 border-t border-terminal-border/50 bg-terminal-cream/90 px-5 py-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
                             <button
                                 onClick={onBack}
-                                className="order-2 text-sm font-mono text-terminal-dark/60 transition-colors hover:text-terminal-dark sm:order-1"
+                                disabled={isDownloading}
+                                className={`order-2 text-sm font-mono transition-colors sm:order-1 ${
+                                    isDownloading
+                                        ? "text-terminal-dark/30 cursor-not-allowed"
+                                        : "text-terminal-dark/60 hover:text-terminal-dark"
+                                }`}
                             >
                                 {t("back")}
                             </button>
                             <div className="flex gap-3 order-1 sm:order-2">
                                 <button
                                     onClick={onSkip}
-                                    className="text-sm font-mono text-terminal-dark/60 transition-colors hover:text-terminal-dark"
+                                    disabled={isDownloading}
+                                    className={`text-sm font-mono transition-colors ${
+                                        isDownloading
+                                            ? "text-terminal-dark/30 cursor-not-allowed"
+                                            : "text-terminal-dark/60 hover:text-terminal-dark"
+                                    }`}
                                 >
                                     {t("skip")}
                                 </button>
@@ -338,8 +507,10 @@ export function EmbeddingSetupPage({
                                         {isDownloading ? (
                                             <>
                                                 <Loader2Icon className="w-4 h-4 animate-spin" />
-                                                {downloadProgress}%
+                                                Downloading...
                                             </>
+                                        ) : downloadError ? (
+                                            "Retry Download"
                                         ) : (
                                             t("downloading").replace("...", "")
                                         )}
@@ -382,6 +553,8 @@ function ProviderCard({
         <button
             onClick={onClick}
             disabled={disabled}
+            aria-pressed={selected}
+            aria-label={title}
             className={`flex-1 p-4 rounded-lg border-2 transition-all text-left ${selected
                 ? "border-terminal-amber bg-terminal-amber/10"
                 : disabled
@@ -413,21 +586,29 @@ function ModelCard({
     model,
     selected,
     downloaded,
+    disabled,
     onClick,
     recommendedLabel,
 }: {
     model: { id: string; name: string; description: string; recommended: boolean };
     selected: boolean;
     downloaded?: boolean;
+    disabled?: boolean;
     onClick: () => void;
     recommendedLabel: string;
 }) {
     return (
         <button
+            role="radio"
+            aria-checked={selected}
+            aria-label={`${model.name}${model.recommended ? ` (${recommendedLabel})` : ""}${downloaded ? " (downloaded)" : ""}`}
             onClick={onClick}
+            disabled={disabled}
             className={`flex items-center justify-between p-3 rounded border transition-all ${selected
                 ? "border-terminal-amber bg-terminal-amber/5"
-                : "border-terminal-border/50 hover:border-terminal-amber/30"
+                : disabled
+                    ? "border-terminal-border/50 opacity-60 cursor-not-allowed"
+                    : "border-terminal-border/50 hover:border-terminal-amber/30"
                 }`}
         >
             <div className="flex items-center gap-3">

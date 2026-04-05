@@ -22,6 +22,7 @@ const pluginRegistryMocks = vi.hoisted(() => ({
   setPluginEnabledForAgent: vi.fn(),
 }));
 
+vi.mock("@/lib/db/sqlite-client", () => ({ db: {} }));
 vi.mock("@/lib/auth/local-auth", () => authMocks);
 vi.mock("@/lib/settings/settings-manager", () => settingsMocks);
 vi.mock("@/lib/db/queries", () => dbMocks);
@@ -122,14 +123,18 @@ describe("/api/characters/[id]/plugins route", () => {
   });
 
   it("POST skips metadata writes when the refreshed enabled plugin ids already match", async () => {
-    characterMocks.getCharacter.mockResolvedValueOnce({
+    const charWithEmptyPlugins = {
       id: "character-1",
       userId: "user-1",
       metadata: {
         enabledPlugins: [],
         purpose: "test agent",
       },
-    });
+    };
+    // Called twice: once in requireCharacterAuth, once in the route handler
+    characterMocks.getCharacter
+      .mockResolvedValueOnce(charWithEmptyPlugins)
+      .mockResolvedValueOnce(charWithEmptyPlugins);
     pluginRegistryMocks.getAvailablePluginsForAgent
       .mockResolvedValueOnce([createAssignment("plugin-1", false, "Plugin One")])
       .mockResolvedValueOnce([createAssignment("plugin-1", false, "Plugin One")]);

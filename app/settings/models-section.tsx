@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { settingsSectionShellClassName } from "@/components/settings/settings-form-layout";
 import { getAntigravityModels } from "@/lib/auth/antigravity-models";
@@ -14,6 +14,17 @@ import type { FormState } from "./settings-types";
 const MODEL_FIELDS = ["chatModel", "researchModel", "visionModel", "utilityModel"] as const;
 type ModelFieldKey = (typeof MODEL_FIELDS)[number];
 const BLACKBOX_MANUAL_OPTION = "__manual__";
+const OLLAMA_MANUAL_OPTION = "__manual__";
+
+interface OllamaModel {
+  name: string;
+  size?: number;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(0)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
 
 function getBlackBoxSelectValue(value: string, fallback: string, knownModels: Set<string>): string {
   if (!value) return fallback;
@@ -70,6 +81,11 @@ interface ModelsSectionProps {
   updateField: <K extends keyof FormState>(key: K, value: FormState[K]) => void;
 }
 
+function getOllamaSelectValue(value: string, knownNames: Set<string>): string {
+  if (!value) return "";
+  return knownNames.has(value) ? value : OLLAMA_MANUAL_OPTION;
+}
+
 function ModelSelect({
   label,
   fieldKey,
@@ -86,6 +102,8 @@ function ModelSelect({
   openrouterPlaceholder,
   helperKey,
   t,
+  ollamaModels,
+  ollamaModelsFailed,
 }: {
   label: string;
   fieldKey: ModelFieldKey;
@@ -102,6 +120,8 @@ function ModelSelect({
   openrouterPlaceholder: string;
   helperKey: string;
   t: ReturnType<typeof useTranslations<"settings">>;
+  ollamaModels: OllamaModel[];
+  ollamaModelsFailed: boolean;
 }) {
   const blackboxModelIds = useMemo(
     () => new Set(BLACKBOX_MODELS.map((model) => model.id)),
@@ -114,10 +134,57 @@ function ModelSelect({
   );
   const isBlackBoxManual = formState.llmProvider === "blackboxai" && blackboxSelectValue === "__manual__";
 
+  const ollamaModelNames = useMemo(
+    () => new Set(ollamaModels.map((m) => m.name)),
+    [ollamaModels],
+  );
+  const ollamaSelectValue = getOllamaSelectValue(
+    formState[fieldKey] ?? "",
+    ollamaModelNames,
+  );
+  const isOllamaManual = formState.llmProvider === "ollama" && ollamaSelectValue === OLLAMA_MANUAL_OPTION && (formState[fieldKey] ?? "") !== "";
+
   return (
     <div>
       <label className="mb-1 block font-mono text-sm text-terminal-muted">{label}</label>
-      {formState.llmProvider === "antigravity" ? (
+      {formState.llmProvider === "ollama" && ollamaModels.length > 0 && !ollamaModelsFailed ? (
+        <>
+          <select
+            value={ollamaSelectValue || ""}
+            onChange={(e) => {
+              const nextValue = e.target.value;
+              if (nextValue === OLLAMA_MANUAL_OPTION) {
+                updateField(fieldKey, formState[fieldKey] || "");
+                return;
+              }
+              updateField(fieldKey, nextValue);
+            }}
+            className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+          >
+            <option value="">-- select model --</option>
+            {ollamaModels.map((m) => (
+              <option key={m.name} value={m.name}>
+                {m.name}{m.size ? ` (${formatBytes(m.size)})` : ""}
+              </option>
+            ))}
+            <option value={OLLAMA_MANUAL_OPTION}>{t("models.manualModelId" as Parameters<typeof t>[0])}</option>
+          </select>
+          {isOllamaManual && (
+            <div className="mt-2 rounded border border-dashed border-terminal-border/70 bg-terminal-cream/40 p-3">
+              <label className="mb-1 block font-mono text-xs uppercase tracking-wide text-terminal-muted">
+                Manual model ID
+              </label>
+              <input
+                type="text"
+                value={formState[fieldKey] ?? ""}
+                onChange={(e) => updateField(fieldKey, e.target.value)}
+                placeholder={ollamaPlaceholder}
+                className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark placeholder:text-terminal-muted/50 focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+              />
+            </div>
+          )}
+        </>
+      ) : formState.llmProvider === "antigravity" ? (
         <select
           value={formState[fieldKey] || antigravityDefault}
           onChange={(e) => updateField(fieldKey, e.target.value)}
@@ -220,6 +287,36 @@ const PROVIDER_MODEL_SETS: Partial<Record<FormState["llmProvider"], Set<string>>
 export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
   const t = useTranslations("settings");
   const prevProviderRef = useRef<FormState["llmProvider"]>(formState.llmProvider);
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [ollamaModelsFailed, setOllamaModelsFailed] = useState(false);
+  const ollamaFetchedRef = useRef(false);
+
+  // Fetch Ollama models when provider is "ollama"
+  const fetchOllamaModels = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ollama/tags");
+      if (!res.ok) {
+        setOllamaModelsFailed(true);
+        return;
+      }
+      const data = await res.json();
+      const models: OllamaModel[] = (data.models ?? []).map((m: { name: string; size?: number }) => ({
+        name: m.name,
+        size: m.size,
+      }));
+      setOllamaModels(models);
+      setOllamaModelsFailed(false);
+    } catch {
+      setOllamaModelsFailed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (formState.llmProvider === "ollama" && !ollamaFetchedRef.current) {
+      ollamaFetchedRef.current = true;
+      fetchOllamaModels();
+    }
+  }, [formState.llmProvider, fetchOllamaModels]);
 
   // Clear model fields that don't belong to the newly selected provider.
   // This prevents stale Codex/Antigravity model IDs from persisting when the
@@ -279,6 +376,8 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           openrouterPlaceholder="x-ai/grok-4.1-fast"
           helperKey="models.fields.chat.helper"
           t={t}
+          ollamaModels={ollamaModels}
+          ollamaModelsFailed={ollamaModelsFailed}
         />
 
         <ModelSelect
@@ -297,6 +396,8 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           openrouterPlaceholder="x-ai/grok-4.1-fast"
           helperKey="models.fields.research.helper"
           t={t}
+          ollamaModels={ollamaModels}
+          ollamaModelsFailed={ollamaModelsFailed}
         />
 
         <ModelSelect
@@ -315,6 +416,8 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           openrouterPlaceholder="google/gemini-2.0-flash-001"
           helperKey="models.fields.vision.helper"
           t={t}
+          ollamaModels={ollamaModels}
+          ollamaModelsFailed={ollamaModelsFailed}
         />
 
         <ModelSelect
@@ -333,6 +436,8 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           openrouterPlaceholder="google/gemini-2.0-flash-lite-001"
           helperKey="models.fields.utility.helper"
           t={t}
+          ollamaModels={ollamaModels}
+          ollamaModelsFailed={ollamaModelsFailed}
         />
 
         {/* OpenRouter Advanced Options */}

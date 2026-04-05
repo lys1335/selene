@@ -16,6 +16,7 @@ import {
 } from "./terminal-pages";
 import { useReducedMotion } from "./hooks/use-reduced-motion";
 import { resilientFetch, resilientPost, resilientPut, resilientPatch } from "@/lib/utils/resilient-fetch";
+import { useSettings, invalidateSettingsCache } from "@/lib/hooks/use-settings";
 import { useAgentExpansion } from "@/lib/characters/hooks";
 import { DEFAULT_ENABLED_TOOLS } from "@/lib/characters/templates/resolve-tools";
 import { WizardProgress, WIZARD_STEPS, type WizardStep } from "@/components/ui/wizard-progress";
@@ -74,7 +75,6 @@ export function TerminalWizard() {
   const [draftAgentId, setDraftAgentId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [vectorDBEnabled, setVectorDBEnabled] = useState(false);
   const [hasMcpServers, setHasMcpServers] = useState<boolean | null>(null);
   const prefersReducedMotion = useReducedMotion();
   const t = useTranslations("characterCreation.progress");
@@ -82,13 +82,9 @@ export function TerminalWizard() {
   const tErr = useTranslations("characterCreation.errors");
   const router = useRouter();
 
-  // Fetch settings to check if Vector Search is enabled
-  useEffect(() => {
-    resilientFetch<{ vectorDBEnabled?: boolean }>("/api/settings")
-      .then(({ data }) => {
-        setVectorDBEnabled(data?.vectorDBEnabled === true);
-      });
-  }, []);
+  // Fetch settings to check if Vector Search is enabled (shared cache)
+  const { settings: cachedSettings } = useSettings();
+  const vectorDBEnabled = cachedSettings?.vectorDBEnabled === true;
 
   // Check if MCP servers are configured (to decide whether to show MCP step)
   useEffect(() => {
@@ -208,7 +204,7 @@ export function TerminalWizard() {
         return;
       }
 
-      setVectorDBEnabled(true);
+      invalidateSettingsCache();
       navigateTo("vectorSearch");
     } catch (err) {
       console.error("Failed to save embedding config:", err);

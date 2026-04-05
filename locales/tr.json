@@ -61,6 +61,10 @@
         "kimi": {
           "title": "Moonshot Kimi",
           "desc": "256K bağlam ve görüntü desteği ile Kimi K2.5 kullanın"
+        },
+        "ollama": {
+          "title": "Ollama",
+          "desc": "Modelleri yerel olarak çalıştırın — ücretsiz, gizli, API anahtarı gerekmez"
         }
       },
       "back": "Geri",
@@ -135,6 +139,12 @@
         "failedSaveProvider": "Sağlayıcı seçimi kaydedilemedi",
         "manualLoginPre": "Tarayıcı otomatik olarak açılmazsa şu adresi ziyaret edin",
         "manualLoginPost": "ve aşağıdaki kodu yapıştırın."
+      },
+      "ollama": {
+        "baseUrlLabel": "Sunucu Adresi",
+        "testConnection": "Bağlantıyı Test Et",
+        "connected": "Bağlandı",
+        "cannotReach": "Ollama'ya ulaşılamıyor"
       }
     },
     "features": {
@@ -2549,7 +2559,15 @@
           "placeholderOpenRouter": "text-embedding-3-small",
           "placeholderLocal": "Xenova/bge-large-en-v1.5",
           "download": "Indir",
-          "downloaded": "Indirildi"
+          "downloaded": "Indirildi",
+          "testModel": "Modeli Test Et",
+          "testing": "Test ediliyor…",
+          "openFolder": "Klasörü Aç",
+          "validateRedownload": "Doğrula ve Yeniden İndir",
+          "redownloadWorking": "Çalışıyor…",
+          "redownloadStarting": "Başlatılıyor…",
+          "validationSuccess": "✓ Model çalışıyor — {dims}d embedding {durationMs}ms'de",
+          "validationFailed": "✗ Doğrulama başarısız — {error}"
         },
         "embeddingLocalPath": {
           "label": "Yerel Model Yolu",

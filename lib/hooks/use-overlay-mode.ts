@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useSettings } from "@/lib/hooks/use-settings";
 
 type OverlayMode = "direct" | "compose";
 
@@ -28,37 +29,31 @@ export function useOverlayMode() {
   const [settings, setSettings] = useState<OverlaySettings>({});
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
-  // Fetch settings on mount — used for default mode fallback and overlay behavior flags
+  // Use shared settings cache instead of independent fetch
+  const { settings: _cachedSettings, isLoading: settingsLoading } = useSettings();
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/settings");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-        const fetched: OverlaySettings = {
-          miniOverlayDefaultMode: data.miniOverlayDefaultMode,
-          voicePostProcessing: data.voicePostProcessing,
-          miniOverlayAutoCloseAfterSpeak: data.miniOverlayAutoCloseAfterSpeak,
-          miniOverlayShowScreenPreview: data.miniOverlayShowScreenPreview,
-          ttsReadCodeBlocks: data.ttsReadCodeBlocks,
-        };
-        setSettings(fetched);
-        setSettingsLoaded(true);
+    if (_cachedSettings) {
+      const data = _cachedSettings;
+      const fetched: OverlaySettings = {
+        miniOverlayDefaultMode: data.miniOverlayDefaultMode as OverlaySettings["miniOverlayDefaultMode"],
+        voicePostProcessing: data.voicePostProcessing as boolean | undefined,
+        miniOverlayAutoCloseAfterSpeak: data.miniOverlayAutoCloseAfterSpeak as boolean | undefined,
+        miniOverlayShowScreenPreview: data.miniOverlayShowScreenPreview as boolean | undefined,
+        ttsReadCodeBlocks: data.ttsReadCodeBlocks as boolean | undefined,
+      };
+      setSettings(fetched);
 
-        // If localStorage has no stored mode, apply the settings default
-        if (typeof window !== "undefined" && !localStorage.getItem("overlay:mode")) {
-          const defaultMode = fetched.miniOverlayDefaultMode ?? "direct";
-          setModeState(defaultMode);
-        }
-      } catch {
-        // Settings fetch failed — use localStorage/hardcoded defaults
-        setSettingsLoaded(true);
+      // If localStorage has no stored mode, apply the settings default
+      if (typeof window !== "undefined" && !localStorage.getItem("overlay:mode")) {
+        const defaultMode = fetched.miniOverlayDefaultMode ?? "direct";
+        setModeState(defaultMode);
       }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+    }
+    // Mark loaded whether settings arrived or fetch completed (even on failure)
+    if (!settingsLoading) {
+      setSettingsLoaded(true);
+    }
+  }, [_cachedSettings, settingsLoading]);
 
   const setMode = (m: OverlayMode) => {
     setModeState(m);

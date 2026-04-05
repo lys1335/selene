@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Loader2Icon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { useAuth } from "@/components/auth/auth-provider";
 import { AuthFormCard } from "@/components/auth/auth-form-card";
 
 export default function LoginPage() {
@@ -18,6 +19,7 @@ export default function LoginPage() {
   const tc = useTranslations("common");
 
   const { checkingAuth } = useAuthRedirect({ redirectOnNoUsers: true });
+  const { refreshAuth } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,8 +41,8 @@ export default function LoginPage() {
         return;
       }
 
+      await refreshAuth();
       router.push("/");
-      router.refresh();
     } catch {
       setError(tc("error"));
       setLoading(false);

@@ -8,8 +8,8 @@
  * 4. Graceful fallback when compaction fails
  * 
  * Reference: https://docs.anthropic.com/en/docs/about-claude/models
- * All Claude models (Opus 4.6, Sonnet 4.5, Haiku 4.5, etc.) have 200K standard context.
- * 1M is only available via opt-in beta header "context-1m-2025-08-07".
+ * Most Claude models (Sonnet 4.6, Sonnet 4.5, Haiku 4.5, etc.) have 200K standard context.
+ * Claude Opus 4.6 has 1M context via Agent SDK.
  */
 
 import { describe, it, expect } from "vitest";
@@ -56,19 +56,23 @@ describe("Context Window Fix Validation", () => {
   });
 
   describe("Claude Model-Specific Configurations (200K)", () => {
-    const claudeModels = [
+    const claude200KModels = [
       "claude-sonnet-4-5-20250929",
       "claude-haiku-4-5-20251001",
       "claude-sonnet-4-6",
-      "claude-opus-4-6",
       "claude-opus-4-6-thinking",
     ];
 
-    claudeModels.forEach((modelId) => {
+    claude200KModels.forEach((modelId) => {
       it(`should configure ${modelId} with 200K context window`, () => {
         const config = getContextWindowConfig(modelId);
         expect(config.maxTokens).toBe(200000);
       });
+    });
+
+    it("should configure claude-opus-4-6 with 1M context window", () => {
+      const config = getContextWindowConfig("claude-opus-4-6");
+      expect(config.maxTokens).toBe(1000000);
     });
   });
 
@@ -167,21 +171,24 @@ describe("Context Window Fix Validation", () => {
   });
 
   describe("Consistency with model-catalog.ts", () => {
-    it("should match model-catalog contextWindow: '200K' for all Claude models", () => {
-      // model-catalog.ts declares contextWindow: "200K" for all Claude models.
-      // provider-limits.ts must agree — 200K = 200000 tokens.
-      const claudeModels = [
+    it("should match model-catalog contextWindow for all Claude models", () => {
+      // model-catalog.ts declares contextWindow per model.
+      // provider-limits.ts must agree.
+      const claude200KModels = [
         "claude-sonnet-4-5-20250929",
         "claude-haiku-4-5-20251001",
         "claude-sonnet-4-6",
-          "claude-opus-4-6",
         "claude-opus-4-6-thinking",
       ];
 
-      for (const modelId of claudeModels) {
+      for (const modelId of claude200KModels) {
         const config = getContextWindowConfig(modelId);
         expect(config.maxTokens).toBe(200000);
       }
+
+      // claude-opus-4-6 has 1M context (model-catalog contextWindow: "1M")
+      const opusConfig = getContextWindowConfig("claude-opus-4-6");
+      expect(opusConfig.maxTokens).toBe(1000000);
     });
   });
 

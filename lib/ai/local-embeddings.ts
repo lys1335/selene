@@ -5,6 +5,8 @@ import {
   type TransformerDevice,
   resolvePreferredDevice as resolvePreferredDeviceShared,
   isRecoverableGpuRuntimeError,
+  detectAppleSiliconInfo,
+  isM4OrLater,
 } from "@/lib/ai/transformer-device";
 
 export const DEFAULT_LOCAL_EMBEDDING_MODEL = "Xenova/bge-large-en-v1.5";
@@ -109,6 +111,26 @@ export function validateLocalModelExists(modelId?: string): {
     (f) => !fs.existsSync(path.join(modelPath, f)),
   );
 
+  // Also verify at least one .onnx model file exists in the directory tree
+  const hasOnnxFile = (dir: string): boolean => {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith(".onnx")) return true;
+        if (entry.isDirectory()) {
+          if (hasOnnxFile(path.join(dir, entry.name))) return true;
+        }
+      }
+    } catch {
+      // Ignore read errors
+    }
+    return false;
+  };
+
+  if (!hasOnnxFile(modelPath)) {
+    missing.push("*.onnx (no ONNX model file found)");
+  }
+
   return {
     exists: missing.length === 0,
     modelId: id,
@@ -207,6 +229,26 @@ async function loadPipelineWithPatch(
       );
       return tryLoad("cpu");
     }
+
+    // Enrich the error with M4-specific guidance if applicable
+    const baseMsg = error instanceof Error ? error.message : String(error);
+    if (isM4OrLater()) {
+      const info = detectAppleSiliconInfo();
+      throw new Error(
+        `[LocalEmbeddings] ONNX pipeline failed on ${info.chipModel ?? "Apple M4"}. ` +
+        `Known fix: upgrade @huggingface/transformers to >=4.0.1 and onnxruntime-node to >=1.24.3. ` +
+        `Quick workaround: switch to OpenRouter embeddings in Settings → Embedding Provider, ` +
+        `or set LOCAL_EMBEDDING_DEVICE=wasm in your .env file. ` +
+        `Original error: ${baseMsg}`
+      );
+    }
+
+    if (detectAppleSiliconInfo().isAppleSilicon) {
+      console.warn(
+        `[LocalEmbeddings] Pipeline failed on Apple Silicon. If running M4, upgrade onnxruntime-node to >=1.24.3.`
+      );
+    }
+
     throw error;
   }
 }
@@ -216,6 +258,28 @@ async function getPipeline(options: LocalEmbeddingOptions): Promise<FeatureExtra
   const cacheDir = resolveCacheDir(options.cacheDir);
   const modelDir = resolveModelDir(options.modelDir);
   const allowRemoteModels = options.allowRemoteModels ?? !modelDir;
+
+  // Validate model completeness before attempting to load (prevents server crash)
+  if (!allowRemoteModels) {
+    const validation = validateLocalModelExists(modelId);
+    if (!validation.exists) {
+      // Check if download is in progress (only if we have a real path)
+      const hasRealPath = validation.expectedPath && !validation.expectedPath.startsWith('(');
+      const lockPath = hasRealPath ? path.join(validation.expectedPath, '_downloading.lock') : null;
+      if (lockPath && fs.existsSync(lockPath)) {
+        throw new Error(
+          `Embedding model "${modelId}" is still downloading. Please wait for the download to complete before indexing files.`
+        );
+      }
+      throw new Error(
+        `Embedding model "${modelId}" is incomplete or not downloaded. ` +
+        `Missing files: ${validation.missingFiles.join(', ')}. ` +
+        `Expected path: ${validation.expectedPath}. ` +
+        `Please download the model from Settings > Embedding before using local embeddings.`
+      );
+    }
+  }
+
   const preferredDevice = resolvePreferredDevice();
   const cacheKey = [
     modelId,
@@ -279,6 +343,40 @@ function toEmbeddings(output: unknown, expectedCount: number): EmbeddingModelV2E
     embeddings.push(data.slice(start, start + cols));
   }
   return embeddings;
+}
+
+export interface ValidationResult {
+  success: boolean;
+  durationMs: number;
+  /** Embedding dimensions returned by the model (0 on failure). */
+  dims: number;
+  error?: string;
+}
+
+/**
+ * Run a minimal test embedding to confirm the ONNX pipeline is functional.
+ *
+ * Safe to call after model download; it creates a temporary model instance
+ * so it doesn't pollute the shared pipeline cache.
+ */
+export async function runValidationEmbedding(
+  options: LocalEmbeddingOptions = {}
+): Promise<ValidationResult> {
+  const start = Date.now();
+  try {
+    const model = createLocalEmbeddingModel(options);
+    const result = await model.doEmbed({ values: ["Selene validation probe"] });
+    const dims = result.embeddings[0]?.length ?? 0;
+    if (dims === 0) throw new Error("Zero-dimension embedding returned");
+    return { success: true, durationMs: Date.now() - start, dims };
+  } catch (err) {
+    return {
+      success: false,
+      durationMs: Date.now() - start,
+      dims: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 export function createLocalEmbeddingModel(

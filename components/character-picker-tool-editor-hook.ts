@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { resilientFetch, resilientPatch } from "@/lib/utils/resilient-fetch";
+import { useSettings } from "@/lib/hooks/use-settings";
 import {
   CHARACTER_TOOL_CATALOG,
   mergeCharacterToolCatalog,
@@ -99,11 +100,14 @@ export function useToolEditor(
     };
   }, [toolEditorOpen, baseTools]);
 
+  const { settings: _cachedSettings } = useSettings();
+
+  // Fetch folder counts (non-cached) and merge with cached settings
   useEffect(() => {
     if (!toolEditorOpen) return;
     let cancelled = false;
 
-    const loadDependencyStatus = async () => {
+    const loadFolderStatus = async () => {
       let foldersCount = 0;
       if (editingCharacter?.id) {
         const { data } = await resilientFetch<{ folders?: unknown[] }>(
@@ -111,48 +115,44 @@ export function useToolEditor(
         );
         if (data) foldersCount = data.folders?.length ?? 0;
       }
-
-      try {
-        const { data: settingsData, error } = await resilientFetch<Record<string, unknown>>("/api/settings");
-        if (!settingsData || error) throw new Error(error || "Failed to load settings");
-        const webScraperReady = settingsData.webScraperProvider === "local"
-          || (typeof settingsData.firecrawlApiKey === "string" && settingsData.firecrawlApiKey.trim().length > 0);
-        const hasEmbeddingModel = typeof settingsData.embeddingModel === "string"
-          && settingsData.embeddingModel.trim().length > 0;
-        const hasOpenRouterKey = typeof settingsData.openrouterApiKey === "string"
-          && settingsData.openrouterApiKey.trim().length > 0;
-        const embeddingsReady = hasEmbeddingModel || settingsData.embeddingProvider === "local" || hasOpenRouterKey;
-
-        if (cancelled) return;
-        setDependencyStatus({
-          syncedFolders: foldersCount > 0,
-          embeddings: embeddingsReady,
-          vectorDbEnabled: settingsData.vectorDBEnabled === true,
-          webScraper: webScraperReady,
-          openrouterKey: typeof settingsData.openrouterApiKey === "string" && settingsData.openrouterApiKey.trim().length > 0,
-          comfyuiEnabled: settingsData.comfyuiEnabled === true,
-          localGrepEnabled: settingsData.localGrepEnabled !== false,
-          devWorkspaceEnabled: settingsData.devWorkspaceEnabled === true,
-          screenCaptureEnabled: settingsData.screenCaptureEnabled !== false,
-          runwayApiSecret: typeof settingsData.runwayApiSecret === "string" && settingsData.runwayApiSecret.trim().length > 0,
-          vertexAIProjectId: typeof settingsData.vertexAIProjectId === "string" && settingsData.vertexAIProjectId.trim().length > 0,
-        });
-      } catch (error) {
-        if (cancelled) return;
-        setDependencyStatus({
-          ...DEFAULT_DEPENDENCY_STATUS,
-          syncedFolders: foldersCount > 0,
-          localGrepEnabled: true,
-        });
-      }
+      if (cancelled) return;
+      setDependencyStatus((prev) => ({
+        ...prev,
+        syncedFolders: foldersCount > 0,
+      }));
     };
 
-    loadDependencyStatus();
-
-    return () => {
-      cancelled = true;
-    };
+    loadFolderStatus();
+    return () => { cancelled = true; };
   }, [toolEditorOpen, editingCharacter]);
+
+  // Update dependency status from cached settings
+  useEffect(() => {
+    if (!toolEditorOpen || !_cachedSettings) return;
+    const settingsData = _cachedSettings;
+
+    const webScraperReady = settingsData.webScraperProvider === "local"
+      || (typeof settingsData.firecrawlApiKey === "string" && (settingsData.firecrawlApiKey as string).trim().length > 0);
+    const hasEmbeddingModel = typeof settingsData.embeddingModel === "string"
+      && (settingsData.embeddingModel as string).trim().length > 0;
+    const hasOpenRouterKey = typeof settingsData.openrouterApiKey === "string"
+      && (settingsData.openrouterApiKey as string).trim().length > 0;
+    const embeddingsReady = hasEmbeddingModel || settingsData.embeddingProvider === "local" || hasOpenRouterKey;
+
+    setDependencyStatus((prev) => ({
+      ...prev,
+      embeddings: embeddingsReady,
+      vectorDbEnabled: settingsData.vectorDBEnabled === true,
+      webScraper: webScraperReady,
+      openrouterKey: typeof settingsData.openrouterApiKey === "string" && (settingsData.openrouterApiKey as string).trim().length > 0,
+      comfyuiEnabled: settingsData.comfyuiEnabled === true,
+      localGrepEnabled: settingsData.localGrepEnabled !== false,
+      devWorkspaceEnabled: settingsData.devWorkspaceEnabled === true,
+      screenCaptureEnabled: settingsData.screenCaptureEnabled !== false,
+      runwayApiSecret: typeof settingsData.runwayApiSecret === "string" && (settingsData.runwayApiSecret as string).trim().length > 0,
+      vertexAIProjectId: typeof settingsData.vertexAIProjectId === "string" && (settingsData.vertexAIProjectId as string).trim().length > 0,
+    }));
+  }, [toolEditorOpen, _cachedSettings]);
 
   const areDependenciesMet = (tool: ToolDefinition): boolean =>
     checkDependenciesMet(tool, dependencyStatus);

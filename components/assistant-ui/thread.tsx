@@ -18,12 +18,13 @@ import { ToolExpansionProvider } from "./tool-expansion-context";
 import { ExpandAllToolsButton } from "./expand-all-tools-button";
 import { ToolDisplayProvider, type ToolDisplayMode } from "./tool-display-context";
 import { useContextStatus } from "@/lib/hooks/use-context-status";
-import { useSessionHasActiveRun } from "@/lib/stores/session-sync-store";
+import { useSessionHasActiveRun, useSessionSyncStore } from "@/lib/stores/session-sync-store";
 import {
   ContextWindowBlockedBanner,
   type ContextWindowBlockedPayload,
 } from "./context-window-blocked-banner";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { AgentResourcesBadge } from "./agent-resources-badge";
 import { type VoiceUiSettings } from "./thread-drop-utils";
 import { useThreadDropHandler } from "./use-thread-drop-handler";
@@ -105,64 +106,34 @@ export const Thread: FC<ThreadProps> = ({
   const [isBrowserActive, setIsBrowserActive] = useState(false);
   const { chatBackground } = useTheme();
 
+  const { settings: _cachedSettings } = useSettings();
   useEffect(() => {
-    let cancelled = false;
+    if (!_cachedSettings) return;
+    const data = _cachedSettings;
 
-    const loadVoiceSettings = async () => {
-      const { data, error } = await resilientFetch<{
-        ttsEnabled?: boolean;
-        sttEnabled?: boolean;
-        voicePostProcessing?: boolean;
-        voiceActionsEnabled?: boolean;
-        voiceAudioCues?: boolean;
-        voiceActivationMode?: "tap" | "push";
-        voiceHotkey?: string;
-        screenCaptureEnabled?: boolean;
-        quickCaptureEnabled?: boolean;
-        quickCaptureHotkey?: string;
-        quickCaptureAutoSend?: boolean;
-        quickCaptureAutoSendDelay?: number;
-        toolDisplayMode?: ToolDisplayMode;
-        devWorkspaceEnabled?: boolean;
-      }>("/api/settings", {
-        timeout: 10_000,
-        retries: 0,
-      });
-
-      if (cancelled || error || !data) {
-        return;
-      }
-
-      setVoiceUiSettings({
-        ttsEnabled: Boolean(data.ttsEnabled),
-        sttEnabled: Boolean(data.sttEnabled),
-        voicePostProcessing: data.voicePostProcessing !== false,
-        voiceActionsEnabled: data.voiceActionsEnabled !== false,
-        voiceAudioCues: data.voiceAudioCues !== false,
-        voiceActivationMode: data.voiceActivationMode === "push" ? "push" : "tap",
-        voiceHotkey:
-          typeof data.voiceHotkey === "string" && data.voiceHotkey.trim().length > 0
-            ? data.voiceHotkey.trim()
-            : "CommandOrControl+Shift+Space",
-        screenCaptureEnabled: data.screenCaptureEnabled !== false,
-        quickCaptureEnabled: data.quickCaptureEnabled !== false,
-        quickCaptureHotkey:
-          typeof data.quickCaptureHotkey === "string" && data.quickCaptureHotkey.trim().length > 0
-            ? data.quickCaptureHotkey.trim()
-            : "CommandOrControl+Shift+A",
-        quickCaptureAutoSend: data.quickCaptureAutoSend === true,
-        quickCaptureAutoSendDelay: typeof data.quickCaptureAutoSendDelay === "number" ? data.quickCaptureAutoSendDelay : 3,
-      });
-      setToolDisplayMode(data.toolDisplayMode === "detailed" ? "detailed" : "compact");
-      setDevWorkspaceEnabled(data.devWorkspaceEnabled === true);
-    };
-
-    void loadVoiceSettings();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    setVoiceUiSettings({
+      ttsEnabled: Boolean(data.ttsEnabled),
+      sttEnabled: Boolean(data.sttEnabled),
+      voicePostProcessing: data.voicePostProcessing !== false,
+      voiceActionsEnabled: data.voiceActionsEnabled !== false,
+      voiceAudioCues: data.voiceAudioCues !== false,
+      voiceActivationMode: data.voiceActivationMode === "push" ? "push" : "tap",
+      voiceHotkey:
+        typeof data.voiceHotkey === "string" && (data.voiceHotkey as string).trim().length > 0
+          ? (data.voiceHotkey as string).trim()
+          : "CommandOrControl+Shift+Space",
+      screenCaptureEnabled: data.screenCaptureEnabled !== false,
+      quickCaptureEnabled: data.quickCaptureEnabled !== false,
+      quickCaptureHotkey:
+        typeof data.quickCaptureHotkey === "string" && (data.quickCaptureHotkey as string).trim().length > 0
+          ? (data.quickCaptureHotkey as string).trim()
+          : "CommandOrControl+Shift+A",
+      quickCaptureAutoSend: data.quickCaptureAutoSend === true,
+      quickCaptureAutoSendDelay: typeof data.quickCaptureAutoSendDelay === "number" ? (data.quickCaptureAutoSendDelay as number) : 3,
+    });
+    setToolDisplayMode(data.toolDisplayMode === "detailed" ? "detailed" : "compact");
+    setDevWorkspaceEnabled(data.devWorkspaceEnabled === true);
+  }, [_cachedSettings]);
 
   const {
     isDragging,
@@ -215,6 +186,21 @@ export const Thread: FC<ThreadProps> = ({
     pollIntervalMs: contextPollIntervalMs,
     pauseWhenHidden: true,
   });
+
+  // Write context status to Zustand store so sidebar badges update
+  useEffect(() => {
+    if (!sessionId) return;
+    const setStatus = useSessionSyncStore.getState().setSessionContextStatus;
+    if (!contextStatus || contextStatus.status === "safe") {
+      setStatus(sessionId, null);
+    } else {
+      setStatus(sessionId, {
+        status: contextStatus.status,
+        percentage: contextStatus.percentage,
+        updatedAt: Date.now(),
+      });
+    }
+  }, [sessionId, contextStatus?.status, contextStatus?.percentage]);
 
   // Blocked banner state — set when a 413 error is received
   const [blockedPayload, setBlockedPayload] =

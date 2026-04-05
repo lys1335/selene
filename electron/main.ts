@@ -9,6 +9,7 @@
 import { app, globalShortcut, session } from "electron";
 import * as path from "path";
 import * as fs from "fs";
+import Module from "module";
 import { initializeRTK } from "../lib/rtk";
 import { initializeProcessEnvironment } from "../lib/process-env/policy";
 
@@ -20,6 +21,14 @@ import { initializeProcessEnvironment } from "../lib/process-env/policy";
 // ---------------------------------------------------------------------------
 
 const isDev = !app.isPackaged;
+
+// ---------------------------------------------------------------------------
+// Native module resolution for packaged builds
+// NOTE: The actual fix is in the esbuild banner (esbuild.electron.mjs) which
+// runs BEFORE any require() in the bundle. The banner sets NODE_PATH and calls
+// Module._initPaths() so that externalized native modules (onnxruntime-node,
+// better-sqlite3, @lancedb/*) resolve from Resources/standalone/node_modules.
+// ---------------------------------------------------------------------------
 
 if (process.platform === "win32") {
   // Keep taskbar/start-menu identity stable so Windows uses the packaged app icon.

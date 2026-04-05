@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTranslations } from "next-intl";
 import { useAuthRedirect } from "@/hooks/use-auth-redirect";
+import { useAuth } from "@/components/auth/auth-provider";
 import { AuthFormCard } from "@/components/auth/auth-form-card";
 
 export default function SignUpPage() {
@@ -21,6 +22,7 @@ export default function SignUpPage() {
   const tc = useTranslations("common");
 
   const { checkingAuth, isFirstUser } = useAuthRedirect();
+  const { refreshAuth } = useAuth();
 
   const validatePassword = (pwd: string): string | null => {
     if (pwd.length < 6) {
@@ -61,8 +63,8 @@ export default function SignUpPage() {
         return;
       }
 
+      await refreshAuth();
       router.push("/");
-      router.refresh();
     } catch {
       setError(tc("error"));
       setLoading(false);

@@ -106,6 +106,7 @@ import { tagIntermediateDelegationParts } from "./delegation-scope-tagging";
 import { shouldStopTurn, hasRunningDelegationsForSession, hasActiveAsyncWork } from "./delegation-waiting";
 import { createThinkTagFilter, shouldFilterThinkTags } from "@/lib/ai/streaming/think-tag-filter";
 import { thinkTagMiddleware, hasThinkTags } from "@/lib/ai/utils/think-tag-stream";
+import { ollamaModelSupportsThinking } from "@/lib/ai/providers/ollama-capabilities";
 import { detectEmotion } from "@/lib/emotion";
 import {
   isUiChunkCommittable,
@@ -470,7 +471,7 @@ export async function POST(req: Request) {
         ? {
             ...(isScheduledRun ? { scheduledRunId: scheduledRunId ?? undefined, scheduledTaskId: scheduledTaskId ?? undefined } : {}),
             ...(isChannelSource ? { suppressFromUI: true, taskSource: "channel" } : {}),
-            ...(isDelegation ? { isDelegation: true, parentAgentId: sessionMetadata.parentAgentId, workflowId: sessionMetadata.workflowId } : {}),
+            ...(isDelegation ? { isDelegation: true, parentAgentId: sessionMetadata.parentAgentId, workflowId: sessionMetadata.workflowId, characterName: sessionMetadata.characterName } : {}),
           }
         : undefined,
     };
@@ -843,6 +844,26 @@ export async function POST(req: Request) {
       `[CHAT API] Using LLM: ${sessionDisplayName}, inject=${injectContext}, caching=${useCaching ? "on" : "off"}, imageInput=${hasUserImageInput ? "yes" : "no"}`,
     );
 
+    // ── Ollama capability detection ─────────────────────────────────────────
+    // Query Ollama's /api/show to check if the model supports native thinking.
+    // When supported, Ollama parses model-specific tags (DeepSeek <think>,
+    // Gemma4 <|channel>thought, etc.) server-side and sends structured
+    // delta.reasoning — no client-side middleware or filtering needed.
+    let ollamaNativeThinking = false;
+    if (provider === "ollama" && currentModelId) {
+      try {
+        ollamaNativeThinking = await ollamaModelSupportsThinking(currentModelId);
+        if (ollamaNativeThinking) {
+          console.debug(
+            `[CHAT API] Ollama native thinking detected for model=${currentModelId} — skipping client-side think-tag handling`,
+          );
+        }
+      } catch {
+        // Capability check failed — fall back to client-side filtering
+        console.debug(`[CHAT API] Ollama capability check failed for model=${currentModelId}, using fallback filtering`);
+      }
+    }
+
     // Think-tag filter: strip <think>...</think> blocks from non-Anthropic providers.
     // NOTE: This filter currently operates on text deltas as they are persisted to
     // the DB-backed message state (via onChunk). It does NOT transform the live SSE
@@ -852,7 +873,7 @@ export async function POST(req: Request) {
     // as a TransformStream on the SSE response, or filtering client-side.
     let thinkTagFilter: ReturnType<typeof createThinkTagFilter> | null = null;
     const recreateThinkTagFilter = () => {
-      thinkTagFilter = shouldFilterThinkTags(provider, currentModelId)
+      thinkTagFilter = shouldFilterThinkTags({ provider, modelId: currentModelId, ollamaSupportsThinking: ollamaNativeThinking })
         ? createThinkTagFilter()
         : null;
       if (thinkTagFilter) {
@@ -1003,7 +1024,7 @@ export async function POST(req: Request) {
                 settings: appSettings,
               });
 
-          if (hasThinkTags(provider)) {
+          if (hasThinkTags({ provider, modelId: currentModelId, ollamaSupportsThinking: ollamaNativeThinking })) {
             // Cast needed: resolvers return LanguageModel (union), wrapLanguageModel expects LanguageModelV3.
             // Safe because resolvers always return actual model objects, never string IDs.
             resolvedModel = wrapLanguageModel({

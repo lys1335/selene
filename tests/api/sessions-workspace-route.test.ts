@@ -65,7 +65,10 @@ vi.mock("@/lib/workspace/git-service", () => gitServiceMocks);
 vi.mock("@/lib/spawn-utils", () => spawnMocks);
 vi.mock("ai", () => aiMocks);
 vi.mock("@/lib/ai/session-model-resolver", () => resolverMocks);
-vi.mock("fs", () => fsMocks);
+vi.mock("fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("fs")>();
+  return { ...actual, ...fsMocks };
+});
 vi.mock("child_process", () => ({ execFile: childProcessMocks.execFile }));
 
 import { GET, POST } from "@/app/api/sessions/[id]/workspace/route";

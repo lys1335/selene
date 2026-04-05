@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Upload, Check, Trash2, Volume2, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { resilientPatch } from "@/lib/utils/resilient-fetch";
+import { useSettings, invalidateSettingsCache } from "@/lib/hooks/use-settings";
 import { PRESET_AVATARS, type PresetAvatar } from "@/lib/avatar/preset-avatars";
 import {
   getEdgeTTSVoicesGrouped,
@@ -60,17 +61,18 @@ export function Avatar3DModelSelector({
   const t = useTranslations("avatar3dModels");
   const voiceGroups = useMemo(() => getEdgeTTSVoicesGrouped(), []);
 
+  const { settings: _cachedSettings } = useSettings();
   useEffect(() => {
     if (open) {
       setLocalConfig(currentAvatarConfig ?? null);
-      fetch("/api/settings")
-        .then((r) => r.json())
-        .then((data) => {
-          if (data?.edgeTtsVoice) setEdgeTtsVoice(data.edgeTtsVoice);
-        })
-        .catch(() => {});
     }
   }, [open, currentAvatarConfig]);
+
+  useEffect(() => {
+    if (open && _cachedSettings?.edgeTtsVoice) {
+      setEdgeTtsVoice(_cachedSettings.edgeTtsVoice as string);
+    }
+  }, [open, _cachedSettings?.edgeTtsVoice]);
 
   const handleVoiceChange = useCallback(async (voiceId: string) => {
     const prev = edgeTtsVoice;
@@ -86,6 +88,7 @@ export function Avatar3DModelSelector({
         const payload = await res.json().catch(() => null);
         throw new Error(payload?.error || `Settings save failed (${res.status})`);
       }
+      invalidateSettingsCache();
     } catch (saveError) {
       setEdgeTtsVoice(prev);
       toast.error(saveError instanceof Error ? saveError.message : t("error.save"));

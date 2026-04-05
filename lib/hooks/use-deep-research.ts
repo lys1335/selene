@@ -6,6 +6,7 @@
 
 import { useState, useCallback, useRef, useEffect, type Dispatch, type SetStateAction } from 'react';
 import { resilientFetch } from '@/lib/utils/resilient-fetch';
+import { deduplicate } from '@/lib/utils/in-flight-cache';
 import type {
   DeepResearchEvent,
   ResearchPhase,
@@ -383,9 +384,13 @@ export function useDeepResearch(options: UseDeepResearchOptions = {}): UseDeepRe
       return null;
     }
 
-    const { data } = await resilientFetch<ActiveRunLookupResponse>(
-      `/api/sessions/${sessionId}/active-run`,
-      { retries: 0, timeout: 8000 }
+    const { data } = await deduplicate(
+      "active-run",
+      sessionId,
+      () => resilientFetch<ActiveRunLookupResponse>(
+        `/api/sessions/${sessionId}/active-run`,
+        { retries: 0, timeout: 8000 }
+      )
     );
 
     if (!data) {
