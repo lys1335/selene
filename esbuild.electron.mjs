@@ -52,6 +52,7 @@ await esbuild.build({
     // Native modules must stay external (they're rebuilt for Electron)
     "better-sqlite3",
     "onnxruntime-node",
+    "sharp",
     "@lancedb/*",
   ],
   define: {
