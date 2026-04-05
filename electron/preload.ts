@@ -121,6 +121,33 @@ const electronAPI = {
     },
     getDownloadState: (modelId: string) => ipcRenderer.invoke("model:getDownloadState", modelId),
     cancelDownload: (modelId: string) => ipcRenderer.invoke("model:cancelDownload", modelId),
+    /** Run a test embedding to verify the ONNX pipeline is working. */
+    validate: (modelId: string): Promise<{
+      success: boolean;
+      durationMs: number;
+      dims: number;
+      error?: string;
+    }> => ipcRenderer.invoke("model:validate", modelId),
+    /** Open the model folder in Finder / Explorer. */
+    openFolder: (modelId: string): Promise<{ success: boolean; path: string }> =>
+      ipcRenderer.invoke("model:openFolder", modelId),
+    /** Clear model files, re-download, and validate. Progress events on "model:redownloadProgress". */
+    redownloadAndValidate: (modelId: string): Promise<{
+      success: boolean;
+      error?: string;
+      validation?: { success: boolean; durationMs: number; dims: number; error?: string };
+    }> => ipcRenderer.invoke("model:redownloadAndValidate", modelId),
+    /** Listen for redownload+validate progress events. */
+    onRedownloadProgress: (callback: (data: {
+      modelId: string;
+      status: string;
+      detail?: string;
+    }) => void): void => {
+      ipcRenderer.on("model:redownloadProgress", (_event, data) => callback(data));
+    },
+    removeRedownloadProgressListener: (): void => {
+      ipcRenderer.removeAllListeners("model:redownloadProgress");
+    },
     parakeetGetStatus: (modelId?: string): Promise<{
       installed: boolean;
       running: boolean;
@@ -560,6 +587,9 @@ const electronAPI = {
         "model:downloadFile",
         "model:getDownloadState",
         "model:cancelDownload",
+        "model:validate",
+        "model:openFolder",
+        "model:redownloadAndValidate",
         "logs:getBuffer",
         "command:execute",
         "comfyui:checkStatus",
@@ -607,13 +637,13 @@ const electronAPI = {
     },
     on: (channel: string, callback: (...args: unknown[]) => void): void => {
       // Whitelist of allowed channels
-      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:toggle-recording", "overlay:session-updated", "overlay:compose-inject", "overlay:add-screenshot", "permission:screen-required"];
+      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "model:redownloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:toggle-recording", "overlay:session-updated", "overlay:compose-inject", "overlay:add-screenshot", "permission:screen-required"];
       if (validChannels.includes(channel)) {
         ipcRenderer.on(channel, (_event, ...args) => callback(...args));
       }
     },
     removeAllListeners: (channel: string): void => {
-      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:toggle-recording", "overlay:session-updated", "overlay:compose-inject", "overlay:add-screenshot", "permission:screen-required"];
+      const validChannels = ["window:maximized-changed", "window:visibility-changed", "window:fullscreen-changed", "model:downloadProgress", "model:redownloadProgress", "logs:entry", "logs:critical", "comfyui:installProgress", "voice-hotkey:triggered", "screen-capture:captured", "unified-capture:triggered", "overlay:toggle-recording", "overlay:session-updated", "overlay:compose-inject", "overlay:add-screenshot", "permission:screen-required"];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeAllListeners(channel);
       }

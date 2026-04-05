@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Loader2Icon, CheckIcon } from "lucide-react";
+import { Loader2Icon, CheckIcon, FolderOpenIcon, RefreshCwIcon, FlaskConicalIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { LOCAL_EMBEDDING_MODELS as SHARED_LOCAL_EMBEDDING_MODELS, formatDimensionLabel } from "@/lib/config/embedding-models";
 import type { FormState } from "./settings-types";
@@ -27,6 +27,16 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const [isElectronEnv, setIsElectronEnv] = useState(false);
 
+  // Validation state
+  const [validating, setValidating] = useState(false);
+  const [validationResult, setValidationResult] = useState<{
+    success: boolean; durationMs: number; dims: number; error?: string;
+  } | null>(null);
+
+  // Redownload+validate state
+  const [redownloading, setRedownloading] = useState(false);
+  const [redownloadStatus, setRedownloadStatus] = useState<string | null>(null);
+
   // Check if running in Electron and model existence on mount
   useEffect(() => {
     const checkElectronAndModels = async () => {
@@ -48,6 +58,63 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
     };
     checkElectronAndModels();
   }, []);
+
+  // Handle test/validate
+  const handleValidate = async (modelId: string) => {
+    if (!isElectronEnv) return;
+    setValidating(true);
+    setValidationResult(null);
+    const electronAPI = (window as unknown as { electronAPI: { model: { validate: (id: string) => Promise<{ success: boolean; durationMs: number; dims: number; error?: string }> } } }).electronAPI;
+    const result = await electronAPI.model.validate(modelId);
+    setValidationResult(result);
+    setValidating(false);
+  };
+
+  // Handle open folder
+  const handleOpenFolder = (modelId: string) => {
+    if (!isElectronEnv) return;
+    const electronAPI = (window as unknown as { electronAPI: { model: { openFolder: (id: string) => Promise<unknown> } } }).electronAPI;
+    electronAPI.model.openFolder(modelId).catch(() => {/* ignore */});
+  };
+
+  // Handle redownload + validate
+  const handleRedownloadAndValidate = async (modelId: string) => {
+    if (!isElectronEnv) return;
+    setRedownloading(true);
+    setRedownloadStatus("Starting…");
+    setValidationResult(null);
+
+    const electronAPI = (window as unknown as {
+      electronAPI: {
+        model: {
+          onRedownloadProgress?: (cb: (data: { modelId: string; status: string; detail?: string }) => void) => void;
+          removeRedownloadProgressListener?: () => void;
+          redownloadAndValidate: (id: string) => Promise<{
+            success: boolean;
+            error?: string;
+            validation?: { success: boolean; durationMs: number; dims: number; error?: string };
+          }>;
+        }
+      }
+    }).electronAPI;
+
+    electronAPI.model.onRedownloadProgress?.((data) => {
+      if (data.modelId === modelId) setRedownloadStatus(data.detail ?? data.status);
+    });
+
+    const result = await electronAPI.model.redownloadAndValidate(modelId);
+    electronAPI.model.removeRedownloadProgressListener?.();
+
+    if (result.success) {
+      setModelStatus((prev) => ({ ...prev, [modelId]: true }));
+      if (result.validation) setValidationResult(result.validation);
+    } else {
+      setValidationResult({ success: false, durationMs: 0, dims: 0, error: result.error });
+    }
+
+    setRedownloading(false);
+    setRedownloadStatus(null);
+  };
 
   // Handle download
   const handleDownload = async (modelId: string) => {
@@ -152,6 +219,58 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
 
         {downloadError && (
           <p className="mt-1 font-mono text-xs text-red-600">{downloadError}</p>
+        )}
+
+        {/* Validate / Open Folder / Redownload — only shown when model is present */}
+        {isElectronEnv && modelStatus[formState.embeddingModel || LOCAL_EMBEDDING_MODELS[0].id] && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleValidate(formState.embeddingModel || LOCAL_EMBEDDING_MODELS[0].id)}
+              disabled={validating || redownloading || downloading !== null}
+              className="gap-1.5 font-mono text-xs"
+            >
+              {validating
+                ? <><Loader2Icon className="size-3.5 animate-spin" /> Testing…</>
+                : <><FlaskConicalIcon className="size-3.5" /> Test Model</>}
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => handleOpenFolder(formState.embeddingModel || LOCAL_EMBEDDING_MODELS[0].id)}
+              disabled={redownloading}
+              className="gap-1.5 font-mono text-xs text-terminal-muted hover:text-terminal-dark"
+            >
+              <FolderOpenIcon className="size-3.5" />
+              Open Folder
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleRedownloadAndValidate(formState.embeddingModel || LOCAL_EMBEDDING_MODELS[0].id)}
+              disabled={redownloading || downloading !== null || validating}
+              className="gap-1.5 font-mono text-xs text-amber-700 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+            >
+              {redownloading
+                ? <><Loader2Icon className="size-3.5 animate-spin" /> {redownloadStatus ?? "Working…"}</>
+                : <><RefreshCwIcon className="size-3.5" /> Validate &amp; Redownload</>}
+            </Button>
+          </div>
+        )}
+
+        {/* Validation result */}
+        {validationResult && (
+          <p className={`mt-1.5 font-mono text-xs ${validationResult.success ? "text-terminal-green" : "text-red-600"}`}>
+            {validationResult.success
+              ? `✓ Model working — ${validationResult.dims}d embedding in ${validationResult.durationMs}ms`
+              : `✗ Validation failed — ${validationResult.error}`}
+          </p>
         )}
 
         <p className="mt-1 font-mono text-xs text-terminal-muted">

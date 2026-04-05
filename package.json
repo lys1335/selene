@@ -104,7 +104,7 @@
     "@assistant-ui/react-markdown": "^0.12.5",
     "@hapi/boom": "^10.0.1",
     "@huggingface/hub": "^2.7.1",
-    "@huggingface/transformers": "3.0.0",
+    "@huggingface/transformers": "^4.0.1",
     "@lancedb/lancedb": "^0.22.3",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "@phosphor-icons/react": "^2.1.10",
@@ -167,6 +167,7 @@
     "next": "^16.1.6",
     "next-intl": "^4.6.1",
     "node-edge-tts": "^1.2.10",
+    "onnxruntime-node": "^1.24.3",
     "pdf-parse": "^2.4.5",
     "pino": "^9.7.0",
     "playwright-core": "^1.58.2",
@@ -216,6 +217,7 @@
     "tailwindcss": "^3.4.16",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",
-    "vitest": "^4.0.17"
+    "vitest": "^4.0.17",
+    "wait-on": "^9.0.4"
   }
 }

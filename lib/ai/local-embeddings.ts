@@ -5,6 +5,8 @@ import {
   type TransformerDevice,
   resolvePreferredDevice as resolvePreferredDeviceShared,
   isRecoverableGpuRuntimeError,
+  detectAppleSiliconInfo,
+  isM4OrLater,
 } from "@/lib/ai/transformer-device";
 
 export const DEFAULT_LOCAL_EMBEDDING_MODEL = "Xenova/bge-large-en-v1.5";
@@ -227,6 +229,26 @@ async function loadPipelineWithPatch(
       );
       return tryLoad("cpu");
     }
+
+    // Enrich the error with M4-specific guidance if applicable
+    const baseMsg = error instanceof Error ? error.message : String(error);
+    if (isM4OrLater()) {
+      const info = detectAppleSiliconInfo();
+      throw new Error(
+        `[LocalEmbeddings] ONNX pipeline failed on ${info.chipModel ?? "Apple M4"}. ` +
+        `Known fix: upgrade @huggingface/transformers to >=4.0.1 and onnxruntime-node to >=1.24.3. ` +
+        `Quick workaround: switch to OpenRouter embeddings in Settings → Embedding Provider, ` +
+        `or set LOCAL_EMBEDDING_DEVICE=wasm in your .env file. ` +
+        `Original error: ${baseMsg}`
+      );
+    }
+
+    if (detectAppleSiliconInfo().isAppleSilicon) {
+      console.warn(
+        `[LocalEmbeddings] Pipeline failed on Apple Silicon. If running M4, upgrade onnxruntime-node to >=1.24.3.`
+      );
+    }
+
     throw error;
   }
 }
@@ -321,6 +343,40 @@ function toEmbeddings(output: unknown, expectedCount: number): EmbeddingModelV2E
     embeddings.push(data.slice(start, start + cols));
   }
   return embeddings;
+}
+
+export interface ValidationResult {
+  success: boolean;
+  durationMs: number;
+  /** Embedding dimensions returned by the model (0 on failure). */
+  dims: number;
+  error?: string;
+}
+
+/**
+ * Run a minimal test embedding to confirm the ONNX pipeline is functional.
+ *
+ * Safe to call after model download; it creates a temporary model instance
+ * so it doesn't pollute the shared pipeline cache.
+ */
+export async function runValidationEmbedding(
+  options: LocalEmbeddingOptions = {}
+): Promise<ValidationResult> {
+  const start = Date.now();
+  try {
+    const model = createLocalEmbeddingModel(options);
+    const result = await model.doEmbed({ values: ["Selene validation probe"] });
+    const dims = result.embeddings[0]?.length ?? 0;
+    if (dims === 0) throw new Error("Zero-dimension embedding returned");
+    return { success: true, durationMs: Date.now() - start, dims };
+  } catch (err) {
+    return {
+      success: false,
+      durationMs: Date.now() - start,
+      dims: 0,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 export function createLocalEmbeddingModel(

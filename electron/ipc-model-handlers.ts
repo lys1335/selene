@@ -1,4 +1,4 @@
-import { ipcMain } from "electron";
+import { ipcMain, shell } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "node:os";
@@ -370,6 +370,155 @@ export function registerModelHandlers(ctx: IpcHandlerContext): void {
       setTimeout(() => activeDownloads.delete(modelId), 60000);
 
       return { success: false, error: errorMsg };
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // model:validate — run a test embedding to confirm the pipeline works
+  // --------------------------------------------------------------------------
+
+  ipcMain.handle("model:validate", async (_event, modelId: string) => {
+    try {
+      // Dynamic import so ONNX is only loaded on demand
+      const { runValidationEmbedding } = await import("@/lib/ai/local-embeddings");
+      const result = await runValidationEmbedding({ modelId });
+      debugLog(
+        `[Model] Validation ${result.success ? "PASSED" : "FAILED"} for ${modelId}: ` +
+        `dims=${result.dims} ms=${result.durationMs}${result.error ? ` err=${result.error}` : ""}`
+      );
+      return result;
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      debugError(`[Model] Validation error for ${modelId}`, err);
+      return { success: false, durationMs: 0, dims: 0, error };
+    }
+  });
+
+  // --------------------------------------------------------------------------
+  // model:openFolder — reveal model directory in Finder / Explorer
+  // --------------------------------------------------------------------------
+
+  ipcMain.handle("model:openFolder", async (_event, modelId: string) => {
+    const modelPath = path.join(userModelsDir, ...modelId.split("/"));
+    assertInsideDir(userModelsDir, modelPath);
+
+    // If the model hasn't been downloaded yet, open the parent models dir
+    const targetPath = fs.existsSync(modelPath) ? modelPath : userModelsDir;
+    await shell.openPath(targetPath);
+    debugLog(`[Model] Opened folder: ${targetPath}`);
+    return { success: true, path: targetPath };
+  });
+
+  // --------------------------------------------------------------------------
+  // model:redownloadAndValidate — clear files, re-download, then validate
+  // --------------------------------------------------------------------------
+
+  ipcMain.handle("model:redownloadAndValidate", async (event, modelId: string) => {
+    const destDir = path.join(userModelsDir, ...modelId.split("/"));
+    assertInsideDir(userModelsDir, destDir);
+
+    const sendStatus = (status: string, detail?: string) => {
+      try {
+        if (!event.sender.isDestroyed()) {
+          event.sender.send("model:redownloadProgress", { modelId, status, detail });
+        }
+      } catch { /* renderer destroyed */ }
+    };
+
+    try {
+      // Step 1: Remove existing files
+      sendStatus("clearing", "Removing existing model files…");
+      if (fs.existsSync(destDir)) {
+        const clearDir = (dir: string) => {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              clearDir(full);
+              try { fs.rmdirSync(full); } catch { /* not empty */ }
+            } else {
+              fs.unlinkSync(full);
+            }
+          }
+        };
+        clearDir(destDir);
+      }
+      debugLog(`[Model] Cleared ${destDir} for redownload`);
+
+      // Step 2: Re-download via HuggingFace Hub (same logic as model:download)
+      sendStatus("downloading", "Starting fresh download…");
+
+      if (!fs.existsSync(destDir)) {
+        fs.mkdirSync(destDir, { recursive: true });
+      }
+
+      fs.writeFileSync(path.join(destDir, DOWNLOAD_LOCK_FILE), JSON.stringify({
+        modelId,
+        startedAt: new Date().toISOString(),
+      }));
+      try { fs.unlinkSync(path.join(destDir, DOWNLOAD_MANIFEST_FILE)); } catch { /* ignore */ }
+
+      const { listFiles: listHfFiles, downloadFile: downloadHfFile } = await import("@huggingface/hub");
+
+      const files: { path: string; size: number }[] = [];
+      for await (const file of listHfFiles({ repo: modelId, recursive: true })) {
+        if (file.type === "file" && !file.path.startsWith(".git/")) {
+          files.push({ path: file.path, size: file.size ?? 0 });
+        }
+      }
+
+      const totalBytes = files.reduce((s, f) => s + f.size, 0);
+      let downloadedBytes = 0;
+
+      for (const file of files) {
+        sendStatus(
+          "downloading",
+          `${file.path} (${Math.round((downloadedBytes / Math.max(totalBytes, 1)) * 100)}%)`
+        );
+
+        const filePath = path.join(destDir, file.path);
+        const fileDir = path.dirname(filePath);
+        if (!fs.existsSync(fileDir)) fs.mkdirSync(fileDir, { recursive: true });
+
+        const blob = await downloadHfFile({ repo: modelId, path: file.path });
+        if (blob) {
+          const buffer = Buffer.from(await blob.arrayBuffer());
+          fs.writeFileSync(filePath, buffer);
+          downloadedBytes += buffer.byteLength;
+        }
+      }
+
+      fs.writeFileSync(path.join(destDir, DOWNLOAD_MANIFEST_FILE), JSON.stringify({
+        modelId,
+        completedAt: new Date().toISOString(),
+        totalFiles: files.length,
+        totalBytes: downloadedBytes,
+      }));
+      try { fs.unlinkSync(path.join(destDir, DOWNLOAD_LOCK_FILE)); } catch { /* ignore */ }
+
+      debugLog(`[Model] Redownload complete: ${modelId}`);
+
+      // Step 3: Validate
+      sendStatus("validating", "Running embedding test…");
+      const { runValidationEmbedding } = await import("@/lib/ai/local-embeddings");
+      const validation = await runValidationEmbedding({ modelId });
+
+      sendStatus(
+        "complete",
+        validation.success
+          ? `Validation passed — ${validation.dims}d in ${validation.durationMs}ms`
+          : `Download complete but validation failed: ${validation.error}`
+      );
+
+      return { success: true, validation };
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      debugError(`[Model] Redownload+validate failed for ${modelId}`, err);
+
+      // Clean up lock file on error
+      try { fs.unlinkSync(path.join(destDir, DOWNLOAD_LOCK_FILE)); } catch { /* ignore */ }
+
+      sendStatus("error", error);
+      return { success: false, error };
     }
   });
 

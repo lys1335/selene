@@ -14,6 +14,7 @@ import { getEmbeddingModel, getEmbeddingModelId } from "@/lib/ai/providers";
 import { normalizeEmbedding, normalizeEmbeddings } from "@/lib/ai/embedding-utils";
 import { getVectorSearchConfig } from "@/lib/config/vector-search";
 import { validateLocalModelExists } from "@/lib/ai/local-embeddings";
+import { isM4OrLater, detectAppleSiliconInfo } from "@/lib/ai/transformer-device";
 import { DocumentProcessingError, DocumentErrorCode } from "@/lib/documents/errors";
 
 interface AgentDocumentEmbeddingIndexResult {
@@ -136,10 +137,29 @@ export async function indexAgentDocumentEmbeddings(params: {
 
   for (let start = 0; start < chunksToEmbed.length; start += batchSize) {
     const batch = chunksToEmbed.slice(start, start + batchSize);
-    const { embeddings } = await embedMany({
-      model: embeddingModel,
-      values: batch.map((chunk) => chunk.text),
-    });
+    let embeddingsResult: Awaited<ReturnType<typeof embedMany>>;
+    try {
+      embeddingsResult = await embedMany({
+        model: embeddingModel,
+        values: batch.map((chunk) => chunk.text),
+      });
+    } catch (embErr) {
+      const rawMsg = embErr instanceof Error ? embErr.message : String(embErr);
+      const isOnnxError = /onnx|pipeline|transformers|feature.extraction/i.test(rawMsg);
+
+      if (isOnnxError && isM4OrLater()) {
+        const info = detectAppleSiliconInfo();
+        throw new DocumentProcessingError(
+          DocumentErrorCode.MODEL_NOT_DOWNLOADED,
+          `Embedding failed on ${info.chipModel ?? "Apple M4"}: ${rawMsg}`,
+          undefined,
+          "Apple M4 requires @huggingface/transformers >=4.0.1 and onnxruntime-node >=1.24.3. " +
+          "Quick workaround: switch to OpenRouter embeddings in Settings → Embedding Provider.",
+        );
+      }
+      throw embErr;
+    }
+    const { embeddings } = embeddingsResult;
     const normalizedEmbeddings = normalizeEmbeddings(embeddings);
 
     if (!normalizedEmbeddings.length || normalizedEmbeddings.length !== batch.length) {
