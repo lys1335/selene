@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, Loader2, CheckCircle2, AlertCircle } from "lucid
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { resilientFetch, resilientPut } from "@/lib/utils/resilient-fetch";
+import { invalidateSettingsCache } from "@/lib/hooks/use-settings";
 
 import type { OnboardingProvider } from "./provider-step";
 
@@ -312,6 +313,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                 throw new Error("Failed to save API key");
             }
 
+            invalidateSettingsCache();
             setIsAuthenticated(true);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save API key");
@@ -330,6 +332,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             return false;
         }
 
+        invalidateSettingsCache();
         return true;
     };
 

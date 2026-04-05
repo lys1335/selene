@@ -470,7 +470,7 @@ export async function POST(req: Request) {
         ? {
             ...(isScheduledRun ? { scheduledRunId: scheduledRunId ?? undefined, scheduledTaskId: scheduledTaskId ?? undefined } : {}),
             ...(isChannelSource ? { suppressFromUI: true, taskSource: "channel" } : {}),
-            ...(isDelegation ? { isDelegation: true, parentAgentId: sessionMetadata.parentAgentId, workflowId: sessionMetadata.workflowId } : {}),
+            ...(isDelegation ? { isDelegation: true, parentAgentId: sessionMetadata.parentAgentId, workflowId: sessionMetadata.workflowId, characterName: sessionMetadata.characterName } : {}),
           }
         : undefined,
     };
@@ -1003,7 +1003,7 @@ export async function POST(req: Request) {
                 settings: appSettings,
               });
 
-          if (hasThinkTags(provider, currentModelId)) {
+          if (hasThinkTags(provider)) {
             // Cast needed: resolvers return LanguageModel (union), wrapLanguageModel expects LanguageModelV3.
             // Safe because resolvers always return actual model objects, never string IDs.
             resolvedModel = wrapLanguageModel({

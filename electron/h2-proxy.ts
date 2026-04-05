@@ -74,6 +74,8 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
   if (typeof server.requestTimeout === "number") server.requestTimeout = 0;
 
   server.on("request", (req: http2.Http2ServerRequest, res: http2.Http2ServerResponse) => {
+    debugLog(`[H2Proxy] → ${req.method} ${req.url} (HTTP/${req.httpVersion})`);
+
     // Build upstream headers: strip HTTP/2 pseudo-headers, override host.
     const upstreamHeaders: http.OutgoingHttpHeaders = {};
 
@@ -86,7 +88,7 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
 
     const proxyReq = http.request(
       {
-        hostname: "localhost",
+        hostname: "::1",
         port: targetPort,
         method: req.method,
         path: req.url,
@@ -166,7 +168,7 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
   // -------------------------------------------------------------------------
   server.on("upgrade", (req, socket, head) => {
     const proxyReq = http.request({
-      hostname: "localhost",
+      hostname: "::1",
       port: targetPort,
       path: req.url,
       method: req.method,

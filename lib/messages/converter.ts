@@ -556,9 +556,8 @@ export function convertDBMessagesToUIMessages(dbMessages: DBMessage[]): UIMessag
     if (dbMsg.role === "system" || dbMsg.role === "tool") continue;
     if (isInjectedLivePromptUserMessage(dbMsg)) continue;
 
-    const rawContent = dbMsg.content as DBContentPart[];
-    const content = Array.isArray(rawContent) ? rawContent : [];
-    if (content.length === 0 && dbMsg.role !== "assistant") {
+    const content = dbMsg.content as DBContentPart[];
+    if (!Array.isArray(content) || content.length === 0) {
       console.warn(`[CONVERTER] Dropping ${dbMsg.role} message ${dbMsg.id}: empty content array`);
       continue;
     }

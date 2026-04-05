@@ -48,39 +48,13 @@ export const thinkTagMiddleware: LanguageModelMiddleware =
     separator: "\n",
   });
 
-// Providers that ALWAYS emit `<think>` tags regardless of model.
-const THINK_TAG_PROVIDERS = new Set(["vllm"]);
+// Providers known to emit `<think>` tags in their text output.
+const THINK_TAG_PROVIDERS = new Set(["vllm", "ollama"]);
 
 /**
- * Model name patterns known to emit `<think>` reasoning tags.
- * Used for providers like Ollama where only some models are thinking models.
+ * Returns `true` if the given provider is known to emit `<think>...</think>`
+ * reasoning tags that should be intercepted by `thinkTagMiddleware`.
  */
-const THINK_TAG_MODEL_PATTERNS = [
-  "deepseek",
-  "qwq",
-  "qwen",
-  "r1",
-];
-
-/**
- * Returns `true` if the given provider + model combination is known to emit
- * `<think>...</think>` reasoning tags that should be intercepted by
- * `thinkTagMiddleware`.
- *
- * For Ollama, only models whose name matches a known thinking-model pattern
- * are wrapped. Non-thinking models (e.g. llama3, functiongemma) must not be
- * wrapped — the middleware would swallow their normal text output as
- * "reasoning" that never gets persisted, causing empty assistant messages.
- */
-export function hasThinkTags(provider: string, modelId?: string): boolean {
-  const lower = provider.toLowerCase();
-  if (THINK_TAG_PROVIDERS.has(lower)) return true;
-
-  if (lower === "ollama") {
-    if (!modelId) return false;
-    const lowerModel = modelId.toLowerCase();
-    return THINK_TAG_MODEL_PATTERNS.some((p) => lowerModel.includes(p));
-  }
-
-  return false;
+export function hasThinkTags(provider: string): boolean {
+  return THINK_TAG_PROVIDERS.has(provider.toLowerCase());
 }

@@ -6,6 +6,7 @@ import { Loader2Icon, BrainIcon, RefreshCwIcon } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useSettings, invalidateSettingsCache } from "@/lib/hooks/use-settings";
 
 export function MemorySection() {
   const t = useTranslations("settings");
@@ -16,28 +17,18 @@ export function MemorySection() {
   const [everMemOSServerUrl, setEverMemOSServerUrl] = useState("");
   const [everMemOSSaving, setEverMemOSSaving] = useState(false);
 
+  const { settings: _cachedSettings } = useSettings();
   useEffect(() => {
-    loadSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    try {
-      const response = await fetch("/api/settings");
-      if (response.ok) {
-        const settings = await response.json();
-        if (settings.everMemOSEnabled !== undefined) {
-          setEverMemOSEnabled(settings.everMemOSEnabled);
-        }
-        if (settings.everMemOSServerUrl) {
-          setEverMemOSServerUrl(settings.everMemOSServerUrl);
-        }
+    if (_cachedSettings) {
+      if (_cachedSettings.everMemOSEnabled !== undefined) {
+        setEverMemOSEnabled(_cachedSettings.everMemOSEnabled as boolean);
       }
-    } catch (error) {
-      console.error("Failed to load settings:", error);
-    } finally {
+      if (_cachedSettings.everMemOSServerUrl) {
+        setEverMemOSServerUrl(_cachedSettings.everMemOSServerUrl as string);
+      }
       setLoading(false);
     }
-  };
+  }, [_cachedSettings]);
 
   const saveEverMemOSSettings = async (enabled: boolean, serverUrl: string) => {
     setEverMemOSSaving(true);
@@ -48,6 +39,7 @@ export function MemorySection() {
         body: JSON.stringify({ everMemOSEnabled: enabled, everMemOSServerUrl: serverUrl }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      invalidateSettingsCache();
     } catch (error) {
       console.error("Failed to save EverMemOS settings:", error);
       toast.error(t("errors.memorySaveFailed"));

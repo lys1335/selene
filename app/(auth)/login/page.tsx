@@ -40,7 +40,6 @@ export default function LoginPage() {
       }
 
       router.push("/");
-      router.refresh();
     } catch {
       setError(tc("error"));
       setLoading(false);

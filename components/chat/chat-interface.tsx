@@ -11,6 +11,8 @@ import { CharacterProvider, type CharacterDisplayData } from "@/components/assis
 import { GitBranchIcon, Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { resilientFetch, resilientPost } from "@/lib/utils/resilient-fetch";
+import { useSettings, invalidateSettingsCache } from "@/lib/hooks/use-settings";
+import { deduplicate } from "@/lib/utils/in-flight-cache";
 import { isBackgroundLifecycleTask, isDelegationTask, type TaskEvent, type TaskStatus } from "@/lib/background-tasks/types";
 import { useUnifiedTasksStore } from "@/lib/stores/unified-tasks-store";
 import { CharacterSidebar } from "@/components/chat/chat-sidebar";
@@ -428,31 +430,29 @@ export default function ChatInterface({
     useEffect(() => { avatarMutedRef.current = avatarMuted; }, [avatarMuted]);
 
 
+    const { settings: _cachedSettings } = useSettings();
     useEffect(() => {
-        fetch("/api/settings")
-            .then((res) => res.ok ? res.json() : null)
-            .then((data) => {
-                if (data?.avatar3dEnabled) {
-                    const meta = character.metadata as Record<string, unknown> | null;
-                    const ac = meta?.avatarConfig as { modelUrl?: string; bodyType?: string } | undefined;
-                    setAvatarConfig({
-                        enabled: true,
-                        modelUrl: ac?.modelUrl,
-                        bodyType: (ac?.bodyType as "M" | "F") ?? "F",
-                        lipsyncLang: "en",
-                    });
-                }
-                if (data?.ttsAutoMode) setTtsAutoMode(data.ttsAutoMode);
-                if (data?.ttsEnabled != null) setTtsEnabled(data.ttsEnabled);
-                if (data?.ttsReadCodeBlocks != null) setTtsReadCodeBlocks(data.ttsReadCodeBlocks);
-                if (data?.ttsSpeakCodeSymbols != null) setTtsSpeakCodeSymbols(data.ttsSpeakCodeSymbols);
-                // Show theme chooser for newly onboarded users who haven't seen it
-                if (data?.onboardingComplete && !data?.hasSeenThemeChooser) {
-                    setShowThemeChooser(true);
-                }
-            })
-            .catch(() => {});
-    }, []);
+        const data = _cachedSettings;
+        if (!data) return;
+        if (data.avatar3dEnabled) {
+            const meta = character.metadata as Record<string, unknown> | null;
+            const ac = meta?.avatarConfig as { modelUrl?: string; bodyType?: string } | undefined;
+            setAvatarConfig({
+                enabled: true,
+                modelUrl: ac?.modelUrl,
+                bodyType: (ac?.bodyType as "M" | "F") ?? "F",
+                lipsyncLang: "en",
+            });
+        }
+        if (data.ttsAutoMode) setTtsAutoMode(data.ttsAutoMode as string);
+        if (data.ttsEnabled != null) setTtsEnabled(data.ttsEnabled as boolean);
+        if (data.ttsReadCodeBlocks != null) setTtsReadCodeBlocks(data.ttsReadCodeBlocks as boolean);
+        if (data.ttsSpeakCodeSymbols != null) setTtsSpeakCodeSymbols(data.ttsSpeakCodeSymbols as boolean);
+        // Show theme chooser for newly onboarded users who haven't seen it
+        if (data.onboardingComplete && !data.hasSeenThemeChooser) {
+            setShowThemeChooser(true);
+        }
+    }, [_cachedSettings]);
 
     // Sync avatar config when character metadata changes (e.g. after 3D avatar change via router.refresh)
     useEffect(() => {
@@ -990,9 +990,13 @@ export default function ChatInterface({
         checkActiveRunRef.current = async () => {
             const targetSessionId = sessionId;
             const requestId = ++activeRunCheckRequestIdRef.current;
-            const { data, error } = await resilientFetch<ActiveRunLookupResponse>(
-                `/api/sessions/${targetSessionId}/active-run`,
-                { retries: 0 }
+            const { data, error } = await deduplicate(
+                "active-run",
+                targetSessionId,
+                () => resilientFetch<ActiveRunLookupResponse>(
+                    `/api/sessions/${targetSessionId}/active-run`,
+                    { retries: 0 }
+                )
             );
             if (checkActiveRunCancelledRef.current) return;
             if (!shouldApplySessionScopedAsyncResult({
@@ -1547,7 +1551,7 @@ export default function ChatInterface({
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ hasSeenThemeChooser: true }),
-        }).catch(() => {});
+        }).then(() => invalidateSettingsCache()).catch(() => {});
     }, []);
 
     const handleWorkspaceModeSelect = useCallback((mode: ChatWorkspaceMode) => {

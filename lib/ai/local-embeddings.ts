@@ -109,6 +109,26 @@ export function validateLocalModelExists(modelId?: string): {
     (f) => !fs.existsSync(path.join(modelPath, f)),
   );
 
+  // Also verify at least one .onnx model file exists in the directory tree
+  const hasOnnxFile = (dir: string): boolean => {
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name.endsWith(".onnx")) return true;
+        if (entry.isDirectory()) {
+          if (hasOnnxFile(path.join(dir, entry.name))) return true;
+        }
+      }
+    } catch {
+      // Ignore read errors
+    }
+    return false;
+  };
+
+  if (!hasOnnxFile(modelPath)) {
+    missing.push("*.onnx (no ONNX model file found)");
+  }
+
   return {
     exists: missing.length === 0,
     modelId: id,
@@ -216,6 +236,28 @@ async function getPipeline(options: LocalEmbeddingOptions): Promise<FeatureExtra
   const cacheDir = resolveCacheDir(options.cacheDir);
   const modelDir = resolveModelDir(options.modelDir);
   const allowRemoteModels = options.allowRemoteModels ?? !modelDir;
+
+  // Validate model completeness before attempting to load (prevents server crash)
+  if (!allowRemoteModels) {
+    const validation = validateLocalModelExists(modelId);
+    if (!validation.exists) {
+      // Check if download is in progress (only if we have a real path)
+      const hasRealPath = validation.expectedPath && !validation.expectedPath.startsWith('(');
+      const lockPath = hasRealPath ? path.join(validation.expectedPath, '_downloading.lock') : null;
+      if (lockPath && fs.existsSync(lockPath)) {
+        throw new Error(
+          `Embedding model "${modelId}" is still downloading. Please wait for the download to complete before indexing files.`
+        );
+      }
+      throw new Error(
+        `Embedding model "${modelId}" is incomplete or not downloaded. ` +
+        `Missing files: ${validation.missingFiles.join(', ')}. ` +
+        `Expected path: ${validation.expectedPath}. ` +
+        `Please download the model from Settings > Embedding before using local embeddings.`
+      );
+    }
+  }
+
   const preferredDevice = resolvePreferredDevice();
   const cacheKey = [
     modelId,
