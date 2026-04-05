@@ -81,7 +81,7 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
   const handleRedownloadAndValidate = async (modelId: string) => {
     if (!isElectronEnv) return;
     setRedownloading(true);
-    setRedownloadStatus("Starting…");
+    setRedownloadStatus(t("models.fields.embedding.redownloadStarting"));
     setValidationResult(null);
 
     const electronAPI = (window as unknown as {
@@ -233,8 +233,8 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
               className="gap-1.5 font-mono text-xs"
             >
               {validating
-                ? <><Loader2Icon className="size-3.5 animate-spin" /> Testing…</>
-                : <><FlaskConicalIcon className="size-3.5" /> Test Model</>}
+                ? <><Loader2Icon className="size-3.5 animate-spin" /> {t("models.fields.embedding.testing")}</>
+                : <><FlaskConicalIcon className="size-3.5" /> {t("models.fields.embedding.testModel")}</>}
             </Button>
 
             <Button
@@ -246,7 +246,7 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
               className="gap-1.5 font-mono text-xs text-terminal-muted hover:text-terminal-dark"
             >
               <FolderOpenIcon className="size-3.5" />
-              Open Folder
+              {t("models.fields.embedding.openFolder")}
             </Button>
 
             <Button
@@ -258,8 +258,8 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
               className="gap-1.5 font-mono text-xs text-amber-700 border-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/20"
             >
               {redownloading
-                ? <><Loader2Icon className="size-3.5 animate-spin" /> {redownloadStatus ?? "Working…"}</>
-                : <><RefreshCwIcon className="size-3.5" /> Validate &amp; Redownload</>}
+                ? <><Loader2Icon className="size-3.5 animate-spin" /> {redownloadStatus ?? t("models.fields.embedding.redownloadWorking")}</>
+                : <><RefreshCwIcon className="size-3.5" /> {t("models.fields.embedding.validateRedownload")}</>}
             </Button>
           </div>
         )}
@@ -268,8 +268,8 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
         {validationResult && (
           <p className={`mt-1.5 font-mono text-xs ${validationResult.success ? "text-terminal-green" : "text-red-600"}`}>
             {validationResult.success
-              ? `✓ Model working — ${validationResult.dims}d embedding in ${validationResult.durationMs}ms`
-              : `✗ Validation failed — ${validationResult.error}`}
+              ? t("models.fields.embedding.validationSuccess", { dims: validationResult.dims, durationMs: validationResult.durationMs })
+              : t("models.fields.embedding.validationFailed", { error: validationResult.error ?? "" })}
           </p>
         )}
 

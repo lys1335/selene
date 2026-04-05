@@ -2549,7 +2549,15 @@
           "placeholderOpenRouter": "text-embedding-3-small",
           "placeholderLocal": "Xenova/bge-large-en-v1.5",
           "download": "Indir",
-          "downloaded": "Indirildi"
+          "downloaded": "Indirildi",
+          "testModel": "Modeli Test Et",
+          "testing": "Test ediliyor…",
+          "openFolder": "Klasörü Aç",
+          "validateRedownload": "Doğrula ve Yeniden İndir",
+          "redownloadWorking": "Çalışıyor…",
+          "redownloadStarting": "Başlatılıyor…",
+          "validationSuccess": "✓ Model çalışıyor — {dims}d embedding {durationMs}ms'de",
+          "validationFailed": "✗ Doğrulama başarısız — {error}"
         },
         "embeddingLocalPath": {
           "label": "Yerel Model Yolu",
