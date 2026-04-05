@@ -65,8 +65,8 @@ const defaultConfig: VectorSearchV2Config = {
   enableLLMSynthesis: true,
 
   // Default max file lines (files larger than this are skipped)
-  maxFileLines: 3000,
-  maxLineLength: 1000,
+  maxFileLines: 5000,
+  maxLineLength: 2000,
 };
 
 let currentConfig: VectorSearchV2Config = { ...defaultConfig };

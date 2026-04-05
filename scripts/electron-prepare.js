@@ -318,6 +318,27 @@ const nativeModuleBinaries = [
     },
 ];
 
+// 10a. Copy sharp's native DLLs that Next.js file tracing misses
+// The .node addon is traced, but libvips DLLs are loaded dynamically at runtime
+// and won't be picked up by static analysis.
+console.log('Copying sharp native DLLs...');
+const sharpPlatformDir = `sharp-${process.platform}-${process.arch === 'arm64' ? 'arm64' : 'x64'}`;
+const sharpLibSrc = path.join(rootDir, 'node_modules', '@img', sharpPlatformDir, 'lib');
+const sharpLibDest = path.join(standaloneDir, 'node_modules', '@img', sharpPlatformDir, 'lib');
+if (fs.existsSync(sharpLibSrc)) {
+    ensureDir(sharpLibDest);
+    for (const file of fs.readdirSync(sharpLibSrc)) {
+        const src = path.join(sharpLibSrc, file);
+        const dest = path.join(sharpLibDest, file);
+        if (!fs.existsSync(dest)) {
+            fs.copyFileSync(src, dest);
+            console.log(`  Copied ${file}`);
+        }
+    }
+} else {
+    console.log(`  Sharp platform package not found at ${sharpLibSrc} — skipping`);
+}
+
 for (const mod of nativeModuleBinaries) {
     const srcPath = path.join(rootDir, 'node_modules', mod.src);
     const destPath = path.join(standaloneDir, 'node_modules', mod.dest);

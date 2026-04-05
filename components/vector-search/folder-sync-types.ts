@@ -138,6 +138,11 @@ export const RECOMMENDED_EXCLUDES = [
   "*.log",
   "*.lock",
   "*.pyc",
+  // Package manager vendor directories for non-JS ecosystems
+  "vendor",        // PHP Composer / Go
+  ".bundle",       // Ruby Bundler
+  "Pods",          // iOS CocoaPods
+  ".dart_tool",    // Dart/Flutter
   "**/node_modules/**",
   "**/.git/**",
   "**/.next/**",
@@ -155,6 +160,10 @@ export const RECOMMENDED_EXCLUDES = [
   "**/.idea/**",
   "**/tmp/**",
   "**/temp/**",
+  "**/vendor/**",
+  "**/.bundle/**",
+  "**/Pods/**",
+  "**/.dart_tool/**",
 ];
 
 export const DEFAULT_EXTENSIONS = [
@@ -176,4 +185,4 @@ export const DEFAULT_EXTENSIONS = [
 ].join(",");
 
 export const DEFAULT_EXCLUDE_PATTERNS =
-  "node_modules,.git,dist,build,.next,__pycache__,.venv,venv,env,site-packages,*.pyc,package-lock.json,pnpm-lock.yaml,yarn.lock";
+  "node_modules,.git,dist,build,.next,__pycache__,.venv,venv,env,site-packages,*.pyc,package-lock.json,pnpm-lock.yaml,yarn.lock,vendor,.bundle,Pods,.dart_tool";
