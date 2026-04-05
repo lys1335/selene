@@ -62,6 +62,41 @@ interface AgentResourcePayload {
   plugins: PluginSummary[];
 }
 
+// ── Module-level cache to deduplicate concurrent fetches & avoid re-fetching ──
+const resourcesCache = new Map<string, { data: AgentResourcePayload; timestamp: number }>();
+const resourcesInflight = new Map<string, Promise<AgentResourcePayload>>();
+const RESOURCES_STALE_TIME = 30_000; // 30 seconds
+
+function fetchResourcesOnce(characterId: string): Promise<AgentResourcePayload> {
+  const cached = resourcesCache.get(characterId);
+  if (cached && Date.now() - cached.timestamp < RESOURCES_STALE_TIME) {
+    return Promise.resolve(cached.data);
+  }
+
+  const existing = resourcesInflight.get(characterId);
+  if (existing) return existing;
+
+  const promise = fetch(`/api/characters/${characterId}/resources`)
+    .then((r) => r.json())
+    .then((data: AgentResourcePayload) => {
+      resourcesCache.set(characterId, { data, timestamp: Date.now() });
+      resourcesInflight.delete(characterId);
+      return data;
+    })
+    .catch((err) => {
+      resourcesInflight.delete(characterId);
+      throw err;
+    });
+
+  resourcesInflight.set(characterId, promise);
+  return promise;
+}
+
+function invalidateResourcesCache(characterId: string) {
+  resourcesCache.delete(characterId);
+  resourcesInflight.delete(characterId);
+}
+
 export function AgentResourcesBadge() {
   const t = useTranslations("plugins.chatBadge");
   const tPlugins = useTranslations("plugins");
@@ -83,13 +118,7 @@ export function AgentResourcesBadge() {
 
     setLoading(true);
     try {
-      const response = await fetch(`/api/characters/${character.id}/resources`, {
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        return;
-      }
-      const payload = (await response.json()) as AgentResourcePayload;
+      const payload = await fetchResourcesOnce(character.id);
       setData(payload);
     } catch {
       // Non-critical indicator; fail silently.
@@ -106,11 +135,12 @@ export function AgentResourcesBadge() {
   // that dispatches "agent-resources-changed").
   useEffect(() => {
     const handler = () => {
+      if (character?.id) invalidateResourcesCache(character.id);
       loadResources();
     };
     window.addEventListener("agent-resources-changed", handler);
     return () => window.removeEventListener("agent-resources-changed", handler);
-  }, [loadResources]);
+  }, [loadResources, character?.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -148,6 +178,7 @@ export function AgentResourcesBadge() {
       }
 
       toast.success(enabled ? tPlugins("pluginEnabled") : tPlugins("pluginDisabled"));
+      invalidateResourcesCache(character.id);
       await loadResources();
     } catch {
       toast.error(tPlugins("updateFailed"));

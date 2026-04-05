@@ -18,7 +18,7 @@ import { ToolExpansionProvider } from "./tool-expansion-context";
 import { ExpandAllToolsButton } from "./expand-all-tools-button";
 import { ToolDisplayProvider, type ToolDisplayMode } from "./tool-display-context";
 import { useContextStatus } from "@/lib/hooks/use-context-status";
-import { useSessionHasActiveRun } from "@/lib/stores/session-sync-store";
+import { useSessionHasActiveRun, useSessionSyncStore } from "@/lib/stores/session-sync-store";
 import {
   ContextWindowBlockedBanner,
   type ContextWindowBlockedPayload,
@@ -186,6 +186,21 @@ export const Thread: FC<ThreadProps> = ({
     pollIntervalMs: contextPollIntervalMs,
     pauseWhenHidden: true,
   });
+
+  // Write context status to Zustand store so sidebar badges update
+  useEffect(() => {
+    if (!sessionId) return;
+    const setStatus = useSessionSyncStore.getState().setSessionContextStatus;
+    if (!contextStatus || contextStatus.status === "safe") {
+      setStatus(sessionId, null);
+    } else {
+      setStatus(sessionId, {
+        status: contextStatus.status,
+        percentage: contextStatus.percentage,
+        updatedAt: Date.now(),
+      });
+    }
+  }, [sessionId, contextStatus?.status, contextStatus?.percentage]);
 
   // Blocked banner state — set when a 413 error is received
   const [blockedPayload, setBlockedPayload] =

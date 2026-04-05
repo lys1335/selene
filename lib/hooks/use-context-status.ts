@@ -31,6 +31,10 @@ export interface ContextStatusInfo {
   };
 }
 
+/** Module-level cache to prevent redundant fetches (e.g. Strict Mode double-mount). */
+const statusCache = new Map<string, { data: ContextStatusInfo; timestamp: number }>();
+const STALE_TIME_MS = 10_000; // 10 seconds
+
 interface UseContextStatusOptions {
   /** Session ID to track. Null/undefined disables polling. */
   sessionId: string | null | undefined;
@@ -79,6 +83,13 @@ export function useContextStatus({
   const fetchStatus = useCallback(async () => {
     if (!sessionId) return;
 
+    // Return cached data if it's still fresh (prevents Strict Mode double-mount re-fetches)
+    const cached = statusCache.get(sessionId);
+    if (cached && Date.now() - cached.timestamp < STALE_TIME_MS) {
+      setStatus(cached.data);
+      return;
+    }
+
     // Cancel any in-flight request
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -103,6 +114,9 @@ export function useContextStatus({
       setError(fetchError);
     } else {
       setStatus(data);
+      if (data) {
+        statusCache.set(sessionId, { data, timestamp: Date.now() });
+      }
     }
 
     setIsLoading(false);
