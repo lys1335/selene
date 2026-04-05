@@ -65,9 +65,11 @@ interface AgentResourcePayload {
 // ── Module-level cache to deduplicate concurrent fetches & avoid re-fetching ──
 const resourcesCache = new Map<string, { data: AgentResourcePayload; timestamp: number }>();
 const resourcesInflight = new Map<string, Promise<AgentResourcePayload>>();
+const resourcesGeneration = new Map<string, number>();
 const RESOURCES_STALE_TIME = 30_000; // 30 seconds
 
 function fetchResourcesOnce(characterId: string): Promise<AgentResourcePayload> {
+  const generation = resourcesGeneration.get(characterId) ?? 0;
   const cached = resourcesCache.get(characterId);
   if (cached && Date.now() - cached.timestamp < RESOURCES_STALE_TIME) {
     return Promise.resolve(cached.data);
@@ -79,13 +81,16 @@ function fetchResourcesOnce(characterId: string): Promise<AgentResourcePayload> 
   const promise = fetch(`/api/characters/${characterId}/resources`)
     .then((r) => r.json())
     .then((data: AgentResourcePayload) => {
-      resourcesCache.set(characterId, { data, timestamp: Date.now() });
-      resourcesInflight.delete(characterId);
+      // Only write cache if no invalidation happened since this request started
+      if ((resourcesGeneration.get(characterId) ?? 0) === generation) {
+        resourcesCache.set(characterId, { data, timestamp: Date.now() });
+      }
       return data;
     })
-    .catch((err) => {
-      resourcesInflight.delete(characterId);
-      throw err;
+    .finally(() => {
+      if (resourcesInflight.get(characterId) === promise) {
+        resourcesInflight.delete(characterId);
+      }
     });
 
   resourcesInflight.set(characterId, promise);
@@ -95,6 +100,7 @@ function fetchResourcesOnce(characterId: string): Promise<AgentResourcePayload> 
 function invalidateResourcesCache(characterId: string) {
   resourcesCache.delete(characterId);
   resourcesInflight.delete(characterId);
+  resourcesGeneration.set(characterId, (resourcesGeneration.get(characterId) ?? 0) + 1);
 }
 
 export function AgentResourcesBadge() {
@@ -107,9 +113,11 @@ export function AgentResourcesBadge() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [data, setData] = useState<AgentResourcePayload | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const loadRequestRef = useRef(0);
   const router = useRouter();
 
   const loadResources = useCallback(async () => {
+    const requestId = ++loadRequestRef.current;
     if (!character?.id || character.id === "default") {
       setData(null);
       setLoading(false);
@@ -119,11 +127,14 @@ export function AgentResourcesBadge() {
     setLoading(true);
     try {
       const payload = await fetchResourcesOnce(character.id);
+      if (requestId !== loadRequestRef.current) return;
       setData(payload);
     } catch {
       // Non-critical indicator; fail silently.
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, [character?.id]);
 

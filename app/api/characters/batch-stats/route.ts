@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error("[Characters API] GET batch-stats error:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to get batch character stats" },
+      { error: "Failed to get batch character stats" },
       { status: 500 }
     );
   }

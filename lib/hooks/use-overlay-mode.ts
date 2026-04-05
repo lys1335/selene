@@ -30,26 +30,30 @@ export function useOverlayMode() {
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
   // Use shared settings cache instead of independent fetch
-  const { settings: _cachedSettings } = useSettings();
+  const { settings: _cachedSettings, isLoading: settingsLoading } = useSettings();
   useEffect(() => {
-    if (!_cachedSettings) return;
-    const data = _cachedSettings;
-    const fetched: OverlaySettings = {
-      miniOverlayDefaultMode: data.miniOverlayDefaultMode as OverlaySettings["miniOverlayDefaultMode"],
-      voicePostProcessing: data.voicePostProcessing as boolean | undefined,
-      miniOverlayAutoCloseAfterSpeak: data.miniOverlayAutoCloseAfterSpeak as boolean | undefined,
-      miniOverlayShowScreenPreview: data.miniOverlayShowScreenPreview as boolean | undefined,
-      ttsReadCodeBlocks: data.ttsReadCodeBlocks as boolean | undefined,
-    };
-    setSettings(fetched);
-    setSettingsLoaded(true);
+    if (_cachedSettings) {
+      const data = _cachedSettings;
+      const fetched: OverlaySettings = {
+        miniOverlayDefaultMode: data.miniOverlayDefaultMode as OverlaySettings["miniOverlayDefaultMode"],
+        voicePostProcessing: data.voicePostProcessing as boolean | undefined,
+        miniOverlayAutoCloseAfterSpeak: data.miniOverlayAutoCloseAfterSpeak as boolean | undefined,
+        miniOverlayShowScreenPreview: data.miniOverlayShowScreenPreview as boolean | undefined,
+        ttsReadCodeBlocks: data.ttsReadCodeBlocks as boolean | undefined,
+      };
+      setSettings(fetched);
 
-    // If localStorage has no stored mode, apply the settings default
-    if (typeof window !== "undefined" && !localStorage.getItem("overlay:mode")) {
-      const defaultMode = fetched.miniOverlayDefaultMode ?? "direct";
-      setModeState(defaultMode);
+      // If localStorage has no stored mode, apply the settings default
+      if (typeof window !== "undefined" && !localStorage.getItem("overlay:mode")) {
+        const defaultMode = fetched.miniOverlayDefaultMode ?? "direct";
+        setModeState(defaultMode);
+      }
     }
-  }, [_cachedSettings]);
+    // Mark loaded whether settings arrived or fetch completed (even on failure)
+    if (!settingsLoading) {
+      setSettingsLoaded(true);
+    }
+  }, [_cachedSettings, settingsLoading]);
 
   const setMode = (m: OverlayMode) => {
     setModeState(m);

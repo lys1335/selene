@@ -65,9 +65,19 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
     setValidating(true);
     setValidationResult(null);
     const electronAPI = (window as unknown as { electronAPI: { model: { validate: (id: string) => Promise<{ success: boolean; durationMs: number; dims: number; error?: string }> } } }).electronAPI;
-    const result = await electronAPI.model.validate(modelId);
-    setValidationResult(result);
-    setValidating(false);
+    try {
+      const result = await electronAPI.model.validate(modelId);
+      setValidationResult(result);
+    } catch (error) {
+      setValidationResult({
+        success: false,
+        durationMs: 0,
+        dims: 0,
+        error: error instanceof Error ? error.message : "Validation failed",
+      });
+    } finally {
+      setValidating(false);
+    }
   };
 
   // Handle open folder
@@ -102,18 +112,27 @@ export function LocalEmbeddingModelSelector({ formState, updateField, t }: Local
       if (data.modelId === modelId) setRedownloadStatus(data.detail ?? data.status);
     });
 
-    const result = await electronAPI.model.redownloadAndValidate(modelId);
-    electronAPI.model.removeRedownloadProgressListener?.();
+    try {
+      const result = await electronAPI.model.redownloadAndValidate(modelId);
 
-    if (result.success) {
-      setModelStatus((prev) => ({ ...prev, [modelId]: true }));
-      if (result.validation) setValidationResult(result.validation);
-    } else {
-      setValidationResult({ success: false, durationMs: 0, dims: 0, error: result.error });
+      if (result.success) {
+        setModelStatus((prev) => ({ ...prev, [modelId]: true }));
+        if (result.validation) setValidationResult(result.validation);
+      } else {
+        setValidationResult({ success: false, durationMs: 0, dims: 0, error: result.error });
+      }
+    } catch (error) {
+      setValidationResult({
+        success: false,
+        durationMs: 0,
+        dims: 0,
+        error: error instanceof Error ? error.message : "Redownload failed",
+      });
+    } finally {
+      electronAPI.model.removeRedownloadProgressListener?.();
+      setRedownloading(false);
+      setRedownloadStatus(null);
     }
-
-    setRedownloading(false);
-    setRedownloadStatus(null);
   };
 
   // Handle download

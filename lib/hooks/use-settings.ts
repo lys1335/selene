@@ -12,28 +12,34 @@ export type CachedSettings = Record<string, unknown>;
 // ── Module-level cache — shared across all component instances ──────────────
 let settingsCache: CachedSettings | null = null;
 let settingsPromise: Promise<CachedSettings> | null = null;
+let settingsGeneration = 0;
 const listeners = new Set<(s: CachedSettings) => void>();
 
 export async function fetchSettingsOnce(): Promise<CachedSettings> {
   if (settingsCache) return settingsCache;
   if (settingsPromise) return settingsPromise;
 
-  settingsPromise = fetch("/api/settings")
+  const generation = settingsGeneration;
+  const promise = fetch("/api/settings")
     .then((r) => {
       if (!r.ok) throw new Error(`Settings fetch failed (${r.status})`);
       return r.json();
     })
     .then((data: CachedSettings) => {
-      settingsCache = data;
-      settingsPromise = null;
-      listeners.forEach((l) => l(data));
+      // Only write cache if no invalidation happened since this request started
+      if (settingsGeneration === generation) {
+        settingsCache = data;
+        listeners.forEach((l) => l(data));
+      }
       return data;
     })
-    .catch((err) => {
-      settingsPromise = null;
-      throw err;
+    .finally(() => {
+      if (settingsPromise === promise) {
+        settingsPromise = null;
+      }
     });
 
+  settingsPromise = promise;
   return settingsPromise;
 }
 
@@ -43,7 +49,8 @@ export async function fetchSettingsOnce(): Promise<CachedSettings> {
  */
 export async function invalidateSettingsCache(): Promise<void> {
   settingsCache = null;
-  settingsPromise = null; // clear any in-flight promise too
+  settingsPromise = null;
+  settingsGeneration++; // bump generation so stale responses are ignored
   try {
     const fresh = await fetchSettingsOnce();
     listeners.forEach((l) => l(fresh));
@@ -55,25 +62,29 @@ export async function invalidateSettingsCache(): Promise<void> {
 /**
  * Shared hook that fetches GET /api/settings exactly once per page load.
  * All components that call useSettings() share the same in-flight request and
- * cached result.
+ * cached result. Always subscribes to invalidation updates.
  */
 export function useSettings() {
   const [settings, setSettings] = useState<CachedSettings | null>(settingsCache);
   const [isLoading, setIsLoading] = useState(!settingsCache);
 
   useEffect(() => {
-    if (settingsCache) {
-      setSettings(settingsCache);
-      setIsLoading(false);
-      return;
-    }
-
     let mounted = true;
     const listener = (s: CachedSettings) => {
+      if (!mounted) return;
       setSettings(s);
       setIsLoading(false);
     };
     listeners.add(listener);
+
+    if (settingsCache) {
+      setSettings(settingsCache);
+      setIsLoading(false);
+      return () => {
+        mounted = false;
+        listeners.delete(listener);
+      };
+    }
 
     fetchSettingsOnce()
       .then((data) => {

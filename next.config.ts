@@ -282,13 +282,22 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        source: "/icon.png",
+        // Next.js auto-hashed assets are safe to cache immutably
+        source: "/_next/static/:path*",
         headers: [
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
         ],
       },
       {
+        // Mutable public assets — short cache with revalidation
         source: "/:path(.*\\.(?:png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf))",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=3600, stale-while-revalidate=86400" },
+        ],
+      },
+      {
+        // App icon — stable filename, safe to cache long-term
+        source: "/icon.png",
         headers: [
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
         ],

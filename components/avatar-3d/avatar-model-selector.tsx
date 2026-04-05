@@ -65,11 +65,14 @@ export function Avatar3DModelSelector({
   useEffect(() => {
     if (open) {
       setLocalConfig(currentAvatarConfig ?? null);
-      if (_cachedSettings?.edgeTtsVoice) {
-        setEdgeTtsVoice(_cachedSettings.edgeTtsVoice as string);
-      }
     }
-  }, [open, currentAvatarConfig, _cachedSettings]);
+  }, [open, currentAvatarConfig]);
+
+  useEffect(() => {
+    if (open && _cachedSettings?.edgeTtsVoice) {
+      setEdgeTtsVoice(_cachedSettings.edgeTtsVoice as string);
+    }
+  }, [open, _cachedSettings?.edgeTtsVoice]);
 
   const handleVoiceChange = useCallback(async (voiceId: string) => {
     const prev = edgeTtsVoice;
