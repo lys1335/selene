@@ -114,7 +114,6 @@ export async function PUT(request: NextRequest) {
       vertexAICredentialsPath: body.vertexAICredentialsPath !== undefined ? body.vertexAICredentialsPath : currentSettings.vertexAICredentialsPath,
       // ComfyUI / Local Image Generation
       comfyuiEnabled: body.comfyuiEnabled !== undefined ? body.comfyuiEnabled : currentSettings.comfyuiEnabled,
-      comfyuiBackendPath: body.comfyuiBackendPath !== undefined ? body.comfyuiBackendPath : currentSettings.comfyuiBackendPath,
       comfyuiCustomHost: body.comfyuiCustomHost !== undefined ? body.comfyuiCustomHost : currentSettings.comfyuiCustomHost,
       comfyuiCustomPort: body.comfyuiCustomPort !== undefined ? body.comfyuiCustomPort : currentSettings.comfyuiCustomPort,
       comfyuiCustomUseHttps: body.comfyuiCustomUseHttps !== undefined ? body.comfyuiCustomUseHttps : currentSettings.comfyuiCustomUseHttps,

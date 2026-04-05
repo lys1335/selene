@@ -176,7 +176,6 @@ export interface FormState {
   localGrepRespectGitignore: boolean;
   // Local image generation settings
   comfyuiEnabled: boolean;
-  comfyuiBackendPath: string;
   comfyuiCustomHost: string;
   comfyuiCustomPort: number;
   comfyuiCustomUseHttps: boolean;
@@ -312,7 +311,6 @@ export const DEFAULT_FORM_STATE: FormState = {
   localGrepContextLines: 2,
   localGrepRespectGitignore: true,
   comfyuiEnabled: false,
-  comfyuiBackendPath: "",
   comfyuiCustomHost: "127.0.0.1",
   comfyuiCustomPort: 8188,
   comfyuiCustomUseHttps: false,
@@ -444,7 +442,6 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     localGrepContextLines: data.localGrepContextLines ?? 2,
     localGrepRespectGitignore: data.localGrepRespectGitignore ?? true,
     comfyuiEnabled: data.comfyuiEnabled ?? false,
-    comfyuiBackendPath: data.comfyuiBackendPath ?? "",
     comfyuiCustomHost: data.comfyuiCustomHost ?? "127.0.0.1",
     comfyuiCustomPort: data.comfyuiCustomPort ?? 8188,
     comfyuiCustomUseHttps: data.comfyuiCustomUseHttps ?? false,
