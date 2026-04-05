@@ -3,8 +3,9 @@ import * as esbuild from "esbuild";
 const isDev = process.argv.includes("--dev");
 
 // Bundle the Electron main process
-// This inlines dependencies like @huggingface/hub that aren't available
-// in the packaged app's ASAR archive (which excludes node_modules)
+// Native modules and large pure-JS deps (like @huggingface/hub) are kept
+// external. In dev they resolve from node_modules; in packaged builds they
+// resolve from the standalone/ directory via the banner below.
 // ---------------------------------------------------------------------------
 // Banner: native module resolution for packaged builds
 // This MUST run before any require() in the bundle because esbuild evaluates
@@ -52,6 +53,13 @@ await esbuild.build({
     "better-sqlite3",
     "onnxruntime-node",
     "@lancedb/*",
+    // Large pure-JS deps — only used via dynamic import() in IPC handlers.
+    // In dev they resolve from node_modules; in packaged builds from standalone/.
+    "@huggingface/hub",
+    "@huggingface/transformers",
+    "gpt-tokenizer",
+    "pdfjs-dist",
+    "pdf-parse",
   ],
   define: {
     "process.env.NODE_ENV": isDev ? '"development"' : '"production"',
