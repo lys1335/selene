@@ -86,7 +86,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
         setError(null);
 
         try {
-            const response = await fetch("/api/ollama/test", {
+            const response = await fetch("/api/ollama/check", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ baseUrl: ollamaBaseUrl }),

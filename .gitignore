@@ -13,7 +13,6 @@ tmp-clawdbot/
 .next
 out
 build
-!comfyui_backend/build/
 Context-Engine/
 # Environment
 .env

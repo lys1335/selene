@@ -9,7 +9,6 @@ const DEFAULT_IGNORED_DIRECTORY_NAMES = [
   "coverage",
   ".local-data",
   "dist-electron",
-  "comfyui_backend",
   ".vscode",
   ".idea",
   "tmp",

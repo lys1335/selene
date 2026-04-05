@@ -183,7 +183,6 @@ const standaloneJunk = [
     '.env.local',
     '.env.example',
     '.local-data',
-    'comfyui_backend',
     'models',
     'binaries',
     // Source code directories - Next.js standalone copies the project root,
