@@ -299,11 +299,23 @@ describe("shouldFilterThinkTags", () => {
     });
   });
 
-  describe("Ollama — always filter", () => {
-    it("returns true for ollama regardless of model", () => {
+  describe("Ollama — capability-aware filtering", () => {
+    it("returns true for ollama with no capability info (fallback)", () => {
       expect(shouldFilterThinkTags("ollama")).toBe(true);
       expect(shouldFilterThinkTags("ollama", "llama3.1:8b")).toBe(true);
       expect(shouldFilterThinkTags("ollama", "deepseek-r1")).toBe(true);
+    });
+
+    it("returns true when ollamaSupportsThinking is false (legacy Ollama)", () => {
+      expect(shouldFilterThinkTags("ollama", "deepseek-r1", false)).toBe(true);
+      expect(shouldFilterThinkTags("ollama", "qwen3:8b", false)).toBe(true);
+    });
+
+    it("returns false when ollamaSupportsThinking is true (native thinking)", () => {
+      // Ollama v0.9.0+ parses tags server-side — no client-side filtering needed
+      expect(shouldFilterThinkTags("ollama", "deepseek-r1", true)).toBe(false);
+      expect(shouldFilterThinkTags("ollama", "qwen3:8b", true)).toBe(false);
+      expect(shouldFilterThinkTags("ollama", "gemma4:12b", true)).toBe(false);
     });
   });
 

@@ -311,10 +311,18 @@ const THINK_TAG_MODEL_PATTERNS = [
  * Returns true for providers that route through OpenAI-compatible APIs
  * (OpenRouter, Ollama) when the model is known to emit think tags, and
  * always false for Anthropic (which handles reasoning natively).
+ *
+ * @param providerId - The LLM provider identifier.
+ * @param modelId - Optional model identifier for pattern matching.
+ * @param ollamaSupportsThinking - For Ollama provider: whether `/api/show`
+ *   reported native thinking support. When `true`, Ollama parses tags
+ *   server-side and sends structured `delta.reasoning` — no text filtering
+ *   needed. When `undefined` or `false`, filtering IS applied as a safety net.
  */
 export function shouldFilterThinkTags(
   providerId: LLMProvider,
   modelId?: string,
+  ollamaSupportsThinking?: boolean,
 ): boolean {
   // Anthropic and Claude Code handle reasoning natively — never filter.
   if (providerId === "anthropic" || providerId === "claudecode") {
@@ -329,7 +337,10 @@ export function shouldFilterThinkTags(
   // For providers that might route to thinking models:
   // OpenRouter, Ollama, Antigravity, Kimi, BlackBox AI
   if (providerId === "ollama") {
-    // Ollama frequently runs local thinking models — always filter.
+    // If Ollama reports native thinking support, it parses tags server-side
+    // and sends structured delta.reasoning — no text-level filtering needed.
+    if (ollamaSupportsThinking === true) return false;
+    // Fallback: Ollama frequently runs thinking models — filter as safety net.
     return true;
   }
 
