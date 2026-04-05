@@ -3,7 +3,7 @@ import * as path from "path";
 import * as fs from "fs";
 import * as os from "node:os";
 import { spawn } from "node:child_process";
-import { listFiles, downloadFile } from "@huggingface/hub";
+// @huggingface/hub is dynamically imported where needed to avoid bundling ~4MB into main.js
 import { debugLog, debugError } from "./debug-logger";
 import type { IpcHandlerContext } from "./ipc-context";
 import {
@@ -280,6 +280,7 @@ export function registerModelHandlers(ctx: IpcHandlerContext): void {
 
       debugLog(`[Model] Starting download: ${modelId} -> ${destDir}`);
 
+      const { listFiles, downloadFile } = await import("@huggingface/hub");
       const files: { path: string; size: number }[] = [];
       for await (const file of listFiles({ repo: modelId, recursive: true })) {
         if (file.type === "file" && !file.path.startsWith(".git/")) {
@@ -544,6 +545,7 @@ export function registerModelHandlers(ctx: IpcHandlerContext): void {
         file: opts.filename,
       });
 
+      const { downloadFile } = await import("@huggingface/hub");
       const blob = await downloadFile({
         repo: opts.repo,
         path: opts.filename,
@@ -689,6 +691,7 @@ export function registerModelHandlers(ctx: IpcHandlerContext): void {
 
           sendProgress("downloading", 70 + Math.round((done / total) * 25), filename);
 
+          const { downloadFile } = await import("@huggingface/hub");
           const blob = await downloadFile({ repo: model.repo, path: filename });
           if (!blob) {
             throw new Error(`Failed to download ${filename} from ${model.repo}`);
