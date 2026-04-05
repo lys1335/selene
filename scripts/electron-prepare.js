@@ -267,11 +267,19 @@ copyNodeDependencies([
 // Look for it in the system Node.js installation first.
 const systemNpmPath = (() => {
     try {
-        const npmBin = require('child_process').execSync('which npm', { encoding: 'utf8' }).trim();
-        // npm binary is at <prefix>/bin/npm, package is at <prefix>/lib/node_modules/npm
+        const lookupCmd = process.platform === 'win32' ? 'where npm' : 'which npm';
+        const npmBin = require('child_process').execSync(lookupCmd, { encoding: 'utf8' }).trim().split(/\r?\n/)[0];
+        // Unix: npm binary at <prefix>/bin/npm, package at <prefix>/lib/node_modules/npm
+        // Windows: npm.cmd at <prefix>/npm.cmd, package at <prefix>/node_modules/npm
         const prefix = path.resolve(path.dirname(npmBin), '..');
-        const npmPkg = path.join(prefix, 'lib', 'node_modules', 'npm');
-        if (fs.existsSync(npmPkg)) return npmPkg;
+        const candidates = [
+            path.join(prefix, 'lib', 'node_modules', 'npm'),
+            path.join(prefix, 'node_modules', 'npm'),
+            // Windows: where returns <prefix>/npm.cmd directly (no bin/ subdir)
+            path.join(path.dirname(npmBin), 'node_modules', 'npm'),
+        ];
+        const found = candidates.find(p => fs.existsSync(p));
+        if (found) return found;
     } catch {}
     return null;
 })();
