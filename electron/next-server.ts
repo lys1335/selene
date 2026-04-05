@@ -29,6 +29,7 @@ const RESTART_RESET_INTERVAL = 5 * 60 * 1000;
 let nextServer: Electron.UtilityProcess | null = null;
 let serverRestartCount = 0;
 let serverRestartResetTimer: NodeJS.Timeout | null = null;
+let lastServerError: string = "";
 
 // ---------------------------------------------------------------------------
 // Path verification helpers
@@ -242,6 +243,12 @@ export async function startNextServer(opts: StartNextServerOptions): Promise<voi
       const output = data.toString();
       debugError("[Next.js stderr]", output);
 
+      // Capture last meaningful error for crash diagnostics
+      const trimmed = output.trim();
+      if (trimmed.length > 10 && !trimmed.startsWith("[Next.js]")) {
+        lastServerError = trimmed.slice(0, 300);
+      }
+
       if (WATCHER_RESOURCE_ERROR_REGEX.test(output)) {
         debugError(
           "[Next.js] Watcher resource exhaustion detected in embedded server process. " +
@@ -262,10 +269,18 @@ export async function startNextServer(opts: StartNextServerOptions): Promise<voi
 
       if (serverRestartCount >= MAX_SERVER_RESTARTS) {
         debugError("[Next.js] Max restart attempts reached. Server will not auto-restart.");
-        dialog.showErrorBox(
-          "Server Crashed",
-          "The application server has crashed repeatedly. Please restart the app manually."
-        );
+        let crashMessage = "The application server has crashed repeatedly. Please restart the app manually.";
+        if (lastServerError) {
+          // Detect common crash causes
+          if (lastServerError.includes("local_files_only") || lastServerError.includes("bge-") || lastServerError.includes("embedding")) {
+            crashMessage += "\n\nLikely cause: The embedding model is incomplete or corrupted. Try re-downloading it from Settings.";
+          } else if (lastServerError.includes("ENOMEM") || lastServerError.includes("heap")) {
+            crashMessage += "\n\nLikely cause: Out of memory. Try using a smaller embedding model.";
+          }
+          crashMessage += `\n\nLast error: ${lastServerError.slice(0, 200)}`;
+        }
+        dialog.showErrorBox("Server Crashed", crashMessage);
+        lastServerError = "";
         return;
       }
 

@@ -28,5 +28,19 @@ await esbuild.build({
   logLevel: "info",
 });
 
+// Bundle preload script separately
+// Preload has access to Node.js APIs but runs in renderer context
+await esbuild.build({
+  entryPoints: ["electron/preload.ts"],
+  bundle: true,
+  platform: "node",
+  target: "node20",
+  outfile: "electron-dist/preload.js",
+  format: "cjs",
+  sourcemap: isDev ? "inline" : false,
+  minify: !isDev,
+  external: ["electron"],
+  logLevel: "info",
+});
 
 console.log("Electron build complete");

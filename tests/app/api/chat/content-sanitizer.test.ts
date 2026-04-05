@@ -78,7 +78,7 @@ describe("content-sanitizer text length limits", () => {
     const output = sanitizeTextContent(input, "unit-test");
 
     expect(storeFullContent).not.toHaveBeenCalled();
-    expect(output).toContain("Content truncated at 75,000 chars");
+    expect(output).toContain("[Content truncated at 75,000 chars - sessionId not available for full content retrieval]");
   });
 
   it("strips inline data-url image payloads without replacing the whole text", () => {

@@ -13,6 +13,38 @@ import {
   type ParakeetModel,
 } from "@/lib/voice/parakeet-models";
 
+// ---------------------------------------------------------------------------
+// Download state tracking (persists across renderer navigations)
+// ---------------------------------------------------------------------------
+
+interface ActiveDownload {
+  modelId: string;
+  status: "downloading" | "completed" | "error";
+  progress: number;
+  totalBytes: number;
+  downloadedBytes: number;
+  totalFiles: number;
+  downloadedFiles: number;
+  currentFile: string;
+  error?: string;
+  startedAt: number;
+  abortController: AbortController;
+}
+
+const activeDownloads = new Map<string, ActiveDownload>();
+
+const DOWNLOAD_MANIFEST_FILE = "_download_complete.json";
+const DOWNLOAD_LOCK_FILE = "_downloading.lock";
+
+/** Ensure a resolved path is inside the allowed base directory (prevents path traversal). */
+function assertInsideDir(basePath: string, resolvedPath: string): void {
+  const normalizedBase = path.resolve(basePath) + path.sep;
+  const normalizedResolved = path.resolve(resolvedPath);
+  if (!normalizedResolved.startsWith(normalizedBase) && normalizedResolved !== path.resolve(basePath)) {
+    throw new Error(`Path traversal detected: ${resolvedPath} is outside ${basePath}`);
+  }
+}
+
 const PARAKEET_DEFAULT_MODEL_ID = "parakeet-tdt-0.6b-v3";
 
 function getParakeetBaseDir(userModelsDir: string): string {
@@ -132,41 +164,145 @@ export function registerModelHandlers(ctx: IpcHandlerContext): void {
 
   ipcMain.handle("model:checkExists", async (_event, modelId: string) => {
     const modelPath = path.join(userModelsDir, ...modelId.split("/"));
-    return fs.existsSync(path.join(modelPath, "config.json"));
+    assertInsideDir(userModelsDir, modelPath);
+
+    // If a download lock file exists, model is incomplete
+    if (fs.existsSync(path.join(modelPath, DOWNLOAD_LOCK_FILE))) {
+      return false;
+    }
+
+    // Check for our completion manifest (written only after ALL files download)
+    if (fs.existsSync(path.join(modelPath, DOWNLOAD_MANIFEST_FILE))) {
+      return true;
+    }
+
+    // Fallback: check minimum required files exist (config.json + at least one .onnx)
+    if (!fs.existsSync(path.join(modelPath, "config.json"))) {
+      return false;
+    }
+    const hasOnnx = fs.existsSync(modelPath) &&
+      fs.readdirSync(modelPath, { recursive: true })
+        .some((f) => String(f).endsWith(".onnx"));
+    return hasOnnx;
+  });
+
+  // Return active download state (survives renderer navigation)
+  ipcMain.handle("model:getDownloadState", async (_event, modelId: string) => {
+    const download = activeDownloads.get(modelId);
+    if (!download) return null;
+    return {
+      modelId: download.modelId,
+      status: download.status,
+      progress: download.progress,
+      totalBytes: download.totalBytes,
+      downloadedBytes: download.downloadedBytes,
+      totalFiles: download.totalFiles,
+      downloadedFiles: download.downloadedFiles,
+      currentFile: download.currentFile,
+      error: download.error,
+      startedAt: download.startedAt,
+    };
+  });
+
+  // Cancel an active download
+  ipcMain.handle("model:cancelDownload", async (_event, modelId: string) => {
+    const download = activeDownloads.get(modelId);
+    if (download && download.status === "downloading") {
+      // Signal abort -- the download loop will throw, hit the catch block,
+      // clean up the lock file, and schedule map eviction.
+      download.abortController.abort();
+      return { success: true };
+    }
+    return { success: false, error: "No active download" };
   });
 
   ipcMain.handle("model:download", async (event, modelId: string) => {
+    // If already downloading this model, return current state
+    const existing = activeDownloads.get(modelId);
+    if (existing && existing.status === "downloading") {
+      return { success: false, error: "Download already in progress", inProgress: true };
+    }
+
+    const abortController = new AbortController();
+    const downloadState: ActiveDownload = {
+      modelId,
+      status: "downloading",
+      progress: 0,
+      totalBytes: 0,
+      downloadedBytes: 0,
+      totalFiles: 0,
+      downloadedFiles: 0,
+      currentFile: "Preparing...",
+      startedAt: Date.now(),
+      abortController,
+    };
+    activeDownloads.set(modelId, downloadState);
+
+    const sendProgress = () => {
+      try {
+        if (event.sender.isDestroyed()) return;
+        const elapsed = (Date.now() - downloadState.startedAt) / 1000;
+        const speed = elapsed > 0 ? downloadState.downloadedBytes / elapsed : 0;
+
+        event.sender.send("model:downloadProgress", {
+          modelId,
+          status: downloadState.status,
+          progress: downloadState.progress,
+          totalBytes: downloadState.totalBytes,
+          downloadedBytes: downloadState.downloadedBytes,
+          totalFiles: downloadState.totalFiles,
+          downloadedFiles: downloadState.downloadedFiles,
+          file: downloadState.currentFile,
+          speed, // bytes per second
+          error: downloadState.error,
+        });
+      } catch {
+        // Renderer destroyed mid-download; progress is still tracked in activeDownloads map
+      }
+    };
+
     try {
       const destDir = path.join(userModelsDir, ...modelId.split("/"));
+      assertInsideDir(userModelsDir, destDir);
 
       if (!fs.existsSync(destDir)) {
         fs.mkdirSync(destDir, { recursive: true });
       }
 
+      // Write lock file to mark download in progress
+      fs.writeFileSync(path.join(destDir, DOWNLOAD_LOCK_FILE), JSON.stringify({
+        modelId,
+        startedAt: new Date().toISOString(),
+      }));
+
+      // Remove stale manifest if re-downloading
+      try { fs.unlinkSync(path.join(destDir, DOWNLOAD_MANIFEST_FILE)); } catch { /* ignore */ }
+
       debugLog(`[Model] Starting download: ${modelId} -> ${destDir}`);
 
-      const files: { path: string; size?: number }[] = [];
+      const files: { path: string; size: number }[] = [];
       for await (const file of listFiles({ repo: modelId, recursive: true })) {
         if (file.type === "file" && !file.path.startsWith(".git/")) {
-          files.push({ path: file.path, size: file.size });
+          files.push({ path: file.path, size: file.size ?? 0 });
         }
       }
 
       const totalFiles = files.length;
-      let downloadedFiles = 0;
+      const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+      let downloadedBytes = 0;
 
-      debugLog(`[Model] Found ${totalFiles} files to download`);
+      downloadState.totalFiles = totalFiles;
+      downloadState.totalBytes = totalBytes;
 
-      event.sender.send("model:downloadProgress", {
-        modelId,
-        status: "downloading",
-        progress: 0,
-        totalFiles,
-        downloadedFiles: 0,
-        file: "Starting...",
-      });
+      debugLog(`[Model] Found ${totalFiles} files to download (${(totalBytes / 1024 / 1024).toFixed(1)} MB total)`);
+      sendProgress();
 
       for (const file of files) {
+        // Check for cancellation
+        if (abortController.signal.aborted) {
+          throw new Error("Download cancelled");
+        }
+
         const filePath = path.join(destDir, file.path);
         const fileDir = path.dirname(filePath);
 
@@ -174,46 +310,66 @@ export function registerModelHandlers(ctx: IpcHandlerContext): void {
           fs.mkdirSync(fileDir, { recursive: true });
         }
 
-        event.sender.send("model:downloadProgress", {
-          modelId,
-          status: "downloading",
-          file: file.path,
-          totalFiles,
-          downloadedFiles,
-          progress: Math.round((downloadedFiles / totalFiles) * 100),
-        });
+        downloadState.currentFile = file.path;
+        sendProgress();
 
         const blob = await downloadFile({
           repo: modelId,
           path: file.path,
+          fetch: (input, init) => fetch(input, { ...init, signal: abortController.signal }),
         });
 
         if (blob) {
           const buffer = await blob.arrayBuffer();
           fs.writeFileSync(filePath, Buffer.from(buffer));
-        }
 
-        downloadedFiles++;
+          downloadedBytes += buffer.byteLength;
+          downloadState.downloadedBytes = downloadedBytes;
+          downloadState.downloadedFiles++;
+          downloadState.progress = totalBytes > 0
+            ? Math.round((downloadedBytes / totalBytes) * 100)
+            : Math.round((downloadState.downloadedFiles / totalFiles) * 100);
+          sendProgress();
+        }
       }
 
-      debugLog(`[Model] Download complete: ${modelId}`);
-      event.sender.send("model:downloadProgress", {
+      // Write completion manifest
+      fs.writeFileSync(path.join(destDir, DOWNLOAD_MANIFEST_FILE), JSON.stringify({
         modelId,
-        status: "completed",
-        progress: 100,
+        completedAt: new Date().toISOString(),
         totalFiles,
-        downloadedFiles: totalFiles,
-      });
+        totalBytes: downloadedBytes,
+        files: files.map(f => f.path),
+      }));
+
+      // Remove lock file
+      try { fs.unlinkSync(path.join(destDir, DOWNLOAD_LOCK_FILE)); } catch { /* ignore */ }
+
+      downloadState.status = "completed";
+      downloadState.progress = 100;
+      debugLog(`[Model] Download complete: ${modelId}`);
+      sendProgress();
+
+      // Keep state for 30s so UI can pick it up after navigation
+      setTimeout(() => activeDownloads.delete(modelId), 30000);
 
       return { success: true };
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
       debugError(`[Model] Download failed: ${modelId}`, error);
-      event.sender.send("model:downloadProgress", {
-        modelId,
-        status: "error",
-        error: error instanceof Error ? error.message : String(error),
-      });
-      return { success: false, error: error instanceof Error ? error.message : String(error) };
+
+      downloadState.status = "error";
+      downloadState.error = errorMsg;
+      sendProgress();
+
+      // Clean up lock file on error
+      const destDir = path.join(userModelsDir, ...modelId.split("/"));
+      try { fs.unlinkSync(path.join(destDir, DOWNLOAD_LOCK_FILE)); } catch { /* ignore */ }
+
+      // Keep error state for 60s
+      setTimeout(() => activeDownloads.delete(modelId), 60000);
+
+      return { success: false, error: errorMsg };
     }
   });
 
