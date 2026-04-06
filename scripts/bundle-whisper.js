@@ -107,7 +107,14 @@ function bundleForMac(realBin, binOutDir, libOutDir) {
         rewriteMacDylibPaths(destLib, requiredLibs, false);
     }
 
-    verifyBinary(destBin, { DYLD_LIBRARY_PATH: libOutDir });
+    // Bundle ggml backend plugins (Metal, CPU, BLAS) into bin/ (next to whisper-cli).
+    // ggml_backend_load_best() searches the executable's directory as a fallback
+    // when the compiled-in GGML_BACKEND_DIR doesn't exist on the user's machine.
+    totalLibSize += bundleGgmlBackends(realBin, binOutDir, libOutDir, requiredLibs);
+
+    verifyBinary(destBin, {
+        DYLD_LIBRARY_PATH: libOutDir,
+    });
     const totalSize = fs.statSync(destBin).size + totalLibSize;
     console.log(`Bundle size: ${toMb(totalSize)} MB`);
     console.log(`Output: ${path.join(binOutDir, '..')}`);
@@ -423,6 +430,131 @@ function extractExecErrorOutput(error) {
     if (Buffer.isBuffer(error.stderr)) parts.push(error.stderr.toString('utf-8'));
     if (typeof error.message === 'string') parts.push(error.message);
     return parts.join('\n');
+}
+
+/**
+ * Bundle ggml backend plugins (.so files) that provide Metal/CPU/BLAS compute.
+ * Without these, whisper-cli crashes with GGML_ASSERT(device) because no
+ * backends can be loaded. The hardcoded search path in libggml points to a
+ * Homebrew Cellar path that won't exist on end-user machines, so we bundle
+ * the plugins and set GGML_BACKEND_PATH at runtime.
+ */
+function bundleGgmlBackends(realBin, libexecOutDir, libOutDir, requiredLibs) {
+    // Find the ggml libexec directory (contains .so backend plugins)
+    const ggmlLibexecCandidates = [
+        '/opt/homebrew/opt/ggml/libexec',
+        '/usr/local/opt/ggml/libexec',
+    ];
+
+    // Also try to derive from the resolved ggml lib path
+    for (const libPath of requiredLibs) {
+        if (path.basename(libPath).startsWith('libggml')) {
+            const realLibDir = path.dirname(fs.realpathSync(libPath));
+            ggmlLibexecCandidates.unshift(path.join(realLibDir, '..', 'libexec'));
+        }
+    }
+
+    let ggmlLibexecDir = null;
+    for (const candidate of ggmlLibexecCandidates) {
+        try {
+            const resolved = fs.realpathSync(candidate);
+            if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+                ggmlLibexecDir = resolved;
+                break;
+            }
+        } catch {
+            continue;
+        }
+    }
+
+    if (!ggmlLibexecDir) {
+        console.log('  No ggml backend plugins directory found — skipping libexec bundling.');
+        console.log('  (Whisper may fail at runtime if ggml backends are not available.)');
+        return 0;
+    }
+
+    fs.mkdirSync(libexecOutDir, { recursive: true });
+    console.log(`Bundling ggml backend plugins from ${ggmlLibexecDir}...`);
+
+    let totalSize = 0;
+    const entries = fs.readdirSync(ggmlLibexecDir).filter((f) => f.endsWith('.so'));
+
+    // Collect extra Homebrew dylibs needed by backends (e.g. libomp)
+    const extraDeps = new Set();
+    for (const soFile of entries) {
+        const soPath = path.join(ggmlLibexecDir, soFile);
+        try {
+            const otoolOut = execFileSync('otool', ['-L', soPath], { encoding: 'utf-8' });
+            for (const line of otoolOut.split('\n')) {
+                const absMatch = line.match(/\s+(\/opt\/homebrew\/[^\s]+\.dylib)/);
+                if (absMatch && fs.existsSync(absMatch[1])) {
+                    extraDeps.add(absMatch[1]);
+                }
+            }
+        } catch {
+            // continue
+        }
+    }
+
+    // Copy extra deps (like libomp.dylib) into lib/
+    for (const depPath of extraDeps) {
+        const depName = path.basename(depPath);
+        const destDep = path.join(libOutDir, depName);
+        if (!fs.existsSync(destDep)) {
+            const realDep = fs.realpathSync(depPath);
+            fs.copyFileSync(realDep, destDep);
+            fs.chmodSync(destDep, 0o755);
+            const size = fs.statSync(destDep).size;
+            totalSize += size;
+            console.log(`  Copied extra dep: ${depName} (${Math.round(size / 1024)} KB)`);
+        }
+    }
+
+    // Copy and rewrite each backend plugin
+    for (const soFile of entries) {
+        const srcPath = path.join(ggmlLibexecDir, soFile);
+        const destPath = path.join(libexecOutDir, soFile);
+        fs.copyFileSync(srcPath, destPath);
+        fs.chmodSync(destPath, 0o755);
+        const size = fs.statSync(destPath).size;
+        totalSize += size;
+        console.log(`  Copied backend: ${soFile} (${Math.round(size / 1024)} KB)`);
+
+        // Rewrite dylib references inside the .so plugin:
+        // - @rpath/libggml-base.0.dylib → @loader_path/../lib/libggml-base.0.dylib
+        // - /opt/homebrew/.../libomp.dylib → @loader_path/../lib/libomp.dylib
+        try {
+            const otoolOut = execFileSync('otool', ['-L', destPath], { encoding: 'utf-8' });
+            for (const line of otoolOut.split('\n')) {
+                const rpathMatch = line.match(/\s+(@rpath\/(\S+))/);
+                if (rpathMatch) {
+                    const oldRef = rpathMatch[1];
+                    const libName = rpathMatch[2];
+                    execFileSync('install_name_tool', [
+                        '-change', oldRef, `@loader_path/../lib/${libName}`, destPath,
+                    ], { stdio: 'pipe' });
+                    continue;
+                }
+
+                const absMatch = line.match(/\s+(\/opt\/homebrew\/[^\s]+\.dylib)/);
+                if (absMatch) {
+                    const oldRef = absMatch[1];
+                    const libName = path.basename(oldRef);
+                    execFileSync('install_name_tool', [
+                        '-change', oldRef, `@loader_path/../lib/${libName}`, destPath,
+                    ], { stdio: 'pipe' });
+                }
+            }
+
+            // Re-sign after modification
+            execFileSync('codesign', ['--force', '--sign', '-', destPath], { stdio: 'pipe' });
+        } catch {
+            // Non-fatal
+        }
+    }
+
+    console.log(`  Bundled ${entries.length} backend plugins.`);
+    return totalSize;
 }
 
 function getRequiredDylibs(binaryPath) {

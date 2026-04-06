@@ -816,11 +816,22 @@ function runWhisperCli(binaryPath: string, args: string[]): string {
 
 function buildWhisperRuntimeEnv(binaryPath: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
+  const binParent = join(dirname(binaryPath), "..");
 
   if (platform() === "win32") {
-    const libDir = join(dirname(binaryPath), "..", "lib");
+    const libDir = join(binParent, "lib");
     if (existsSync(libDir)) {
       env.PATH = `${libDir};${env.PATH || ""}`;
+    }
+  }
+
+  if (platform() === "darwin") {
+    // Ensure bundled dylibs (libggml, libomp, etc.) are found.
+    // Backend plugins (.so) are placed next to whisper-cli in bin/ so
+    // ggml_backend_load_best() finds them via its executable-dir fallback.
+    const libDir = join(binParent, "lib");
+    if (existsSync(libDir)) {
+      env.DYLD_LIBRARY_PATH = libDir + (env.DYLD_LIBRARY_PATH ? `:${env.DYLD_LIBRARY_PATH}` : "");
     }
   }
 
