@@ -149,8 +149,8 @@ async function executeUnifiedCapture(
 export function createUnifiedCaptureTrigger(ctx: IpcHandlerContext): () => void {
   return () => {
     const baseUrl = ctx.isDev
-      ? (process.env.ELECTRON_DEV_URL || `http://localhost:3000`)
-      : `${ctx.prodUseHttps ? "https" : "http"}://localhost:${ctx.prodServerPort}`;
+      ? (process.env.ELECTRON_DEV_URL || `http://127.0.0.1:3000`)
+      : `${ctx.prodUseHttps ? "https" : "http"}://127.0.0.1:${ctx.prodServerPort}`;
 
     const overlay = getOverlay();
     if (overlay && !overlay.isDestroyed() && overlay.isVisible() && !overlay.webContents.isCrashed()) {

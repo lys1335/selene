@@ -216,9 +216,9 @@ export async function createWindow(opts: CreateWindowOptions): Promise<void> {
           "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com; " +
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
           "font-src 'self' https://fonts.gstatic.com data:; " +
-          "img-src 'self' data: blob: https: http://localhost:*; " +
-          "media-src 'self' data: blob: https://*.amazonaws.com https://*.cloudfront.net https://assets.mixkit.co https://*.mixkit.co http://localhost:* https://localhost:*; " +
-          "connect-src 'self' blob: https://api.anthropic.com https://openrouter.ai ws://localhost:* wss://localhost:* http://localhost:* https://localhost:*; " +
+          "img-src 'self' data: blob: https: http://localhost:* http://127.0.0.1:*; " +
+          "media-src 'self' data: blob: https://*.amazonaws.com https://*.cloudfront.net https://assets.mixkit.co https://*.mixkit.co http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:*; " +
+          "connect-src 'self' blob: https://api.anthropic.com https://openrouter.ai ws://localhost:* wss://localhost:* http://localhost:* https://localhost:* ws://127.0.0.1:* wss://127.0.0.1:* http://127.0.0.1:* https://127.0.0.1:*; " +
           "worker-src 'self' blob:; " +
           "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com;",
         ],
@@ -379,7 +379,7 @@ export async function createWindow(opts: CreateWindowOptions): Promise<void> {
   } else {
     // In production, load from embedded Next.js server (via HTTP/2 proxy if available)
     const protocol = opts.prodUseHttps ? "https" : "http";
-    const serverUrl = `${protocol}://localhost:${opts.prodServerPort}`;
+    const serverUrl = `${protocol}://127.0.0.1:${opts.prodServerPort}`;
 
     debugLog("[Window] Production mode - checking server health before loading");
 

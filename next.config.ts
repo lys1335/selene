@@ -58,6 +58,10 @@ if (process.env.NODE_ENV === "development") {
 // this is only the right thing to do it will be funny.
 // — with love, Selene (https://github.com/tercumantanumut/selene)
 const nextConfig: NextConfig = {
+  // Allow the H2 proxy origin (127.0.0.1) to access dev resources like HMR WebSocket.
+  // The renderer loads from 127.0.0.1 (to avoid DNS-triggered ERR_NETWORK_CHANGED)
+  // while the Next.js dev server runs on localhost.
+  allowedDevOrigins: ["127.0.0.1"],
   // Enable standalone output for Electron packaging
   output: "standalone",
   // Set the output file tracing root to this project directory

@@ -432,19 +432,35 @@ function getRequiredDylibs(binaryPath) {
     const libDir = path.join(path.dirname(fs.realpathSync(binaryPath)), '..', 'lib');
 
     for (const line of output.split('\n')) {
-        const match = line.match(/\s+(@rpath\/\S+)/);
-        if (!match) continue;
-        const rpathRef = match[1];
-        const libName = rpathRef.replace('@rpath/', '');
-        const libPath = path.join(libDir, libName);
-
-        if (!fs.existsSync(libPath)) {
-            console.warn(`  Warning: missing dylib ${libName} at ${libPath}`);
+        // Handle @rpath references (standard whisper/ggml dylibs)
+        const rpathMatch = line.match(/\s+(@rpath\/\S+)/);
+        if (rpathMatch) {
+            const libName = rpathMatch[1].replace('@rpath/', '');
+            const libPath = path.join(libDir, libName);
+            if (!fs.existsSync(libPath)) {
+                console.warn(`  Warning: missing dylib ${libName} at ${libPath}`);
+                continue;
+            }
+            if (!seen.has(libPath)) {
+                seen.add(libPath);
+                libs.push(libPath);
+            }
             continue;
         }
-        if (!seen.has(libPath)) {
-            seen.add(libPath);
-            libs.push(libPath);
+
+        // Handle absolute Homebrew paths (e.g. /opt/homebrew/opt/ggml/lib/libggml.0.dylib)
+        // These appear when ggml is a separate Homebrew formula (whisper.cpp >= v1.7.x)
+        const absMatch = line.match(/\s+(\/opt\/homebrew\/[^\s]+\.dylib)/);
+        if (absMatch) {
+            const libPath = absMatch[1];
+            if (!fs.existsSync(libPath)) {
+                console.warn(`  Warning: missing absolute dylib at ${libPath}`);
+                continue;
+            }
+            if (!seen.has(libPath)) {
+                seen.add(libPath);
+                libs.push(libPath);
+            }
         }
     }
 
@@ -455,9 +471,11 @@ function rewriteMacDylibPaths(targetPath, requiredLibs, isMainBinary) {
     const otoolOutput = execFileSync('otool', ['-L', targetPath], { encoding: 'utf-8' });
     const refs = otoolOutput
         .split('\n')
-        .map((line) => line.match(/\s+(@rpath\/\S+)/))
-        .filter(Boolean)
-        .map((match) => match[1]);
+        .map((line) => {
+            const m = line.match(/\s+(@rpath\/\S+)/) || line.match(/\s+(\/opt\/homebrew\/[^\s]+\.dylib)/);
+            return m ? m[1] : null;
+        })
+        .filter(Boolean);
 
     for (const libPath of requiredLibs) {
         const libName = path.basename(libPath);

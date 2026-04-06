@@ -110,7 +110,7 @@ export function registerFileHandlers(ctx: IpcHandlerContext): void {
 
       const serverPort = isDev ? 3000 : prodServerPort;
       const protocol = isDev ? "http" : (prodUseHttps ? "https" : "http");
-      const apiUrl = `${protocol}://localhost:${serverPort}/api/execute-command`;
+      const apiUrl = `${protocol}://127.0.0.1:${serverPort}/api/execute-command`;
 
       const response = await net.fetch(apiUrl, {
         method: "POST",

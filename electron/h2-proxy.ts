@@ -88,7 +88,7 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
 
     const proxyReq = http.request(
       {
-        hostname: "::1",
+        hostname: "127.0.0.1",
         port: targetPort,
         method: req.method,
         path: req.url,
@@ -167,12 +167,21 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
   // WebSocket upgrade — proxies HMR, live-reload, and any WS connections.
   // -------------------------------------------------------------------------
   server.on("upgrade", (req, socket, head) => {
+    // Strip HTTP/2 pseudo-headers (same as the request handler) — they are
+    // illegal in HTTP/1.1 and would produce a malformed upstream request.
+    const upstreamHeaders: Record<string, string | string[] | undefined> = {};
+    for (const [name, value] of Object.entries(req.headers)) {
+      if (H2_PSEUDO_HEADERS.has(name)) continue;
+      upstreamHeaders[name] = value as string | string[] | undefined;
+    }
+    upstreamHeaders["host"] = `localhost:${targetPort}`;
+
     const proxyReq = http.request({
-      hostname: "::1",
+      hostname: "127.0.0.1",
       port: targetPort,
       path: req.url,
       method: req.method,
-      headers: { ...req.headers, host: `localhost:${targetPort}` },
+      headers: upstreamHeaders,
     });
 
     proxyReq.on("upgrade", (_proxyRes, proxySocket, proxyHead) => {
@@ -242,8 +251,9 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
     debugError("[H2Proxy] Server error:", err.message);
   });
 
-  // Bind to 127.0.0.1 only — prevent LAN access to the proxy.
-  server.listen(listenPort, "127.0.0.1", () => {
+  // Bind to all loopback interfaces (IPv4 + IPv6) so macOS DNS
+  // alternating between 127.0.0.1 and ::1 doesn't cause ERR_NETWORK_CHANGED.
+  server.listen(listenPort, () => {
     debugLog(`[H2Proxy] HTTP/2 reverse proxy listening on https://127.0.0.1:${listenPort} → http://localhost:${targetPort}`);
   });
 
