@@ -73,6 +73,7 @@ export default async function RootLayout({
   // Standalone pages (e.g. browser-session pop-out window) skip the full
   // app shell — no auth, sync, task providers, sidebar, toaster, etc.
   if (isStandalone) {
+    const messages = await getMessages();
     return (
       <html
         lang={locale}
@@ -82,7 +83,9 @@ export default async function RootLayout({
       >
         <body className="bg-black overflow-hidden antialiased font-sans">
           <ThemeProvider initialTheme="dark" initialChatWorkspaceMode="sidebar">
-            {children}
+            <NextIntlClientProvider locale={locale} messages={messages}>
+              {children}
+            </NextIntlClientProvider>
           </ThemeProvider>
         </body>
       </html>
