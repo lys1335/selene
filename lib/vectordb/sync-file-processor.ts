@@ -116,6 +116,7 @@ export async function processFileInBatch(
       counters.processedCount++;
       incrementSkipReason(skipReasons, "max_file_size");
       logProgress(counters.processedCount, totalFiles, file.relativePath, "skipped", startTime);
+      await onProgress();
       return {
         indexed: false,
         skipped: true,
@@ -134,6 +135,7 @@ export async function processFileInBatch(
       counters.processedCount++;
       incrementSkipReason(skipReasons, "unchanged");
       logProgress(counters.processedCount, totalFiles, file.relativePath, "skipped", startTime);
+      await onProgress();
       return { indexed: false, skipped: true };
     }
 
@@ -153,6 +155,7 @@ export async function processFileInBatch(
             `[SyncService] Skipping large file (${scanResult.lineCount} lines, max ${maxFileLines}): ${file.relativePath}`
           );
           logProgress(counters.processedCount, totalFiles, file.relativePath, "skipped", startTime);
+          await onProgress();
           return {
             indexed: false,
             skipped: true,
@@ -168,6 +171,7 @@ export async function processFileInBatch(
             `[SyncService] Skipping file with long line (${scanResult.tooLongLineLength} chars, max ${maxLineLength}): ${file.relativePath}`
           );
           logProgress(counters.processedCount, totalFiles, file.relativePath, "skipped", startTime);
+          await onProgress();
           return {
             indexed: false,
             skipped: true,
@@ -217,6 +221,7 @@ export async function processFileInBatch(
       if (indexResult.error) {
         counters.processedCount++;
         logProgress(counters.processedCount, totalFiles, file.relativePath, "error", startTime);
+        await onProgress();
         return { indexed: false, skipped: false, error: `${file.relativePath}: ${indexResult.error}` };
       }
     } else {
@@ -292,6 +297,7 @@ export async function processFileInBatch(
     }
 
     logProgress(counters.processedCount, totalFiles, file.relativePath, "error", startTime);
+    await onProgress();
     return { indexed: false, skipped: false, error: `${file.relativePath}: ${errorMsg}` };
   }
 }

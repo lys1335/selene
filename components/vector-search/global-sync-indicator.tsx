@@ -31,10 +31,9 @@ export function GlobalSyncIndicator() {
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const t = useTranslations("syncIndicator");
 
-  // Reset dismissed state when a new sync starts
-  if (isDismissed && status.isSyncing) {
-    setIsDismissed(false);
-  }
+  // Derive effective dismissed state: dismiss is automatically invalidated when a new sync starts,
+  // avoiding both setState-during-render and one-frame flash issues
+  const effectivelyDismissed = isDismissed && !status.isSyncing;
 
   const handleCleanup = useCallback(async () => {
     setIsCleaningUp(true);
@@ -57,7 +56,7 @@ export function GlobalSyncIndicator() {
   }, [refresh]);
 
   // Don't show if not enabled, not syncing, or dismissed
-  if (!status.isEnabled || (!status.isSyncing && status.pendingSyncs.length === 0) || isDismissed) {
+  if (!status.isEnabled || (!status.isSyncing && status.pendingSyncs.length === 0) || effectivelyDismissed) {
     return null;
   }
 
@@ -95,8 +94,9 @@ export function GlobalSyncIndicator() {
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Loader2Icon className="w-4 h-4 text-terminal-green animate-spin flex-shrink-0" />
             <span className="text-terminal-dark truncate">
-              {t("syncing")}
-              {totalActive > 1 && ` (${totalActive})`}
+              {status.totalFolders > 1
+                ? `${t("syncing")} · ${status.foldersComplete} / ${status.totalFolders}`
+                : t("syncing") + (totalActive > 1 ? ` (${totalActive})` : "")}
             </span>
           </div>
           <div className="flex items-center gap-1">
@@ -192,6 +192,8 @@ interface SyncFolderItemProps {
     folderPath: string;
     fileCount: number | null;
     chunkCount: number | null;
+    totalFiles: number | null;
+    progress: number | null;
     lastError: string | null;
   };
   status: "syncing" | "pending" | "error";
@@ -200,6 +202,7 @@ interface SyncFolderItemProps {
 function SyncFolderItem({ sync, status }: SyncFolderItemProps) {
   const t = useTranslations("syncIndicator");
   const folderName = sync.displayName || sync.folderPath?.split(/[/\\]/).pop() || "Unknown";
+  const progressPct = sync.progress !== null ? Math.round(sync.progress * 100) : null;
 
   return (
     <div className="pt-2 first:pt-2">
@@ -223,12 +226,36 @@ function SyncFolderItem({ sync, status }: SyncFolderItemProps) {
                 ({sync.characterName})
               </span>
             )}
+            {status === "syncing" && progressPct !== null && (
+              <span className="text-xs text-terminal-green ml-auto flex-shrink-0">
+                {progressPct}%
+              </span>
+            )}
           </div>
-          {status === "syncing" && sync.fileCount !== null && (
-            <div className="text-xs text-terminal-muted">
-              {sync.fileCount} {t("filesIndexed")}
-              {sync.chunkCount !== null && ` • ${sync.chunkCount} ${t("chunks")}`}
-            </div>
+          {status === "syncing" && (
+            <>
+              {sync.progress !== null && (
+                <div
+                  className="mt-1 h-1 w-full rounded-full bg-terminal-border/30 overflow-hidden"
+                  role="progressbar"
+                  aria-valuenow={progressPct ?? 0}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`Sync progress: ${progressPct}%`}
+                >
+                  <div
+                    className="h-full bg-terminal-green rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${progressPct ?? 0}%` }}
+                  />
+                </div>
+              )}
+              {sync.fileCount !== null && (
+                <div className="text-xs text-terminal-muted mt-0.5">
+                  {sync.fileCount}{sync.totalFiles ? ` / ${sync.totalFiles}` : ""} {t("filesIndexed")}
+                  {sync.chunkCount !== null && ` · ${sync.chunkCount} ${t("chunks")}`}
+                </div>
+              )}
+            </>
           )}
           {status === "error" && sync.lastError && (
             <div className="text-xs text-destructive truncate" title={sync.lastError}>

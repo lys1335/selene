@@ -317,7 +317,18 @@ export async function syncFolder(
         lastProgressUpdate = now;
         await db
           .update(agentSyncFolders)
-          .set({ fileCount: counters.indexedCount, chunkCount: counters.totalChunksIndexed, updatedAt: new Date().toISOString() })
+          .set({
+            fileCount: counters.indexedCount,
+            chunkCount: counters.totalChunksIndexed,
+            lastRunMetadata: {
+              trigger,
+              totalFiles,
+              filesProcessed: counters.processedCount,
+              filesIndexed: counters.indexedCount,
+              inProgress: true,
+            },
+            updatedAt: new Date().toISOString(),
+          })
           .where(eq(agentSyncFolders.id, folderId));
       }
     };

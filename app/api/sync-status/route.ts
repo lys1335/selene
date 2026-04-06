@@ -13,6 +13,8 @@ export interface SyncStatusFolder {
   status: "pending" | "syncing" | "synced" | "error" | "paused";
   fileCount: number | null;
   chunkCount: number | null;
+  totalFiles: number | null;
+  progress: number | null; // 0-1 ratio of filesProcessed/totalFiles
   lastSyncedAt: string | null;
   lastError: string | null;
 }
@@ -25,6 +27,7 @@ export interface GlobalSyncStatus {
   recentErrors: SyncStatusFolder[];
   totalFolders: number;
   totalSyncingOrPending: number;
+  foldersComplete: number;
 }
 
 /**
@@ -44,6 +47,7 @@ export async function GET() {
         recentErrors: [],
         totalFolders: 0,
         totalSyncingOrPending: 0,
+        foldersComplete: 0,
       } as GlobalSyncStatus);
     }
 
@@ -59,6 +63,7 @@ export async function GET() {
         chunkCount: agentSyncFolders.chunkCount,
         lastSyncedAt: agentSyncFolders.lastSyncedAt,
         lastError: agentSyncFolders.lastError,
+        lastRunMetadata: agentSyncFolders.lastRunMetadata,
         characterName: characters.name,
       })
       .from(agentSyncFolders)
@@ -70,6 +75,14 @@ export async function GET() {
     const recentErrors: SyncStatusFolder[] = [];
 
     for (const folder of allFolders) {
+      // Extract progress from lastRunMetadata when syncing
+      const metadata = folder.lastRunMetadata as Record<string, unknown> | null;
+      const totalFiles = (metadata && typeof metadata.totalFiles === "number") ? metadata.totalFiles : null;
+      const filesProcessed = (metadata && typeof metadata.filesProcessed === "number") ? metadata.filesProcessed : null;
+      const progress = (totalFiles !== null && totalFiles > 0 && filesProcessed !== null)
+        ? Math.min(filesProcessed / totalFiles, 1)
+        : null;
+
       const statusFolder: SyncStatusFolder = {
         id: folder.id,
         characterId: folder.characterId,
@@ -79,6 +92,8 @@ export async function GET() {
         status: folder.status as SyncStatusFolder["status"],
         fileCount: folder.fileCount,
         chunkCount: folder.chunkCount,
+        totalFiles: folder.status === "syncing" ? totalFiles : null,
+        progress: folder.status === "syncing" ? progress : null,
         lastSyncedAt: folder.lastSyncedAt,
         lastError: folder.lastError,
       };
@@ -92,6 +107,8 @@ export async function GET() {
       }
     }
 
+    const foldersComplete = allFolders.filter(f => f.status === "synced").length;
+
     const response: GlobalSyncStatus = {
       isEnabled,
       isSyncing: activeSyncs.length > 0,
@@ -100,6 +117,7 @@ export async function GET() {
       recentErrors,
       totalFolders: allFolders.length,
       totalSyncingOrPending: activeSyncs.length + pendingSyncs.length,
+      foldersComplete,
     };
 
     return NextResponse.json(response);

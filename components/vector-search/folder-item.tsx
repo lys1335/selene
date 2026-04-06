@@ -255,7 +255,8 @@ export function FolderItem({
             variant="ghost"
             size="icon"
             onClick={() => onRemove(folder.id)}
-            disabled={isRemoving}
+            disabled={isRemoving || folder.status === "syncing"}
+            title={folder.status === "syncing" ? t("syncInProgress") : undefined}
             className="h-8 w-8 shrink-0 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
           >
             {isRemoving ? (
