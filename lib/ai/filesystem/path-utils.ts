@@ -51,6 +51,11 @@ function validatePath(filePath: string): void {
  * @returns The resolved absolute path if allowed, or null if rejected
  */
 export async function isPathAllowed(filePath: string, allowedFolderPaths: string[]): Promise<string | null> {
+  // Normalize Unicode to NFC to prevent macOS APFS encoding mismatches
+  // (e.g., ç as U+00E7 vs c + combining cedilla)
+  filePath = filePath.normalize("NFC");
+  allowedFolderPaths = allowedFolderPaths.map((p) => p.normalize("NFC"));
+
   // Case 1: Path is already absolute
   if (isAbsolute(filePath)) {
     const normalizedPath = normalize(filePath);

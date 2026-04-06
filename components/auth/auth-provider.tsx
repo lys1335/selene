@@ -114,6 +114,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (isPublicRoute) {
+      // Don't redirect away from /onboarding — user may be re-running the wizard
+      if (pathname.startsWith("/onboarding")) return;
       router.replace("/");
     }
   }, [isLoading, user, noUsers, pathname, router]);

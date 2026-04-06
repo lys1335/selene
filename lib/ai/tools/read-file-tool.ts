@@ -302,13 +302,13 @@ export function createReadFileTool(options: ReadFileToolOptions) {
           const suggestionText = ` Did you mean: ${suggestions.map(s => `"${s}"`).join(", ")}?`;
           return {
             status: "error",
-            error: `File not found in Knowledge Base or synced folders.${suggestionText}`,
+            error: `File does not exist at this path.${suggestionText} Tip: use executeCommand to run 'ls <folder_path>' to list directory contents and verify exact filenames before reading.`,
             allowedFolders: syncedFolders,
           };
         }
         return {
           status: "success",
-          text: `File not found in Knowledge Base or synced folders. Use the Read tool to read files from the filesystem directly.`,
+          text: `File does not exist at this path. Use executeCommand to run 'ls <folder_path>' to list the directory contents and find the exact filename, or use the Read tool to read files from the filesystem directly.`,
         };
       }
 
