@@ -19,6 +19,7 @@ import { DEFAULT_IGNORE_PATTERNS, createIgnoreMatcher, createAggressiveIgnore } 
 import { taskRegistry } from "@/lib/background-tasks/registry";
 import { resolveChunkingOverrides, resolveFolderSyncBehavior, shouldRunForTrigger } from "./sync-mode-resolver";
 import type { TaskEvent } from "@/lib/background-tasks/types";
+import { notifyFolderChange } from "./folder-events";
 import {
   getMaxConcurrency,
   getOpenFileDescriptorCount,
@@ -193,8 +194,16 @@ async function teardownPathFatally(resolvedPath: string, errorMsg: string): Prom
 }
 
 // ---------------------------------------------------------------------------
-// Chat-run deferral (unchanged logic, per-character)
+// Chat-run deferral — time-bounded periodic flush instead of blocking
+//
+// File changes during active chat are collected in deferred queues and
+// flushed every DEFERRED_FLUSH_INTERVAL_MS, ensuring files get indexed
+// within seconds even during continuous chat sessions.
 // ---------------------------------------------------------------------------
+
+const DEFERRED_FLUSH_INTERVAL_MS = 5000; // flush deferred files every 5 seconds
+let deferredFlushTimer: ReturnType<typeof setInterval> | null = null;
+let flushInProgress = false;
 
 function seedActiveChatRuns(): void {
   activeChatRunsByCharacter.clear();
@@ -203,6 +212,24 @@ function seedActiveChatRuns(): void {
     if (!task.characterId) continue;
     const current = activeChatRunsByCharacter.get(task.characterId) ?? 0;
     activeChatRunsByCharacter.set(task.characterId, current + 1);
+  }
+}
+
+function startDeferredFlushTimer(): void {
+  if (deferredFlushTimer) return;
+  deferredFlushTimer = setInterval(() => {
+    void flushAllDeferredQueues();
+  }, DEFERRED_FLUSH_INTERVAL_MS);
+  // Don't prevent Node.js from exiting if stopAllWatchers isn't called
+  if (deferredFlushTimer && typeof deferredFlushTimer === "object" && "unref" in deferredFlushTimer) {
+    (deferredFlushTimer as NodeJS.Timeout).unref();
+  }
+}
+
+function stopDeferredFlushTimer(): void {
+  if (deferredFlushTimer) {
+    clearInterval(deferredFlushTimer);
+    deferredFlushTimer = null;
   }
 }
 
@@ -224,48 +251,53 @@ function initializeRegistryListener(): void {
     const next = Math.max(0, current - 1);
     if (next === 0) {
       activeChatRunsByCharacter.delete(event.task.characterId);
-      flushDeferredForCharacter(event.task.characterId);
+      // Immediate flush when chat ends (no need to wait for timer)
+      void flushAllDeferredQueues();
     } else {
       activeChatRunsByCharacter.set(event.task.characterId, next);
     }
   });
 
+  // Start the periodic flush timer for time-bounded deferral
+  startDeferredFlushTimer();
+
   registryListenerInitialized = true;
 }
 
-function shouldDeferIndexing(characterId: string): boolean {
+function isChatActive(characterId: string): boolean {
   return (activeChatRunsByCharacter.get(characterId) ?? 0) > 0;
 }
 
-function flushDeferredForCharacter(characterId: string): void {
-  if (shouldDeferIndexing(characterId)) {
-    return;
-  }
-  for (const [folderId, processor] of folderProcessors.entries()) {
-    if (processor.characterId !== characterId) continue;
-    void flushDeferredForFolder(folderId);
-  }
-}
+/**
+ * Flush ALL deferred queues regardless of chat state.
+ * Called periodically (every 5s) and on chat completion.
+ * Guarded against concurrent execution.
+ */
+async function flushAllDeferredQueues(): Promise<void> {
+  if (flushInProgress) return;
+  flushInProgress = true;
+  try {
+    for (const [folderId, processor] of folderProcessors.entries()) {
+      try {
+        const deferred = deferredQueues.get(folderId);
+        const queue = folderQueues.get(folderId);
+        if (!deferred || !queue || deferred.size === 0) continue;
 
-async function flushDeferredForFolder(folderId: string): Promise<void> {
-  const deferred = deferredQueues.get(folderId);
-  const processor = folderProcessors.get(folderId);
-  const queue = folderQueues.get(folderId);
-  if (!deferred || !processor || !queue || deferred.size === 0) {
-    return;
-  }
-  if (shouldDeferIndexing(processor.characterId)) {
-    return;
-  }
+        for (const filePath of deferred) {
+          queue.add(filePath);
+        }
+        const count = deferred.size;
+        deferred.clear();
 
-  for (const filePath of deferred) {
-    queue.add(filePath);
+        console.log(`[FileWatcher] Periodic flush: ${count} deferred file(s) for ${processor.folderPath}`);
+        await processor.processBatch();
+      } catch (err) {
+        console.error(`[FileWatcher] Error flushing deferred queue for folder ${folderId}:`, err);
+      }
+    }
+  } finally {
+    flushInProgress = false;
   }
-  const count = deferred.size;
-  deferred.clear();
-
-  console.log(`[FileWatcher] Flushing ${count} deferred file(s) for ${processor.folderPath}`);
-  await processor.processBatch();
 }
 
 // ---------------------------------------------------------------------------
@@ -276,13 +308,15 @@ function scheduleBatchForFolder(folderId: string, filePath: string): void {
   const processor = folderProcessors.get(folderId);
   if (!processor) return;
 
-  if (shouldDeferIndexing(processor.characterId)) {
+  // During active chat: collect in deferred queue (flushed every 5s by timer)
+  // Outside chat: process immediately with debounce
+  if (isChatActive(processor.characterId)) {
     const deferred = deferredQueues.get(folderId);
     if (deferred && !deferred.has(filePath)) {
       deferred.add(filePath);
       if (deferred.size === 1) {
         console.log(
-          `[FileWatcher] Deferring indexing while chat run is active for ${processor.folderPath}`
+          `[FileWatcher] Deferring indexing during active chat for ${processor.folderPath} (will flush within ${DEFERRED_FLUSH_INTERVAL_MS / 1000}s)`
         );
       }
     }
@@ -655,6 +689,7 @@ function createBatchProcessor(
     const filesToProcess = Array.from(queue);
     queue.clear();
     folderTimers.delete(folderId);
+    const batchStartTime = Date.now();
 
     console.log(`[FileWatcher] Processing batch of ${filesToProcess.length} files for ${folderPath} (folder: ${folderId})`);
 
@@ -705,6 +740,8 @@ function createBatchProcessor(
     console.log(
       `[FileWatcher] Folder indexing mode: ${folder.indexingMode}, sync mode: ${behavior.syncMode} (embeddings: ${shouldCreateEmbeddings})`
     );
+
+    let successCount = 0;
 
     try {
       await processWithConcurrency(filesToProcess, getMaxConcurrency(), async (filePath) => {
@@ -781,13 +818,31 @@ function createBatchProcessor(
               });
             }
           }
+          successCount++;
         } catch (error) {
           console.error(`[FileWatcher] Error processing file ${filePath}:`, error);
         }
       });
     } finally {
       activeBatchProcessing.delete(folderId);
-      console.log(`[FileWatcher] Batch processing complete for ${folderPath} (folder: ${folderId})`);
+      const elapsedMs = Date.now() - batchStartTime;
+      const failedCount = filesToProcess.length - successCount;
+      console.log(
+        `[FileWatcher] Batch processing complete for ${folderPath} (folder: ${folderId}, ` +
+        `${successCount}/${filesToProcess.length} files, ${failedCount > 0 ? `${failedCount} failed, ` : ""}${elapsedMs}ms)`
+      );
+
+      // Only emit notification if at least one file was processed
+      if (successCount > 0) {
+        notifyFolderChange(characterId, {
+          type: "file_watcher_sync",
+          folderId,
+          folderPath,
+          filesIndexed: successCount,
+          elapsedMs,
+          syncReason: "file_watcher",
+        });
+      }
 
       if (pendingBatchRun.get(folderId)) {
         pendingBatchRun.delete(folderId);
@@ -864,6 +919,18 @@ export async function stopWatching(folderId: string): Promise<void> {
  * Stop all watchers and clear all state.
  */
 export async function stopAllWatchers(): Promise<void> {
+  // Stop the periodic deferred flush timer and reset initialization flag
+  stopDeferredFlushTimer();
+  registryListenerInitialized = false;
+  flushInProgress = false;
+  activeChatRunsByCharacter.clear();
+
+  // Clear any pending debounce timers
+  for (const timer of folderTimers.values()) {
+    clearTimeout(timer);
+  }
+  folderTimers.clear();
+
   // Close all chokidar instances
   for (const [resolvedPath, watcher] of pathWatchers.entries()) {
     try {
@@ -900,4 +967,11 @@ function getWatchedFolders(): string[] {
  */
 export function isWatching(folderId: string): boolean {
   return folderSubscribers.has(folderId);
+}
+
+/**
+ * Get the number of deferred (queued but not yet indexed) files for a folder.
+ */
+export function getDeferredCount(folderId: string): number {
+  return deferredQueues.get(folderId)?.size ?? 0;
 }

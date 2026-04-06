@@ -6,7 +6,8 @@
 
 export type FolderChangeEvent = {
     type: "added" | "removed" | "updated" | "primary_changed"
-    | "mcp_reload_started" | "mcp_reload_completed" | "mcp_reload_failed";
+    | "mcp_reload_started" | "mcp_reload_completed" | "mcp_reload_failed"
+    | "file_watcher_sync";
     folderId: string;
     wasPrimary?: boolean;
     folderPath?: string;
@@ -16,6 +17,10 @@ export type FolderChangeEvent = {
     completedServers?: number;
     estimatedDuration?: number; // milliseconds
     error?: string;
+    // File-watcher sync completion fields
+    filesIndexed?: number;
+    elapsedMs?: number;
+    syncReason?: "file_watcher" | "user_manual" | "scheduled";
 };
 
 type FolderChangeListener = (characterId: string, event: FolderChangeEvent) => void;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2Icon,
@@ -10,7 +10,6 @@ import {
   AlertCircleIcon,
   XIcon,
   DatabaseIcon,
-  FolderSyncIcon,
   Trash2Icon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +17,7 @@ import { useVectorSyncStatus } from "@/hooks/use-vector-sync-status";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { resilientPost } from "@/lib/utils/resilient-fetch";
+import type { FileWatcherSyncEvent } from "@/app/api/sync-status/route";
 
 /**
  * GlobalSyncIndicator - Shows vector database sync status globally
@@ -25,15 +25,69 @@ import { resilientPost } from "@/lib/utils/resilient-fetch";
  * Displays a persistent indicator when sync is active.
  * Can be expanded to show detailed progress information.
  */
+// Toast for file-watcher sync notifications
+interface FileWatcherToast {
+  id: string;
+  filesIndexed: number;
+  folderName: string;
+  createdAt: number; // local Date.now() when the toast was created
+}
+
+const TOAST_DURATION_MS = 4000;
+
 export function GlobalSyncIndicator() {
   const { status, isLoading, isExpanded, setIsExpanded, refresh } = useVectorSyncStatus();
   const [isDismissed, setIsDismissed] = useState(false);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
+  const [toasts, setToasts] = useState<FileWatcherToast[]>([]);
+  const seenEventsRef = useRef(new Set<string>());
   const t = useTranslations("syncIndicator");
 
   // Derive effective dismissed state: dismiss is automatically invalidated when a new sync starts,
   // avoiding both setState-during-render and one-frame flash issues
   const effectivelyDismissed = isDismissed && !status.isSyncing;
+
+  // Track new file-watcher sync events and show toasts
+  useEffect(() => {
+    const events = status.recentFileWatcherSyncs ?? [];
+    const newToasts: FileWatcherToast[] = [];
+    for (const event of events) {
+      // Use folderId + timestamp as dedup key
+      const key = `${event.folderId}:${event.timestamp}`;
+      if (seenEventsRef.current.has(key)) continue;
+      seenEventsRef.current.add(key);
+
+      const folderName = event.folderPath?.split(/[/\\]/).pop() || "folder";
+      newToasts.push({
+        id: key,
+        filesIndexed: event.filesIndexed,
+        folderName,
+        createdAt: Date.now(), // local time for accurate auto-dismiss
+      });
+    }
+
+    if (newToasts.length > 0) {
+      setToasts(prev => [...prev, ...newToasts]);
+    }
+
+    // Prune old dedup keys (keep last 100)
+    if (seenEventsRef.current.size > 100) {
+      const keys = Array.from(seenEventsRef.current);
+      seenEventsRef.current = new Set(keys.slice(-50));
+    }
+  }, [status.recentFileWatcherSyncs]);
+
+  // Auto-dismiss toasts — schedule one timer for the oldest toast's expiry
+  useEffect(() => {
+    if (toasts.length === 0) return;
+    const oldest = Math.min(...toasts.map(t => t.createdAt));
+    const remaining = TOAST_DURATION_MS - (Date.now() - oldest);
+    const delay = Math.max(remaining, 0);
+    const timer = setTimeout(() => {
+      setToasts(prev => prev.filter(t => Date.now() - t.createdAt < TOAST_DURATION_MS));
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [toasts]);
 
   const handleCleanup = useCallback(async () => {
     setIsCleaningUp(true);
@@ -55,8 +109,11 @@ export function GlobalSyncIndicator() {
     }
   }, [refresh]);
 
-  // Don't show if not enabled, not syncing, or dismissed
-  if (!status.isEnabled || (!status.isSyncing && status.pendingSyncs.length === 0) || effectivelyDismissed) {
+  // Show file-watcher toasts even when not syncing (they're transient notifications)
+  const hasToasts = toasts.length > 0;
+
+  // Don't show if not enabled, not syncing, and no toasts, or dismissed
+  if (!status.isEnabled || ((!status.isSyncing && status.pendingSyncs.length === 0) && !hasToasts) || (effectivelyDismissed && !hasToasts)) {
     return null;
   }
 
@@ -68,8 +125,38 @@ export function GlobalSyncIndicator() {
   const primarySync = status.activeSyncs[0] || status.pendingSyncs[0];
   const folderName = primarySync?.displayName || primarySync?.folderPath?.split(/[/\\]/).pop() || "Unknown";
 
+  // If only toasts (no active sync), show just the toasts
+  const showMainIndicator = status.isSyncing || status.pendingSyncs.length > 0;
+
   return (
     <AnimatePresence>
+      {/* File-watcher sync toasts */}
+      {toasts.map((toast, i) => (
+        <motion.div
+          key={toast.id}
+          layout
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -20, opacity: 0 }}
+          transition={{ type: "spring", damping: 25, stiffness: 500 }}
+          className={cn(
+            "fixed left-4 z-50",
+            "bg-terminal-cream border border-terminal-green/30 rounded-lg shadow-md",
+            "font-mono text-xs px-3 py-2 flex items-center gap-2"
+          )}
+          style={{ bottom: `${(showMainIndicator ? 64 : 16) + i * 40}px` }}
+        >
+          <CheckCircleIcon className="w-3.5 h-3.5 text-terminal-green flex-shrink-0" />
+          <span className="text-terminal-dark">
+            {toast.filesIndexed} {toast.filesIndexed === 1 ? "file" : "files"} reindexed
+          </span>
+          <span className="text-terminal-muted">
+            {toast.folderName}
+          </span>
+        </motion.div>
+      ))}
+
+      {showMainIndicator && (
       <motion.div
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -180,6 +267,7 @@ export function GlobalSyncIndicator() {
           )}
         </AnimatePresence>
       </motion.div>
+      )}
     </AnimatePresence>
   );
 }
@@ -195,6 +283,8 @@ interface SyncFolderItemProps {
     totalFiles: number | null;
     progress: number | null;
     lastError: string | null;
+    isWatching?: boolean;
+    deferredCount?: number;
   };
   status: "syncing" | "pending" | "error";
 }
@@ -260,6 +350,11 @@ function SyncFolderItem({ sync, status }: SyncFolderItemProps) {
           {status === "error" && sync.lastError && (
             <div className="text-xs text-destructive truncate" title={sync.lastError}>
               {sync.lastError}
+            </div>
+          )}
+          {sync.deferredCount != null && sync.deferredCount > 0 && (
+            <div className="text-xs text-amber-600 mt-0.5">
+              {sync.deferredCount} deferred
             </div>
           )}
         </div>

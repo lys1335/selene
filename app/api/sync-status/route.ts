@@ -3,6 +3,50 @@ import { db } from "@/lib/db/sqlite-client";
 import { agentSyncFolders, characters } from "@/lib/db/sqlite-character-schema";
 import { eq, or } from "drizzle-orm";
 import { isVectorDBEnabled } from "@/lib/vectordb/client";
+import { isWatching, getDeferredCount } from "@/lib/vectordb/file-watcher";
+import { onFolderChange, type FolderChangeEvent } from "@/lib/vectordb/folder-events";
+
+// ---------------------------------------------------------------------------
+// In-memory ring buffer for recent file-watcher sync events
+// Events older than 15 seconds are pruned on each request.
+// ---------------------------------------------------------------------------
+const FILE_WATCHER_EVENT_TTL_MS = 15_000;
+const MAX_FILE_WATCHER_EVENTS = 50;
+
+const recentFileWatcherEvents: FileWatcherSyncEvent[] = [];
+
+let fileWatcherListenerInitialized = false;
+
+function initFileWatcherListener() {
+  if (fileWatcherListenerInitialized) return;
+  fileWatcherListenerInitialized = true;
+
+  onFolderChange((_characterId: string, event: FolderChangeEvent) => {
+    if (event.type !== "file_watcher_sync") return;
+
+    recentFileWatcherEvents.push({
+      folderId: event.folderId,
+      folderPath: event.folderPath ?? "",
+      filesIndexed: event.filesIndexed ?? 0,
+      elapsedMs: event.elapsedMs ?? 0,
+      timestamp: Date.now(),
+    });
+
+    // Cap ring buffer
+    while (recentFileWatcherEvents.length > MAX_FILE_WATCHER_EVENTS) {
+      recentFileWatcherEvents.shift();
+    }
+  });
+}
+
+function getRecentFileWatcherSyncs(): FileWatcherSyncEvent[] {
+  const cutoff = Date.now() - FILE_WATCHER_EVENT_TTL_MS;
+  // Prune old events
+  while (recentFileWatcherEvents.length > 0 && recentFileWatcherEvents[0].timestamp < cutoff) {
+    recentFileWatcherEvents.shift();
+  }
+  return [...recentFileWatcherEvents];
+}
 
 export interface SyncStatusFolder {
   id: string;
@@ -17,6 +61,16 @@ export interface SyncStatusFolder {
   progress: number | null; // 0-1 ratio of filesProcessed/totalFiles
   lastSyncedAt: string | null;
   lastError: string | null;
+  isWatching: boolean;
+  deferredCount: number;
+}
+
+export interface FileWatcherSyncEvent {
+  folderId: string;
+  folderPath: string;
+  filesIndexed: number;
+  elapsedMs: number;
+  timestamp: number;
 }
 
 export interface GlobalSyncStatus {
@@ -28,6 +82,7 @@ export interface GlobalSyncStatus {
   totalFolders: number;
   totalSyncingOrPending: number;
   foldersComplete: number;
+  recentFileWatcherSyncs: FileWatcherSyncEvent[];
 }
 
 /**
@@ -48,8 +103,12 @@ export async function GET() {
         totalFolders: 0,
         totalSyncingOrPending: 0,
         foldersComplete: 0,
+        recentFileWatcherSyncs: [],
       } as GlobalSyncStatus);
     }
+
+    // Ensure file-watcher listener is initialized for event collection
+    initFileWatcherListener();
 
     // Get all folders with their character names
     const allFolders = await db
@@ -96,6 +155,8 @@ export async function GET() {
         progress: folder.status === "syncing" ? progress : null,
         lastSyncedAt: folder.lastSyncedAt,
         lastError: folder.lastError,
+        isWatching: isWatching(folder.id),
+        deferredCount: getDeferredCount(folder.id),
       };
 
       if (folder.status === "syncing") {
@@ -118,6 +179,7 @@ export async function GET() {
       totalFolders: allFolders.length,
       totalSyncingOrPending: activeSyncs.length + pendingSyncs.length,
       foldersComplete,
+      recentFileWatcherSyncs: getRecentFileWatcherSyncs(),
     };
 
     return NextResponse.json(response);

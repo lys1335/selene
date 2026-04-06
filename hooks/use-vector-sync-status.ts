@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo, createContext, useContext } from "react";
-import type { GlobalSyncStatus, SyncStatusFolder } from "@/app/api/sync-status/route";
+import type { GlobalSyncStatus, SyncStatusFolder, FileWatcherSyncEvent } from "@/app/api/sync-status/route";
 
 // Default empty state
 const DEFAULT_STATUS: GlobalSyncStatus = {
@@ -13,6 +13,7 @@ const DEFAULT_STATUS: GlobalSyncStatus = {
   totalFolders: 0,
   totalSyncingOrPending: 0,
   foldersComplete: 0,
+  recentFileWatcherSyncs: [],
 };
 
 // Polling intervals by tier
@@ -100,6 +101,7 @@ export function useVectorSyncStatusInternal(): UseVectorSyncStatusInternalResult
   const activeSyncsKey = JSON.stringify(rawStatus.activeSyncs);
   const pendingSyncsKey = JSON.stringify(rawStatus.pendingSyncs);
   const recentErrorsKey = JSON.stringify(rawStatus.recentErrors);
+  const fileWatcherSyncsKey = JSON.stringify(rawStatus.recentFileWatcherSyncs);
 
   // Memoize status: construct inside memo to avoid returning a stale rawStatus identity
   const status = useMemo<GlobalSyncStatus>(() => ({
@@ -111,6 +113,7 @@ export function useVectorSyncStatusInternal(): UseVectorSyncStatusInternalResult
     activeSyncs: rawStatus.activeSyncs,
     pendingSyncs: rawStatus.pendingSyncs,
     recentErrors: rawStatus.recentErrors,
+    recentFileWatcherSyncs: rawStatus.recentFileWatcherSyncs,
   }), [
     rawStatus.isEnabled,
     rawStatus.isSyncing,
@@ -120,6 +123,7 @@ export function useVectorSyncStatusInternal(): UseVectorSyncStatusInternalResult
     activeSyncsKey,
     pendingSyncsKey,
     recentErrorsKey,
+    fileWatcherSyncsKey,
   ]);
 
   // Initial fetch
