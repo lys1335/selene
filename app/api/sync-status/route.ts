@@ -24,13 +24,15 @@ function initFileWatcherListener() {
   onFolderChange((_characterId: string, event: FolderChangeEvent) => {
     if (event.type !== "file_watcher_sync") return;
 
-    recentFileWatcherEvents.push({
+    const entry = {
       folderId: event.folderId,
       folderPath: event.folderPath ?? "",
       filesIndexed: event.filesIndexed ?? 0,
       elapsedMs: event.elapsedMs ?? 0,
       timestamp: Date.now(),
-    });
+    };
+    recentFileWatcherEvents.push(entry);
+    console.error(`[SyncStatusAPI] File watcher event received and buffered (total: ${recentFileWatcherEvents.length}, filesIndexed: ${entry.filesIndexed})`);
 
     // Cap ring buffer
     while (recentFileWatcherEvents.length > MAX_FILE_WATCHER_EVENTS) {
