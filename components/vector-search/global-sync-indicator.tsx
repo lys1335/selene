@@ -41,6 +41,7 @@ export function GlobalSyncIndicator() {
   const [isCleaningUp, setIsCleaningUp] = useState(false);
   const [toasts, setToasts] = useState<FileWatcherToast[]>([]);
   const seenEventsRef = useRef(new Set<string>());
+  const missedPollsRef = useRef(0); // tracks polls with events but no new toasts
   const t = useTranslations("syncIndicator");
 
   // Derive effective dismissed state: dismiss is automatically invalidated when a new sync starts,
@@ -50,24 +51,57 @@ export function GlobalSyncIndicator() {
   // Track new file-watcher sync events and show toasts
   useEffect(() => {
     const events = status.recentFileWatcherSyncs ?? [];
-    const newToasts: FileWatcherToast[] = [];
+    // Group events by timestamp window (within 2s) to deduplicate cross-subscriber events
+    // The same file change fires for every folder subscriber — show 1 toast, not N
+    const unseenEvents: typeof events = [];
     for (const event of events) {
-      // Use folderId + timestamp as dedup key
       const key = `${event.folderId}:${event.timestamp}`;
       if (seenEventsRef.current.has(key)) continue;
       seenEventsRef.current.add(key);
+      unseenEvents.push(event);
+    }
 
-      const folderName = event.folderPath?.split(/[/\\]/).pop() || "folder";
+    // Group by timestamp window (events within 2s of each other = same batch)
+    const groups = new Map<string, { filesIndexed: number; folderPath: string }>();
+    for (const event of unseenEvents) {
+      // Round timestamp to 2s window for grouping
+      const windowKey = `${Math.floor(event.timestamp / 2000)}`;
+      const existing = groups.get(windowKey);
+      if (existing) {
+        existing.filesIndexed = Math.max(existing.filesIndexed, event.filesIndexed);
+      } else {
+        groups.set(windowKey, {
+          filesIndexed: event.filesIndexed,
+          folderPath: event.folderPath || "",
+        });
+      }
+    }
+
+    const newToasts: FileWatcherToast[] = [];
+    for (const [windowKey, group] of groups) {
+      const folderName = group.folderPath?.split(/[/\\]/).pop() || "folder";
       newToasts.push({
-        id: key,
-        filesIndexed: event.filesIndexed,
+        id: windowKey,
+        filesIndexed: group.filesIndexed,
         folderName,
-        createdAt: Date.now(), // local time for accurate auto-dismiss
+        createdAt: Date.now(),
       });
     }
 
     if (newToasts.length > 0) {
       setToasts(prev => [...prev, ...newToasts]);
+      missedPollsRef.current = 0;
+    } else if (events.length > 0) {
+      // Events exist but all were already "seen" — the useEffect may not be
+      // re-firing due to reference stability.  After 3 consecutive polls with
+      // no new toasts, force-clear the seen set so the next pass picks them up.
+      missedPollsRef.current += 1;
+      if (missedPollsRef.current >= 3) {
+        seenEventsRef.current = new Set();
+        missedPollsRef.current = 0;
+      }
+    } else {
+      missedPollsRef.current = 0;
     }
 
     // Prune old dedup keys (keep last 100)

@@ -20,7 +20,7 @@ const DEFAULT_STATUS: GlobalSyncStatus = {
 // Polling intervals by tier
 const POLL_INTERVALS = {
   active: 5000,   // 5 seconds when syncing
-  idle: 60000,    // 60 seconds when idle
+  idle: 10000,    // 10 seconds when idle — must be well under the 75s event TTL
   disabled: 600000, // 10 minutes when vector DB is disabled
 } as const;
 
