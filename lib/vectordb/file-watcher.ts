@@ -299,6 +299,7 @@ async function flushAllDeferredQueues(): Promise<void> {
   }
   flushInProgress = true;
   flushStartedAt = Date.now();
+  let flushedCount = 0;
   try {
     for (const [folderId, processor] of folderProcessors.entries()) {
       try {
@@ -311,6 +312,7 @@ async function flushAllDeferredQueues(): Promise<void> {
         }
         const count = deferred.size;
         deferred.clear();
+        flushedCount += count;
 
         console.error(`[FileWatcher] Periodic flush: ${count} deferred file(s) for ${processor.folderPath}`);
         await processor.processBatch();
@@ -321,7 +323,9 @@ async function flushAllDeferredQueues(): Promise<void> {
   } finally {
     flushInProgress = false;
     flushStartedAt = 0;
-    console.error(`[FileWatcher] Flush complete`);
+    if (flushedCount > 0) {
+      console.error(`[FileWatcher] Flush complete (${flushedCount} files)`);
+    }
   }
 }
 
