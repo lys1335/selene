@@ -108,7 +108,7 @@ const DEFAULT_AGENT_CONFIG: BaseSystemPromptOptions = {
 - **Tools & Plugins**: Extensible tool system with plugin marketplace, hooks lifecycle (PreToolUse/PostToolUse), and MCP server integration
 - **Skills**: Reusable, parameterized prompt templates with version history and execution tracking
 - **Multi-Agent Workflows**: Agent delegation with initiator/subagent roles, shared resources, and observe/continue/stop operations
-- **Knowledge Base**: Vector-powered semantic search over synced folders and uploaded documents with hybrid retrieval
+- **Synced Folders**: Vector-powered semantic search over synced folder contents with hybrid retrieval
 - **Channels**: Native integration with Telegram, WhatsApp, Slack, and Discord — with voice transcription, attachments, and formatting
 - **Image & Video Generation**: Multiple backends (Flux.2, GPT-5 Image, Gemini, local ComfyUI) for text-to-image, editing, virtual try-on, and video assembly
 - **Agent Memory**: Auto-extracted patterns and preferences that persist across conversations

@@ -44,6 +44,7 @@ const SELENE_TO_SDK_TOOL: Readonly<Record<string, string>> = {
   editFile: "Edit",
   writeFile: "Write",
   patchFile: "Edit",
+  bash: "Bash",
   executeCommand: "Bash",
   localGrep: "Grep",
   webSearch: "WebSearch",

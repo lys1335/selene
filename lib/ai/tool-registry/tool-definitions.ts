@@ -25,7 +25,6 @@ import type { ToolMetadata } from "./types";
 import { createToolSearchTool } from "./search-tool";
 import {
   createDescribeImageTool,
-  createDocsSearchTool,
   createRetrieveFullContentTool,
 } from "../tools";
 import { createWebSearchTool } from "../web-search";
@@ -68,7 +67,7 @@ export function registerAllTools(): void {
         "exploration",
       ],
       shortDescription:
-        "Search for available tools and discover capabilities like image generation or docs search",
+        "Search for available tools and discover capabilities like image generation or code search",
       loading: { alwaysLoad: true }, // CRITICAL: Must always be available to discover other tools
       requiresSession: false,
     } satisfies ToolMetadata,
@@ -159,40 +158,6 @@ Search and filter past conversations. Returns session metadata and summaries (no
       })
   );
 
-  // Agent Docs Search (configurable per-agent - knowledge feature)
-  registry.register(
-    "docsSearch",
-    {
-      displayName: "Search Agent Documents",
-      category: "knowledge",
-      keywords: [
-        "docs",
-        "documents",
-        "knowledge",
-        "pdf",
-        "markdown",
-        "html",
-        "rag",
-        "manual",
-        "policy",
-      ],
-      shortDescription:
-        "Search an agent's attached documents and knowledge base for relevant passages",
-      loading: { deferLoading: true },
-      // Requires an agent/user context to be meaningful, but can exist without a session
-      requiresSession: false,
-    } satisfies ToolMetadata,
-    // NOTE: The chat route also creates a fully scoped docsSearch tool with
-    // userId/characterId for regular chat use. This factory ensures the Claude Code
-    // SDK MCP bridge can also create a properly scoped instance when characterId
-    // is available via factory opts.
-    ({ userId, characterId }) =>
-      createDocsSearchTool({
-        userId: userId || "UNSCOPED",
-        characterId: characterId ?? null,
-      })
-  );
-
   // Vector Search Tool V2 (LLM-powered intelligent search over synced folders)
   registry.register(
     "vectorSearch",
@@ -253,7 +218,7 @@ Semantic + keyword hybrid search with AI synthesis. Finds code by concept, not j
       })
   );
 
-  // Read File Tool (read files from Knowledge Base documents or synced folders)
+  // Read File Tool (read files from synced folders)
   registry.register(
     "readFile",
     {
@@ -272,22 +237,20 @@ Semantic + keyword hybrid search with AI synthesis. Finds code by concept, not j
         "export",
         "follow",
         "document",
-        "knowledge",
-        "pdf",
         "markdown",
         "analysis",
         "codebase",
       ],
       shortDescription:
-        "Read full file content from Knowledge Base documents or synced folders",
+        "Read full file content from synced folders",
       fullInstructions: `## Read File
 
-Read full file content or line ranges from Knowledge Base docs or synced folders.
+Read full file content or line ranges from synced folders.
 
-**Sources:** Knowledge Base (PDFs, Markdown, HTML by filename/title) and synced folders (paths from vectorSearch).
+**Sources:** Synced folders (paths from vectorSearch or localGrep).
 **Limits:** Max 1MB / 5000 lines. Use startLine/endLine for larger files.
 
-**When to use:** After vectorSearch/docsSearch finds snippets and you need full context, or to follow imports/exports.`,
+**When to use:** After vectorSearch finds snippets and you need full context, or to follow imports/exports.`,
       loading: { deferLoading: true },
       requiresSession: true,
     } satisfies ToolMetadata,

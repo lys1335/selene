@@ -18,7 +18,6 @@
 import { tool, jsonSchema, type Tool } from "ai";
 import type { ExecuteCommandProgressUpdate } from "@/lib/command-execution/types";
 import {
-  createDocsSearchTool,
   createRetrieveFullContentTool,
 } from "@/lib/ai/tools";
 import { createWebSearchTool } from "@/lib/ai/web-search";
@@ -203,12 +202,6 @@ export async function buildToolsForRequest(
     searchTools: createToolSearchTool(toolSearchContext),
     // retrieveFullContent ALWAYS overrides (alwaysLoad: true)
     retrieveFullContent: createRetrieveFullContentTool({ sessionId }),
-    ...(allTools.docsSearch && {
-      docsSearch: createDocsSearchTool({
-        userId,
-        characterId: characterId || null,
-      }),
-    }),
     ...(allTools.vectorSearch && {
       vectorSearch: createVectorSearchToolV2({
         sessionId,

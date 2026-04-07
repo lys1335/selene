@@ -18,4 +18,3 @@ export * from "./queries-sessions";
 export * from "./queries-messages";
 export * from "./queries-web-browse";
 export * from "./queries-channel";
-export * from "./queries-documents";

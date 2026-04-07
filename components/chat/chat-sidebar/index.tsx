@@ -132,7 +132,6 @@ export function CharacterSidebar({
     useState<SessionInfo | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [resourcesOpen, setResourcesOpen] = useState(false);
-  const [docsOpen, setDocsOpen] = useState(false);
 
   // Build a CharacterSummary from the full data for the agent action hooks
   const characterSummary = useMemo((): CharacterSummary => ({
@@ -407,9 +406,7 @@ export function CharacterSidebar({
         characterId={characterId}
         characterName={character.name}
         resourcesOpen={resourcesOpen}
-        docsOpen={docsOpen}
         onToggleResources={() => setResourcesOpen((prev) => !prev)}
-        onToggleDocs={() => setDocsOpen((prev) => !prev)}
       />
     </div>
   );

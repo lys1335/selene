@@ -40,7 +40,6 @@ export function LoadingPage({
   const defaultMessages = [
     t("messages.initializingProfile"),
     t("messages.configuringCapabilities"),
-    t("messages.settingUpKnowledgeBase"),
     t("messages.applyingToolPermissions"),
     t("messages.validatingConfiguration"),
     t("messages.finalizingSetup"),

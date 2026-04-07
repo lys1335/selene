@@ -34,22 +34,17 @@ export interface ToolWarning {
 
 /** Core tools that are ALWAYS enabled — no prerequisites */
 export const ALWAYS_ENABLED_TOOLS = [
-  "docsSearch",
   "localGrep",
   "readFile",
   "editFile",
   "writeFile",
-  "executeCommand",
+  "bash",
 ] as const;
 
 /** Utility tools that are ALWAYS enabled — no external dependencies */
 export const UTILITY_TOOLS = [
-  "calculator",
   "compactSession",
   "memorize",
-  "scheduleTask",
-  "sendMessageToChannel",
-  "showProductImages",
   "skill",
   "updatePlan",
   "delegateToSubagent",
@@ -65,7 +60,6 @@ export const DEFAULT_ENABLED_TOOLS: string[] = [
   ...UTILITY_TOOLS,
   "webSearch",
   "chromiumWorkspace",
-  "workspace",
 ];
 
 /** Tools that are EXCLUDED from the Selene template by design */
@@ -139,9 +133,20 @@ export function resolveSeleneTemplateTools(settings: AppSettings): ToolResolutio
     console.log("[SeleneTemplate] Ghost OS skipped: not on macOS");
   }
 
-  // 6. Pre-selected conditional tools (enabled by default, user can toggle off)
-  enabledTools.push("workspace");
-  console.log("[SeleneTemplate] Workspace pre-selected: git worktree integration");
+  // 6. Conditional: Workspace (only when dev mode is enabled)
+  if (settings.devWorkspaceEnabled === true) {
+    enabledTools.push("workspace");
+    console.log("[SeleneTemplate] Workspace enabled: devWorkspaceEnabled=true");
+  } else {
+    warnings.push({
+      toolId: "workspace",
+      toolName: "Workspace",
+      reason: "Dev Workspace is disabled in settings",
+      settingsKeys: ["devWorkspaceEnabled"],
+      action: "Enable Dev Workspace in Settings to use git worktree integration",
+    });
+    console.log("[SeleneTemplate] Workspace disabled: devWorkspaceEnabled is not true");
+  }
 
   // 7. Log excluded tools
   for (const toolId of EXCLUDED_TOOLS) {

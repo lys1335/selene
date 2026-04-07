@@ -695,10 +695,6 @@
       }
     },
     "tools": {
-      "docsSearch": {
-        "name": "Doküman Arama",
-        "description": "Ajanın bilgi tabanında arayın"
-      },
       "vectorSearch": {
         "name": "Vektör Arama",
         "description": "Dizinlenmiş klasörlerde semantik arama yapın"
@@ -1092,7 +1088,6 @@
       "webSearch": "Web Arama",
       "firecrawlCrawl": "Web Sitesini Tara",
       "vectorSearch": "Vektör Arama",
-      "docsSearch": "Belge Arama",
       "readFile": "Dosya Oku",
       "editFile": "Dosya Düzenle",
       "writeFile": "Dosya Yaz",
@@ -1949,7 +1944,6 @@
       "messages": {
         "initializingProfile": "Ajan profili başlatılıyor...",
         "configuringCapabilities": "Yetenekler yapılandırılıyor...",
-        "settingUpKnowledgeBase": "Bilgi tabanı kuruluyor...",
         "applyingToolPermissions": "Araç izinleri uygulanıyor...",
         "validatingConfiguration": "Yapılandırma doğrulanıyor...",
         "finalizingSetup": "Ajan kurulumu tamamlanıyor..."
@@ -2028,8 +2022,6 @@
         "browser": "Tarayıcı"
       },
       "tools": {
-        "docsSearch": "Belge Araması",
-        "docsSearchDesc": "Ajanın bilgi tabanını ve ekli belgeleri ara",
         "vectorSearch": "Vektör Araması",
         "vectorSearchDesc": "İndekslenmiş klasörlerde anlamsal arama",
         "readFile": "Dosya Oku",
@@ -2186,19 +2178,6 @@
       "back": "Geri",
       "generateCharacter": "Karakter Oluştur →"
     },
-    "knowledgeBase": {
-      "question": "Ajanın bilgi tabanını oluşturmak için belgeler yükleyin...",
-      "uploading": "Yükleniyor...",
-      "clickToUpload": "Yüklemek için tıklayın",
-      "orDragFiles": "veya dosyaları buraya sürükleyin",
-      "supportedFormats": "Desteklenen biçimler: {formats}",
-      "uploadedDocuments": "Yüklenen Belgeler",
-      "confirmDelete": "Onayla?",
-      "skipHint": "Bu adımı atlayabilir ve belgeleri daha sonra ekleyebilirsiniz",
-      "back": "Geri",
-      "continue": "Devam →",
-      "skip": "Atla →"
-    },
     "vectorSearchPage": {
       "step": "Adım 4",
       "title": "Vektör Araması",
@@ -2212,14 +2191,8 @@
       "purpose": "Amaç",
       "capabilities": "Yetenekler",
       "noToolsEnabled": "Etkin araç yok",
-      "knowledgeBase": "Bilgi Tabanı",
-      "documentsAttached": "{count} belge eklendi",
-      "documentsAttachedPlural": "{count} belge eklendi",
-      "moreDocuments": "+{count} daha",
-      "noDocuments": "Ekli belge yok",
       "configSummary": "Yapılandırma Özeti",
       "toolsEnabled": "Araçlar: {count} etkin",
-      "documentsCount": "Belgeler: {count} eklendi",
       "readyToDeploy": "Dağıtıma hazır",
       "mcpTools": "MCP Araçları",
       "mcpServersCount": "{count, plural, =1 {# MCP sunucusu} other {# MCP sunucusu}}",
@@ -3613,7 +3586,6 @@
       "noActiveChannels": "Aktif kanal yok",
       "filters": "Filtreler",
       "quickLinks": "Kisa Baglantilar",
-      "knowledgeBase": "Bilgi Kutuphanesi",
       "agentMemoryShort": "Hafiza",
       "schedulesShort": "Takvim",
       "usageShort": "Kullanim",

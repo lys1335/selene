@@ -60,62 +60,6 @@ export const characterImages = sqliteTable("character_images", {
 });
 
 // ============================================================================
-// AGENT DOCUMENTS TABLE
-// ============================================================================
-
-export const agentDocuments = sqliteTable("agent_documents", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  userId: text("user_id")
-    .references(() => users.id, { onDelete: "cascade" })
-    .notNull(),
-  characterId: text("character_id")
-    .references(() => characters.id, { onDelete: "cascade" })
-    .notNull(),
-  originalFilename: text("original_filename").notNull(),
-  contentType: text("content_type").notNull(),
-  extension: text("extension"),
-  storagePath: text("storage_path").notNull(),
-  sizeBytes: integer("size_bytes"),
-  title: text("title"),
-  description: text("description"),
-  pageCount: integer("page_count"),
-  sourceType: text("source_type"),
-  status: text("status", { enum: ["pending", "ready", "failed"] }).default("pending").notNull(),
-  errorMessage: text("error_message"),
-  tags: text("tags", { mode: "json" }).default("[]").notNull(),
-  metadata: text("metadata", { mode: "json" }).default("{}").notNull(),
-  embeddingModel: text("embedding_model"),
-  lastIndexedAt: text("last_indexed_at"),
-  createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
-  updatedAt: text("updated_at").default(sql`(datetime('now'))`).notNull(),
-});
-
-// ============================================================================
-// AGENT DOCUMENT CHUNKS TABLE
-// ============================================================================
-
-export const agentDocumentChunks = sqliteTable("agent_document_chunks", {
-  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
-  documentId: text("document_id")
-    .references(() => agentDocuments.id, { onDelete: "cascade" })
-    .notNull(),
-  userId: text("user_id")
-    .references(() => users.id, { onDelete: "cascade" })
-    .notNull(),
-  characterId: text("character_id")
-    .references(() => characters.id, { onDelete: "cascade" })
-    .notNull(),
-  chunkIndex: integer("chunk_index").notNull(),
-  text: text("text").notNull(),
-  tokenCount: integer("token_count"),
-  embedding: text("embedding", { mode: "json" }),
-  embeddingModel: text("embedding_model"),
-  embeddingDimensions: integer("embedding_dimensions"),
-  createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
-  updatedAt: text("updated_at").default(sql`(datetime('now'))`).notNull(),
-});
-
-// ============================================================================
 // AGENT SYNC FOLDERS TABLE
 // ============================================================================
 
@@ -315,40 +259,11 @@ export const charactersRelations = relations(characters, ({ one, many }) => ({
     references: [users.id],
   }),
   images: many(characterImages),
-  documents: many(agentDocuments),
-  documentChunks: many(agentDocumentChunks),
 }));
 
 export const characterImagesRelations = relations(characterImages, ({ one }) => ({
   character: one(characters, {
     fields: [characterImages.characterId],
-    references: [characters.id],
-  }),
-}));
-
-export const agentDocumentsRelations = relations(agentDocuments, ({ one, many }) => ({
-  user: one(users, {
-    fields: [agentDocuments.userId],
-    references: [users.id],
-  }),
-  character: one(characters, {
-    fields: [agentDocuments.characterId],
-    references: [characters.id],
-  }),
-  chunks: many(agentDocumentChunks),
-}));
-
-export const agentDocumentChunksRelations = relations(agentDocumentChunks, ({ one }) => ({
-  document: one(agentDocuments, {
-    fields: [agentDocumentChunks.documentId],
-    references: [agentDocuments.id],
-  }),
-  user: one(users, {
-    fields: [agentDocumentChunks.userId],
-    references: [users.id],
-  }),
-  character: one(characters, {
-    fields: [agentDocumentChunks.characterId],
     references: [characters.id],
   }),
 }));
@@ -428,11 +343,6 @@ export type Character = typeof characters.$inferSelect;
 export type NewCharacter = typeof characters.$inferInsert;
 export type CharacterImage = typeof characterImages.$inferSelect;
 export type NewCharacterImage = typeof characterImages.$inferInsert;
-
-export type AgentDocument = typeof agentDocuments.$inferSelect;
-export type NewAgentDocument = typeof agentDocuments.$inferInsert;
-export type AgentDocumentChunk = typeof agentDocumentChunks.$inferSelect;
-export type NewAgentDocumentChunk = typeof agentDocumentChunks.$inferInsert;
 
 export type AgentSyncFolder = typeof agentSyncFolders.$inferSelect;
 export type NewAgentSyncFolder = typeof agentSyncFolders.$inferInsert;

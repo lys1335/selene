@@ -11,7 +11,6 @@
 
 import type { ModelMessage, UserModelMessage } from "ai";
 import {
-  createDocsSearchTool,
   createRetrieveFullContentTool,
 } from "@/lib/ai/tools";
 import { createWebSearchTool } from "@/lib/ai/web-search";
@@ -83,10 +82,6 @@ export async function prepareMessagesForRequest(
       userId,
       characterId: characterId || null,
       sessionMetadata,
-    }),
-    docsSearch: createDocsSearchTool({
-      userId,
-      characterId: characterId || null,
     }),
     webSearch: createWebSearchTool({
       sessionId,

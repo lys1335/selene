@@ -18,7 +18,6 @@ const TOOL_COLORS: Record<string, string> = {
 
 /** Tool ID to category mapping */
 const TOOL_CATEGORIES: Record<string, string> = {
-  docsSearch: "knowledge",
   vectorSearch: "knowledge",
   readFile: "knowledge",
   webSearch: "search",

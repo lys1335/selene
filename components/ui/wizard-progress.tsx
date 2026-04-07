@@ -2,7 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { Check, Sparkles, User, Wrench, BookOpen, Database, Eye, Plug } from "lucide-react";
+import { Check, Sparkles, User, Wrench, Database, Eye, Plug } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useReducedMotion } from "@/components/character-creation/hooks/use-reduced-motion";
 
@@ -23,7 +23,6 @@ interface WizardProgressProps {
 export const WIZARD_STEPS: WizardStep[] = [
   { id: "intro", label: "Start", icon: <Sparkles className="w-4 h-4" /> },
   { id: "identity", label: "Identity", icon: <User className="w-4 h-4" /> },
-  { id: "knowledge", label: "Knowledge", icon: <BookOpen className="w-4 h-4" /> },
   { id: "embeddingSetup", label: "Embeddings", icon: <Database className="w-4 h-4" /> },
   { id: "vectorSearch", label: "Folders", icon: <Database className="w-4 h-4" /> },
   { id: "capabilities", label: "Capabilities", icon: <Wrench className="w-4 h-4" /> },

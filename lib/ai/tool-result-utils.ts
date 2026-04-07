@@ -210,13 +210,6 @@ function buildToolSummary(toolName: string, input?: unknown, output?: unknown): 
       const findings = Array.isArray(result.findings) ? result.findings.length : 0;
       return `Vector search: ${findings} findings`;
     }
-    case "docsSearch": {
-      const query = getString(result.query) || getString(inputObj?.query) || "query";
-      const hitCount =
-        getNumber(result.hitCount) ||
-        (Array.isArray(result.hits) ? result.hits.length : 0);
-      return `Docs search "${query}": ${hitCount} hits`;
-    }
     case "webSearch": {
       const query = getString(result.query) || getString(inputObj?.query) || "query";
       const sources = Array.isArray(result.sources) ? result.sources.length : 0;

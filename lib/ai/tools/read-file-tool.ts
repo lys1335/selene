@@ -1,12 +1,11 @@
 /**
  * Read File Tool
  *
- * AI tool for reading file content from Synced Folders or Knowledge Base.
+ * AI tool for reading file content from Synced Folders.
  * Enhanced with:
  * - Binary file detection (prevents dumping binary garbage)
  * - Head/Tail support for reading large files
  * - Line range support
- * - Knowledge Base integration
  */
 
 import { tool, jsonSchema } from "ai";
@@ -18,7 +17,6 @@ import {
   recordFileRead,
   findSimilarFiles,
 } from "@/lib/ai/filesystem";
-import { findAgentDocumentByName, getAgentDocumentChunksByDocumentId } from "@/lib/db/queries";
 import {
   getCodeLanguage,
   isBinaryFile,
@@ -65,8 +63,7 @@ interface ReadFileResult {
   message?: string;
   text?: string;
   error?: string;
-  source?: "synced_folder" | "knowledge_base";
-  documentTitle?: string;
+  source?: "synced_folder";
   allowedFolders?: string[];
   isBinary?: boolean;
 }
@@ -78,12 +75,12 @@ interface ReadFileResult {
 const readFileSchema = jsonSchema<ReadFileInput>({
   type: "object",
   title: "ReadFileInput",
-  description: "Input schema for reading files from synced folders or knowledge base",
+  description: "Input schema for reading files from synced folders",
   properties: {
     filePath: {
       type: "string",
       description:
-        "File path or document name to read. Can be: (1) Knowledge Base document filename or title, (2) relative path from synced folder, or (3) absolute path within synced folders",
+        "File path to read. Can be a relative path from a synced folder or an absolute path within synced folders",
     },
     startLine: {
       type: "number",
@@ -111,65 +108,6 @@ const readFileSchema = jsonSchema<ReadFileInput>({
 });
 
 // ---------------------------------------------------------------------------
-// Knowledge Base Logic
-// ---------------------------------------------------------------------------
-
-async function tryReadFromKnowledgeBase(
-  characterId: string,
-  filePath: string,
-  startLine?: number,
-  endLine?: number,
-  head?: number,
-  tail?: number
-): Promise<ReadFileResult | null> {
-  try {
-    const document = await findAgentDocumentByName(characterId, filePath);
-
-    if (!document) {
-      return null;
-    }
-
-    const chunks = await getAgentDocumentChunksByDocumentId(document.id, document.userId);
-
-    if (!chunks.length) {
-      return null;
-    }
-
-    const content = chunks.map((chunk) => chunk.text).join("\n\n---\n\n");
-    const allLines = content.split("\n");
-
-    const { lines: selectedLines, actualStartLine, actualEndLine } = selectLines(allLines, {
-      head, tail, startLine, endLine, maxLineCount: MAX_LINE_COUNT,
-    });
-
-    const lang = getCodeLanguage(document.originalFilename);
-    const formattedContent = formatLinesWithNumbers(selectedLines, actualStartLine);
-
-    const truncated = selectedLines.length < allLines.length;
-    const displayName = document.title || document.originalFilename;
-
-    return {
-      status: "success",
-      filePath: document.originalFilename,
-      language: lang,
-      lineRange: `${actualStartLine}-${actualEndLine}`,
-      startLine: actualStartLine,
-      endLine: actualEndLine,
-      totalLines: allLines.length,
-      content: formattedContent,
-      truncated,
-      message: truncated
-        ? `Showing lines ${actualStartLine}-${actualEndLine} of ${allLines.length} total lines from Knowledge Base document "${displayName}"`
-        : `Read ${allLines.length} lines from Knowledge Base document "${displayName}"`,
-      source: "knowledge_base",
-      documentTitle: document.title || undefined,
-    };
-  } catch (error) {
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Tool Factory
 // ---------------------------------------------------------------------------
 
@@ -177,11 +115,7 @@ export function createReadFileTool(options: ReadFileToolOptions) {
   const { sessionId, characterId } = options;
 
   return tool({
-    description: `Read full file content or a specific line range from Knowledge Base documents or synced folders.
-
-**Supported Sources:**
-1. **Knowledge Base documents** - Uploaded PDFs, text, Markdown, HTML files. Reference by filename or title.
-2. **Synced folder files** - Files from indexed folders.
+    description: `Read full file content or a specific line range from synced folders.
 
 **Features:**
 - **Smart Limiting**: Reads first 5000 lines by default.
@@ -258,20 +192,7 @@ export function createReadFileTool(options: ReadFileToolOptions) {
         };
       }
 
-      // STEP 1: Knowledge Base
-      const kbResult = await tryReadFromKnowledgeBase(
-        characterId,
-        filePath,
-        startLine,
-        endLine,
-        head,
-        tail
-      );
-      if (kbResult) {
-        return kbResult;
-      }
-
-      // STEP 2: Synced Folders (workspace-aware — worktree path is included if active)
+      // Synced Folders (workspace-aware — worktree path is included if active)
       let syncedFolders: string[];
       try {
         // resolveWorkspaceAwarePaths already includes shared workflow folders
@@ -281,7 +202,7 @@ export function createReadFileTool(options: ReadFileToolOptions) {
         if (syncedFolders.length === 0) {
           return {
             status: "error",
-            error: "No matching documents found. No synced folders configured and no Knowledge Base document matches this filename.",
+            error: "No synced folders configured for this agent. Add folders in agent settings to enable file reading.",
           };
         }
       } catch (error) {
