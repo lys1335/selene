@@ -2654,12 +2654,12 @@
           "enable": "Sorgu genişletmeyi etkinleştir"
         },
         "fileLimits": {
-          "title": "Dosya Limitleri",
-          "description": "Aşırı büyük dosyaları veya satırları olanları atla.",
+          "title": "İndeksleme Dosya Filtreleri",
+          "description": "Vektör veritabanına hangi dosyaların indeksleneceğini kontrol eder. Araç çıktı boyutunu ETKİLEMEZ.",
           "maxLines": "Maksimum dosya satırı",
           "maxLinesHelper": "Bu satır sayısını aşan dosyalar indeksleme sırasında atlanır (varsayılan: 3000)",
           "maxLineLength": "Maksimum satır uzunluğu",
-          "maxLineLengthHelper": "Herhangi bir satırı bu karakter sayısını aşan dosyalar atlanır (varsayılan: 1000)"
+          "maxLineLengthHelper": "Herhangi bir satırı bu karakter sayısını aşan dosyalar indeksleme sırasında atlanır (varsayılan: 1000)"
         }
       }
     },

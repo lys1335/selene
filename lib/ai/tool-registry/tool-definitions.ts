@@ -251,7 +251,7 @@ Read full file content or line ranges from synced folders.
 **Limits:** Max 1MB / 5000 lines. Use startLine/endLine for larger files.
 
 **When to use:** After vectorSearch finds snippets and you need full context, or to follow imports/exports.`,
-      loading: { deferLoading: true },
+      loading: { alwaysLoad: true },
       requiresSession: true,
     } satisfies ToolMetadata,
     ({ sessionId, characterId }) =>
@@ -465,7 +465,7 @@ Skipping → wrong gender/body assumptions → poor edit results.
 **Analysis types:** person (appearance/body/style), room (layout/materials), product (type/color/material), general.
 
 **Workflow:** describeImage → use analysis in editImage prompt to ensure accurate results. Never assume — always analyze first.`,
-      loading: { alwaysLoad: true },  // Always available - essential for virtual try-on
+      loading: { deferLoading: true },
       requiresSession: false,
       // No enableEnvVar - uses getVisionModel() which falls back to Claude (always available)
     } satisfies ToolMetadata,

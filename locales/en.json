@@ -2829,12 +2829,12 @@
           "enable": "Enable query expansion"
         },
         "fileLimits": {
-          "title": "File Limits",
-          "description": "Skip files that are too large or contain extreme lines.",
+          "title": "Indexing File Filters",
+          "description": "Control which files are indexed into the vector database. This does NOT affect tool output size.",
           "maxLines": "Max file lines",
           "maxLinesHelper": "Files exceeding this line count will be skipped during indexing (default: 3000)",
           "maxLineLength": "Max line length",
-          "maxLineLengthHelper": "Files with any line exceeding this character count will be skipped (default: 1000)"
+          "maxLineLengthHelper": "Files with any line exceeding this character count will be skipped during indexing (default: 1000)"
         }
       }
     },

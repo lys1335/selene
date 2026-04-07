@@ -321,6 +321,9 @@ function hasProjectionTruncationMarker(value: unknown): boolean {
   if (obj.text && hasProjectionTruncationMarker(obj.text)) return true;
   if (obj.stdout && hasProjectionTruncationMarker(obj.stdout)) return true;
   if (obj.output && hasProjectionTruncationMarker(obj.output)) return true;
+  if (obj.results && hasProjectionTruncationMarker(obj.results)) return true;
+  if (obj.summary && hasProjectionTruncationMarker(obj.summary)) return true;
+  if (obj.markdown && hasProjectionTruncationMarker(obj.markdown)) return true;
   return false;
 }
 
@@ -355,10 +358,20 @@ export function normalizeToolResultOutput(
     // richer content that should not be utility-truncated here.
     const EXEMPT_TOOLS = new Set(["readFile", "skill", "webSearch"]);
 
+    // Per-tool token budgets for tools that need more context than the default 3,000.
+    // localGrep results are dense, useful content for code navigation — 8,000 tokens
+    // (~32,000 chars) accommodates ~20 matches with context lines.
+    const TOOL_TOKEN_BUDGETS: Record<string, number> = {
+      localGrep: 8000,
+      vectorSearch: 6000,
+    };
+
     // Apply token limit (universal safety net) — UNLESS tool is exempt
     // This prevents context bloat from massive outputs like ls -R, pip freeze, etc.
     const limitResult = !EXEMPT_TOOLS.has(toolName)
-      ? limitToolOutput(normalizedOutput, toolName, sessionId)
+      ? limitToolOutput(normalizedOutput, toolName, sessionId, {
+          maxTokens: TOOL_TOKEN_BUDGETS[toolName],
+        })
       : { limited: false, output: "", originalLength: 0, truncatedLength: 0, estimatedTokens: 0 };
 
     // If limited, update output with truncated version
@@ -382,6 +395,16 @@ export function normalizeToolResultOutput(
           obj.content = limitResult.output;
         } else if (typeof obj.text === "string") {
           obj.text = limitResult.output;
+        } else if (typeof obj.result === "string") {
+          obj.result = limitResult.output;
+        } else if (typeof obj.results === "string") {
+          obj.results = limitResult.output;
+        } else if (typeof obj.output === "string") {
+          obj.output = limitResult.output;
+        } else if (typeof obj.summary === "string") {
+          obj.summary = limitResult.output;
+        } else if (typeof obj.markdown === "string") {
+          obj.markdown = limitResult.output;
         } else if (typeof obj.stdout === "string") {
           obj.stdout = limitResult.output;
         }
