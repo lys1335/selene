@@ -36,7 +36,7 @@ function estimateTokens(text: string): number {
 }
 
 function truncateToTokenBudget(text: string, maxTokens: number): string {
-  const maxChars = maxTokens * 4;
+  const maxChars = maxTokens * 6;
   if (text.length <= maxChars) return text;
   return text.slice(0, maxChars - 3) + "...";
 }
