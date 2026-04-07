@@ -251,9 +251,9 @@ export function startH2Proxy(opts: H2ProxyOptions): http2.Http2SecureServer {
     debugError("[H2Proxy] Server error:", err.message);
   });
 
-  // Bind to all loopback interfaces (IPv4 + IPv6) so macOS DNS
-  // alternating between 127.0.0.1 and ::1 doesn't cause ERR_NETWORK_CHANGED.
-  server.listen(listenPort, () => {
+  // Bind to IPv4 loopback only. All consumers (renderer, IPC handlers,
+  // internal API calls) connect via 127.0.0.1 explicitly — no IPv6 needed.
+  server.listen(listenPort, "127.0.0.1", () => {
     debugLog(`[H2Proxy] HTTP/2 reverse proxy listening on https://127.0.0.1:${listenPort} → http://localhost:${targetPort}`);
   });
 

@@ -359,11 +359,11 @@ export function normalizeToolResultOutput(
     const EXEMPT_TOOLS = new Set(["readFile", "skill", "webSearch"]);
 
     // Per-tool token budgets for tools that need more context than the default 3,000.
-    // localGrep results are dense, useful content for code navigation — 8,000 tokens
-    // (~32,000 chars) accommodates ~20 matches with context lines.
+    // localGrep and vectorSearch results are dense, useful content — 10,000 tokens
+    // (~40,000 chars) accommodates ~25 matches with context lines.
     const TOOL_TOKEN_BUDGETS: Record<string, number> = {
-      localGrep: 8000,
-      vectorSearch: 6000,
+      localGrep: 10000,
+      vectorSearch: 10000,
     };
 
     // Apply token limit (universal safety net) — UNLESS tool is exempt

@@ -199,7 +199,7 @@ export async function startNextServer(opts: StartNextServerOptions): Promise<voi
           ...process.env,
           NODE_ENV: "production",
           PORT: String(NEXT_INTERNAL_PORT),
-          HOSTNAME: "0.0.0.0",
+          HOSTNAME: "127.0.0.1",
           LOCAL_DATA_PATH: path.join(opts.userDataPath, "data"),
           NEXT_TELEMETRY_DISABLED: "1",
           ELECTRON_RESOURCES_PATH: resourcesPath,
