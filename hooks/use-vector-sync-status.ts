@@ -29,6 +29,8 @@ type PollTier = keyof typeof POLL_INTERVALS;
 function getPollTier(status: GlobalSyncStatus): PollTier {
   if (!status.isEnabled) return "disabled";
   if (status.isSyncing || status.pendingSyncs.length > 0 || status.activeSyncs.length > 0) return "active";
+  // Boost polling when there are recent file-watcher events so toasts appear quickly
+  if (status.recentFileWatcherSyncs && status.recentFileWatcherSyncs.length > 0) return "active";
   return "idle";
 }
 

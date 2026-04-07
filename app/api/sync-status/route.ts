@@ -8,9 +8,10 @@ import { onFolderChange, type FolderChangeEvent } from "@/lib/vectordb/folder-ev
 
 // ---------------------------------------------------------------------------
 // In-memory ring buffer for recent file-watcher sync events
-// Events older than 15 seconds are pruned on each request.
+// Events older than 75 seconds are pruned on each request.
+// TTL must exceed the idle polling interval (60s) so events are seen before expiry.
 // ---------------------------------------------------------------------------
-const FILE_WATCHER_EVENT_TTL_MS = 15_000;
+const FILE_WATCHER_EVENT_TTL_MS = 75_000;
 const MAX_FILE_WATCHER_EVENTS = 50;
 
 const recentFileWatcherEvents: FileWatcherSyncEvent[] = [];
