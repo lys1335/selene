@@ -10,6 +10,7 @@ const DEFAULT_STATUS: GlobalSyncStatus = {
   activeSyncs: [],
   pendingSyncs: [],
   recentErrors: [],
+  folders: [],
   totalFolders: 0,
   totalSyncingOrPending: 0,
   foldersComplete: 0,
@@ -104,6 +105,8 @@ export function useVectorSyncStatusInternal(): UseVectorSyncStatusInternalResult
   const fileWatcherSyncsKey = JSON.stringify(rawStatus.recentFileWatcherSyncs);
 
   // Memoize status: construct inside memo to avoid returning a stale rawStatus identity
+  const foldersKey = JSON.stringify(rawStatus.folders?.map(f => `${f.id}:${f.status}:${f.isWatching}`) ?? []);
+
   const status = useMemo<GlobalSyncStatus>(() => ({
     isEnabled: rawStatus.isEnabled,
     isSyncing: rawStatus.isSyncing,
@@ -113,6 +116,7 @@ export function useVectorSyncStatusInternal(): UseVectorSyncStatusInternalResult
     activeSyncs: rawStatus.activeSyncs,
     pendingSyncs: rawStatus.pendingSyncs,
     recentErrors: rawStatus.recentErrors,
+    folders: rawStatus.folders ?? [],
     recentFileWatcherSyncs: rawStatus.recentFileWatcherSyncs,
   }), [
     rawStatus.isEnabled,
@@ -123,6 +127,7 @@ export function useVectorSyncStatusInternal(): UseVectorSyncStatusInternalResult
     activeSyncsKey,
     pendingSyncsKey,
     recentErrorsKey,
+    foldersKey,
     fileWatcherSyncsKey,
   ]);
 

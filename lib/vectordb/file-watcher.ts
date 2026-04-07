@@ -99,6 +99,8 @@ const folderQueues = globalForWatchers.folderQueues;
 const deferredQueues = globalForWatchers.deferredQueues;
 const folderProcessors = globalForWatchers.folderProcessors;
 const folderSubscribers = globalForWatchers.folderSubscribers;
+// Track whether we've logged the first raw event per path (one-shot diagnostic)
+const rawEventLogged = new Set<string>();
 
 // Track which paths are using polling mode
 const pollingModePaths = new Set<string>();
@@ -404,7 +406,7 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
   const existingOwner = getWatcherOwner(folderPath);
   if (existingOwner && existingOwner !== folderId && pathWatchers.has(resolvedPath)) {
     const subscriberCount = getSubscriberCount(folderPath);
-    console.log(
+    console.error(
       `[FileWatcher] Path ${folderPath} already watched by ${existingOwner}, ` +
       `added ${folderId} as subscriber #${subscriberCount} (shared watcher)`
     );
@@ -418,7 +420,9 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
   // --- 5. This folder will own the watcher for this path ---
   setWatcherOwner(folderPath, folderId);
 
-  console.log(`[FileWatcher] Starting watch for folder: ${folderPath} (owner: ${folderId})`);
+  // Use console.error for critical lifecycle messages so they appear in production
+  // logs (stderr is always captured; stdout may be filtered by log level).
+  console.error(`[FileWatcher] Starting watch for folder: ${folderPath} (owner: ${folderId})`);
 
   if (folderPath === process.cwd()) {
     console.warn(
@@ -465,6 +469,11 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
     );
   }
 
+  console.error(
+    `[FileWatcher] Creating chokidar watcher: polling=${usePolling}, recursive=${recursive}, ` +
+    `path=${folderPath}`
+  );
+
   const watcher = chokidar.watch(folderPath, {
     persistent: true,
     ignoreInitial: true,
@@ -477,6 +486,23 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
     usePolling,
     interval: usePolling ? 2000 : undefined,
     binaryInterval: usePolling ? 5000 : undefined,
+  });
+
+  // --- 7b. Confirm watcher is operational ---
+  watcher.on("ready", () => {
+    console.error(
+      `[FileWatcher] ✓ Watcher READY for ${folderPath} (owner: ${folderId}, ` +
+      `polling: ${usePolling}, subscribers: ${getSubscribers(resolvedPath).length})`
+    );
+  });
+
+  // --- 7c. Raw event logging for diagnostics ---
+  watcher.on("raw", (event: string, path: string) => {
+    // Only log the first few raw events to confirm the watcher is live
+    if (!rawEventLogged.has(resolvedPath)) {
+      rawEventLogged.add(resolvedPath);
+      console.error(`[FileWatcher] First raw event for ${folderPath}: ${event} ${path}`);
+    }
   });
 
   // --- 8. Fan-out event handlers ---
@@ -650,6 +676,10 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
     });
 
   pathWatchers.set(resolvedPath, watcher);
+  console.error(
+    `[FileWatcher] Watcher stored for ${folderPath}. ` +
+    `Total active path watchers: ${pathWatchers.size}, subscribers: ${folderSubscribers.size}`
+  );
 
   // Watcher started successfully — reset EMFILE retry state
   emfileRetryCounts.delete(resolvedPath);
@@ -974,4 +1004,27 @@ export function isWatching(folderId: string): boolean {
  */
 export function getDeferredCount(folderId: string): number {
   return deferredQueues.get(folderId)?.size ?? 0;
+}
+
+/**
+ * Get a health snapshot of the watcher system for diagnostics.
+ */
+export function getWatcherHealth(): {
+  activePathWatchers: number;
+  folderSubscribers: number;
+  totalDeferredFiles: number;
+  watchedPaths: string[];
+  subscriberFolderIds: string[];
+} {
+  let totalDeferred = 0;
+  for (const q of deferredQueues.values()) {
+    totalDeferred += q.size;
+  }
+  return {
+    activePathWatchers: pathWatchers.size,
+    folderSubscribers: folderSubscribers.size,
+    totalDeferredFiles: totalDeferred,
+    watchedPaths: Array.from(pathWatchers.keys()),
+    subscriberFolderIds: Array.from(folderSubscribers.keys()),
+  };
 }

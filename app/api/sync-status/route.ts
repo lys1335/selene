@@ -3,7 +3,7 @@ import { db } from "@/lib/db/sqlite-client";
 import { agentSyncFolders, characters } from "@/lib/db/sqlite-character-schema";
 import { eq, or } from "drizzle-orm";
 import { isVectorDBEnabled } from "@/lib/vectordb/client";
-import { isWatching, getDeferredCount } from "@/lib/vectordb/file-watcher";
+import { isWatching, getDeferredCount, getWatcherHealth } from "@/lib/vectordb/file-watcher";
 import { onFolderChange, type FolderChangeEvent } from "@/lib/vectordb/folder-events";
 
 // ---------------------------------------------------------------------------
@@ -79,6 +79,8 @@ export interface GlobalSyncStatus {
   activeSyncs: SyncStatusFolder[];
   pendingSyncs: SyncStatusFolder[];
   recentErrors: SyncStatusFolder[];
+  /** All folders with their current watcher/deferred state (for diagnostics) */
+  folders: SyncStatusFolder[];
   totalFolders: number;
   totalSyncingOrPending: number;
   foldersComplete: number;
@@ -100,11 +102,13 @@ export async function GET() {
         activeSyncs: [],
         pendingSyncs: [],
         recentErrors: [],
+        folders: [],
         totalFolders: 0,
         totalSyncingOrPending: 0,
         foldersComplete: 0,
         recentFileWatcherSyncs: [],
-      } as GlobalSyncStatus);
+        watcherHealth: getWatcherHealth(),
+      });
     }
 
     // Ensure file-watcher listener is initialized for event collection
@@ -170,16 +174,45 @@ export async function GET() {
 
     const foldersComplete = allFolders.filter(f => f.status === "synced").length;
 
-    const response: GlobalSyncStatus = {
+    // Build full folder list for diagnostics (watcher health, deferred count)
+    const allStatusFolders: SyncStatusFolder[] = allFolders.map(folder => {
+      const metadata = folder.lastRunMetadata as Record<string, unknown> | null;
+      const totalFiles = (metadata && typeof metadata.totalFiles === "number") ? metadata.totalFiles : null;
+      const filesProcessed = (metadata && typeof metadata.filesProcessed === "number") ? metadata.filesProcessed : null;
+      const progress = (totalFiles !== null && totalFiles > 0 && filesProcessed !== null)
+        ? Math.min(filesProcessed / totalFiles, 1)
+        : null;
+
+      return {
+        id: folder.id,
+        characterId: folder.characterId,
+        characterName: folder.characterName,
+        folderPath: folder.folderPath,
+        displayName: folder.displayName,
+        status: folder.status as SyncStatusFolder["status"],
+        fileCount: folder.fileCount,
+        chunkCount: folder.chunkCount,
+        totalFiles: folder.status === "syncing" ? totalFiles : null,
+        progress: folder.status === "syncing" ? progress : null,
+        lastSyncedAt: folder.lastSyncedAt,
+        lastError: folder.lastError,
+        isWatching: isWatching(folder.id),
+        deferredCount: getDeferredCount(folder.id),
+      };
+    });
+
+    const response: GlobalSyncStatus & { watcherHealth?: ReturnType<typeof getWatcherHealth> } = {
       isEnabled,
       isSyncing: activeSyncs.length > 0,
       activeSyncs,
       pendingSyncs,
       recentErrors,
+      folders: allStatusFolders,
       totalFolders: allFolders.length,
       totalSyncingOrPending: activeSyncs.length + pendingSyncs.length,
       foldersComplete,
       recentFileWatcherSyncs: getRecentFileWatcherSyncs(),
+      watcherHealth: getWatcherHealth(),
     };
 
     return NextResponse.json(response);

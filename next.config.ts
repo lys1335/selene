@@ -94,6 +94,10 @@ const nextConfig: NextConfig = {
   },
   // Exclude native/platform-specific packages from Turbopack bundling
   serverExternalPackages: [
+    // chokidar uses optional native `fsevents` on macOS for efficient file watching.
+    // Bundling it via Turbopack strips the native binding, forcing unreliable polling.
+    // Keeping it external preserves fsevents and ensures file watchers work in production.
+    "chokidar",
     // Claude Agent SDK resolves cli.js via import.meta.url at runtime —
     // bundling it breaks that path resolution, causing auth to fail in production.
     "@anthropic-ai/claude-agent-sdk",
