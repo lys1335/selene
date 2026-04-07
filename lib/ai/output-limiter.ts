@@ -197,7 +197,17 @@ export function limitToolOutput(
     }
 
     // Fallback: serialize object outputs to avoid "[object Object]"
-    const serialized = typeof output === "string" ? output : JSON.stringify(output);
+    const serialized =
+      typeof output === "string"
+        ? output
+        : (() => {
+            try {
+              const s = JSON.stringify(output);
+              return typeof s === "string" ? s : String(output);
+            } catch {
+              return String(output);
+            }
+          })();
     return {
       limited: false,
       output: serialized,
@@ -218,7 +228,17 @@ export function limitToolOutput(
   if (!primaryText) {
     // Can't extract a known text field — serialize the whole object and truncate it.
     console.warn(`[OutputLimiter] Could not extract text from ${toolName} output, truncating serialized form`);
-    const serialized = typeof output === "string" ? output : JSON.stringify(output);
+    const serialized =
+      typeof output === "string"
+        ? output
+        : (() => {
+            try {
+              const s = JSON.stringify(output);
+              return typeof s === "string" ? s : String(output);
+            } catch {
+              return String(output);
+            }
+          })();
 
     const middleTruncated = middleTruncateText(serialized, maxChars);
     const truncatedText = middleTruncated.content;

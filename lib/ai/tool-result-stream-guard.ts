@@ -228,6 +228,8 @@ export function guardToolResultForStreaming(
       obj.results = (obj.results as string) + notice;
     } else if (typeof obj.summary === "string") {
       obj.summary = (obj.summary as string) + notice;
+    } else if (typeof obj.markdown === "string") {
+      obj.markdown = (obj.markdown as string) + notice;
     }
     finalResult = obj;
   }
