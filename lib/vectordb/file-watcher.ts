@@ -458,7 +458,11 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
   // --- 7. Create chokidar watcher ---
   const aggressiveIgnore = createAggressiveIgnore(mergedExcludePatterns, folderPath, includeExtensions);
 
-  const isProjectRoot = process.platform !== "win32" && await isProjectRootDirectory(folderPath);
+  // On macOS, Node.js fs.watch() uses native FSEvents through libuv — no need
+  // for polling even on large project roots.  Only force polling on Linux where
+  // inotify has per-user watch limits that large codebases can exhaust.
+  const isLinux = process.platform === "linux";
+  const isProjectRoot = isLinux && await isProjectRootDirectory(folderPath);
   const forcedPolling = pollingModePaths.has(resolvedPath);
   const usePolling = isProjectRoot || forcedPolling || configForcePolling === true;
 
@@ -509,16 +513,31 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
   // These handlers broadcast to ALL subscriber folders for this path.
 
   const handleFileChange = (filePath: string) => {
+    // Skip directory-level events (polling mode fires these but they have no extension)
+    // Only process actual file paths
+    const ext = extname(filePath).slice(1).toLowerCase();
+    if (!ext) {
+      console.error(`[FileWatcher] Skipping directory-level event: ${filePath}`);
+      return;
+    }
+
     const subscribers = getSubscribers(resolvedPath);
+    console.error(`[FileWatcher] File change detected: ${filePath} (ext=${ext}, subscribers=${subscribers.length})`);
     for (const subFolderId of subscribers) {
       const sub = folderSubscribers.get(subFolderId);
       if (!sub) continue;
 
       // Apply per-subscriber filtering
-      if (sub.shouldIgnore(filePath)) continue;
-      const ext = extname(filePath).slice(1).toLowerCase();
-      if (sub.normalizedExts.length > 0 && !sub.normalizedExts.includes(ext)) continue;
+      if (sub.shouldIgnore(filePath)) {
+        console.error(`[FileWatcher] Ignored by pattern: ${filePath} (folder: ${subFolderId})`);
+        continue;
+      }
+      if (sub.normalizedExts.length > 0 && !sub.normalizedExts.includes(ext)) {
+        console.error(`[FileWatcher] Filtered by extension: ${filePath} ext=${ext} not in [${sub.normalizedExts.slice(0, 5).join(",")}...] (folder: ${subFolderId})`);
+        continue;
+      }
 
+      console.error(`[FileWatcher] Scheduling batch for folder ${subFolderId}: ${filePath}`);
       scheduleBatchForFolder(subFolderId, filePath);
     }
   };
