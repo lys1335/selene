@@ -486,7 +486,7 @@ function bundleGgmlBackends(realBin, libexecOutDir, libOutDir, requiredLibs) {
         try {
             const otoolOut = execFileSync('otool', ['-L', soPath], { encoding: 'utf-8' });
             for (const line of otoolOut.split('\n')) {
-                const absMatch = line.match(/\s+(\/opt\/homebrew\/[^\s]+\.dylib)/);
+                const absMatch = line.match(/\s+(\/(?:opt\/homebrew|usr\/local)\/[^\s]+\.dylib)/);
                 if (absMatch && fs.existsSync(absMatch[1])) {
                     extraDeps.add(absMatch[1]);
                 }
@@ -536,7 +536,7 @@ function bundleGgmlBackends(realBin, libexecOutDir, libOutDir, requiredLibs) {
                     continue;
                 }
 
-                const absMatch = line.match(/\s+(\/opt\/homebrew\/[^\s]+\.dylib)/);
+                const absMatch = line.match(/\s+(\/(?:opt\/homebrew|usr\/local)\/[^\s]+\.dylib)/);
                 if (absMatch) {
                     const oldRef = absMatch[1];
                     const libName = path.basename(oldRef);
@@ -582,7 +582,8 @@ function getRequiredDylibs(binaryPath) {
 
         // Handle absolute Homebrew paths (e.g. /opt/homebrew/opt/ggml/lib/libggml.0.dylib)
         // These appear when ggml is a separate Homebrew formula (whisper.cpp >= v1.7.x)
-        const absMatch = line.match(/\s+(\/opt\/homebrew\/[^\s]+\.dylib)/);
+        // Matches both Apple Silicon (/opt/homebrew/) and Intel Mac (/usr/local/) prefixes
+        const absMatch = line.match(/\s+(\/(?:opt\/homebrew|usr\/local)\/[^\s]+\.dylib)/);
         if (absMatch) {
             const libPath = absMatch[1];
             if (!fs.existsSync(libPath)) {
@@ -604,7 +605,7 @@ function rewriteMacDylibPaths(targetPath, requiredLibs, isMainBinary) {
     const refs = otoolOutput
         .split('\n')
         .map((line) => {
-            const m = line.match(/\s+(@rpath\/\S+)/) || line.match(/\s+(\/opt\/homebrew\/[^\s]+\.dylib)/);
+            const m = line.match(/\s+(@rpath\/\S+)/) || line.match(/\s+(\/(?:opt\/homebrew|usr\/local)\/[^\s]+\.dylib)/);
             return m ? m[1] : null;
         })
         .filter(Boolean);
