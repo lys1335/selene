@@ -2,7 +2,7 @@
  * Web Browse Module
  *
  * Session-based web browsing with secondary LLM synthesis.
- * Replaces the old pattern of fetchWebpage → embed → docsSearch.
+ * Replaces the old pattern of fetchWebpage → embed → search.
  *
  * Key features:
  * - Session-scoped content storage (not in permanent embeddings)

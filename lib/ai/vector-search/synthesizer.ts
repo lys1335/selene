@@ -405,7 +405,7 @@ Returns the file content with line numbers.`,
         if (!validPath) {
           return {
             status: "success",
-            text: "File not found in Knowledge Base or synced folders. Use the Read tool to read files from the filesystem directly.",
+            text: "File not found in synced folders. Use the Read tool to read files from the filesystem directly.",
           };
         }
 

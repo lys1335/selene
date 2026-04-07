@@ -6,10 +6,7 @@ import { isPathAllowed, resolveWorkspaceAwarePaths } from "@/lib/ai/filesystem";
 // Mock dependencies
 vi.mock("fs/promises");
 vi.mock("@/lib/ai/filesystem");
-vi.mock("@/lib/db/queries", () => ({
-  findAgentDocumentByName: vi.fn(),
-  getAgentDocumentChunksByDocumentId: vi.fn(),
-}));
+vi.mock("@/lib/db/queries", () => ({}));
 vi.mock("better-sqlite3", () => ({
   default: vi.fn().mockReturnValue({}),
 }));

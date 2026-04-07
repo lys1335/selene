@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, type ReactNode } from "react";
+import { useState, useCallback, useMemo, type ReactNode } from "react";
 import {
   VectorSyncContext,
   useVectorSyncStatusInternal,
@@ -33,7 +33,7 @@ export function VectorSyncProvider({ children }: VectorSyncProviderProps) {
     }
   }, [refresh]);
 
-  const contextValue: VectorSyncContextType = {
+  const contextValue: VectorSyncContextType = useMemo(() => ({
     status,
     isLoading,
     error,
@@ -41,7 +41,7 @@ export function VectorSyncProvider({ children }: VectorSyncProviderProps) {
     setIsExpanded,
     refresh,
     cancelSync,
-  };
+  }), [status, isLoading, error, isExpanded, setIsExpanded, refresh, cancelSync]);
 
   return (
     <VectorSyncContext.Provider value={contextValue}>

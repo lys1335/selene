@@ -6,14 +6,12 @@ import { ComputerGraphic } from "../computer-graphic";
 import { TerminalPrompt, TerminalBlock } from "@/components/ui/terminal-prompt";
 import { useReducedMotion } from "../hooks/use-reduced-motion";
 import { ToolBadge } from "@/components/ui/tool-badge";
-import { Wrench, FileText, CheckCircle2, Loader2, Plug } from "lucide-react";
+import { Wrench, CheckCircle2, Loader2, Plug } from "lucide-react";
 import type { AgentIdentity } from "./identity-page";
-import type { UploadedDocument } from "./file-upload-area";
 import { useTranslations } from "next-intl";
 
 /** Tool translation keys for preview - maps tool ID to capabilities.tools key */
 const TOOL_TRANSLATION_KEYS: Record<string, string> = {
-  docsSearch: "docsSearch",
   vectorSearch: "vectorSearch",
   generateImageFlux2: "generateImageFlux2",
   generateImageWan22: "generateImageWan22",
@@ -30,7 +28,6 @@ const TOOL_TRANSLATION_KEYS: Record<string, string> = {
 interface PreviewPageProps {
   identity: AgentIdentity;
   enabledTools: string[];
-  documents: UploadedDocument[];
   onConfirm: () => void;
   onBack: () => void;
   isSubmitting?: boolean;
@@ -41,7 +38,6 @@ interface PreviewPageProps {
 export function PreviewPage({
   identity,
   enabledTools,
-  documents,
   onConfirm,
   onBack,
   isSubmitting = false,
@@ -143,39 +139,6 @@ export function PreviewPage({
                 </div>
               </TerminalBlock>
 
-              {/* Knowledge Base */}
-              <TerminalBlock title={t("knowledgeBase")}>
-                <div className="space-y-2 text-sm">
-                  {documents.length > 0 ? (
-                    <>
-                      <div className="flex items-center gap-2 text-terminal-amber font-semibold">
-                        <FileText className="w-4 h-4" />
-                        {documents.length === 1
-                          ? t("documentsAttached", { count: documents.length })
-                          : t("documentsAttachedPlural", { count: documents.length })}
-                      </div>
-                      <div className="space-y-1">
-                        {documents.slice(0, 3).map((doc) => (
-                          <div key={doc.id} className="text-terminal-text/70 truncate pl-6">
-                            • {doc.title || doc.originalFilename}
-                          </div>
-                        ))}
-                        {documents.length > 3 && (
-                          <div className="text-terminal-text/50 italic pl-6">
-                            {t("moreDocuments", { count: documents.length - 3 })}
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-terminal-text/50 italic flex items-center gap-2">
-                      <FileText className="w-4 h-4" />
-                      {t("noDocuments")}
-                    </div>
-                  )}
-                </div>
-              </TerminalBlock>
-
               {/* MCP Tools */}
               {enabledMcpServers.length > 0 && (
                 <TerminalBlock title={t("mcpTools")}>
@@ -211,10 +174,6 @@ export function PreviewPage({
                   <div className="flex items-center gap-2">
                     <Wrench className="w-4 h-4 text-terminal-muted/80" />
                     {t("toolsEnabled", { count: enabledTools.length })}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-terminal-muted/80" />
-                    {t("documentsCount", { count: documents.length })}
                   </div>
                   {enabledMcpServers.length > 0 && (
                     <div className="flex items-center gap-2">

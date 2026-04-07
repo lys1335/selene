@@ -29,7 +29,6 @@ type RegistryToolCatalogItem = {
  * Shared base catalog for character picker and creation wizard capabilities.
  */
 export const CHARACTER_TOOL_CATALOG: CharacterToolCatalogItem[] = [
-  { id: "docsSearch", category: "knowledge" },
   { id: "vectorSearch", category: "knowledge", dependencies: ["syncedFolders", "embeddings", "vectorDbEnabled"] },
   { id: "readFile", category: "knowledge", dependencies: ["syncedFolders"] },
   { id: "editFile", category: "knowledge", dependencies: ["syncedFolders"] },
@@ -41,6 +40,7 @@ export const CHARACTER_TOOL_CATALOG: CharacterToolCatalogItem[] = [
   { id: "firecrawlCrawl", category: "search", dependencies: ["webScraper"] },
   { id: "describeImage", category: "analysis" },
   { id: "showProductImages", category: "utility" },
+  { id: "bash", category: "utility", dependencies: ["syncedFolders"] },
   { id: "executeCommand", category: "utility", dependencies: ["syncedFolders"] },
   { id: "scheduleTask", category: "scheduling" },
   { id: "skill", category: "utility" },

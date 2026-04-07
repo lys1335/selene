@@ -57,7 +57,7 @@ Run shell commands with a single shell string.
 - Commands still run only within synced folders/worktrees
 - Removal commands and path traversal are blocked
 - Prefer dedicated file/search tools when they are a better fit`,
-      loading: { deferLoading: true },
+      loading: { alwaysLoad: true },
       requiresSession: true,
     } satisfies ToolMetadata,
     ({ sessionId, characterId, onExecuteCommandProgress }) =>
@@ -309,7 +309,7 @@ Schedule future tasks (cron/interval/once). Task runs with agent's full context 
         "copy skill", "archive skill", "skill by id", "skill by name",
       ],
       shortDescription: "Unified skill tool: list, inspect, run, create, patch, replace, metadata, copy, archive",
-      loading: { deferLoading: true },
+      loading: { alwaysLoad: true },
       requiresSession: true,
     } satisfies ToolMetadata,
     ({ sessionId, userId, characterId }) =>
@@ -344,7 +344,7 @@ Save memories when the user says "remember that...", "memorize this", "note for 
 - Pick the best category or omit to default to domain_knowledge
 - Categories: visual_preferences, communication_style, workflow_patterns, domain_knowledge, business_rules
 - Memories are immediately active in all future conversations`,
-      loading: { deferLoading: true },
+      loading: { alwaysLoad: true },
       requiresSession: true,
     } satisfies ToolMetadata,
     ({ sessionId, characterId }) =>
@@ -430,7 +430,7 @@ Creates or updates a visible task plan. First call creates; subsequent calls upd
 Example: \`{ "steps": [{"id": "step_abc", "status": "completed"}], "mode": "merge" }\`
 
 **Constraints:** Max 20 steps. Only 1 step can be "in_progress" at a time. Use returned step ids for merge updates.`,
-      loading: { alwaysLoad: true },
+      loading: { deferLoading: true },
       requiresSession: true,
     } satisfies ToolMetadata,
     ({ sessionId }) => createUpdatePlanTool({ sessionId: sessionId || "UNSCOPED" })
@@ -562,7 +562,7 @@ ${getSceneGuideSummary()}
       ],
       shortDescription:
         "Ask the user interactive questions with selectable options and wait for their response",
-      loading: { alwaysLoad: true },
+      loading: { deferLoading: true },
       requiresSession: true,
     } satisfies ToolMetadata,
     ({ sessionId }) =>

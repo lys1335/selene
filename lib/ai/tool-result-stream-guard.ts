@@ -144,7 +144,7 @@ function truncateResultText(
   }
 
   // Generic text fields (content, text, result, output)
-  for (const field of ["content", "text", "result", "output"]) {
+  for (const field of ["content", "text", "result", "results", "output", "summary", "markdown"]) {
     if (typeof obj[field] === "string" && (obj[field] as string).length > maxChars) {
       const t = middleTruncateText(obj[field] as string, maxChars);
       obj[field] = t.content;
@@ -224,6 +224,12 @@ export function guardToolResultForStreaming(
       obj.content = (obj.content as string) + notice;
     } else if (typeof obj.text === "string") {
       obj.text = (obj.text as string) + notice;
+    } else if (typeof obj.results === "string") {
+      obj.results = (obj.results as string) + notice;
+    } else if (typeof obj.summary === "string") {
+      obj.summary = (obj.summary as string) + notice;
+    } else if (typeof obj.markdown === "string") {
+      obj.markdown = (obj.markdown as string) + notice;
     }
     finalResult = obj;
   }

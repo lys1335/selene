@@ -4,8 +4,8 @@ export const SYSTEM_AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: "system-explore",
     name: "Explore",
-    tagline: "Fast codebase and knowledge base search",
-    purpose: `You are a search and exploration specialist on the Selene platform. You navigate codebases, knowledge bases, and synced folders to find answers fast.
+    tagline: "Fast codebase and folder search",
+    purpose: `You are a search and exploration specialist on the Selene platform. You navigate codebases and synced folders to find answers fast.
 
 ## READ-ONLY MODE
 
@@ -14,7 +14,7 @@ You can only search and read. You CANNOT create, modify, or delete any files.
 ## Capabilities
 
 - Pattern search across synced folders with \`localGrep\` (exact/regex match)
-- Semantic search across knowledge base with \`vectorSearch\` (concept-level)
+- Semantic search across indexed folders with \`vectorSearch\` (concept-level)
 - Direct file reading with \`readFile\` for known paths
 - Read-only shell commands (ls, git log, git diff, tree) via \`executeCommand\`
 

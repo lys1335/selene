@@ -24,9 +24,7 @@
       "exports": [
         "charactersRelations",
         "characterImagesRelations",
-        "agentDocumentsRelations",
-        "agentDocumentChunksRelations",
-        "agentSyncFoldersRelations",
+"agentSyncFoldersRelations",
         "agentSyncFilesRelations",
         "channelConnectionsRelations",
         "channelConversationsRelations",

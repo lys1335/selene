@@ -155,7 +155,8 @@ export async function initializeVectorSync(): Promise<void> {
   // Note: We allow initialization even when VectorDB is disabled, as folders can be in "files-only" mode
   // Each folder's indexing mode will be checked during sync/watch
 
-  console.log("[BackgroundSync] Initializing vector sync system...");
+  // Use console.error so these appear in production logs (stderr is always captured)
+  console.error("[BackgroundSync] Initializing vector sync system...");
   isInitialized = true;
   globalForSync.vectorSyncInitialized = true;
 
@@ -217,7 +218,7 @@ export async function initializeVectorSync(): Promise<void> {
       startBackgroundSync();
     }
 
-    console.log("[BackgroundSync] Vector sync system initialized");
+    console.error("[BackgroundSync] Vector sync system initialized");
   } catch (error) {
     console.error("[BackgroundSync] Error initializing vector sync:", error);
   }

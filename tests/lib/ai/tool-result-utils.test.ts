@@ -166,28 +166,6 @@ describe("normalizeToolResultOutput - readFile exemption", () => {
     expect(limitToolOutput).toHaveBeenCalled();
   });
 
-  it("handles readFile with Knowledge Base source", () => {
-    const output = {
-      status: "success",
-      content: "PDF extracted text content...",
-      filePath: "document.pdf",
-      lineRange: "1-100",
-      totalLines: 100,
-      language: "text",
-      source: "knowledge_base",
-      documentTitle: "My Document",
-    };
-
-    const result = normalizeToolResultOutput("readFile", output, undefined, {
-      mode: "projection",
-    });
-
-    // Should not be truncated
-    const resultOutput = result.output as Record<string, unknown>;
-    expect(resultOutput.content).toBe("PDF extracted text content...");
-    expect(resultOutput.source).toBe("knowledge_base");
-  });
-
   it("handles readFile error results without modification", () => {
     const output = {
       status: "error",

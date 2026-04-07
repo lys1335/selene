@@ -1,8 +1,8 @@
 import Database from "better-sqlite3";
 
 /**
- * Initialize character-related tables: characters, character_images, agent_documents,
- * agent_document_chunks, agent_sync_folders, agent_sync_files.
+ * Initialize character-related tables: characters, character_images,
+ * agent_sync_folders, agent_sync_files.
  */
 export function initCharacterTablesWith(sqlite: Database.Database): void {
   // Characters table
@@ -50,73 +50,6 @@ export function initCharacterTablesWith(sqlite: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
-
-  // Agent documents table
-  sqlite.exec(`
-	    CREATE TABLE IF NOT EXISTS agent_documents (
-	      id TEXT PRIMARY KEY,
-	      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-	      character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-	      original_filename TEXT NOT NULL,
-	      content_type TEXT NOT NULL,
-	      extension TEXT,
-	      storage_path TEXT NOT NULL,
-	      size_bytes INTEGER,
-	      title TEXT,
-	      description TEXT,
-	      page_count INTEGER,
-	      source_type TEXT,
-	      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'ready', 'failed')),
-	      tags TEXT NOT NULL DEFAULT '[]',
-	      metadata TEXT NOT NULL DEFAULT '{}',
-	      embedding_model TEXT,
-	      last_indexed_at TEXT,
-	      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-	      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-	    )
-	  `);
-
-  // Migration: Add error_message column to agent_documents if it doesn't exist
-  try {
-    sqlite.exec(`ALTER TABLE agent_documents ADD COLUMN error_message TEXT`);
-    console.log("[SQLite Migration] Added error_message column to agent_documents");
-  } catch {
-    // Column already exists, ignore error
-  }
-
-  // Agent document chunks table
-  sqlite.exec(`
-	    CREATE TABLE IF NOT EXISTS agent_document_chunks (
-	      id TEXT PRIMARY KEY,
-	      document_id TEXT NOT NULL REFERENCES agent_documents(id) ON DELETE CASCADE,
-	      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-	      character_id TEXT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
-	      chunk_index INTEGER NOT NULL,
-	      text TEXT NOT NULL,
-	      token_count INTEGER,
-	      embedding TEXT,
-	      embedding_model TEXT,
-	      embedding_dimensions INTEGER,
-	      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-	      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-	    )
-	  `);
-
-  // Indexes for agent documents and chunks
-  sqlite.exec(`
-	    CREATE INDEX IF NOT EXISTS idx_agent_documents_user_character
-	      ON agent_documents (user_id, character_id, created_at DESC)
-	  `);
-
-  sqlite.exec(`
-	    CREATE INDEX IF NOT EXISTS idx_agent_document_chunks_document
-	      ON agent_document_chunks (document_id, chunk_index)
-	  `);
-
-  sqlite.exec(`
-	    CREATE INDEX IF NOT EXISTS idx_agent_document_chunks_user_character
-	      ON agent_document_chunks (user_id, character_id)
-	  `);
 
   // Agent sync folders table (for LanceDB Vector Search)
   sqlite.exec(`
@@ -370,5 +303,16 @@ export function initCharacterTablesWith(sqlite: Database.Database): void {
     `);
   } catch (error) {
     console.warn("[SQLite Migration] Failed to backfill vector sync defaults:", error);
+  }
+
+  // Migration: Drop deprecated Knowledge Base tables (agent_document_chunks, agent_documents)
+  // These were replaced by the Sync Folders / LanceDB vector search system.
+  // Drop chunks first due to foreign key dependency on agent_documents.
+  try {
+    sqlite.exec(`DROP TABLE IF EXISTS agent_document_chunks`);
+    sqlite.exec(`DROP TABLE IF EXISTS agent_documents`);
+    console.log("[SQLite Migration] Dropped deprecated agent_documents and agent_document_chunks tables");
+  } catch (error) {
+    console.warn("[SQLite Migration] Failed to drop deprecated document tables:", error);
   }
 }

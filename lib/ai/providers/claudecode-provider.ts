@@ -568,7 +568,7 @@ function buildSystemPrompt(system: unknown): string | undefined {
 
 function buildPromptFromMessages(messages: unknown): string {
   if (!Array.isArray(messages)) {
-    return "USER: Continue.";
+    return "<human_turn>\nContinue.\n</human_turn>";
   }
 
   const lines: string[] = [];
@@ -578,11 +578,13 @@ function buildPromptFromMessages(messages: unknown): string {
       continue;
     }
 
-    const role = message.role === "assistant" ? "ASSISTANT" : "USER";
+    const isAssistant = message.role === "assistant";
+    const openTag = isAssistant ? "<assistant_turn>" : "<human_turn>";
+    const closeTag = isAssistant ? "</assistant_turn>" : "</human_turn>";
     const content = message.content;
 
     if (typeof content === "string" && content.trim().length > 0) {
-      lines.push(`${role}: ${content}`);
+      lines.push(`${openTag}\n${content}\n${closeTag}`);
       continue;
     }
 
@@ -604,13 +606,13 @@ function buildPromptFromMessages(messages: unknown): string {
       }
 
       if (fragments.length > 0) {
-        lines.push(`${role}: ${fragments.join("\n")}`);
+        lines.push(`${openTag}\n${fragments.join("\n")}\n${closeTag}`);
       }
     }
   }
 
   if (lines.length === 0) {
-    return "USER: Continue.";
+    return "<human_turn>\nContinue.\n</human_turn>";
   }
 
   return lines.join("\n\n");
@@ -656,11 +658,13 @@ async function* buildMultimodalSdkPrompt(
   for (const message of messages) {
     if (!isDictionary(message)) continue;
 
-    const role = message.role === "assistant" ? "ASSISTANT" : "USER";
+    const isAssistant = message.role === "assistant";
+    const openTag = isAssistant ? "<assistant_turn>" : "<human_turn>";
+    const closeTag = isAssistant ? "</assistant_turn>" : "</human_turn>";
     const content = message.content;
 
     if (typeof content === "string" && content.trim().length > 0) {
-      contentBlocks.push({ type: "text", text: `${role}: ${content}` });
+      contentBlocks.push({ type: "text", text: `${openTag}\n${content}\n${closeTag}` });
       continue;
     }
 
@@ -697,7 +701,7 @@ async function* buildMultimodalSdkPrompt(
       if (textFragments.length > 0) {
         contentBlocks.push({
           type: "text",
-          text: `${role}: ${textFragments.join("\n")}`,
+          text: `${openTag}\n${textFragments.join("\n")}\n${closeTag}`,
         });
       }
     }
@@ -1117,7 +1121,6 @@ function createStreamingClaudeCodeResponse(options: {
         let syntheticStreamLocalIndex = -1;
         let sawStreamTextThisTurn = false;
         const streamedToolUseIdsThisTurn = new Set<string>();
-        const streamedToolUseNamesThisTurn = new Set<string>();
         const streamLocalToGlobalIndex = new Map<number, number>();
         const openStreamLocalIndices = new Set<number>();
         /** Global indices that were already closed (force-closed or naturally stopped).
@@ -1280,7 +1283,6 @@ function createStreamingClaudeCodeResponse(options: {
           }
           sawStreamTextThisTurn = false;
           streamedToolUseIdsThisTurn.clear();
-          streamedToolUseNamesThisTurn.clear();
         };
 
         for await (const rawMessage of query) {
@@ -1390,7 +1392,6 @@ function createStreamingClaudeCodeResponse(options: {
                   });
                 }
                 streamedToolUseIdsThisTurn.add(toolUseId);
-                streamedToolUseNamesThisTurn.add(toolName);
               } else {
                 openStreamLocalIndices.delete(localIndex);
               }
@@ -1425,7 +1426,6 @@ function createStreamingClaudeCodeResponse(options: {
                     content_block: { type: "tool_use", id: toolUseId, name: toolName },
                   });
                   streamedToolUseIdsThisTurn.add(toolUseId);
-                  streamedToolUseNamesThisTurn.add(toolName);
                 }
               }
 
@@ -1515,9 +1515,12 @@ function createStreamingClaudeCodeResponse(options: {
                   if (!normalizedBlockName) {
                     continue;
                   }
-                  const duplicateById = streamedToolUseIdsThisTurn.has(block.id);
-                  const duplicateByName = streamedToolUseNamesThisTurn.has(normalizedBlockName);
-                  if (duplicateById || duplicateByName) {
+                  // Only deduplicate by unique tool-call ID. Name-based dedup
+                  // is unsafe: when multiple independent calls share a tool name
+                  // (e.g. 4 parallel Agent launches), the first streamed call adds
+                  // the name to the set, causing calls 2–N to be silently dropped
+                  // even though they were never streamed as deltas.
+                  if (streamedToolUseIdsThisTurn.has(block.id)) {
                     continue;
                   }
                   emitToolUseBlock(

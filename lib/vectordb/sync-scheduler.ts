@@ -319,9 +319,11 @@ async function getStaleFolders(maxAgeMs: number = 60 * 60 * 1000): Promise<strin
  * same directory reuse a single chokidar watcher via the shared registry.
  */
 export async function restartAllWatchers(): Promise<void> {
-  console.log("[SyncService] Restarting file watchers for synced folders...");
+  // Use console.error so these appear in production logs (stderr is always captured)
+  console.error("[SyncService] Restarting file watchers for synced folders...");
 
   const foldersToWatch = await getSyncedFoldersNeedingWatch();
+  console.error(`[SyncService] Found ${foldersToWatch.length} folders needing watchers`);
 
   // Group by resolved path to log sharing stats
   const byPath = new Map<string, typeof foldersToWatch>();
@@ -371,7 +373,7 @@ export async function restartAllWatchers(): Promise<void> {
     }
   }
 
-  console.log(
+  console.error(
     `[SyncService] Watcher restart complete: ${watchersCreated} new watcher(s), ` +
     `${subscribersAdded} shared subscriber(s), ${foldersToWatch.length} total folders`
   );

@@ -19,6 +19,7 @@ import { DEFAULT_IGNORE_PATTERNS, createIgnoreMatcher, createAggressiveIgnore } 
 import { taskRegistry } from "@/lib/background-tasks/registry";
 import { resolveChunkingOverrides, resolveFolderSyncBehavior, shouldRunForTrigger } from "./sync-mode-resolver";
 import type { TaskEvent } from "@/lib/background-tasks/types";
+import { notifyFolderChange } from "./folder-events";
 import {
   getMaxConcurrency,
   getOpenFileDescriptorCount,
@@ -98,6 +99,8 @@ const folderQueues = globalForWatchers.folderQueues;
 const deferredQueues = globalForWatchers.deferredQueues;
 const folderProcessors = globalForWatchers.folderProcessors;
 const folderSubscribers = globalForWatchers.folderSubscribers;
+// Track whether we've logged the first raw event per path (one-shot diagnostic)
+const rawEventLogged = new Set<string>();
 
 // Track which paths are using polling mode
 const pollingModePaths = new Set<string>();
@@ -193,8 +196,18 @@ async function teardownPathFatally(resolvedPath: string, errorMsg: string): Prom
 }
 
 // ---------------------------------------------------------------------------
-// Chat-run deferral (unchanged logic, per-character)
+// Chat-run deferral — time-bounded periodic flush instead of blocking
+//
+// File changes during active chat are collected in deferred queues and
+// flushed every DEFERRED_FLUSH_INTERVAL_MS, ensuring files get indexed
+// within seconds even during continuous chat sessions.
 // ---------------------------------------------------------------------------
+
+const DEFERRED_FLUSH_INTERVAL_MS = 5000; // flush deferred files every 5 seconds
+let deferredFlushTimer: ReturnType<typeof setInterval> | null = null;
+let flushInProgress = false;
+let flushStartedAt = 0;
+const FLUSH_TIMEOUT_MS = 30000; // reset stuck flush after 30s
 
 function seedActiveChatRuns(): void {
   activeChatRunsByCharacter.clear();
@@ -203,6 +216,33 @@ function seedActiveChatRuns(): void {
     if (!task.characterId) continue;
     const current = activeChatRunsByCharacter.get(task.characterId) ?? 0;
     activeChatRunsByCharacter.set(task.characterId, current + 1);
+  }
+}
+
+function startDeferredFlushTimer(): void {
+  if (deferredFlushTimer) return;
+  console.error(`[FileWatcher] Starting deferred flush timer (interval: ${DEFERRED_FLUSH_INTERVAL_MS}ms)`);
+  deferredFlushTimer = setInterval(() => {
+    // Count total deferred files across all queues
+    let totalDeferred = 0;
+    for (const deferred of deferredQueues.values()) {
+      totalDeferred += deferred.size;
+    }
+    if (totalDeferred > 0) {
+      console.error(`[FileWatcher] Flush timer tick: ${totalDeferred} deferred file(s) across ${deferredQueues.size} queues`);
+    }
+    void flushAllDeferredQueues();
+  }, DEFERRED_FLUSH_INTERVAL_MS);
+  // Don't prevent Node.js from exiting if stopAllWatchers isn't called
+  if (deferredFlushTimer && typeof deferredFlushTimer === "object" && "unref" in deferredFlushTimer) {
+    (deferredFlushTimer as NodeJS.Timeout).unref();
+  }
+}
+
+function stopDeferredFlushTimer(): void {
+  if (deferredFlushTimer) {
+    clearInterval(deferredFlushTimer);
+    deferredFlushTimer = null;
   }
 }
 
@@ -224,48 +264,69 @@ function initializeRegistryListener(): void {
     const next = Math.max(0, current - 1);
     if (next === 0) {
       activeChatRunsByCharacter.delete(event.task.characterId);
-      flushDeferredForCharacter(event.task.characterId);
+      // Immediate flush when chat ends (no need to wait for timer)
+      void flushAllDeferredQueues();
     } else {
       activeChatRunsByCharacter.set(event.task.characterId, next);
     }
   });
 
+  // Start the periodic flush timer for time-bounded deferral
+  startDeferredFlushTimer();
+
   registryListenerInitialized = true;
 }
 
-function shouldDeferIndexing(characterId: string): boolean {
+function isChatActive(characterId: string): boolean {
   return (activeChatRunsByCharacter.get(characterId) ?? 0) > 0;
 }
 
-function flushDeferredForCharacter(characterId: string): void {
-  if (shouldDeferIndexing(characterId)) {
-    return;
+/**
+ * Flush ALL deferred queues regardless of chat state.
+ * Called periodically (every 5s) and on chat completion.
+ * Guarded against concurrent execution.
+ */
+async function flushAllDeferredQueues(): Promise<void> {
+  if (flushInProgress) {
+    // Safety: reset stuck flush after timeout
+    if (flushStartedAt > 0 && Date.now() - flushStartedAt > FLUSH_TIMEOUT_MS) {
+      console.error(`[FileWatcher] Flush stuck for ${Math.round((Date.now() - flushStartedAt) / 1000)}s, force-resetting`);
+      flushInProgress = false;
+    } else {
+      console.error(`[FileWatcher] Flush already in progress (${Math.round((Date.now() - flushStartedAt) / 1000)}s), skipping`);
+      return;
+    }
   }
-  for (const [folderId, processor] of folderProcessors.entries()) {
-    if (processor.characterId !== characterId) continue;
-    void flushDeferredForFolder(folderId);
-  }
-}
+  flushInProgress = true;
+  flushStartedAt = Date.now();
+  let flushedCount = 0;
+  try {
+    for (const [folderId, processor] of folderProcessors.entries()) {
+      try {
+        const deferred = deferredQueues.get(folderId);
+        const queue = folderQueues.get(folderId);
+        if (!deferred || !queue || deferred.size === 0) continue;
 
-async function flushDeferredForFolder(folderId: string): Promise<void> {
-  const deferred = deferredQueues.get(folderId);
-  const processor = folderProcessors.get(folderId);
-  const queue = folderQueues.get(folderId);
-  if (!deferred || !processor || !queue || deferred.size === 0) {
-    return;
-  }
-  if (shouldDeferIndexing(processor.characterId)) {
-    return;
-  }
+        for (const filePath of deferred) {
+          queue.add(filePath);
+        }
+        const count = deferred.size;
+        deferred.clear();
+        flushedCount += count;
 
-  for (const filePath of deferred) {
-    queue.add(filePath);
+        console.error(`[FileWatcher] Periodic flush: ${count} deferred file(s) for ${processor.folderPath}`);
+        await processor.processBatch();
+      } catch (err) {
+        console.error(`[FileWatcher] Error flushing deferred queue for folder ${folderId}:`, err);
+      }
+    }
+  } finally {
+    flushInProgress = false;
+    flushStartedAt = 0;
+    if (flushedCount > 0) {
+      console.error(`[FileWatcher] Flush complete (${flushedCount} files)`);
+    }
   }
-  const count = deferred.size;
-  deferred.clear();
-
-  console.log(`[FileWatcher] Flushing ${count} deferred file(s) for ${processor.folderPath}`);
-  await processor.processBatch();
 }
 
 // ---------------------------------------------------------------------------
@@ -276,19 +337,8 @@ function scheduleBatchForFolder(folderId: string, filePath: string): void {
   const processor = folderProcessors.get(folderId);
   if (!processor) return;
 
-  if (shouldDeferIndexing(processor.characterId)) {
-    const deferred = deferredQueues.get(folderId);
-    if (deferred && !deferred.has(filePath)) {
-      deferred.add(filePath);
-      if (deferred.size === 1) {
-        console.log(
-          `[FileWatcher] Deferring indexing while chat run is active for ${processor.folderPath}`
-        );
-      }
-    }
-    return;
-  }
-
+  // Process immediately regardless of chat state.
+  // Chat and file indexing are independent — no reason to defer.
   const queue = folderQueues.get(folderId);
   if (!queue) return;
 
@@ -370,7 +420,7 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
   const existingOwner = getWatcherOwner(folderPath);
   if (existingOwner && existingOwner !== folderId && pathWatchers.has(resolvedPath)) {
     const subscriberCount = getSubscriberCount(folderPath);
-    console.log(
+    console.error(
       `[FileWatcher] Path ${folderPath} already watched by ${existingOwner}, ` +
       `added ${folderId} as subscriber #${subscriberCount} (shared watcher)`
     );
@@ -384,7 +434,9 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
   // --- 5. This folder will own the watcher for this path ---
   setWatcherOwner(folderPath, folderId);
 
-  console.log(`[FileWatcher] Starting watch for folder: ${folderPath} (owner: ${folderId})`);
+  // Use console.error for critical lifecycle messages so they appear in production
+  // logs (stderr is always captured; stdout may be filtered by log level).
+  console.error(`[FileWatcher] Starting watch for folder: ${folderPath} (owner: ${folderId})`);
 
   if (folderPath === process.cwd()) {
     console.warn(
@@ -420,16 +472,25 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
   // --- 7. Create chokidar watcher ---
   const aggressiveIgnore = createAggressiveIgnore(mergedExcludePatterns, folderPath, includeExtensions);
 
-  const isProjectRoot = process.platform !== "win32" && await isProjectRootDirectory(folderPath);
+  // On macOS, Node.js fs.watch() uses native FSEvents through libuv — no need
+  // for polling even on large project roots.  Only force polling on Linux where
+  // inotify has per-user watch limits that large codebases can exhaust.
+  const isLinux = process.platform === "linux";
+  const isProjectRoot = isLinux && await isProjectRootDirectory(folderPath);
   const forcedPolling = pollingModePaths.has(resolvedPath);
   const usePolling = isProjectRoot || forcedPolling || configForcePolling === true;
 
   if (usePolling) {
-    console.log(
+    console.error(
       `[FileWatcher] Using polling mode for large codebase: ${folderPath} ` +
       `(prevents file descriptor exhaustion)`
     );
   }
+
+  console.error(
+    `[FileWatcher] Creating chokidar watcher: polling=${usePolling}, recursive=${recursive}, ` +
+    `path=${folderPath}`
+  );
 
   const watcher = chokidar.watch(folderPath, {
     persistent: true,
@@ -445,20 +506,52 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
     binaryInterval: usePolling ? 5000 : undefined,
   });
 
+  // --- 7b. Confirm watcher is operational ---
+  watcher.on("ready", () => {
+    console.error(
+      `[FileWatcher] ✓ Watcher READY for ${folderPath} (owner: ${folderId}, ` +
+      `polling: ${usePolling}, subscribers: ${getSubscribers(resolvedPath).length})`
+    );
+  });
+
+  // --- 7c. Raw event logging for diagnostics ---
+  watcher.on("raw", (event: string, path: string) => {
+    // Only log the first few raw events to confirm the watcher is live
+    if (!rawEventLogged.has(resolvedPath)) {
+      rawEventLogged.add(resolvedPath);
+      console.error(`[FileWatcher] First raw event for ${folderPath}: ${event} ${path}`);
+    }
+  });
+
   // --- 8. Fan-out event handlers ---
   // These handlers broadcast to ALL subscriber folders for this path.
 
   const handleFileChange = (filePath: string) => {
+    // Skip directory-level events (polling mode fires these but they have no extension)
+    // Only process actual file paths
+    const ext = extname(filePath).slice(1).toLowerCase();
+    if (!ext) {
+      console.error(`[FileWatcher] Skipping directory-level event: ${filePath}`);
+      return;
+    }
+
     const subscribers = getSubscribers(resolvedPath);
+    console.error(`[FileWatcher] File change detected: ${filePath} (ext=${ext}, subscribers=${subscribers.length})`);
     for (const subFolderId of subscribers) {
       const sub = folderSubscribers.get(subFolderId);
       if (!sub) continue;
 
       // Apply per-subscriber filtering
-      if (sub.shouldIgnore(filePath)) continue;
-      const ext = extname(filePath).slice(1).toLowerCase();
-      if (sub.normalizedExts.length > 0 && !sub.normalizedExts.includes(ext)) continue;
+      if (sub.shouldIgnore(filePath)) {
+        console.error(`[FileWatcher] Ignored by pattern: ${filePath} (folder: ${subFolderId})`);
+        continue;
+      }
+      if (sub.normalizedExts.length > 0 && !sub.normalizedExts.includes(ext)) {
+        console.error(`[FileWatcher] Filtered by extension: ${filePath} ext=${ext} not in [${sub.normalizedExts.slice(0, 5).join(",")}...] (folder: ${subFolderId})`);
+        continue;
+      }
 
+      console.error(`[FileWatcher] Scheduling batch for folder ${subFolderId}: ${filePath}`);
       scheduleBatchForFolder(subFolderId, filePath);
     }
   };
@@ -506,7 +599,7 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
           }
 
           await db.delete(agentSyncFiles).where(eq(agentSyncFiles.id, fileRecord.id));
-          console.log(`[FileWatcher] Removed ${pointIds.length} vectors for deleted file: ${filePath} (folder: ${subFolderId})`);
+          console.error(`[FileWatcher] Removed ${pointIds.length} vectors for deleted file: ${filePath} (folder: ${subFolderId})`);
         }
       } catch (error) {
         console.error(`[FileWatcher] Error removing file ${filePath} for folder ${subFolderId}:`, error);
@@ -582,7 +675,7 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
         );
 
         setTimeout(async () => {
-          console.log(
+          console.error(
             `[FileWatcher] Restarting watcher for ${folderPath} in polling mode ` +
             `(attempt ${retryCount}, ${affectedFolderIds.length} subscriber(s))...`
           );
@@ -616,6 +709,10 @@ export async function startWatching(config: WatcherConfig): Promise<void> {
     });
 
   pathWatchers.set(resolvedPath, watcher);
+  console.error(
+    `[FileWatcher] Watcher stored for ${folderPath}. ` +
+    `Total active path watchers: ${pathWatchers.size}, subscribers: ${folderSubscribers.size}`
+  );
 
   // Watcher started successfully — reset EMFILE retry state
   emfileRetryCounts.delete(resolvedPath);
@@ -655,8 +752,9 @@ function createBatchProcessor(
     const filesToProcess = Array.from(queue);
     queue.clear();
     folderTimers.delete(folderId);
+    const batchStartTime = Date.now();
 
-    console.log(`[FileWatcher] Processing batch of ${filesToProcess.length} files for ${folderPath} (folder: ${folderId})`);
+    console.error(`[FileWatcher] Processing batch of ${filesToProcess.length} files for ${folderPath} (folder: ${folderId})`);
 
     const [folder] = await db
       .select()
@@ -694,7 +792,7 @@ function createBatchProcessor(
     }
 
     if (!shouldRunForTrigger(behavior, "triggered")) {
-      console.log(`[FileWatcher] Folder ${folderId} ignores trigger runs in ${behavior.syncMode} mode`);
+      console.error(`[FileWatcher] Folder ${folderId} ignores trigger runs in ${behavior.syncMode} mode`);
       activeBatchProcessing.delete(folderId);
       return;
     }
@@ -702,9 +800,11 @@ function createBatchProcessor(
     const shouldCreateEmbeddings = behavior.shouldCreateEmbeddings;
     const chunkingOverrides = resolveChunkingOverrides(behavior);
 
-    console.log(
+    console.error(
       `[FileWatcher] Folder indexing mode: ${folder.indexingMode}, sync mode: ${behavior.syncMode} (embeddings: ${shouldCreateEmbeddings})`
     );
+
+    let successCount = 0;
 
     try {
       await processWithConcurrency(filesToProcess, getMaxConcurrency(), async (filePath) => {
@@ -714,12 +814,12 @@ function createBatchProcessor(
           const { stat } = await import("fs/promises");
           const fileStat = await stat(filePath);
           if (fileStat.size > behavior.maxFileSizeBytes) {
-            console.log(`[FileWatcher] Skipping ${filePath}: exceeds max size ${behavior.maxFileSizeBytes}`);
+            console.error(`[FileWatcher] Skipping ${filePath}: exceeds max size ${behavior.maxFileSizeBytes}`);
             return;
           }
 
           if (shouldCreateEmbeddings) {
-            console.log(`[FileWatcher] Indexing changed file with embeddings: ${filePath}`);
+            console.error(`[FileWatcher] Indexing changed file with embeddings: ${filePath}`);
             await indexFileToVectorDB({
               characterId,
               filePath,
@@ -733,7 +833,7 @@ function createBatchProcessor(
                 : undefined,
             });
           } else {
-            console.log(`[FileWatcher] Tracking changed file (files-only mode): ${filePath}`);
+            console.error(`[FileWatcher] Tracking changed file (files-only mode): ${filePath}`);
 
             const { stat } = await import("fs/promises");
             const { createHash } = await import("crypto");
@@ -781,13 +881,31 @@ function createBatchProcessor(
               });
             }
           }
+          successCount++;
         } catch (error) {
           console.error(`[FileWatcher] Error processing file ${filePath}:`, error);
         }
       });
     } finally {
       activeBatchProcessing.delete(folderId);
-      console.log(`[FileWatcher] Batch processing complete for ${folderPath} (folder: ${folderId})`);
+      const elapsedMs = Date.now() - batchStartTime;
+      const failedCount = filesToProcess.length - successCount;
+      console.error(
+        `[FileWatcher] Batch processing complete for ${folderPath} (folder: ${folderId}, ` +
+        `${successCount}/${filesToProcess.length} files, ${failedCount > 0 ? `${failedCount} failed, ` : ""}${elapsedMs}ms)`
+      );
+
+      // Only emit notification if at least one file was processed
+      if (successCount > 0) {
+        notifyFolderChange(characterId, {
+          type: "file_watcher_sync",
+          folderId,
+          folderPath,
+          filesIndexed: successCount,
+          elapsedMs,
+          syncReason: "file_watcher",
+        });
+      }
 
       if (pendingBatchRun.get(folderId)) {
         pendingBatchRun.delete(folderId);
@@ -847,13 +965,13 @@ export async function stopWatching(folderId: string): Promise<void> {
     await safeClosePathWatcher(registeredPath);
     pollingModePaths.delete(registeredPath);
     permissionErrorCounts.delete(registeredPath);
-    console.log(`[FileWatcher] Stopped last watcher for path: ${registeredPath} (was folder: ${folderId})`);
+    console.error(`[FileWatcher] Stopped last watcher for path: ${registeredPath} (was folder: ${folderId})`);
   } else {
     // Other subscribers remain. The registry's unregisterFolder already
     // transferred ownership if this was the owner. Log the transfer.
     const newOwner = getWatcherOwner(registeredPath);
     const remainingCount = getSubscriberCount(registeredPath);
-    console.log(
+    console.error(
       `[FileWatcher] Removed subscriber ${folderId} from ${registeredPath}. ` +
       `${remainingCount} subscriber(s) remain, owner: ${newOwner}`
     );
@@ -864,6 +982,18 @@ export async function stopWatching(folderId: string): Promise<void> {
  * Stop all watchers and clear all state.
  */
 export async function stopAllWatchers(): Promise<void> {
+  // Stop the periodic deferred flush timer and reset initialization flag
+  stopDeferredFlushTimer();
+  registryListenerInitialized = false;
+  flushInProgress = false;
+  activeChatRunsByCharacter.clear();
+
+  // Clear any pending debounce timers
+  for (const timer of folderTimers.values()) {
+    clearTimeout(timer);
+  }
+  folderTimers.clear();
+
   // Close all chokidar instances
   for (const [resolvedPath, watcher] of pathWatchers.entries()) {
     try {
@@ -900,4 +1030,34 @@ function getWatchedFolders(): string[] {
  */
 export function isWatching(folderId: string): boolean {
   return folderSubscribers.has(folderId);
+}
+
+/**
+ * Get the number of deferred (queued but not yet indexed) files for a folder.
+ */
+export function getDeferredCount(folderId: string): number {
+  return deferredQueues.get(folderId)?.size ?? 0;
+}
+
+/**
+ * Get a health snapshot of the watcher system for diagnostics.
+ */
+export function getWatcherHealth(): {
+  activePathWatchers: number;
+  folderSubscribers: number;
+  totalDeferredFiles: number;
+  watchedPaths: string[];
+  subscriberFolderIds: string[];
+} {
+  let totalDeferred = 0;
+  for (const q of deferredQueues.values()) {
+    totalDeferred += q.size;
+  }
+  return {
+    activePathWatchers: pathWatchers.size,
+    folderSubscribers: folderSubscribers.size,
+    totalDeferredFiles: totalDeferred,
+    watchedPaths: Array.from(pathWatchers.keys()),
+    subscriberFolderIds: Array.from(folderSubscribers.keys()),
+  };
 }

@@ -6,11 +6,10 @@
 // compatibility with existing import sites.
 // ==========================================================================
 
-// Docs tools
+// Retrieve full content tool (for truncated content access)
 export {
-  createDocsSearchTool,
   createRetrieveFullContentTool,
-} from "@/lib/ai/tools/docs-tools";
+} from "@/lib/ai/tools/retrieve-full-content-tool";
 
 // Image tools (edit, describe, flux2, wan22 imagen)
 export {

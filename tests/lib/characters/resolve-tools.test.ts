@@ -42,11 +42,11 @@ describe("resolveSeleneTemplateTools", () => {
   // Core tools — always enabled regardless of settings
   // =========================================================================
   describe("always-enabled core tools", () => {
-    it("should always include docsSearch, localGrep, readFile, editFile, writeFile, executeCommand", () => {
+    it("should always include localGrep, readFile, editFile, writeFile, bash", () => {
       const settings = buildSettings(); // No API keys, no vector DB
       const result = resolveSeleneTemplateTools(settings);
 
-      const coreTools = ["docsSearch", "localGrep", "readFile", "editFile", "writeFile", "executeCommand"];
+      const coreTools = ["localGrep", "readFile", "editFile", "writeFile", "bash"];
       for (const tool of coreTools) {
         expect(result.enabledTools).toContain(tool);
       }
@@ -54,12 +54,11 @@ describe("resolveSeleneTemplateTools", () => {
 
     it("should export always-enabled core tools constant", () => {
       expect(ALWAYS_ENABLED_TOOLS).toEqual([
-        "docsSearch",
         "localGrep",
         "readFile",
         "editFile",
         "writeFile",
-        "executeCommand",
+        "bash",
       ]);
     });
   });
@@ -73,12 +72,8 @@ describe("resolveSeleneTemplateTools", () => {
       const result = resolveSeleneTemplateTools(settings);
 
       const utilityTools = [
-        "calculator",
         "compactSession",
         "memorize",
-        "scheduleTask",
-        "sendMessageToChannel",
-        "showProductImages",
         "skill",
         "updatePlan",
         "delegateToSubagent",
@@ -197,18 +192,30 @@ describe("resolveSeleneTemplateTools", () => {
   // Workspace — pre-selected by default (not in UTILITY_TOOLS)
   // =========================================================================
   describe("workspace", () => {
-    it("should always include workspace as a pre-selected default tool", () => {
-      const settings = buildSettings();
+    it("should include workspace when devWorkspaceEnabled is true", () => {
+      const settings = buildSettings({ devWorkspaceEnabled: true } as Partial<AppSettings>);
       const result = resolveSeleneTemplateTools(settings);
       expect(result.enabledTools).toContain("workspace");
+      expect(result.warnings.find((w) => w.toolId === "workspace")).toBeUndefined();
     });
 
-    it("should NOT be in UTILITY_TOOLS (it is a pre-selected conditional tool)", () => {
+    it("should NOT include workspace when devWorkspaceEnabled is false", () => {
+      const settings = buildSettings({ devWorkspaceEnabled: false } as Partial<AppSettings>);
+      const result = resolveSeleneTemplateTools(settings);
+      expect(result.enabledTools).not.toContain("workspace");
+    });
+
+    it("should include a warning when workspace is disabled", () => {
+      const settings = buildSettings();
+      const result = resolveSeleneTemplateTools(settings);
+      const warning = result.warnings.find((w) => w.toolId === "workspace");
+      expect(warning).toBeDefined();
+      expect(warning!.settingsKeys).toContain("devWorkspaceEnabled");
+    });
+
+    it("should NOT be in UTILITY_TOOLS or DEFAULT_ENABLED_TOOLS (it is conditional)", () => {
       expect(UTILITY_TOOLS).not.toContain("workspace");
-    });
-
-    it("should be in DEFAULT_ENABLED_TOOLS for migration", () => {
-      expect(DEFAULT_ENABLED_TOOLS).toContain("workspace");
+      expect(DEFAULT_ENABLED_TOOLS).not.toContain("workspace");
     });
   });
 
@@ -234,22 +241,25 @@ describe("resolveSeleneTemplateTools", () => {
     it("should enable all conditional tools when everything is configured", () => {
       const settings = buildSettings({
         vectorDBEnabled: true,
+        devWorkspaceEnabled: true,
         tavilyApiKey: "tvly-test-key",
         firecrawlApiKey: "fc-test-key",
-      });
+      } as Partial<AppSettings>);
       const result = resolveSeleneTemplateTools(settings);
 
       expect(result.enabledTools).toContain("vectorSearch");
       expect(result.enabledTools).toContain("webSearch");
+      expect(result.enabledTools).toContain("workspace");
       expect(result.warnings).toHaveLength(0);
     });
 
     it("should have no warnings when all prerequisites are met", () => {
       const settings = buildSettings({
         vectorDBEnabled: true,
+        devWorkspaceEnabled: true,
         tavilyApiKey: "tvly-test-key",
         firecrawlApiKey: "fc-test-key",
-      });
+      } as Partial<AppSettings>);
       const result = resolveSeleneTemplateTools(settings);
       expect(result.warnings).toHaveLength(0);
     });
@@ -259,7 +269,7 @@ describe("resolveSeleneTemplateTools", () => {
   // Bare minimum configuration — only core and utility tools
   // =========================================================================
   describe("bare minimum configuration", () => {
-    it("should have 1 warning when nothing is configured (webSearch always on)", () => {
+    it("should have 2 warnings when nothing is configured (vectorSearch + workspace)", () => {
       const settings = buildSettings({
         vectorDBEnabled: false,
         tavilyApiKey: undefined,
@@ -268,9 +278,10 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      expect(result.warnings).toHaveLength(1);
+      expect(result.warnings).toHaveLength(2);
       expect(result.warnings.map((w) => w.toolId).sort()).toEqual([
         "vectorSearch",
+        "workspace",
       ]);
     });
 
@@ -283,11 +294,12 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 9 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace = 18 base
-      // + 1 ghostOs on macOS = 19
-      const expectedMin = 18 + GHOST_OS_TOOL_COUNT;
+      // 5 core + 5 utility + 1 always-on webSearch + 1 chromiumWorkspace = 12 base
+      // + 1 ghostOs on macOS = 13
+      const expectedMin = 12 + GHOST_OS_TOOL_COUNT;
       expect(result.enabledTools.length).toBeGreaterThanOrEqual(expectedMin);
       expect(result.enabledTools).not.toContain("vectorSearch");
+      expect(result.enabledTools).not.toContain("workspace");
       expect(result.enabledTools).toContain("webSearch");
     });
   });
@@ -299,14 +311,15 @@ describe("resolveSeleneTemplateTools", () => {
     it("should return correct tool count when all prerequisites are met", () => {
       const settings = buildSettings({
         vectorDBEnabled: true,
+        devWorkspaceEnabled: true,
         tavilyApiKey: "tvly-test-key",
         firecrawlApiKey: "fc-test-key",
-      });
+      } as Partial<AppSettings>);
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 9 utility + 1 workspace + 1 vectorSearch + 1 webSearch + 1 chromiumWorkspace = 19 base
-      // + 1 ghostOs on macOS = 20
-      const expected = 19 + GHOST_OS_TOOL_COUNT;
+      // 5 core + 5 utility + 1 workspace + 1 vectorSearch + 1 webSearch + 1 chromiumWorkspace = 14 base
+      // + 1 ghostOs on macOS = 15
+      const expected = 14 + GHOST_OS_TOOL_COUNT;
       expect(result.enabledTools).toHaveLength(expected);
       expect(result.enabledTools).toContain("workspace");
       if (isMacOS) {
@@ -325,9 +338,9 @@ describe("resolveSeleneTemplateTools", () => {
       });
       const result = resolveSeleneTemplateTools(settings);
 
-      // 6 core + 9 utility + 1 workspace + 1 always-on webSearch + 1 chromiumWorkspace = 18 base
-      // + 1 ghostOs on macOS = 19
-      const expected = 18 + GHOST_OS_TOOL_COUNT;
+      // 5 core + 5 utility + 1 always-on webSearch + 1 chromiumWorkspace = 12 base
+      // + 1 ghostOs on macOS = 13
+      const expected = 12 + GHOST_OS_TOOL_COUNT;
       expect(result.enabledTools).toHaveLength(expected);
     });
   });
@@ -366,13 +379,12 @@ describe("getExcludedSeleneTools", () => {
 });
 
 describe("DEFAULT_ENABLED_TOOLS", () => {
-  it("should include core and utility tools plus webSearch and pre-selected tools", () => {
+  it("should include core and utility tools plus webSearch and chromiumWorkspace", () => {
     expect(DEFAULT_ENABLED_TOOLS).toEqual([
       ...ALWAYS_ENABLED_TOOLS,
       ...UTILITY_TOOLS,
       "webSearch",
       "chromiumWorkspace",
-      "workspace",
     ]);
   });
 
@@ -391,7 +403,7 @@ describe("isToolAvailableForSelene", () => {
     const settings = buildSettings();
     expect(isToolAvailableForSelene("readFile", settings)).toBe(true);
     expect(isToolAvailableForSelene("editFile", settings)).toBe(true);
-    expect(isToolAvailableForSelene("calculator", settings)).toBe(true);
+    expect(isToolAvailableForSelene("bash", settings)).toBe(true);
   });
 
   it("should return false for vectorSearch when vectorDB is disabled", () => {

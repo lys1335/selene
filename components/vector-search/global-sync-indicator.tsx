@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Loader2Icon,
@@ -10,7 +10,6 @@ import {
   AlertCircleIcon,
   XIcon,
   DatabaseIcon,
-  FolderSyncIcon,
   Trash2Icon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -18,6 +17,7 @@ import { useVectorSyncStatus } from "@/hooks/use-vector-sync-status";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { resilientPost } from "@/lib/utils/resilient-fetch";
+import type { FileWatcherSyncEvent } from "@/app/api/sync-status/route";
 
 /**
  * GlobalSyncIndicator - Shows vector database sync status globally
@@ -25,16 +25,103 @@ import { resilientPost } from "@/lib/utils/resilient-fetch";
  * Displays a persistent indicator when sync is active.
  * Can be expanded to show detailed progress information.
  */
+// Toast for file-watcher sync notifications
+interface FileWatcherToast {
+  id: string;
+  filesIndexed: number;
+  folderName: string;
+  createdAt: number; // local Date.now() when the toast was created
+}
+
+const TOAST_DURATION_MS = 4000;
+
 export function GlobalSyncIndicator() {
   const { status, isLoading, isExpanded, setIsExpanded, refresh } = useVectorSyncStatus();
   const [isDismissed, setIsDismissed] = useState(false);
   const [isCleaningUp, setIsCleaningUp] = useState(false);
+  const [toasts, setToasts] = useState<FileWatcherToast[]>([]);
+  const seenEventsRef = useRef(new Set<string>());
+  const missedPollsRef = useRef(0); // tracks polls with events but no new toasts
   const t = useTranslations("syncIndicator");
 
-  // Reset dismissed state when a new sync starts
-  if (isDismissed && status.isSyncing) {
-    setIsDismissed(false);
-  }
+  // Derive effective dismissed state: dismiss is automatically invalidated when a new sync starts,
+  // avoiding both setState-during-render and one-frame flash issues
+  const effectivelyDismissed = isDismissed && !status.isSyncing;
+
+  // Track new file-watcher sync events and show toasts
+  useEffect(() => {
+    const events = status.recentFileWatcherSyncs ?? [];
+    // Group events by timestamp window (within 2s) to deduplicate cross-subscriber events
+    // The same file change fires for every folder subscriber — show 1 toast, not N
+    const unseenEvents: typeof events = [];
+    for (const event of events) {
+      const key = `${event.folderId}:${event.timestamp}`;
+      if (seenEventsRef.current.has(key)) continue;
+      seenEventsRef.current.add(key);
+      unseenEvents.push(event);
+    }
+
+    // Group by timestamp window (events within 2s of each other = same batch)
+    const groups = new Map<string, { filesIndexed: number; folderPath: string }>();
+    for (const event of unseenEvents) {
+      // Round timestamp to 2s window for grouping
+      const windowKey = `${Math.floor(event.timestamp / 2000)}`;
+      const existing = groups.get(windowKey);
+      if (existing) {
+        existing.filesIndexed = Math.max(existing.filesIndexed, event.filesIndexed);
+      } else {
+        groups.set(windowKey, {
+          filesIndexed: event.filesIndexed,
+          folderPath: event.folderPath || "",
+        });
+      }
+    }
+
+    const newToasts: FileWatcherToast[] = [];
+    for (const [windowKey, group] of groups) {
+      const folderName = group.folderPath?.split(/[/\\]/).pop() || "folder";
+      newToasts.push({
+        id: windowKey,
+        filesIndexed: group.filesIndexed,
+        folderName,
+        createdAt: Date.now(),
+      });
+    }
+
+    if (newToasts.length > 0) {
+      setToasts(prev => [...prev, ...newToasts]);
+      missedPollsRef.current = 0;
+    } else if (events.length > 0) {
+      // Events exist but all were already "seen" — the useEffect may not be
+      // re-firing due to reference stability.  After 3 consecutive polls with
+      // no new toasts, force-clear the seen set so the next pass picks them up.
+      missedPollsRef.current += 1;
+      if (missedPollsRef.current >= 3) {
+        seenEventsRef.current = new Set();
+        missedPollsRef.current = 0;
+      }
+    } else {
+      missedPollsRef.current = 0;
+    }
+
+    // Prune old dedup keys (keep last 100)
+    if (seenEventsRef.current.size > 100) {
+      const keys = Array.from(seenEventsRef.current);
+      seenEventsRef.current = new Set(keys.slice(-50));
+    }
+  }, [status.recentFileWatcherSyncs]);
+
+  // Auto-dismiss toasts — schedule one timer for the oldest toast's expiry
+  useEffect(() => {
+    if (toasts.length === 0) return;
+    const oldest = Math.min(...toasts.map(t => t.createdAt));
+    const remaining = TOAST_DURATION_MS - (Date.now() - oldest);
+    const delay = Math.max(remaining, 0);
+    const timer = setTimeout(() => {
+      setToasts(prev => prev.filter(t => Date.now() - t.createdAt < TOAST_DURATION_MS));
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [toasts]);
 
   const handleCleanup = useCallback(async () => {
     setIsCleaningUp(true);
@@ -56,8 +143,11 @@ export function GlobalSyncIndicator() {
     }
   }, [refresh]);
 
-  // Don't show if not enabled, not syncing, or dismissed
-  if (!status.isEnabled || (!status.isSyncing && status.pendingSyncs.length === 0) || isDismissed) {
+  // Show file-watcher toasts even when not syncing (they're transient notifications)
+  const hasToasts = toasts.length > 0;
+
+  // Don't show if not enabled, not syncing, and no toasts, or dismissed
+  if (!status.isEnabled || ((!status.isSyncing && status.pendingSyncs.length === 0) && !hasToasts) || (effectivelyDismissed && !hasToasts)) {
     return null;
   }
 
@@ -69,8 +159,38 @@ export function GlobalSyncIndicator() {
   const primarySync = status.activeSyncs[0] || status.pendingSyncs[0];
   const folderName = primarySync?.displayName || primarySync?.folderPath?.split(/[/\\]/).pop() || "Unknown";
 
+  // If only toasts (no active sync), show just the toasts
+  const showMainIndicator = status.isSyncing || status.pendingSyncs.length > 0;
+
   return (
     <AnimatePresence>
+      {/* File-watcher sync toasts */}
+      {toasts.map((toast, i) => (
+        <motion.div
+          key={toast.id}
+          layout
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -20, opacity: 0 }}
+          transition={{ type: "spring", damping: 25, stiffness: 500 }}
+          className={cn(
+            "fixed left-4 z-50",
+            "bg-terminal-cream border border-terminal-green/30 rounded-lg shadow-md",
+            "font-mono text-xs px-3 py-2 flex items-center gap-2"
+          )}
+          style={{ bottom: `${(showMainIndicator ? 64 : 16) + i * 40}px` }}
+        >
+          <CheckCircleIcon className="w-3.5 h-3.5 text-terminal-green flex-shrink-0" />
+          <span className="text-terminal-dark">
+            {toast.filesIndexed} {toast.filesIndexed === 1 ? "file" : "files"} reindexed
+          </span>
+          <span className="text-terminal-muted">
+            {toast.folderName}
+          </span>
+        </motion.div>
+      ))}
+
+      {showMainIndicator && (
       <motion.div
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -95,8 +215,9 @@ export function GlobalSyncIndicator() {
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <Loader2Icon className="w-4 h-4 text-terminal-green animate-spin flex-shrink-0" />
             <span className="text-terminal-dark truncate">
-              {t("syncing")}
-              {totalActive > 1 && ` (${totalActive})`}
+              {status.totalFolders > 1
+                ? `${t("syncing")} · ${status.foldersComplete} / ${status.totalFolders}`
+                : t("syncing") + (totalActive > 1 ? ` (${totalActive})` : "")}
             </span>
           </div>
           <div className="flex items-center gap-1">
@@ -180,6 +301,7 @@ export function GlobalSyncIndicator() {
           )}
         </AnimatePresence>
       </motion.div>
+      )}
     </AnimatePresence>
   );
 }
@@ -192,7 +314,11 @@ interface SyncFolderItemProps {
     folderPath: string;
     fileCount: number | null;
     chunkCount: number | null;
+    totalFiles: number | null;
+    progress: number | null;
     lastError: string | null;
+    isWatching?: boolean;
+    deferredCount?: number;
   };
   status: "syncing" | "pending" | "error";
 }
@@ -200,6 +326,7 @@ interface SyncFolderItemProps {
 function SyncFolderItem({ sync, status }: SyncFolderItemProps) {
   const t = useTranslations("syncIndicator");
   const folderName = sync.displayName || sync.folderPath?.split(/[/\\]/).pop() || "Unknown";
+  const progressPct = sync.progress !== null ? Math.round(sync.progress * 100) : null;
 
   return (
     <div className="pt-2 first:pt-2">
@@ -223,16 +350,45 @@ function SyncFolderItem({ sync, status }: SyncFolderItemProps) {
                 ({sync.characterName})
               </span>
             )}
+            {status === "syncing" && progressPct !== null && (
+              <span className="text-xs text-terminal-green ml-auto flex-shrink-0">
+                {progressPct}%
+              </span>
+            )}
           </div>
-          {status === "syncing" && sync.fileCount !== null && (
-            <div className="text-xs text-terminal-muted">
-              {sync.fileCount} {t("filesIndexed")}
-              {sync.chunkCount !== null && ` • ${sync.chunkCount} ${t("chunks")}`}
-            </div>
+          {status === "syncing" && (
+            <>
+              {sync.progress !== null && (
+                <div
+                  className="mt-1 h-1 w-full rounded-full bg-terminal-border/30 overflow-hidden"
+                  role="progressbar"
+                  aria-valuenow={progressPct ?? 0}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={`Sync progress: ${progressPct}%`}
+                >
+                  <div
+                    className="h-full bg-terminal-green rounded-full transition-all duration-500 ease-out"
+                    style={{ width: `${progressPct ?? 0}%` }}
+                  />
+                </div>
+              )}
+              {sync.fileCount !== null && (
+                <div className="text-xs text-terminal-muted mt-0.5">
+                  {sync.fileCount}{sync.totalFiles ? ` / ${sync.totalFiles}` : ""} {t("filesIndexed")}
+                  {sync.chunkCount !== null && ` · ${sync.chunkCount} ${t("chunks")}`}
+                </div>
+              )}
+            </>
           )}
           {status === "error" && sync.lastError && (
             <div className="text-xs text-destructive truncate" title={sync.lastError}>
               {sync.lastError}
+            </div>
+          )}
+          {sync.deferredCount != null && sync.deferredCount > 0 && (
+            <div className="text-xs text-amber-600 mt-0.5">
+              {sync.deferredCount} deferred
             </div>
           )}
         </div>

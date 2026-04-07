@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -36,7 +36,8 @@ import { FolderSyncAddForm } from "./folder-sync-add-form";
 export function FolderSyncManager({ characterId, className, compact = false }: FolderSyncManagerProps) {
   const t = useTranslations("folderSync");
   const [folders, setFolders] = useState<SyncFolder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [syncingFolderId, setSyncingFolderId] = useState<string | null>(null);
@@ -76,9 +77,13 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
   const [newChunkOverlapOverride, setNewChunkOverlapOverride] = useState("");
   const [newReindexPolicy, setNewReindexPolicy] = useState<ReindexPolicy>("never");
 
-  const loadFolders = useCallback(async () => {
+  const loadFolders = useCallback(async (isBackground = false) => {
     try {
-      setLoading(true);
+      if (!isBackground) {
+        setInitialLoading(true);
+      } else {
+        setIsRefreshing(true);
+      }
       const { data, error } = await resilientFetch<{ folders?: SyncFolder[]; error?: string }>(
         `/api/vector-sync?characterId=${characterId}`
       );
@@ -88,7 +93,8 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
     } catch (err) {
       setError(err instanceof Error ? err.message : t("errorLoadFolders"));
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
+      setIsRefreshing(false);
     }
   }, [characterId]);
 
@@ -96,16 +102,18 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
     loadFolders();
   }, [loadFolders]);
 
-  // Poll every 2 seconds while any folder is actively syncing
+  // Stable boolean — only changes when syncing state actually transitions
+  const hasSyncing = useMemo(() => folders.some((f) => f.status === "syncing"), [folders]);
+
+  // Poll every 5 seconds while any folder is actively syncing (background refresh — no loading flicker)
   useEffect(() => {
-    const hasSyncing = folders.some((f) => f.status === "syncing");
     if (!hasSyncing) return;
 
     const interval = setInterval(() => {
-      loadFolders();
-    }, 2000);
+      loadFolders(true);
+    }, 5000);
     return () => clearInterval(interval);
-  }, [folders, loadFolders]);
+  }, [hasSyncing, loadFolders]);
 
   const handleCancelSync = async (folderId: string) => {
     try {
@@ -252,7 +260,7 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
       }
 
       resetForm();
-      await loadFolders();
+      await loadFolders(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("errorAddFolder"));
     } finally {
@@ -301,7 +309,7 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
         `/api/vector-sync?folderId=${folderId}`
       );
       if (error) throw new Error(error);
-      await loadFolders();
+      await loadFolders(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("errorRemoveFolder"));
     } finally {
@@ -331,7 +339,7 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
       if (error || data?.failed) {
         setError(t("errorRemoveStaleFolders", { failed: data?.failed ?? 0, total: folders.filter(isStalePath).length }));
       }
-      await loadFolders();
+      await loadFolders(true);
     } finally {
       setRemovingFolderId(null);
     }
@@ -366,7 +374,7 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
         setError(t("errorRemoveWorkspaceFolders", { failed: failures.length, total: workspaceFolders.length }));
       }
 
-      await loadFolders();
+      await loadFolders(true);
     } finally {
       setRemovingFolderId(null);
     }
@@ -385,7 +393,7 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
         action: "sync", folderId,
       });
       if (error) throw new Error(error);
-      await loadFolders();
+      await loadFolders(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("errorSyncFolder"));
     } finally {
@@ -399,7 +407,7 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
         action: "set-primary", folderId, characterId,
       });
       if (error) throw new Error(error);
-      await loadFolders();
+      await loadFolders(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("errorSetPrimary"));
     }
@@ -414,7 +422,7 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
         ...updates,
       });
       if (error) throw new Error(error);
-      await loadFolders();
+      await loadFolders(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : t("errorUpdateSettings"));
     } finally {
@@ -445,7 +453,7 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
         folderId: folder.id,
       });
       if (error) throw new Error(error);
-      await loadFolders();
+      await loadFolders(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : (isPaused ? t("errorResume") : t("errorPause")));
     } finally {
@@ -453,7 +461,7 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
     }
   };
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className={cn("flex items-center justify-center p-4", className)}>
         <Loader2Icon className="w-5 h-5 animate-spin text-terminal-green" />
@@ -463,7 +471,13 @@ export function FolderSyncManager({ characterId, className, compact = false }: F
   }
 
   return (
-    <div className={cn("space-y-4 min-w-0 overflow-x-hidden", className)}>
+    <div className={cn("space-y-4 min-w-0 overflow-x-hidden relative", className)}>
+      {/* Background refresh indicator — subtle, no unmount */}
+      {isRefreshing && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-terminal-green/20 overflow-hidden z-10">
+          <div className="h-full w-1/3 bg-terminal-green animate-shimmer" />
+        </div>
+      )}
       {!compact && folders.length > 0 && (
         <div className="rounded border border-terminal-border bg-terminal-cream/30 p-3">
           <p className="font-mono text-xs text-terminal-muted">

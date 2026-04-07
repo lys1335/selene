@@ -505,9 +505,7 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
       );
     }
 
-    const sourceLabel = readResult.source === "knowledge_base"
-      ? ` (Knowledge Base${readResult.documentTitle ? `: ${readResult.documentTitle}` : ""})`
-      : "";
+    const sourceLabel = "";
     const lineInfo = readResult.lineRange
       ? tResults("lineRange", { range: readResult.lineRange }) + (readResult.totalLines ? ` ${tResults("ofTotalLines", { total: readResult.totalLines })}` : "")
       : readResult.totalLines

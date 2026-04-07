@@ -117,7 +117,7 @@ function extractPrimaryText(output: unknown): string | null {
   }
 
   // Check common text fields in priority order
-  const textFields = ["content", "text", "result", "output"];
+  const textFields = ["content", "text", "result", "results", "output", "summary", "markdown"];
   for (const field of textFields) {
     if (typeof obj[field] === "string") {
       return obj[field] as string;
@@ -135,7 +135,7 @@ function extractPrimaryText(output: unknown): string | null {
  * Apply token limit to tool output
  *
  * If output exceeds limit:
- * - Truncates to maxTokens (~10,000 tokens = ~40,000 chars)
+ * - Truncates to maxTokens (default ~3,000 tokens = ~12,000 chars)
  * - Stores full content for retrieval (if sessionId provided)
  * - Adds clear truncation notice with retrieval instructions
  *
@@ -197,7 +197,17 @@ export function limitToolOutput(
     }
 
     // Fallback: serialize object outputs to avoid "[object Object]"
-    const serialized = typeof output === "string" ? output : JSON.stringify(output);
+    const serialized =
+      typeof output === "string"
+        ? output
+        : (() => {
+            try {
+              const s = JSON.stringify(output);
+              return typeof s === "string" ? s : String(output);
+            } catch {
+              return String(output);
+            }
+          })();
     return {
       limited: false,
       output: serialized,
@@ -216,13 +226,43 @@ export function limitToolOutput(
   const primaryText = extractPrimaryText(output);
 
   if (!primaryText) {
-    // Can't extract text - return as-is (rare case for binary/unknown formats)
-    console.warn(`[OutputLimiter] Could not extract text from ${toolName} output`);
+    // Can't extract a known text field — serialize the whole object and truncate it.
+    console.warn(`[OutputLimiter] Could not extract text from ${toolName} output, truncating serialized form`);
+    const serialized =
+      typeof output === "string"
+        ? output
+        : (() => {
+            try {
+              const s = JSON.stringify(output);
+              return typeof s === "string" ? s : String(output);
+            } catch {
+              return String(output);
+            }
+          })();
+
+    const middleTruncated = middleTruncateText(serialized, maxChars);
+    const truncatedText = middleTruncated.content;
+
+    let contentId: string | undefined;
+    if (sessionId) {
+      contentId = storeFullContent(sessionId, `${toolName} output`, serialized, truncatedText.length);
+    }
+
+    const truncationNotice = generateTruncationMarker({
+      originalLength: serialized.length,
+      truncatedLength: truncatedText.length,
+      estimatedTokens,
+      maxTokens,
+      id: contentId,
+      idType: "contentId",
+    });
+
     return {
-      limited: false,
-      output: output as string,
-      originalLength: 0,
-      truncatedLength: 0,
+      limited: true,
+      output: truncatedText + truncationNotice,
+      originalLength: serialized.length,
+      truncatedLength: truncatedText.length,
+      contentId,
       estimatedTokens,
     };
   }

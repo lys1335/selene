@@ -9,7 +9,6 @@ import {
   SuccessPage,
   IdentityPage,
   CapabilitiesPage,
-  KnowledgeBasePage,
   VectorSearchPage,
   EmbeddingSetupPage,
   MCPToolsPage,
@@ -25,7 +24,6 @@ import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useWizardNavigation, wizardPageVariants } from "@/lib/hooks/use-wizard-navigation";
 import type { AgentIdentity } from "./terminal-pages/identity-page";
-import type { UploadedDocument } from "./terminal-pages/file-upload-area";
 import type { CatalogSkill } from "@/lib/skills/catalog/types";
 
 type WizardPage =
@@ -33,7 +31,6 @@ type WizardPage =
   | "identity"
   | "capabilities"
   | "mcpTools"
-  | "knowledge"
   | "embeddingSetup"
   | "vectorSearch"
   | "loading"
@@ -41,12 +38,11 @@ type WizardPage =
   | "success";
 
 /** Pages that should show the progress bar */
-const PROGRESS_PAGES: WizardPage[] = ["identity", "knowledge", "embeddingSetup", "vectorSearch", "capabilities", "mcpTools", "preview"];
+const PROGRESS_PAGES: WizardPage[] = ["identity", "embeddingSetup", "vectorSearch", "capabilities", "mcpTools", "preview"];
 
 interface WizardState {
   identity: AgentIdentity;
   enabledTools: string[];
-  documents: UploadedDocument[];
   createdCharacterId: string | null;
   enabledMcpServers: string[];
   enabledMcpTools: string[];
@@ -60,7 +56,6 @@ interface WizardState {
 const initialState: WizardState = {
   identity: { name: "", tagline: "", purpose: "" },
   enabledTools: DEFAULT_ENABLED_TOOLS,
-  documents: [],
   createdCharacterId: null,
   enabledMcpServers: [],
   enabledMcpTools: [],
@@ -110,7 +105,7 @@ export function TerminalWizard() {
     });
     return baseSteps.map((step) => ({
       ...step,
-      label: t(step.id as "intro" | "identity" | "capabilities" | "mcpTools" | "knowledge" | "embeddingSetup" | "vectorSearch" | "preview"),
+      label: t(step.id as "intro" | "identity" | "capabilities" | "mcpTools" | "embeddingSetup" | "vectorSearch" | "preview"),
     }));
   }, [vectorDBEnabled, hasMcpServers, t]);
 
@@ -148,7 +143,7 @@ export function TerminalWizard() {
       }
 
       setDraftAgentId(data.character.id);
-      navigateTo("knowledge");
+      navigateTo("embeddingSetup");
     } catch (err) {
       setError(err instanceof Error ? err.message : tErr("createFailed"));
       navigateTo("identity", -1);
@@ -173,13 +168,6 @@ export function TerminalWizard() {
       enabledMcpTools: tools,
       mcpToolPreferences: preferences,
     }));
-  };
-
-  // Handle knowledge base submission
-  const handleKnowledgeSubmit = (documents: UploadedDocument[]) => {
-    setState((prev) => ({ ...prev, documents }));
-    // Navigate to embedding setup to configure semantic search
-    navigateTo("embeddingSetup");
   };
 
   // Handle vector search submission
@@ -406,15 +394,6 @@ export function TerminalWizard() {
                 onBack={() => navigateTo("capabilities", -1)}
               />
             )}
-            {currentPage === "knowledge" && draftAgentId && (
-              <KnowledgeBasePage
-                agentId={draftAgentId}
-                agentName={state.identity.name}
-                initialDocuments={state.documents}
-                onSubmit={handleKnowledgeSubmit}
-                onBack={() => navigateTo("identity", -1)}
-              />
-            )}
             {currentPage === "vectorSearch" && draftAgentId && (
               <VectorSearchPage
                 agentId={draftAgentId}
@@ -428,7 +407,7 @@ export function TerminalWizard() {
               <EmbeddingSetupPage
                 agentName={state.identity.name}
                 onSubmit={handleEmbeddingSetupSubmit}
-                onBack={() => navigateTo("knowledge", -1)}
+                onBack={() => navigateTo("identity", -1)}
                 onSkip={handleEmbeddingSetupSkip}
               />
             )}
@@ -447,7 +426,6 @@ export function TerminalWizard() {
               <PreviewPage
                 identity={state.identity}
                 enabledTools={state.enabledTools}
-                documents={state.documents}
                 enabledMcpServers={state.enabledMcpServers}
                 enabledMcpTools={state.enabledMcpTools}
                 onConfirm={handleFinalizeAgent}
