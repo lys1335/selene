@@ -181,7 +181,15 @@ export function sanitizeAssistantOutputText(
   options: { hasToolCallLikeParts?: boolean } = {}
 ): string {
   const systemMarkerPattern = /\[SYSTEM:\s*Tool\s+[^\]]+\]/gi;
-  return stripFakeToolCallJson(text.replace(systemMarkerPattern, ""), options);
+  let cleaned = text.replace(systemMarkerPattern, "");
+
+  // Strip role markers that leak when the model reproduces flattened conversation
+  // history. These appear as "USER: ..." or "ASSISTANT: ..." at the start of lines,
+  // or as XML turn delimiters from the structured prompt format.
+  cleaned = cleaned.replace(/^(USER|ASSISTANT):\s*/gm, "");
+  cleaned = cleaned.replace(/<\/?(?:human_turn|assistant_turn)>\s*/g, "");
+
+  return stripFakeToolCallJson(cleaned, options);
 }
 
 /**

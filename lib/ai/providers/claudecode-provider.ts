@@ -568,7 +568,7 @@ function buildSystemPrompt(system: unknown): string | undefined {
 
 function buildPromptFromMessages(messages: unknown): string {
   if (!Array.isArray(messages)) {
-    return "USER: Continue.";
+    return "<human_turn>\nContinue.\n</human_turn>";
   }
 
   const lines: string[] = [];
@@ -578,11 +578,13 @@ function buildPromptFromMessages(messages: unknown): string {
       continue;
     }
 
-    const role = message.role === "assistant" ? "ASSISTANT" : "USER";
+    const isAssistant = message.role === "assistant";
+    const openTag = isAssistant ? "<assistant_turn>" : "<human_turn>";
+    const closeTag = isAssistant ? "</assistant_turn>" : "</human_turn>";
     const content = message.content;
 
     if (typeof content === "string" && content.trim().length > 0) {
-      lines.push(`${role}: ${content}`);
+      lines.push(`${openTag}\n${content}\n${closeTag}`);
       continue;
     }
 
@@ -604,13 +606,13 @@ function buildPromptFromMessages(messages: unknown): string {
       }
 
       if (fragments.length > 0) {
-        lines.push(`${role}: ${fragments.join("\n")}`);
+        lines.push(`${openTag}\n${fragments.join("\n")}\n${closeTag}`);
       }
     }
   }
 
   if (lines.length === 0) {
-    return "USER: Continue.";
+    return "<human_turn>\nContinue.\n</human_turn>";
   }
 
   return lines.join("\n\n");
@@ -656,11 +658,13 @@ async function* buildMultimodalSdkPrompt(
   for (const message of messages) {
     if (!isDictionary(message)) continue;
 
-    const role = message.role === "assistant" ? "ASSISTANT" : "USER";
+    const isAssistant = message.role === "assistant";
+    const openTag = isAssistant ? "<assistant_turn>" : "<human_turn>";
+    const closeTag = isAssistant ? "</assistant_turn>" : "</human_turn>";
     const content = message.content;
 
     if (typeof content === "string" && content.trim().length > 0) {
-      contentBlocks.push({ type: "text", text: `${role}: ${content}` });
+      contentBlocks.push({ type: "text", text: `${openTag}\n${content}\n${closeTag}` });
       continue;
     }
 
@@ -697,7 +701,7 @@ async function* buildMultimodalSdkPrompt(
       if (textFragments.length > 0) {
         contentBlocks.push({
           type: "text",
-          text: `${role}: ${textFragments.join("\n")}`,
+          text: `${openTag}\n${textFragments.join("\n")}\n${closeTag}`,
         });
       }
     }
