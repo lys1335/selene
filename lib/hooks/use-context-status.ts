@@ -175,7 +175,12 @@ export function useContextStatus({
   // Refresh when model config changes (agent defaults, session overrides, etc.)
   useEffect(() => {
     if (!sessionId) return;
-    const handler = () => void fetchStatus();
+    const handler = () => {
+      // Invalidate cache so fetchStatus actually hits the API
+      // instead of returning stale data with the previous model.
+      statusCache.delete(sessionId);
+      void fetchStatus();
+    };
     window.addEventListener("seline:model-config-changed", handler);
     return () => window.removeEventListener("seline:model-config-changed", handler);
   }, [sessionId, fetchStatus]);
