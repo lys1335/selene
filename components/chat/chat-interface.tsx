@@ -44,6 +44,7 @@ import { ChatSidebarHeader, ScheduledRunBanner } from "@/components/chat/chat-in
 import { shouldReloadSessionFromTaskProgress, useBackgroundProcessing, useSessionManager } from "@/components/chat/chat-interface-hooks";
 import { ThemeChooserModal } from "@/components/theme/theme-chooser-modal";
 import { BrowserChatWorkspace } from "@/components/chat/browser-chat-workspace";
+import { DesignWorkspace } from "@/components/design";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
 import { useChatWorkspaceStore } from "@/lib/stores/chat-workspace-store";
 import type { ChatWorkspaceMode } from "@/lib/chat/workspace-mode";
@@ -1802,6 +1803,7 @@ export default function ChatInterface({
                         onClose={() => setIsDiffPanelOpen(false)}
                     />
                 )}
+                <DesignWorkspace sessionId={sessionId} />
                 <ThemeChooserModal open={showThemeChooser} onClose={handleThemeChooserClose} />
             </div>
         );
@@ -1866,6 +1868,7 @@ export default function ChatInterface({
                     onClose={() => setIsDiffPanelOpen(false)}
                 />
             )}
+            <DesignWorkspace sessionId={sessionId} />
             <ThemeChooserModal open={showThemeChooser} onClose={handleThemeChooserClose} />
         </Shell>
     );
