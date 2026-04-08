@@ -339,7 +339,7 @@ export const Composer: FC<{
   }, [composerTextForReward, syncRewardSuggestion]);
 
   // Voice recording
-  const { isRecordingVoice, isTranscribingVoice, handleVoiceInput, handleVoiceStart, handleVoiceStop, analyserNode, lastTranscriptRef, wasAiEnhancedRef } = useVoiceRecording({
+  const { isRecordingVoice, isTranscribingVoice, handleVoiceInput, handleVoiceStart, handleVoiceStop, analyserNode, lastTranscriptRef, wasAiEnhancedRef, lastTranscriptionFailedRef } = useVoiceRecording({
     sttEnabled,
     voicePostProcessing,
     voiceAudioCues,
@@ -354,25 +354,30 @@ export const Composer: FC<{
         return;
       }
 
-      // Simple textarea mode — insert at cursor with proper spacing
+      // Simple textarea mode — use functional updater to read latest state
+      // and avoid stale closure over inputValue (which caused message loss
+      // when a second transcription error wiped the composer).
       const textarea = inputRef.current;
-      const insertion = buildTranscriptInsertion({
-        currentValue: inputValue,
-        transcript: textToInsert,
-        selectionStart: textarea?.selectionStart ?? null,
-        selectionEnd: textarea?.selectionEnd ?? null,
-      });
+      const selStart = textarea?.selectionStart ?? null;
+      const selEnd = textarea?.selectionEnd ?? null;
 
-      if (insertion) {
-        setInputValue(insertion.nextValue);
-        updateCursorPosition(insertion.nextCursor);
-      } else {
-        // Fallback: append
-        setInputValue((prev) => {
-          if (!prev.trim()) return textToInsert;
-          return `${prev}${prev.endsWith(" ") ? "" : " "}${textToInsert}`;
+      setInputValue((prev) => {
+        const insertion = buildTranscriptInsertion({
+          currentValue: prev,
+          transcript: textToInsert,
+          selectionStart: selStart,
+          selectionEnd: selEnd,
         });
-      }
+
+        if (insertion) {
+          // Schedule cursor update after render
+          requestAnimationFrame(() => updateCursorPosition(insertion.nextCursor));
+          return insertion.nextValue;
+        }
+        // Fallback: append
+        if (!prev.trim()) return textToInsert;
+        return `${prev}${prev.endsWith(" ") ? "" : " "}${textToInsert}`;
+      });
     },
     onTranscriptInserted: () => {
       if (isEditorMode && tiptapRef.current) {
@@ -419,6 +424,7 @@ export const Composer: FC<{
   const captureSession = useCaptureSession({
     isRecordingVoice,
     isTranscribingVoice,
+    lastTranscriptionFailed: lastTranscriptionFailedRef.current,
     autoSendEnabled: quickCaptureAutoSend,
     autoSendDelay: quickCaptureAutoSendDelay,
     onSend: () => { void handleSubmit(); },
@@ -525,21 +531,22 @@ export const Composer: FC<{
         if (isEditorMode && tiptapRef.current) {
           tiptapRef.current.insertVoiceTranscript(transcript);
         } else {
+          // Use functional updater to avoid stale closure over inputValue
           const textarea = inputRef.current;
-          const insertion = buildTranscriptInsertion({
-            currentValue: inputValue,
-            transcript,
-            selectionStart: textarea?.selectionStart ?? null,
-            selectionEnd: textarea?.selectionEnd ?? null,
-          });
-          if (insertion) {
-            setInputValue(insertion.nextValue);
-          } else {
-            setInputValue((prev) => {
-              if (!prev.trim()) return transcript;
-              return `${prev}${prev.endsWith(" ") ? "" : " "}${transcript}`;
+          const selStart = textarea?.selectionStart ?? null;
+          const selEnd = textarea?.selectionEnd ?? null;
+
+          setInputValue((prev) => {
+            const insertion = buildTranscriptInsertion({
+              currentValue: prev,
+              transcript,
+              selectionStart: selStart,
+              selectionEnd: selEnd,
             });
-          }
+            if (insertion) return insertion.nextValue;
+            if (!prev.trim()) return transcript;
+            return `${prev}${prev.endsWith(" ") ? "" : " "}${transcript}`;
+          });
         }
       }
 

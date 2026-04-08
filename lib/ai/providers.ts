@@ -31,6 +31,7 @@ import {
   invalidateAntigravityAuthCache,
 } from "@/lib/auth/antigravity-auth";
 import { isCodexAuthenticated, ensureValidCodexToken } from "@/lib/auth/codex-auth";
+import { isKimiOAuthAuthenticated, ensureValidKimiToken, invalidateKimiAuthCache } from "@/lib/auth/kimi-auth";
 import { CODEX_MODEL_IDS } from "@/lib/auth/codex-models";
 import { KIMI_MODEL_IDS } from "@/lib/auth/kimi-models";
 import { MINIMAX_MODEL_IDS } from "@/lib/auth/minimax-models";
@@ -229,6 +230,15 @@ export async function ensureCodexTokenValid(): Promise<boolean> {
   return ensureValidCodexToken();
 }
 
+/**
+ * Ensure Kimi auth token is valid, refreshing if needed.
+ */
+export async function ensureKimiTokenValid(): Promise<boolean> {
+  invalidateSettingsCache();
+  invalidateKimiAuthCache();
+  return ensureValidKimiToken();
+}
+
 // ---- Provider instance getters -----------------------------------------------
 
 /**
@@ -354,9 +364,9 @@ function getProviderAvailabilityIssue(provider: LLMProvider): string | null {
   }
 
   if (provider === "kimi") {
-    return getKimiApiKey()
+    return (isKimiOAuthAuthenticated() || getKimiApiKey())
       ? null
-      : "Kimi selected but KIMI_API_KEY is not set";
+      : "Kimi selected but not authenticated and KIMI_API_KEY is not set";
   }
 
   if (provider === "minimax") {
@@ -546,10 +556,13 @@ export function getConfiguredProvider(): LLMProvider {
   }
 
   if (provider === "kimi") {
+    if (isKimiOAuthAuthenticated()) {
+      return "kimi";
+    }
     const apiKey = getKimiApiKey();
     if (!apiKey) {
       console.warn(
-        "[PROVIDERS] Kimi selected but KIMI_API_KEY is not set, falling back to anthropic"
+        "[PROVIDERS] Kimi selected but not authenticated and KIMI_API_KEY is not set, falling back to anthropic"
       );
       return "anthropic";
     }
@@ -666,9 +679,11 @@ export function getLanguageModelForProvider(
     }
 
     case "kimi": {
-      const apiKey = getKimiApiKey();
-      if (!apiKey) {
-        throw new Error("KIMI_API_KEY environment variable is not configured");
+      if (!isKimiOAuthAuthenticated()) {
+        const apiKey = getKimiApiKey();
+        if (!apiKey) {
+          throw new Error("Kimi authentication required. Please login via Settings or configure KIMI_API_KEY.");
+        }
       }
       return getKimiClient()(model);
     }
@@ -739,12 +754,11 @@ export function getModelByName(modelId: string): LanguageModel {
   }
 
   if (isKimiModel(modelId)) {
-    const apiKey = getKimiApiKey();
-    if (apiKey) {
+    if (isKimiOAuthAuthenticated() || getKimiApiKey()) {
       console.log(`[PROVIDERS] Using Kimi for model: ${modelId}`);
       return getKimiClient()(modelId);
     }
-    // Fall through to OpenRouter if no Kimi key
+    // Fall through to OpenRouter if no Kimi auth
   }
 
   if (isMiniMaxModel(modelId)) {

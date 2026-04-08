@@ -50,6 +50,8 @@ interface UseVoiceRecordingReturn {
   lastTranscriptRef: React.RefObject<string | null>;
   /** Whether the last transcript was AI-enhanced (post-processed) */
   wasAiEnhancedRef: React.RefObject<boolean>;
+  /** Whether the last transcription attempt failed (used by capture session to cancel auto-send) */
+  lastTranscriptionFailedRef: React.RefObject<boolean>;
 }
 
 export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRecordingReturn {
@@ -68,6 +70,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastTranscriptRef = useRef<string | null>(null);
   const wasAiEnhancedRef = useRef(false);
+  const lastTranscriptionFailedRef = useRef(false);
 
   const stopRecordingStream = useCallback(() => {
     if (recordingStreamRef.current) {
@@ -209,6 +212,14 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
           return;
         }
 
+        // Validate WebM EBML header to catch corrupted blobs before sending
+        if (mimeType.includes("webm") && audioBlob.size >= 4) {
+          const header = new Uint8Array(await audioBlob.slice(0, 4).arrayBuffer());
+          if (header[0] !== 0x1A || header[1] !== 0x45 || header[2] !== 0xDF || header[3] !== 0xA3) {
+            console.warn("[Voice] Invalid WebM EBML header detected, blob may be corrupted");
+          }
+        }
+
         setIsTranscribingVoice(true);
         try {
           const result = await transcribeRecordedSpeech({
@@ -224,8 +235,8 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
 
           // Store raw transcript for auto-learn comparison when user sends
           lastTranscriptRef.current = result.transcript;
-
           wasAiEnhancedRef.current = result.usedPostProcessing;
+          lastTranscriptionFailedRef.current = false;
 
           onTranscript({
             transcript: result.transcript,
@@ -235,6 +246,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
           });
           onTranscriptInserted?.();
         } catch (error) {
+          lastTranscriptionFailedRef.current = true;
           const errorMessage =
             error instanceof Error ? error.message : t("toast.transcriptionFailed");
           toast.error(errorMessage);
@@ -243,7 +255,11 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
         }
       };
 
-      recorder.start(250);
+      // No timeslice — collect a single complete blob on stop.
+      // Using timeslice (e.g. 250ms) causes Chromium's WebM muxer to emit
+      // chunks without proper EBML headers on subsequent recordings in the
+      // same session, leading to "Invalid file format" errors from Whisper.
+      recorder.start();
       playTone(880, 0.12);
       isRecordingRef.current = true;
       setIsRecordingVoice(true);
@@ -309,7 +325,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
     stopRecording();
   }, [stopRecording]);
 
-  return { isRecordingVoice, isTranscribingVoice, handleVoiceInput, handleVoiceStart, handleVoiceStop, analyserNode, lastTranscriptRef, wasAiEnhancedRef };
+  return { isRecordingVoice, isTranscribingVoice, handleVoiceInput, handleVoiceStart, handleVoiceStop, analyserNode, lastTranscriptRef, wasAiEnhancedRef, lastTranscriptionFailedRef };
 }
 
 // ---------------------------------------------------------------------------
@@ -556,7 +572,7 @@ function useSkillPickerState({
 
 interface UsePromptEnhancementOptions {
   inputValue: string;
-  setInputValue: (value: string) => void;
+  setInputValue: (value: string | ((previous: string) => string)) => void;
   characterId: string | undefined;
   sessionId?: string;
   /** Recent thread messages for conversation context */
@@ -653,9 +669,11 @@ export function usePromptEnhancement({
         return;
       }
 
-      if (data.success) {
-        setInputValue(data.enhancedPrompt!);
-        setEnhancedContext(data.enhancedPrompt!);
+      const enhancedPrompt = data.enhancedPrompt?.trim() ?? "";
+
+      if (data.success && enhancedPrompt) {
+        setInputValue(enhancedPrompt);
+        setEnhancedContext(enhancedPrompt);
         setEnhancementInfo({ filesFound: data.filesFound, chunksRetrieved: data.chunksRetrieved });
         const llmIndicator = data.usedLLM ? " (LLM)" : "";
         toast.success(
@@ -665,6 +683,9 @@ export function usePromptEnhancement({
             llmIndicator,
           })
         );
+      } else if (data.success) {
+        toast.error(data.error || t("enhance.failed"));
+        setEnhancedContext(null);
       } else {
         toast.info(data.skipReason || t("enhance.skipped"));
         setEnhancedContext(null);

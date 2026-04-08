@@ -29,6 +29,20 @@ export interface AppSettings {
     anthropicApiKey?: string;
     openrouterApiKey?: string;
     kimiApiKey?: string;      // For Moonshot Kimi models
+    // Kimi OAuth authentication (Kimi subscription via device flow)
+    kimiAuth?: {
+        isAuthenticated: boolean;
+        email?: string;
+        expiresAt?: number;
+        lastRefresh?: number;
+    };
+    kimiToken?: {
+        type: "oauth";
+        access_token: string;
+        refresh_token: string;
+        expires_at: number;
+    };
+    kimiDeviceId?: string;    // Persistent device ID for Kimi OAuth device flow
     minimaxApiKey?: string;   // For MiniMax models
     blackboxaiApiKey?: string; // For BlackBox AI models
     openaiApiKey?: string;    // For OpenAI Whisper STT, TTS, and other OpenAI-direct services
@@ -556,6 +570,8 @@ function updateEnvFromSettings(settings: AppSettings): void {
     if (settings.openrouterApiKey) {
         process.env.OPENROUTER_API_KEY = settings.openrouterApiKey;
     }
+    // Kimi: only set API key from explicit key, never from OAuth token
+    // (OAuth tokens are read directly via getKimiAccessToken() in the provider client)
     if (settings.kimiApiKey) {
         process.env.KIMI_API_KEY = settings.kimiApiKey;
     }
@@ -762,8 +778,8 @@ export function hasRequiredApiKeys(): boolean {
     if (settings.llmProvider === "codex" && !settings.codexAuth?.isAuthenticated) {
         return false;
     }
-    // Kimi requires an API key from Moonshot
-    if (settings.llmProvider === "kimi" && !settings.kimiApiKey) {
+    // Kimi requires OAuth authentication or an API key
+    if (settings.llmProvider === "kimi" && !settings.kimiAuth?.isAuthenticated && !settings.kimiApiKey) {
         return false;
     }
     // MiniMax requires an API key

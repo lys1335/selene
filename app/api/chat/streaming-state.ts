@@ -5,6 +5,7 @@ import {
   normalizeProvenance,
   type ContextProvenance,
 } from "@/lib/context-window/scoped-counting-contract";
+import { activeDelegations } from "@/lib/ai/tools/delegate-to-subagent-types";
 
 /**
  * Hard cap on accumulated argsText per tool call (100KB).
@@ -241,12 +242,36 @@ export function finalizeStreamingToolCalls(state: StreamingMessageState): boolea
 }
 
 /**
+ * Check if a tool call is an observe action for a delegation that is still running.
+ * Such tool calls should not be sealed as "dangling" since they are legitimately
+ * waiting for the delegation to complete.
+ */
+function isObserveForRunningDelegation(part: DBToolCallPart): boolean {
+  if (part.toolName !== "delegateToSubagent") return false;
+
+  const args = part.args as { action?: string; delegationId?: string } | undefined;
+  if (args?.action !== "observe") return false;
+
+  const delegationId = args?.delegationId;
+  if (!delegationId) return false;
+
+  const delegation = activeDelegations.get(delegationId);
+  // If delegation exists and is not settled, the observe call is still valid
+  return delegation !== undefined && !delegation.settled;
+}
+
+/**
  * Ensure every persisted tool-call has a corresponding tool-result.
  *
  * Some interruption/error paths can leave tool-call parts in input-* states
  * without a result, which causes repeated client-side sanitization and noisy
  * logs on every poll. This seals those calls with a synthetic output-error
  * result so history is internally consistent.
+ *
+ * NOTE: This function skips sealing observe calls for delegations that are
+ * still running. When parallel delegations are launched and the initiator
+ * calls observe() on multiple delegations, completing one should not seal
+ * the others as "dangling" — they are still legitimately waiting.
  */
 export function sealDanglingToolCalls(
   state: StreamingMessageState,
@@ -268,6 +293,14 @@ export function sealDanglingToolCalls(
     nextParts.push(part);
     if (part.type !== "tool-call") continue;
     if (!part.toolCallId || toolResultIds.has(part.toolCallId)) continue;
+
+    // Skip sealing observe calls for running delegations — they are still
+    // legitimately waiting for the delegation to complete. This prevents
+    // false "dangling" errors when parallel observe calls are in flight
+    // and one completes before the others.
+    if (isObserveForRunningDelegation(part)) {
+      continue;
+    }
 
     // Normalize unresolved tool call into a terminal state.
     if (!part.args) {

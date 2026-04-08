@@ -123,6 +123,10 @@
       "connecting": "Bağlanılıyor...",
       "signInOpenAI": "OpenAI ile giriş yap",
       "signInAnthropic": "Anthropic ile giriş yap",
+      "signInKimi": "Kimi ile giriş yap",
+      "kimiDeviceCodePrompt": "Bu kodu Kimi web sitesine girin:",
+      "kimiWaitingAuth": "Yetkilendirme bekleniyor...",
+      "kimiOpenLoginPage": "Kimi Giriş Sayfasını Aç",
       "claudecodeLoginHint": "Burada giriş yapmadan önce cihazınızda Claude Code'a giriş yaptığınızdan emin olun.",
       "apiKeySaved": "API Anahtarı kaydedildi!",
       "saving": "Kaydediliyor...",
@@ -138,7 +142,10 @@
         "failedSaveApiKey": "API anahtarı kaydedilemedi",
         "failedSaveProvider": "Sağlayıcı seçimi kaydedilemedi",
         "manualLoginPre": "Tarayıcı otomatik olarak açılmazsa şu adresi ziyaret edin",
-        "manualLoginPost": "ve aşağıdaki kodu yapıştırın."
+        "manualLoginPost": "ve aşağıdaki kodu yapıştırın.",
+        "deviceAuthTimedOut": "Cihaz yetkilendirmesi zaman aşımına uğradı. Lütfen tekrar deneyin.",
+        "deviceAuthInitFailed": "Cihaz yetkilendirmesi başlatılamadı",
+        "failedSaveOllama": "Ollama ayarları kaydedilemedi"
       },
       "ollama": {
         "baseUrlLabel": "Sunucu Adresi",
@@ -2334,7 +2341,9 @@
       "resetOnboardingFailed": "Başlangıç kurulumu sıfırlanamadı",
       "connectingToGoogle": "Google'a bağlanıyor...",
       "connectingToOpenAI": "OpenAI'ya bağlanıyor...",
-      "authUrlFailed": "Yetkilendirme URL'si alınamadı"
+      "authUrlFailed": "Yetkilendirme URL'si alınamadı",
+      "deviceAuthTimedOut": "Cihaz yetkilendirmesi zaman aşımına uğradı",
+      "deviceAuthInitFailed": "Cihaz yetkilendirmesi başlatılamadı"
     },
     "api": {
       "title": "LLM Sağlayıcısı",
@@ -2368,6 +2377,12 @@
         "claudecodeWarning": "Yalnızca kişisel kullanım — ticari kullanım için değil",
         "claudecodeLoginHint": "Burada giriş yapmadan önce cihazınızda Claude Code'a giriş yaptığınızdan emin olun.",
         "signInAnthropic": "Anthropic ile giriş yap",
+        "kimiTitle": "Kimi (Moonshot AI)",
+        "kimiDesc": "Aboneliğinizi kullanmak için Kimi hesabınızla giriş yapın",
+        "kimiConnected": "Kimi hesabı ile bağlandı",
+        "kimiDeviceCodePrompt": "Bu kodu Kimi web sitesine girin:",
+        "kimiOpenLoginPage": "Kimi Giriş Sayfasını Aç",
+        "signInKimi": "Kimi ile Giriş Yap",
         "authFlowTitle": "Kimlik Doğrulamayı Tamamla",
         "authStep1": "Anthropic kimlik doğrulama sayfası ile bir tarayıcı penceresi açıldı",
         "authStep2": "İstenirse Anthropic hesabınızla giriş yapın",

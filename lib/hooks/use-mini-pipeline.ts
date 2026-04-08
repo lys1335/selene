@@ -292,6 +292,14 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         const blob = new Blob(chunksRef.current, { type: mimeType });
         chunksRef.current = [];
 
+        // Validate WebM EBML header to catch corrupted blobs early
+        if (mimeType.includes("webm") && blob.size >= 4) {
+          const header = new Uint8Array(await blob.slice(0, 4).arrayBuffer());
+          if (header[0] !== 0x1A || header[1] !== 0x45 || header[2] !== 0xDF || header[3] !== 0xA3) {
+            console.warn("[Voice] Invalid WebM EBML header detected, blob may be corrupted");
+          }
+        }
+
         // Stop stream tracks now that recording is done
         if (streamRef.current) {
           streamRef.current.getTracks().forEach((t) => t.stop());
@@ -546,8 +554,10 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         return;
       }
 
-      // Request data every 250ms to avoid holding entire recording in memory
-      recorder.start(250);
+      // No timeslice — collect a single complete blob on stop.
+      // Using timeslice causes Chromium's WebM muxer to produce invalid
+      // headers on second recordings within the same session (Whisper 400).
+      recorder.start();
       setPhase("recording");
     } catch (err: unknown) {
       if (cancelledRef.current) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { ArrowLeft, ArrowRight, Loader2, CheckCircle2, AlertCircle, Wifi, WifiOff } from "lucide-react";
@@ -33,6 +33,20 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
     const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
     const [ollamaTestStatus, setOllamaTestStatus] = useState<"idle" | "testing" | "success" | "error">("idle");
 
+    // Kimi device flow state
+    const [kimiDeviceCode, setKimiDeviceCode] = useState<string | null>(null);
+    const [kimiUserCode, setKimiUserCode] = useState<string | null>(null);
+    const [kimiVerificationUrl, setKimiVerificationUrl] = useState<string | null>(null);
+    const [kimiPolling, setKimiPolling] = useState(false);
+    const kimiAbortRef = useRef(false);
+
+    // Cleanup Kimi polling on unmount
+    useEffect(() => {
+        return () => {
+            kimiAbortRef.current = true;
+        };
+    }, []);
+
     // Check if already authenticated for OAuth providers
     useEffect(() => {
         if (provider === "antigravity") {
@@ -41,6 +55,8 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             void checkOAuthAuth("/api/auth/codex");
         } else if (provider === "claudecode") {
             void checkOAuthAuth("/api/auth/claudecode", { forceRefresh: true });
+        } else if (provider === "kimi") {
+            void checkOAuthAuth("/api/auth/kimi");
         }
     }, [provider]);
 
@@ -101,7 +117,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                     ollamaBaseUrl: ollamaBaseUrl.replace(/\/?$/, "/v1"),
                 });
                 if (saveError) {
-                    throw new Error("Failed to save Ollama settings");
+                    throw new Error(t("errors.failedSaveOllama"));
                 }
                 invalidateSettingsCache();
                 setIsAuthenticated(true);
@@ -164,7 +180,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
 
             if (authError || !authData?.success || !authData?.url) {
                 popup?.close();
-                throw new Error(authData?.error || authError || "Failed to get authorization URL");
+                throw new Error(authData?.error || authError || t("errors.authFailed"));
             }
 
             if (isElectron && electronAPI?.shell?.openExternal) {
@@ -218,7 +234,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
 
         } catch (err) {
             console.error(`${config.logLabel} login failed:`, err);
-            setError(err instanceof Error ? err.message : "Authentication failed");
+            setError(err instanceof Error ? err.message : t("errors.authFailed"));
             cleanup();
         }
     };
@@ -256,7 +272,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             const authData = await authResponse.json();
 
             if (!authData.success) {
-                throw new Error(authData.error || "Failed to initialize authentication");
+                throw new Error(authData.error || t("errors.authFailed"));
             }
 
             if (authData.authenticated) {
@@ -289,7 +305,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             setLoading(false);
         } catch (err) {
             console.error("Claude Code login failed:", err);
-            setError(err instanceof Error ? err.message : "Authentication failed");
+            setError(err instanceof Error ? err.message : t("errors.authFailed"));
             setLoading(false);
         }
     };
@@ -307,7 +323,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             const data = await response.json();
 
             if (!data.success) {
-                throw new Error(data.error || "Claude Agent SDK is not authenticated yet");
+                throw new Error(data.error || t("errors.claudeCodeNotAuth"));
             }
 
             setIsAuthenticated(true);
@@ -315,15 +331,119 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             setClaudeCodePasteValue("");
         } catch (err) {
             console.error("Claude Code auth verification failed:", err);
-            setError(err instanceof Error ? err.message : "Code exchange failed");
+            setError(err instanceof Error ? err.message : t("errors.codeExchangeFailed"));
         } finally {
             setLoading(false);
         }
     };
 
+    const handleKimiDeviceLogin = async () => {
+        setLoading(true);
+        setError(null);
+        kimiAbortRef.current = false;
+
+        try {
+            // Initiate device authorization
+            const response = await fetch("/api/auth/kimi/device", { method: "POST" });
+            const data = await response.json();
+
+            if (!data.success) {
+                throw new Error(data.error || t("errors.deviceAuthInitFailed"));
+            }
+
+            const verificationUrl = data.verification_uri_complete || data.verification_uri;
+
+            setKimiDeviceCode(data.device_code);
+            setKimiUserCode(data.user_code);
+            setKimiVerificationUrl(verificationUrl || null);
+
+            // Open the verification URL
+            if (verificationUrl) {
+                const electronAPI = typeof window !== "undefined" && "electronAPI" in window
+                    ? (window as unknown as { electronAPI?: { isElectron?: boolean; shell?: { openExternal: (url: string) => Promise<void> } } }).electronAPI
+                    : undefined;
+
+                if (electronAPI?.isElectron && electronAPI?.shell?.openExternal) {
+                    await electronAPI.shell.openExternal(verificationUrl);
+                } else {
+                    window.open(verificationUrl, "_blank");
+                }
+            }
+
+            // Start polling
+            setKimiPolling(true);
+            setLoading(false);
+
+            let currentInterval = (data.interval || 5) * 1000;
+            const maxAttempts = Math.ceil((5 * 60 * 1000) / currentInterval); // 5 min timeout
+
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                if (kimiAbortRef.current) return;
+
+                await new Promise(resolve => setTimeout(resolve, currentInterval));
+
+                if (kimiAbortRef.current) return;
+
+                try {
+                    const pollResponse = await fetch("/api/auth/kimi/poll", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ device_code: data.device_code }),
+                    });
+                    const pollData = await pollResponse.json();
+
+                    if (kimiAbortRef.current) return;
+
+                    if (pollData.status === "success") {
+                        setIsAuthenticated(true);
+                        setKimiPolling(false);
+                        setKimiDeviceCode(null);
+                        return;
+                    }
+
+                    if (pollData.status === "slow_down") {
+                        currentInterval += 5000;
+                        continue;
+                    }
+
+                    if (pollData.status === "error") {
+                        throw new Error(pollData.error || t("errors.deviceAuthInitFailed"));
+                    }
+                    // status === "pending" — continue polling
+                } catch (pollErr) {
+                    console.error("Kimi device poll error:", pollErr);
+                    // Continue polling unless it's a real error
+                    if (pollErr instanceof Error && !pollErr.message.includes("pending")) {
+                        if (!kimiAbortRef.current) {
+                            setError(pollErr.message);
+                            setKimiPolling(false);
+                            setKimiDeviceCode(null);
+                        }
+                        return;
+                    }
+                }
+            }
+
+            // Timeout
+            if (!kimiAbortRef.current) {
+                setError(t("errors.deviceAuthTimedOut"));
+                setKimiPolling(false);
+                setKimiDeviceCode(null);
+            }
+        } catch (err) {
+            console.error("Kimi device login failed:", err);
+            if (!kimiAbortRef.current) {
+                setError(err instanceof Error ? err.message : t("errors.authFailed"));
+                setLoading(false);
+                setKimiPolling(false);
+                setKimiDeviceCode(null);
+            }
+        }
+    };
+
     const handleApiKeySubmit = async () => {
         if (!apiKey.trim()) {
-            setError("Please enter an API key");
+            setError(t("errors.enterApiKey"));
             return;
         }
 
@@ -339,7 +459,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             };
             const keyField = keyFieldMap[provider];
             if (!keyField) {
-                throw new Error("Invalid provider for API key");
+                throw new Error(t("errors.invalidProvider"));
             }
 
             const { error: saveError } = await resilientPut("/api/settings", {
@@ -348,13 +468,13 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
             });
 
             if (saveError) {
-                throw new Error("Failed to save API key");
+                throw new Error(t("errors.failedSaveApiKey"));
             }
 
             invalidateSettingsCache();
             setIsAuthenticated(true);
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Failed to save API key");
+            setError(err instanceof Error ? err.message : t("errors.failedSaveApiKey"));
         } finally {
             setLoading(false);
         }
@@ -366,7 +486,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
         });
 
         if (saveError) {
-            setError("Failed to save provider selection");
+            setError(t("errors.failedSaveProvider"));
             return false;
         }
 
@@ -460,7 +580,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                             </>
                         )}
                     </div>
-                ) : provider === "antigravity" || provider === "codex" || provider === "claudecode" ? (
+                ) : provider === "antigravity" || provider === "codex" || provider === "claudecode" || provider === "kimi" ? (
                     <div className="space-y-6 mt-8">
                         {isAuthenticated ? (
                             <motion.div
@@ -470,9 +590,35 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                             >
                                 <CheckCircle2 className="w-12 h-12 text-terminal-green mx-auto mb-4" />
                                 <p className="font-mono text-terminal-green font-semibold">
-                                    {t("connectedTo", { name: provider === "antigravity" ? "Antigravity" : provider === "codex" ? "Codex" : "Claude Code" })}
+                                    {t("connectedTo", { name: provider === "antigravity" ? "Antigravity" : provider === "codex" ? "Codex" : provider === "kimi" ? "Kimi" : "Claude Code" })}
                                 </p>
                             </motion.div>
+                        ) : provider === "kimi" && (kimiPolling || kimiDeviceCode) ? (
+                            <div className="space-y-4">
+                                <div className="rounded-lg border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 p-6 text-center">
+                                    <p className="font-mono text-sm text-terminal-muted mb-3">
+                                        {t("kimiDeviceCodePrompt")}
+                                    </p>
+                                    <p className="font-mono text-3xl font-bold text-terminal-dark tracking-widest mb-4">
+                                        {kimiUserCode}
+                                    </p>
+                                    {kimiPolling && (
+                                        <div className="flex items-center justify-center gap-2 text-terminal-muted">
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <span className="font-mono text-sm">{t("kimiWaitingAuth")}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                {kimiVerificationUrl && (
+                                    <Button
+                                        onClick={() => window.open(kimiVerificationUrl, "_blank")}
+                                        variant="ghost"
+                                        className="w-full font-mono text-terminal-green hover:text-terminal-green/80"
+                                    >
+                                        {t("kimiOpenLoginPage")}
+                                    </Button>
+                                )}
+                            </div>
                         ) : provider === "claudecode" && claudeCodePasteMode ? (
                             <>
                                 <div className="text-left space-y-3">
@@ -551,7 +697,7 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                         ) : (
                             <>
                                 <Button
-                                    onClick={provider === "antigravity" ? handleAntigravityLogin : provider === "codex" ? handleCodexLogin : handleClaudeCodeLogin}
+                                    onClick={provider === "antigravity" ? handleAntigravityLogin : provider === "codex" ? handleCodexLogin : provider === "kimi" ? handleKimiDeviceLogin : handleClaudeCodeLogin}
                                     disabled={loading || claudeCodeAutoChecking}
                                     className="w-full gap-2 bg-terminal-green text-white hover:bg-terminal-green/90 font-mono py-6"
                                 >
@@ -562,6 +708,8 @@ export function AuthStep({ provider, onAuthenticated, onBack, onSkip }: AuthStep
                                         </>
                                     ) : provider === "codex" ? (
                                         t("signInOpenAI")
+                                    ) : provider === "kimi" ? (
+                                        t("signInKimi")
                                     ) : provider === "claudecode" ? (
                                         t("signInAnthropic")
                                     ) : (

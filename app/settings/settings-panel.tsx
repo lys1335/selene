@@ -53,6 +53,12 @@ interface SettingsPanelProps {
   onClaudeCodePasteSubmit: (code: string) => void;
   onClaudeCodePasteCancel: () => void;
   onClaudeCodeAuthComplete: () => void;
+  kimiAuth: { isAuthenticated: boolean; email?: string; expiresAt?: number } | null;
+  kimiLoading: boolean;
+  kimiDeviceCode?: string | null;
+  kimiVerificationUrl?: string | null;
+  onKimiLogin: () => void;
+  onKimiLogout: () => void;
 }
 
 function PermissionStatusBanner() {
@@ -185,6 +191,12 @@ export function SettingsPanel({
   onClaudeCodePasteSubmit,
   onClaudeCodePasteCancel,
   onClaudeCodeAuthComplete,
+  kimiAuth,
+  kimiLoading,
+  kimiDeviceCode,
+  kimiVerificationUrl,
+  onKimiLogin,
+  onKimiLogout,
 }: SettingsPanelProps) {
   const t = useTranslations("settings");
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -215,6 +227,12 @@ export function SettingsPanel({
         onClaudeCodePasteSubmit={onClaudeCodePasteSubmit}
         onClaudeCodePasteCancel={onClaudeCodePasteCancel}
         onClaudeCodeAuthComplete={onClaudeCodeAuthComplete}
+        kimiAuth={kimiAuth}
+        kimiLoading={kimiLoading}
+        kimiDeviceCode={kimiDeviceCode}
+        kimiVerificationUrl={kimiVerificationUrl}
+        onKimiLogin={onKimiLogin}
+        onKimiLogout={onKimiLogout}
       />
     );
   }
