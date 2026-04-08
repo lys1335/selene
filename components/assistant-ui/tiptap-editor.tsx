@@ -845,6 +845,11 @@ function ToolbarButton({
       <TooltipTrigger asChild>
         <button
           type="button"
+          onMouseDown={(e) => {
+            // Prevent focus loss when clicking toolbar buttons
+            // This ensures the editor maintains its selection
+            e.preventDefault();
+          }}
           onClick={onClick}
           disabled={disabled}
           className={cn(
