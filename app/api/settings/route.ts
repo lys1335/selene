@@ -211,6 +211,15 @@ export async function PUT(request: NextRequest) {
     if (body.kimiApiKey && !body.kimiApiKey.includes("•")) {
       updatedSettings.kimiApiKey = body.kimiApiKey;
     }
+    if (body.kimiAuth !== undefined) {
+      updatedSettings.kimiAuth = body.kimiAuth;
+    }
+    if (body.kimiToken !== undefined) {
+      updatedSettings.kimiToken = body.kimiToken;
+    }
+    if (body.kimiDeviceId !== undefined) {
+      updatedSettings.kimiDeviceId = body.kimiDeviceId;
+    }
     if (body.minimaxApiKey && !body.minimaxApiKey.includes("•")) {
       updatedSettings.minimaxApiKey = body.minimaxApiKey;
     }

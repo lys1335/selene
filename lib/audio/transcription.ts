@@ -450,7 +450,7 @@ function transcribeViaParakeetWebSocket(endpoint: string, payload: Buffer): Prom
     const timer = setTimeout(() => {
       ws.close();
       reject(new Error("Parakeet websocket transcription timeout"));
-    }, 300_000);
+    }, 60_000);
 
     ws.addEventListener("open", () => {
       ws.send(payload);

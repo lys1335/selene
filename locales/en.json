@@ -123,6 +123,10 @@
       "connecting": "Connecting...",
       "signInOpenAI": "Sign in with OpenAI",
       "signInAnthropic": "Sign in with Anthropic",
+      "signInKimi": "Sign in with Kimi",
+      "kimiDeviceCodePrompt": "Enter this code on the Kimi website:",
+      "kimiWaitingAuth": "Waiting for authorization...",
+      "kimiOpenLoginPage": "Open Kimi Login Page",
       "claudecodeLoginHint": "Make sure you are logged into Claude Code on your device before signing in here.",
       "apiKeySaved": "API Key saved!",
       "saving": "Saving...",
@@ -138,7 +142,10 @@
         "failedSaveApiKey": "Failed to save API key",
         "failedSaveProvider": "Failed to save provider selection",
         "manualLoginPre": "If the browser does not open automatically, visit",
-        "manualLoginPost": "and paste the code below."
+        "manualLoginPost": "and paste the code below.",
+        "deviceAuthTimedOut": "Device authorization timed out. Please try again.",
+        "deviceAuthInitFailed": "Failed to initiate device authorization",
+        "failedSaveOllama": "Failed to save Ollama settings"
       },
       "ollama": {
         "baseUrlLabel": "Base URL",
@@ -2303,7 +2310,9 @@
       "resetOnboardingFailed": "Failed to reset onboarding",
       "connectingToGoogle": "Connecting to Google...",
       "connectingToOpenAI": "Connecting to OpenAI...",
-      "authUrlFailed": "Failed to get authorization URL"
+      "authUrlFailed": "Failed to get authorization URL",
+      "deviceAuthTimedOut": "Device authorization timed out",
+      "deviceAuthInitFailed": "Failed to initiate device authorization"
     },
     "api": {
       "title": "Choose your AI provider",
@@ -2339,6 +2348,12 @@
         "claudecodeWarning": "Personal use only — not for commercial use",
         "claudecodeLoginHint": "Make sure you are logged into Claude Code on your device before signing in here.",
         "signInAnthropic": "Sign in with Anthropic",
+        "kimiTitle": "Kimi (Moonshot AI)",
+        "kimiDesc": "Sign in with your Kimi account to use your subscription",
+        "kimiConnected": "Connected via Kimi account",
+        "kimiDeviceCodePrompt": "Enter this code on the Kimi website:",
+        "kimiOpenLoginPage": "Open Kimi Login Page",
+        "signInKimi": "Sign In with Kimi",
         "authFlowTitle": "Complete Authentication",
         "authStep1": "A browser window has opened with the Anthropic authentication page",
         "authStep2": "Sign in with your Anthropic account if prompted",

@@ -8,7 +8,7 @@ import {
   type UIMessageChunk,
   type UserModelMessage,
 } from "ai";
-import { ensureAntigravityTokenValid, ensureClaudeCodeTokenValid, ensureCodexTokenValid, providerSupportsFeature } from "@/lib/ai/providers";
+import { ensureAntigravityTokenValid, ensureClaudeCodeTokenValid, ensureCodexTokenValid, ensureKimiTokenValid, providerSupportsFeature } from "@/lib/ai/providers";
 import { registerAllTools } from "@/lib/ai/tool-registry";
 import { AI_CONFIG } from "@/lib/ai/config";
 import { getPrimarySyncFolder } from "@/lib/vectordb/sync-folder-crud";
@@ -212,6 +212,16 @@ export async function POST(req: Request) {
         if (!tokenValid) {
           return new Response(
             JSON.stringify({ error: "Codex authentication expired. Please re-authenticate in Settings." }),
+            { status: 401, headers: { "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      if (selectedProvider === "kimi") {
+        const tokenValid = await ensureKimiTokenValid();
+        if (!tokenValid) {
+          return new Response(
+            JSON.stringify({ error: "Kimi authentication expired. Please re-authenticate in Settings." }),
             { status: 401, headers: { "Content-Type": "application/json" } }
           );
         }

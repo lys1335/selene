@@ -63,6 +63,17 @@ export default function SettingsPage() {
   } | null>(null);
   const [claudecodeLoading, setClaudecodeLoading] = useState(false);
 
+  // Kimi auth state (separate from form state, managed via OAuth device flow)
+  const [kimiAuth, setKimiAuth] = useState<{
+    isAuthenticated: boolean;
+    email?: string;
+    expiresAt?: number;
+  } | null>(null);
+  const [kimiLoading, setKimiLoading] = useState(false);
+  const [kimiDeviceCode, setKimiDeviceCode] = useState<string | null>(null);
+  const [kimiVerificationUrl, setKimiVerificationUrl] = useState<string | null>(null);
+  const kimiAbortRef = useRef(false);
+
   useEffect(() => {
     document.title = `${t("title")} — Selene`;
     return () => { document.title = "Selene"; };
@@ -73,6 +84,7 @@ export default function SettingsPage() {
     loadAntigravityAuth();
     loadCodexAuth();
     loadClaudeCodeAuth({ forceRefresh: true });
+    loadKimiAuth();
   }, []);
 
   const { settings: _cachedSettings } = useSettings();
@@ -155,6 +167,27 @@ export default function SettingsPage() {
       }
     } catch (err) {
       console.error("Failed to load Claude Code auth status:", err);
+    }
+    return false;
+  };
+
+  const loadKimiAuth = async (): Promise<boolean> => {
+    try {
+      await fetch("/api/auth/kimi/refresh", { method: "POST" });
+
+      const response = await fetch(`/api/auth/kimi?t=${Date.now()}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log("[Settings] Loaded Kimi auth:", data);
+        setKimiAuth({
+          isAuthenticated: data.authenticated,
+          email: data.email,
+          expiresAt: data.expiresAt,
+        });
+        return data.authenticated;
+      }
+    } catch (err) {
+      console.error("Failed to load Kimi auth status:", err);
     }
     return false;
   };
@@ -471,7 +504,7 @@ export default function SettingsPage() {
       const data = await response.json();
 
       if (!data.success) {
-        throw new Error(data.error || "Claude Agent SDK is not authenticated yet");
+        throw new Error(data.error || t("errors.codeExchangeFailed"));
       }
 
       // Load fresh auth state and show success
@@ -480,7 +513,7 @@ export default function SettingsPage() {
         setClaudeCodeAuthSuccess(true);
         setClaudecodeLoading(false);
       } else {
-        throw new Error("Authentication verification failed");
+        throw new Error(t("errors.authStartFailed"));
       }
     } catch (err) {
       console.error("Claude Code auth verification failed:", err);
@@ -512,6 +545,126 @@ export default function SettingsPage() {
       toast.error(tc("error"));
     } finally {
       setClaudecodeLoading(false);
+    }
+  };
+
+  const handleKimiLogin = async () => {
+    setKimiLoading(true);
+    kimiAbortRef.current = false;
+
+    try {
+      // Initiate device authorization
+      const deviceResponse = await fetch("/api/auth/kimi/device", { method: "POST" });
+      const deviceData = await deviceResponse.json();
+
+      if (!deviceData.success) {
+        throw new Error(deviceData.error || t("errors.deviceAuthInitFailed"));
+      }
+
+      const verificationUrl = deviceData.verification_uri_complete || deviceData.verification_uri;
+
+      setKimiDeviceCode(deviceData.user_code || deviceData.device_code);
+      setKimiVerificationUrl(verificationUrl || null);
+
+      // Open verification URL
+      if (verificationUrl) {
+        const electronAPI = typeof window !== "undefined" && "electronAPI" in window
+          ? (window as unknown as { electronAPI?: { isElectron?: boolean; shell?: { openExternal: (url: string) => Promise<void> } } }).electronAPI
+          : undefined;
+
+        if (electronAPI?.isElectron && electronAPI?.shell?.openExternal) {
+          await electronAPI.shell.openExternal(verificationUrl);
+        } else {
+          window.open(verificationUrl, "_blank");
+        }
+      }
+
+      // Poll for completion
+      let currentInterval = (deviceData.interval || 5) * 1000;
+      const maxAttempts = Math.ceil((5 * 60 * 1000) / currentInterval);
+
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (kimiAbortRef.current) return;
+
+        await new Promise(resolve => setTimeout(resolve, currentInterval));
+
+        if (kimiAbortRef.current) return;
+
+        try {
+          const pollResponse = await fetch("/api/auth/kimi/poll", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ device_code: deviceData.device_code }),
+          });
+          const pollData = await pollResponse.json();
+
+          if (kimiAbortRef.current) return;
+
+          if (pollData.status === "success") {
+            await loadKimiAuth();
+            setKimiDeviceCode(null);
+            setKimiVerificationUrl(null);
+            setKimiLoading(false);
+            return;
+          }
+
+          if (pollData.status === "slow_down") {
+            currentInterval += 5000;
+            continue;
+          }
+
+          if (pollData.status === "error") {
+            throw new Error(pollData.error || t("errors.deviceAuthInitFailed"));
+          }
+          // status === "pending" — continue polling
+        } catch (pollErr) {
+          // Network errors (TypeError) — log and retry on next iteration
+          if (pollErr instanceof TypeError) {
+            console.warn("[KimiAuth] Poll network error, retrying:", pollErr.message);
+            continue;
+          }
+          // Other errors (e.g. API "error" status) — break out to outer catch
+          throw pollErr;
+        }
+      }
+
+      if (!kimiAbortRef.current) {
+        toast.error(t("errors.deviceAuthTimedOut"));
+      }
+    } catch (err) {
+      console.error("Kimi login failed:", err);
+      if (!kimiAbortRef.current) {
+        toast.error(t("errors.loginFailed"));
+      }
+    } finally {
+      if (!kimiAbortRef.current) {
+        setKimiLoading(false);
+        setKimiDeviceCode(null);
+        setKimiVerificationUrl(null);
+      }
+    }
+  };
+
+  const handleKimiLogout = async () => {
+    kimiAbortRef.current = true;
+    setKimiDeviceCode(null);
+    setKimiVerificationUrl(null);
+    setKimiLoading(true);
+    try {
+      const response = await fetch("/api/auth/kimi", { method: "DELETE" });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(errorText || `Logout failed with status ${response.status}`);
+      }
+      setKimiAuth(null);
+      if (formState.llmProvider === "kimi") {
+        setFormState(prev => ({ ...prev, llmProvider: "anthropic" }));
+      }
+    } catch (err) {
+      console.error("Kimi logout failed:", err);
+      toast.error(tc("error"));
+    } finally {
+      setKimiLoading(false);
     }
   };
 
@@ -599,6 +752,7 @@ export default function SettingsPage() {
       if (saveResetTimeoutRef.current) {
         clearTimeout(saveResetTimeoutRef.current);
       }
+      kimiAbortRef.current = true;
     };
   }, []);
 
@@ -770,6 +924,12 @@ export default function SettingsPage() {
                 setClaudecodeLoading(false);
               }}
               onClaudeCodeAuthComplete={handleClaudeCodeAuthComplete}
+              kimiAuth={kimiAuth}
+              kimiLoading={kimiLoading}
+              kimiDeviceCode={kimiDeviceCode}
+              kimiVerificationUrl={kimiVerificationUrl}
+              onKimiLogin={handleKimiLogin}
+              onKimiLogout={handleKimiLogout}
             />
           </div>
         </div>

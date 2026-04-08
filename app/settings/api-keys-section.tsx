@@ -38,6 +38,12 @@ interface ApiKeysSectionProps {
   onClaudeCodePasteSubmit: (code: string) => void;
   onClaudeCodePasteCancel: () => void;
   onClaudeCodeAuthComplete: () => void;
+  kimiAuth: { isAuthenticated: boolean; email?: string; expiresAt?: number } | null;
+  kimiLoading: boolean;
+  kimiDeviceCode?: string | null;
+  kimiVerificationUrl?: string | null;
+  onKimiLogin: () => void;
+  onKimiLogout: () => void;
 }
 
 export function ApiKeysSection({
@@ -62,6 +68,12 @@ export function ApiKeysSection({
   onClaudeCodePasteSubmit,
   onClaudeCodePasteCancel,
   onClaudeCodeAuthComplete,
+  kimiAuth,
+  kimiLoading,
+  kimiDeviceCode,
+  kimiVerificationUrl,
+  onKimiLogin,
+  onKimiLogout,
 }: ApiKeysSectionProps) {
   const t = useTranslations("settings");
 
@@ -454,6 +466,69 @@ export function ApiKeysSection({
             onCancel={onClaudeCodePasteCancel}
             onComplete={onClaudeCodeAuthComplete}
           />
+        )}
+      </div>
+
+      {/* Kimi OAuth Section */}
+      <div className="rounded-lg border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-mono text-sm font-semibold text-terminal-dark">
+              {t("api.auth.kimiTitle")}
+            </h3>
+            <p className="mt-1 font-mono text-xs text-terminal-muted">
+              {t("api.auth.kimiDesc")}
+            </p>
+            {kimiAuth?.isAuthenticated && kimiAuth.email && (
+              <p className="mt-1 font-mono text-xs text-terminal-green">
+                {t("api.auth.signedIn", { email: kimiAuth.email })}
+              </p>
+            )}
+            {kimiAuth?.isAuthenticated && !kimiAuth.email && (
+              <p className="mt-1 font-mono text-xs text-terminal-green">
+                {t("api.auth.kimiConnected")}
+              </p>
+            )}
+          </div>
+          <div>
+            {kimiAuth?.isAuthenticated ? (
+              <button
+                onClick={onKimiLogout}
+                disabled={kimiLoading}
+                className="rounded border border-red-300 bg-red-50 px-3 py-1.5 font-mono text-xs text-red-600 hover:bg-red-100 disabled:opacity-50"
+              >
+                {kimiLoading ? "..." : t("api.auth.signOut")}
+              </button>
+            ) : (
+              <button
+                onClick={onKimiLogin}
+                disabled={kimiLoading}
+                className="rounded border border-terminal-green bg-terminal-green/10 px-3 py-1.5 font-mono text-xs text-terminal-green hover:bg-terminal-green/20 disabled:opacity-50"
+              >
+                {kimiLoading ? t("api.auth.connecting") : t("api.auth.signInKimi")}
+              </button>
+            )}
+          </div>
+        </div>
+        {/* Show device code and verification link while polling */}
+        {kimiLoading && kimiDeviceCode && (
+          <div className="mt-3 rounded border border-terminal-border/50 bg-terminal-bg/5 p-3 text-center">
+            <p className="font-mono text-xs text-terminal-muted mb-1">
+              {t("api.auth.kimiDeviceCodePrompt")}
+            </p>
+            <p className="font-mono text-xl font-bold text-terminal-dark tracking-widest mb-2">
+              {kimiDeviceCode}
+            </p>
+            {kimiVerificationUrl && (
+              <button
+                type="button"
+                onClick={() => window.open(kimiVerificationUrl, "_blank")}
+                className="font-mono text-xs text-terminal-green underline underline-offset-2 hover:text-terminal-green/80"
+              >
+                {t("api.auth.kimiOpenLoginPage")}
+              </button>
+            )}
+          </div>
         )}
       </div>
 

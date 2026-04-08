@@ -1,6 +1,7 @@
 "use client";
 
 import { refineTranscript } from "@/lib/audio/refine-transcript";
+import { resilientFetch } from "@/lib/utils/resilient-fetch";
 
 const PREFERRED_SPEECH_MIME_TYPES = [
   "audio/webm;codecs=opus",
@@ -57,15 +58,26 @@ export async function transcribeRecordedSpeech({
   const formData = new FormData();
   formData.append("file", audioBlob, `voice-input.${getSpeechRecordingExtension(mimeType)}`);
 
-  const response = await fetch("/api/voice/transcribe", {
+  const { data: payload, error: fetchError, timedOut } = await resilientFetch<{
+    text?: string;
+    error?: string;
+  }>("/api/voice/transcribe", {
     method: "POST",
     body: formData,
     signal,
+    timeout: 30_000, // 30s for audio uploads
+    retries: 2,
+    onRetry: (attempt) => {
+      console.warn(`[Voice STT] Transcription retry attempt ${attempt}`);
+    },
   });
 
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
-    throw new Error(payload?.error || transcriptionFailedMessage);
+  if (fetchError || timedOut) {
+    throw new Error(
+      timedOut
+        ? "Transcription timed out — please try again"
+        : fetchError || transcriptionFailedMessage
+    );
   }
 
   const transcript =

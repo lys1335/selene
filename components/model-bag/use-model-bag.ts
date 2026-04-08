@@ -31,6 +31,7 @@ interface SettingsData {
   codexAuth?: { isAuthenticated?: boolean };
   claudecodeAuth?: { isAuthenticated?: boolean };
   kimiApiKey?: string;
+  kimiAuth?: { isAuthenticated?: boolean };
   minimaxApiKey?: string;
   blackboxaiApiKey?: string;
   llmProvider: LLMProvider;
@@ -93,7 +94,7 @@ export function useModelBag() {
       antigravity: !!data.antigravityAuth?.isAuthenticated,
       codex: !!data.codexAuth?.isAuthenticated,
       claudecode: !!data.claudecodeAuth?.isAuthenticated,
-      kimi: !!data.kimiApiKey,
+      kimi: !!data.kimiApiKey || !!data.kimiAuth?.isAuthenticated,
       minimax: !!data.minimaxApiKey,
       blackboxai: !!data.blackboxaiApiKey,
       ollama: true,

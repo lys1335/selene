@@ -27,12 +27,14 @@ type CaptureSessionMetadata = {
 export function useCaptureSession(options: {
   isRecordingVoice: boolean;
   isTranscribingVoice: boolean;
+  /** Whether the last transcription attempt failed — cancels auto-send to prevent sending stale text */
+  lastTranscriptionFailed?: boolean;
   autoSendEnabled: boolean;
   autoSendDelay: number; // seconds
   onSend: () => void;
   onClearAttachments?: () => void;
 }) {
-  const { isRecordingVoice, isTranscribingVoice, autoSendEnabled, autoSendDelay, onSend, onClearAttachments } = options;
+  const { isRecordingVoice, isTranscribingVoice, lastTranscriptionFailed, autoSendEnabled, autoSendDelay, onSend, onClearAttachments } = options;
 
   const [phase, setPhase] = useState<CapturePhase>("idle");
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
@@ -95,6 +97,15 @@ export function useCaptureSession(options: {
       (phase === "recording" || phase === "transcribing")
     ) {
       // Transcription complete — move to reviewing
+      // If transcription failed, go back to idle to prevent sending stale text
+      if (lastTranscriptionFailed) {
+        setSendAfterTranscription(false);
+        setPhase("idle");
+        setIsUnifiedSession(false);
+        setScreenshotUrl(null);
+        setMetadata(null);
+        return;
+      }
       // If sendAfterTranscription flag is set (Stop & Send was clicked), send immediately
       if (sendAfterTranscription) {
         setPhase("sending");
@@ -111,7 +122,7 @@ export function useCaptureSession(options: {
         setPhase("reviewing");
       }
     }
-  }, [isRecordingVoice, isTranscribingVoice, phase, isUnifiedSession, sendAfterTranscription]);
+  }, [isRecordingVoice, isTranscribingVoice, lastTranscriptionFailed, phase, isUnifiedSession, sendAfterTranscription]);
 
   // Auto-send countdown in reviewing phase
   useEffect(() => {
