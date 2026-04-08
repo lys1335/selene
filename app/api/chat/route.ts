@@ -186,44 +186,34 @@ export async function POST(req: Request) {
 
     const selectedProvider = (settings.llmProvider || process.env.LLM_PROVIDER || "").toLowerCase();
 
+    // Best-effort OAuth token refresh for ALL providers that have stored
+    // tokens.  This runs regardless of which provider `selectedProvider`
+    // points to, because the session-model-resolver may pick a *different*
+    // provider from the agent or session config.  Running them in parallel
+    // keeps latency minimal; failures are non-fatal — the resolver will
+    // gracefully fall back if a provider remains unavailable.
     if (!isInternalAuth) {
-      if (selectedProvider === "antigravity") {
-        const tokenValid = await ensureAntigravityTokenValid();
-        if (!tokenValid) {
-          return new Response(
-            JSON.stringify({ error: "Antigravity authentication expired. Please re-authenticate in Settings." }),
-            { status: 401, headers: { "Content-Type": "application/json" } }
-          );
-        }
-      }
+      const refreshResults = await Promise.allSettled([
+        selectedProvider === "antigravity" || settings.antigravityAuth?.isAuthenticated
+          ? ensureAntigravityTokenValid()
+          : Promise.resolve(true),
+        selectedProvider === "claudecode"
+          ? ensureClaudeCodeTokenValid()
+          : Promise.resolve(true),
+        selectedProvider === "codex" || settings.codexAuth?.isAuthenticated
+          ? ensureCodexTokenValid()
+          : Promise.resolve(true),
+        selectedProvider === "kimi" || settings.kimiAuth?.isAuthenticated
+          ? ensureKimiTokenValid()
+          : Promise.resolve(true),
+      ]);
 
-      if (selectedProvider === "claudecode") {
-        const tokenValid = await ensureClaudeCodeTokenValid();
-        if (!tokenValid) {
-          return new Response(
-            JSON.stringify({ error: "Claude Code authentication expired. Please re-authenticate in Settings." }),
-            { status: 401, headers: { "Content-Type": "application/json" } }
-          );
-        }
-      }
-
-      if (selectedProvider === "codex") {
-        const tokenValid = await ensureCodexTokenValid();
-        if (!tokenValid) {
-          return new Response(
-            JSON.stringify({ error: "Codex authentication expired. Please re-authenticate in Settings." }),
-            { status: 401, headers: { "Content-Type": "application/json" } }
-          );
-        }
-      }
-
-      if (selectedProvider === "kimi") {
-        const tokenValid = await ensureKimiTokenValid();
-        if (!tokenValid) {
-          return new Response(
-            JSON.stringify({ error: "Kimi authentication expired. Please re-authenticate in Settings." }),
-            { status: 401, headers: { "Content-Type": "application/json" } }
-          );
+      // Log failures but don't hard-fail — let the session resolver fall back.
+      const labels = ["antigravity", "claudecode", "codex", "kimi"] as const;
+      for (let i = 0; i < refreshResults.length; i++) {
+        const r = refreshResults[i];
+        if (r.status === "fulfilled" && !r.value && labels[i] === selectedProvider) {
+          console.warn(`[CHAT API] ${labels[i]} token refresh failed; resolver will handle fallback`);
         }
       }
     }
@@ -1273,6 +1263,16 @@ export async function POST(req: Request) {
                 message: error instanceof Error ? error.message : undefined,
               },
             });
+            // When the Kimi API rejects the access token mid-stream (server-side
+            // revocation or early expiry), force-expire the local copy so the next
+            // request triggers a proactive refresh instead of repeatedly failing.
+            if (provider === "kimi" && /invalid.*(?:auth|api.?key|credential)|expired|unauthorized/i.test(errorMessage)) {
+              try {
+                const { forceExpireKimiToken, invalidateKimiAuthCache } = await import("@/lib/auth/kimi-auth");
+                invalidateKimiAuthCache();
+                forceExpireKimiToken();
+              } catch { /* non-fatal */ }
+            }
             // Claude Code SDK agents self-correct after tool validation failures —
             // the stream stays open and onFinish will finalize the run properly.
             if (provider === "claudecode" && isNonFatalToolError(error)) {

@@ -137,6 +137,22 @@ export function isKimiOAuthAuthenticated(): boolean {
   return isKimiTokenValid();
 }
 
+/**
+ * Force-expire the local token so the next availability check sees it as
+ * invalid and triggers a refresh.  This is used when the Kimi API rejects
+ * the access token mid-stream (server-side revocation / early expiry).
+ */
+export function forceExpireKimiToken(): void {
+  const token = getKimiOAuthToken();
+  if (!token) return;
+
+  // Preserve the refresh_token so the next request can still refresh.
+  const expired: KimiOAuthToken = { ...token, expires_at: 0 };
+  saveKimiOAuthToken(expired);
+
+  console.warn("[KimiAuth] Local token force-expired for proactive refresh on next request");
+}
+
 export async function refreshKimiToken(): Promise<boolean> {
   const token = getKimiOAuthToken();
   if (!token?.refresh_token) {
@@ -144,10 +160,14 @@ export async function refreshKimiToken(): Promise<boolean> {
   }
 
   try {
+    // Include the same device headers used during the initial device-code
+    // grant — Kimi's OAuth server may require them for refresh requests too.
+    const deviceHeaders = getKimiDeviceHeaders();
     const response = await fetch(KIMI_OAUTH.TOKEN_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
+        ...deviceHeaders,
       },
       body: new URLSearchParams({
         grant_type: "refresh_token",
