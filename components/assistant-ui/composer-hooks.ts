@@ -572,7 +572,7 @@ function useSkillPickerState({
 
 interface UsePromptEnhancementOptions {
   inputValue: string;
-  setInputValue: (value: string) => void;
+  setInputValue: (value: string | ((previous: string) => string)) => void;
   characterId: string | undefined;
   sessionId?: string;
   /** Recent thread messages for conversation context */
@@ -669,9 +669,11 @@ export function usePromptEnhancement({
         return;
       }
 
-      if (data.success) {
-        setInputValue(data.enhancedPrompt!);
-        setEnhancedContext(data.enhancedPrompt!);
+      const enhancedPrompt = data.enhancedPrompt?.trim() ?? "";
+
+      if (data.success && enhancedPrompt) {
+        setInputValue(enhancedPrompt);
+        setEnhancedContext(enhancedPrompt);
         setEnhancementInfo({ filesFound: data.filesFound, chunksRetrieved: data.chunksRetrieved });
         const llmIndicator = data.usedLLM ? " (LLM)" : "";
         toast.success(
@@ -681,6 +683,9 @@ export function usePromptEnhancement({
             llmIndicator,
           })
         );
+      } else if (data.success) {
+        toast.error(data.error || t("enhance.failed"));
+        setEnhancedContext(null);
       } else {
         toast.info(data.skipReason || t("enhance.skipped"));
         setEnhancedContext(null);

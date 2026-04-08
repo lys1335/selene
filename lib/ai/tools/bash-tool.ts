@@ -47,7 +47,10 @@ type BashToolResult = {
   processId?: string;
   logId?: string;
   isTruncated?: boolean;
+  /** Inline diff payload when apply_patch is detected in the command */
+  inlineDiff?: string;
 };
+
 
 function extractToolCallId(options?: ToolExecutionOptions): string {
   if (!options || typeof options !== "object") return "";
@@ -65,7 +68,21 @@ function normalizeTimeout(timeout?: number): number {
   return Math.min(Math.floor(timeout), MAX_BASH_TIMEOUT_MS);
 }
 
-function wrapShellCommand(command: string): { command: string; args: string[] } {
+/**
+ * Detect `apply_patch <<'DELIM'\n...\nDELIM` heredoc patterns in the command
+ * string and extract the patch content for stdin-based execution.
+ * Returns null if the command is not an apply_patch heredoc.
+ */
+function extractApplyPatchHeredoc(command: string): { stdin: string; patchText: string } | null {
+  const match = command.match(/^apply_patch\s+<<\s*['"]?(\w+)['"]?\n([\s\S]*?)\n\1\s*$/);
+  if (!match) return null;
+  const body = match[2];
+  if (!body || !body.includes("*** Begin Patch")) return null;
+  const stdin = body.endsWith("\n") ? body : `${body}\n`;
+  return { stdin, patchText: body };
+}
+
+function wrapShellCommand(command: string): { command: string; args: string[]; stdin?: string } {
   if (process.platform === "win32") {
     const shellCommand = process.env.ComSpec || "cmd.exe";
     const wrapped = `${command} & set "SELENE_EXIT=!ERRORLEVEL!" & echo ${CWD_MARKER}!CD! & exit /b !SELENE_EXIT!`;
@@ -80,9 +97,13 @@ __selene_exit=$?
 printf '\n${CWD_MARKER}%s\n' "$(pwd -P)"
 exit $__selene_exit`;
 
+  // Pass the script via stdin instead of -c to avoid heredoc/quote parsing
+  // issues. Shells read stdin line-by-line, so heredocs, triple quotes,
+  // backticks, and f-strings all work naturally without escaping.
   return {
     command: "/bin/sh",
-    args: ["-lc", wrapped],
+    args: ["-l"],
+    stdin: wrapped,
   };
 }
 
@@ -253,6 +274,22 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
 
       const action = input.action ?? (input.processId ? "status" : undefined);
 
+      // Validate action constraints
+      if (action && action !== "list") {
+        if (!input.processId) {
+          return {
+            status: "error",
+            error: `bash action "${action}" requires processId.`,
+          };
+        }
+        if (input.command || input.run_in_background) {
+          return {
+            status: "error",
+            error: `bash action "${action}" cannot be combined with command or run_in_background.`,
+          };
+        }
+      }
+
       if (action === "list") {
         cleanupBackgroundProcesses();
         const processes = listBackgroundProcesses();
@@ -351,7 +388,6 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
       }
 
       const { syncedFolders, executionDir } = executionContext;
-      const shellCommand = wrapShellCommand(command);
       const timeout = normalizeTimeout(input.timeout);
 
       const forwardProgress = (update: ExecuteCommandProgressUpdate) => {
@@ -366,11 +402,50 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
         });
       };
 
+      // Intercept apply_patch heredoc commands: extract patch content and
+      // execute apply_patch directly with stdin instead of wrapping in a shell.
+      const patchHeredoc = extractApplyPatchHeredoc(command);
+      if (patchHeredoc) {
+        const result = await executeCommandWithValidation(
+          {
+            command: "apply_patch",
+            args: [],
+            stdin: patchHeredoc.stdin,
+            cwd: executionDir,
+            timeout,
+            characterId,
+            toolCallId,
+            onProgress: forwardProgress,
+          },
+          syncedFolders
+        );
+
+        return {
+          status: result.success
+            ? "success"
+            : result.error?.includes("blocked")
+              ? "blocked"
+              : "error",
+          stdout: result.stdout,
+          stderr: result.stderr,
+          exitCode: result.exitCode,
+          executionTime: result.executionTime,
+          startedAt: result.startedAt,
+          error: result.error,
+          logId: result.logId,
+          isTruncated: result.isTruncated,
+          inlineDiff: patchHeredoc.patchText,
+        };
+      }
+
+      const shellCommand = wrapShellCommand(command);
+
       if (input.run_in_background) {
         const backgroundResult = await startBackgroundProcess(
           {
             command: shellCommand.command,
             args: shellCommand.args,
+            stdin: shellCommand.stdin,
             cwd: executionDir,
             timeout,
             characterId,
@@ -398,6 +473,7 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
         {
           command: shellCommand.command,
           args: shellCommand.args,
+          stdin: shellCommand.stdin,
           cwd: executionDir,
           timeout,
           characterId,

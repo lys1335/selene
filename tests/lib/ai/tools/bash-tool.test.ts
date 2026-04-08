@@ -110,10 +110,8 @@ describe("bash-tool", () => {
         command: "/bin/sh",
         cwd: "/workspace",
         characterId: "char-1",
-        args: [
-          "-lc",
-          expect.stringContaining("git status"),
-        ],
+        args: ["-l"],
+        stdin: expect.stringContaining("git status"),
       }),
       ["/workspace"]
     );
@@ -154,6 +152,79 @@ describe("bash-tool", () => {
     expect(commandExecutionMocks.executeCommandWithValidation).not.toHaveBeenCalled();
   });
 
+
+  it("rejects background status actions without processId", async () => {
+    const tool = createBashTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      { action: "status" },
+      createToolContext()
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.error).toBe('bash action "status" requires processId.');
+    expect(commandExecutionMocks.executeCommandWithValidation).not.toHaveBeenCalled();
+  });
+
+  it("rejects mixing command execution with background status actions", async () => {
+    const tool = createBashTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      { command: "git status", processId: "bg-123", action: "status" },
+      createToolContext()
+    );
+
+    expect(result.status).toBe("error");
+    expect(result.error).toBe('bash action "status" cannot be combined with command or run_in_background.');
+    expect(commandExecutionMocks.executeCommandWithValidation).not.toHaveBeenCalled();
+  });
+
+  it("moves apply_patch heredoc payloads into stdin automatically", async () => {
+    commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
+      success: false,
+      stdout: "",
+      stderr: "patch failed",
+      exitCode: 1,
+      signal: null,
+      executionTime: 3,
+    });
+
+    const tool = createBashTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      {
+        command: [
+          "apply_patch <<'PATCH'",
+          "*** Begin Patch",
+          "*** Add File: tmp.txt",
+          "+hello",
+          "*** End Patch",
+          "PATCH",
+        ].join("\n"),
+      },
+      createToolContext()
+    );
+
+    expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "apply_patch",
+        args: [],
+        stdin: "*** Begin Patch\n*** Add File: tmp.txt\n+hello\n*** End Patch\n",
+      }),
+      ["/workspace"]
+    );
+    expect(result.inlineDiff).toContain("*** Begin Patch");
+  });
+
   it("starts background shell commands", async () => {
     commandExecutionMocks.startBackgroundProcess.mockResolvedValue({
       processId: "bg-123",
@@ -175,7 +246,8 @@ describe("bash-tool", () => {
       expect.objectContaining({
         command: "/bin/sh",
         cwd: "/workspace",
-        args: ["-lc", expect.stringContaining("npm run dev")],
+        args: ["-l"],
+        stdin: expect.stringContaining("npm run dev"),
       }),
       ["/workspace"]
     );
