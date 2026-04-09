@@ -49,7 +49,7 @@ const SVG_ALLOWED_TAGS = new Set([
   'animate', 'animateMotion', 'title', 'desc', 'use', 'symbol',
 ]);
 
-export interface SanitizeOptions {
+interface SanitizeOptions {
   /** Use stricter rules for AI-generated content (no forms, no inline styles) */
   isAIContent?: boolean;
   /** Allow SVG-specific tags */
@@ -178,58 +178,6 @@ export function sanitizeHTML(dirty: string, options?: SanitizeOptions): string {
 }
 
 /**
- * Sanitize SVG content specifically.
- * Shorthand for `sanitizeHTML(svg, { isSVG: true })`.
- */
-export function sanitizeSVG(svgContent: string, sanitizer?: (html: string) => string): string {
-  return sanitizeHTML(svgContent, { isSVG: true, sanitizer });
-}
-
-/**
- * Create a `{ __html: string }` object safe for use with React's
- * `dangerouslySetInnerHTML`.
- */
-export function createSafeHTML(
-  html: string,
-  options?: SanitizeOptions,
-): { __html: string } {
-  return { __html: sanitizeHTML(html, options) };
-}
-
-/** Patterns that indicate potentially dangerous content */
-const SUSPICIOUS_PATTERNS: RegExp[] = [
-  /<script[\s>]/i,
-  /javascript:/i,
-  /on\w+\s*=/i,
-  /<iframe/i,
-  /<object/i,
-  /<embed/i,
-  /expression\s*\(/i,
-  /eval\s*\(/i,
-  /Function\s*\(/i,
-  /setTimeout\s*\(/i,
-  /setInterval\s*\(/i,
-  /\.innerHTML\s*=/i,
-  /\.outerHTML\s*=/i,
-  /document\s*\./i,
-  /window\s*\./i,
-  /localStorage/i,
-  /sessionStorage/i,
-  /fetch\s*\(/i,
-  /XMLHttpRequest/i,
-];
-
-/**
- * Check whether a string contains patterns that suggest malicious content.
- *
- * Returns `true` if any suspicious pattern is found.
- */
-export function isContentSuspicious(content: string): boolean {
-  if (!content) return false;
-  return SUSPICIOUS_PATTERNS.some(pattern => pattern.test(content));
-}
-
-/**
  * Validate and sanitize a URL.
  *
  * By default only `http:`, `https:`, and `mailto:` protocols are permitted.
@@ -239,7 +187,7 @@ export function isContentSuspicious(content: string): boolean {
  * Invalid URLs have protocol-like prefixes stripped and are returned as
  * relative paths.
  */
-export function sanitizeURL(url: string, opts?: { allowDataUrls?: boolean }): string {
+function sanitizeURL(url: string, opts?: { allowDataUrls?: boolean }): string {
   if (!url) return '';
 
   try {

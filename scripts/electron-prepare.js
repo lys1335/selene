@@ -397,9 +397,9 @@ for (const mod of nativeModuleBinaries) {
 // 10b. Remove dev/build-time-only packages from standalone node_modules
 // These get pulled in by Next.js standalone tracing or transitive deps but aren't needed at runtime.
 // electron: duplicates the Electron framework already in Contents/Frameworks/ (~270 MB)
-// typescript: build-time compiler, not used at runtime (~19 MB)
+// typescript: now needed at runtime by design workspace validation (lib/design/workspace/validation.ts)
 console.log('Removing dev-only packages from standalone...');
-const devOnlyPackages = ['electron', 'typescript', 'webpack', 'terser-webpack-plugin'];
+const devOnlyPackages = ['electron', 'webpack', 'terser-webpack-plugin'];
 for (const pkg of devOnlyPackages) {
     const pkgPath = path.join(standaloneDir, 'node_modules', pkg);
     if (fs.existsSync(pkgPath)) {

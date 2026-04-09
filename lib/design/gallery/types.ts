@@ -2,6 +2,7 @@ export interface NewDesignComponent {
   userId: string;
   characterId?: string;
   sessionId?: string;
+  projectId?: string;
   name: string;
   description?: string;
   prompt: string;
@@ -20,6 +21,7 @@ export interface DesignComponentRow {
   userId: string;
   characterId: string | null;
   sessionId: string | null;
+  projectId: string | null;
   name: string;
   description: string | null;
   prompt: string;
@@ -45,6 +47,42 @@ export interface GallerySearchOpts {
   framework?: string;
   tags?: string[];
   favoritesOnly?: boolean;
+  projectId?: string;
   limit?: number;
   offset?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Project types
+// ---------------------------------------------------------------------------
+
+export interface NewDesignProject {
+  name: string;
+  description?: string;
+  tags?: string[];
+}
+
+export interface DesignProjectRow {
+  id: string;
+  userId: string;
+  name: string;
+  description: string | null;
+  coverImageUrl: string | null;
+  tags: string[];
+  isArchived: boolean;
+  componentCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectSearchOpts {
+  userId: string;
+  search?: string;
+  includeArchived?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface DesignProjectWithComponents extends DesignProjectRow {
+  components: DesignComponentRow[];
 }

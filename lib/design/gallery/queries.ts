@@ -54,6 +54,7 @@ export async function saveDesignComponent(
       userId: component.userId,
       characterId: component.characterId ?? null,
       sessionId: component.sessionId ?? null,
+      projectId: component.projectId ?? null,
       name: component.name,
       description: component.description ?? null,
       prompt: component.prompt,
@@ -63,7 +64,7 @@ export async function saveDesignComponent(
       tags: JSON.stringify(component.tags ?? []),
       styleTags: JSON.stringify(component.styleTags ?? []),
       previewPath: component.previewPath ?? null,
-      mode: component.mode ?? "html",
+      mode: component.mode ?? "tailwind",
       style: component.style ?? "default",
       createdAt: ts,
       updatedAt: ts,
@@ -100,6 +101,9 @@ export async function listDesignComponents(opts: GallerySearchOpts & {
   if (opts.favoritesOnly) {
     conditions.push(eq(designComponents.isFavorite, true));
   }
+  if (opts.projectId) {
+    conditions.push(eq(designComponents.projectId, opts.projectId));
+  }
   if (search) {
     const pattern = `%${escapeLike(search)}%`;
     conditions.push(
@@ -119,7 +123,7 @@ export async function listDesignComponents(opts: GallerySearchOpts & {
 }
 
 /** Update a component (partial), scoped to a user. */
-export async function updateDesignComponent(
+async function updateDesignComponent(
   userId: string,
   id: string,
   updates: Partial<NewDesignComponent>
@@ -139,6 +143,7 @@ export async function updateDesignComponent(
   if (updates.style !== undefined) values.style = updates.style;
   if (updates.characterId !== undefined) values.characterId = updates.characterId;
   if (updates.sessionId !== undefined) values.sessionId = updates.sessionId;
+  if (updates.projectId !== undefined) values.projectId = updates.projectId;
 
   const [updated] = await db
     .update(designComponents)
@@ -189,28 +194,3 @@ export async function incrementDesignUseCount(userId: string, id: string): Promi
     .where(and(eq(designComponents.userId, userId), eq(designComponents.id, id)));
 }
 
-/** Search components whose tags JSON array contains any of the given tags. */
-export async function searchDesignByTags(
-  userId: string,
-  tags: string[]
-): Promise<DesignComponentRow[]> {
-  if (tags.length === 0) return [];
-
-  // Build OR conditions checking JSON text for each tag (with ESCAPE clause for consistency)
-  const tagConditions = tags.map(
-    (tag) => sql`${designComponents.tags} LIKE ${'%"' + escapeLike(tag) + '"%'} ESCAPE '\\'`
-  );
-
-  const rows = await db
-    .select()
-    .from(designComponents)
-    .where(
-      and(
-        eq(designComponents.userId, userId),
-        sql`(${sql.join(tagConditions, sql` OR `)})`
-      )
-    )
-    .orderBy(desc(designComponents.updatedAt));
-
-  return rows.map(toRow);
-}

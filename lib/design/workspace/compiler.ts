@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * Server-side React/TSX component compiler.
  *
@@ -16,6 +14,20 @@ import type { Config } from "tailwindcss";
 import { resolve } from "path";
 import { SANDBOX_NODE_MODULES } from "../libraries";
 import { getProjectRoot } from "../../utils/project-root";
+import {
+  installSandboxPackages,
+  validateWorkspaceDependencies,
+  type DependencyValidationResult,
+  type DependencyInstallResult,
+} from "./dependencies";
+import {
+  type DesignWorkspaceAutoInstallSummary,
+  type DesignWorkspaceCompilationIssue,
+  type DesignWorkspaceCompileReport,
+  type DesignWorkspaceDependencySummary,
+  type DesignWorkspaceDiagnostic,
+} from "./config";
+import { logToolEvent } from "@/lib/ai/tool-registry/logging";
 // Turbopack needs a static import it can trace in server bundles.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- CJS config is loaded as the module default at runtime
@@ -23,6 +35,8 @@ import previewTailwindConfig from "../../../tailwind.preview.config.cjs";
 
 const VIRTUAL_COMPONENT_PATH = "__selene_preview_component__";
 const VIRTUAL_COMPONENT_NAMESPACE = "selene-preview-component";
+const COMPILE_TIMEOUT_MS = 15_000;
+const TAILWIND_TIMEOUT_MS = 15_000;
 const PREVIEW_THEME_CSS = [
   ":root {",
   "  --terminal-cream: 34 63% 89%;",
@@ -115,6 +129,164 @@ const PREVIEW_TAILWIND_SOURCE = [
   "",
 ].join("\n");
 
+interface BuildTailwindPreviewOptions {
+  autoInstallMissingDependencies?: boolean;
+  source?: string;
+}
+
+interface BuildTailwindPreviewResult {
+  html: string;
+  report: DesignWorkspaceCompileReport;
+}
+
+interface CompileResult {
+  code: string;
+  warnings: string[];
+  diagnostics?: DesignWorkspaceDiagnostic[];
+}
+
+class DesignWorkspaceCompileError extends Error {
+  report: DesignWorkspaceCompileReport;
+
+  constructor(message: string, report: DesignWorkspaceCompileReport) {
+    super(message);
+    this.name = "DesignWorkspaceCompileError";
+    this.report = report;
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolvePromise, rejectPromise) => {
+    const timer = setTimeout(() => {
+      rejectPromise(new Error(`${label} timed out after ${ms}ms`));
+    }, ms);
+
+    if (typeof timer === "object" && "unref" in timer) {
+      timer.unref();
+    }
+
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolvePromise(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        rejectPromise(error);
+      },
+    );
+  });
+}
+
+function normalizeDependencySummary(
+  value: DependencyValidationResult,
+): DesignWorkspaceDependencySummary {
+  return {
+    manifestPackages: value.manifestPackages,
+    importedPackages: value.importedPackages,
+    checkedPackages: value.checkedPackages,
+    missingManifestPackages: value.missingManifestPackages,
+    missingImportedPackages: value.missingImportedPackages,
+    missingPackages: value.missingPackages,
+  };
+}
+
+function normalizeAutoInstallSummary(
+  value?: DependencyInstallResult,
+): DesignWorkspaceAutoInstallSummary | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return {
+    attempted: value.attempted,
+    success: value.success,
+    packages: value.packages,
+    packageNames: value.packageNames,
+    error: value.error,
+  };
+}
+
+function toDiagnosticLocation(location?: esbuild.Location): DesignWorkspaceDiagnostic["location"] {
+  if (!location?.file) {
+    return undefined;
+  }
+
+  return {
+    file: location.file,
+    line: location.line,
+    column: location.column,
+  };
+}
+
+function inferIssueType(message: string): DesignWorkspaceCompilationIssue["type"] {
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes("could not resolve") ||
+    normalized.includes("cannot find module") ||
+    normalized.includes("failed to resolve")
+  ) {
+    return "dependency";
+  }
+  if (
+    normalized.includes("expected") ||
+    normalized.includes("unexpected") ||
+    normalized.includes("syntax") ||
+    normalized.includes("unterminated")
+  ) {
+    return "syntax";
+  }
+  if (normalized.includes("type") || normalized.includes("jsx")) {
+    return "type";
+  }
+  if (normalized.includes("runtime") || normalized.includes("render")) {
+    return "runtime";
+  }
+  return "unknown";
+}
+
+function buildIssueSuggestion(
+  issueType: DesignWorkspaceCompilationIssue["type"],
+  message: string,
+  dependencyCheck: DependencyValidationResult,
+): string | undefined {
+  if (issueType === "dependency") {
+    const missingPackages = dependencyCheck.missingPackages;
+    if (missingPackages.length > 0) {
+      return `Install missing workspace packages: ${missingPackages.join(", ")}`;
+    }
+
+    const couldResolveMatch = message.match(/["'`](.+?)["'`]/);
+    if (couldResolveMatch?.[1]) {
+      return `Verify that ${couldResolveMatch[1]} is installed in .selene-workspace/package.json.`;
+    }
+  }
+
+  if (issueType === "syntax") {
+    return "Fix the TSX syntax near the reported location and ensure the file exports a default React component.";
+  }
+
+  if (issueType === "type") {
+    return "Check JSX usage, component props, and imported symbols for mismatches.";
+  }
+
+  return undefined;
+}
+
+function toCompilationIssue(
+  text: string,
+  location: DesignWorkspaceDiagnostic["location"],
+  dependencyCheck: DependencyValidationResult,
+): DesignWorkspaceCompilationIssue {
+  const type = inferIssueType(text);
+  return {
+    type,
+    message: text,
+    location,
+    suggestion: buildIssueSuggestion(type, text, dependencyCheck),
+  };
+}
+
 function createPreviewEntrySource(): string {
   return [
     "import React from 'react';",
@@ -183,86 +355,113 @@ function createComponentPlugin(componentCode: string): esbuild.Plugin {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Compiler
-// ---------------------------------------------------------------------------
+async function compileReactComponent(
+  componentCode: string,
+  dependencyCheck: DependencyValidationResult,
+): Promise<CompileResult> {
+  try {
+    const result = await withTimeout(
+      esbuild.build({
+        stdin: {
+          contents: createPreviewEntrySource(),
+          resolveDir: PROJECT_ROOT,
+          loader: "tsx",
+        },
+        absWorkingDir: PROJECT_ROOT,
+        bundle: true,
+        format: "iife",
+        write: false,
+        minify: false,
+        target: ["es2020"],
+        jsx: "automatic",
+        jsxImportSource: "react",
+        logLevel: "silent",
+        treeShaking: true,
+        sourcemap: false,
+        platform: "browser",
+        define: {
+          "process.env.NODE_ENV": '"production"',
+        },
+        alias: {
+          "react": resolve(PROJECT_ROOT, "node_modules/react"),
+          "react-dom": resolve(PROJECT_ROOT, "node_modules/react-dom"),
+          "react/jsx-runtime": resolve(PROJECT_ROOT, "node_modules/react/jsx-runtime"),
+          "react/jsx-dev-runtime": resolve(PROJECT_ROOT, "node_modules/react/jsx-dev-runtime"),
+        },
+        nodePaths: [SANDBOX_NODE_MODULES],
+        plugins: [createComponentPlugin(componentCode)],
+      }),
+      COMPILE_TIMEOUT_MS,
+      "Design preview compilation",
+    );
 
-interface CompileResult {
-  code: string;
-  warnings: string[];
-  diagnostics?: Array<{ text: string; location?: { file: string; line: number; column: number } }>;
-}
+    const warnings = result.warnings.map((warning) => warning.text);
+    const diagnostics = result.warnings.map((warning) => ({
+      text: warning.text,
+      location: toDiagnosticLocation(warning.location ?? undefined),
+    }));
 
-/**
- * Compile a React/TSX component into a self-contained JavaScript bundle.
- *
- * The preview entry imports the component via a virtual module so the model
- * output stays untouched and standard ES module semantics handle the default
- * export contract.
- */
-async function compileReactComponent(componentCode: string): Promise<CompileResult> {
-  const result = await esbuild.build({
-    stdin: {
-      contents: createPreviewEntrySource(),
-      resolveDir: PROJECT_ROOT,
-      loader: "tsx",
-    },
-    absWorkingDir: PROJECT_ROOT,
-    bundle: true,
-    format: "iife",
-    write: false,
-    minify: false,
-    target: ["es2020"],
-    jsx: "automatic",
-    jsxImportSource: "react",
-    logLevel: "silent",
-    treeShaking: true,
-    sourcemap: false,
-    platform: "browser",
-    define: {
-      "process.env.NODE_ENV": '"production"',
-    },
-    alias: {
-      // Pin React to the main project copy so sandbox packages (e.g.
-      // @react-three/fiber) share the same React instance as the preview
-      // entry.  Two React instances cause "Cannot read properties of null
-      // (reading 'useMemo')" because hooks rely on a shared internals
-      // singleton.
-      "react": resolve(PROJECT_ROOT, "node_modules/react"),
-      "react-dom": resolve(PROJECT_ROOT, "node_modules/react-dom"),
-      "react/jsx-runtime": resolve(PROJECT_ROOT, "node_modules/react/jsx-runtime"),
-      "react/jsx-dev-runtime": resolve(PROJECT_ROOT, "node_modules/react/jsx-dev-runtime"),
-    },
-    nodePaths: [SANDBOX_NODE_MODULES],
-    plugins: [createComponentPlugin(componentCode)],
-  });
+    if (result.outputFiles.length === 0) {
+      throw new Error("esbuild produced no output files");
+    }
 
-  const warnings = result.warnings.map((warning) => warning.text);
-  const diagnostics = result.warnings.map((warning) => ({
-    text: warning.text,
-    location: warning.location
-      ? {
-          file: warning.location.file,
-          line: warning.location.line,
-          column: warning.location.column,
-        }
-      : undefined,
-  }));
+    return {
+      code: result.outputFiles[0].text,
+      warnings,
+      diagnostics: diagnostics.length > 0 ? diagnostics : undefined,
+    };
+  } catch (error) {
+    if (error instanceof DesignWorkspaceCompileError) {
+      throw error;
+    }
 
-  if (result.outputFiles.length === 0) {
-    throw new Error("esbuild produced no output files");
+    const errors =
+      typeof error === "object" && error !== null && "errors" in error && Array.isArray((error as { errors?: unknown[] }).errors)
+        ? ((error as { errors: esbuild.Message[] }).errors ?? [])
+        : [];
+
+    const warnings =
+      typeof error === "object" && error !== null && "warnings" in error && Array.isArray((error as { warnings?: unknown[] }).warnings)
+        ? ((error as { warnings: esbuild.Message[] }).warnings ?? []).map((warning) => warning.text)
+        : [];
+
+    const diagnostics =
+      typeof error === "object" && error !== null && "warnings" in error && Array.isArray((error as { warnings?: unknown[] }).warnings)
+        ? ((error as { warnings: esbuild.Message[] }).warnings ?? []).map((warning) => ({
+            text: warning.text,
+            location: toDiagnosticLocation(warning.location ?? undefined),
+          }))
+        : undefined;
+
+    const issueList = errors.length > 0
+      ? errors.map((issue) =>
+          toCompilationIssue(
+            issue.text,
+            toDiagnosticLocation(issue.location ?? undefined),
+            dependencyCheck,
+          ),
+        )
+      : [
+          toCompilationIssue(
+            error instanceof Error ? error.message : "Compilation failed.",
+            undefined,
+            dependencyCheck,
+          ),
+        ];
+
+    throw new DesignWorkspaceCompileError(
+      issueList[0]?.message ?? "Compilation failed.",
+      {
+        warnings,
+        diagnostics,
+        errors: issueList,
+        dependencyCheck: normalizeDependencySummary(dependencyCheck),
+        recovered: false,
+        durationMs: 0,
+      },
+    );
   }
-
-  return {
-    code: result.outputFiles[0].text,
-    warnings,
-    diagnostics: diagnostics.length > 0 ? diagnostics : undefined,
-  };
 }
-
-// ---------------------------------------------------------------------------
-// Preview HTML builder
-// ---------------------------------------------------------------------------
 
 function escapeHtml(value: string): string {
   return value
@@ -273,38 +472,37 @@ function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/**
- * Escape `</script>` sequences in compiled JS to prevent breaking
- * the inline `<script>` tag in the preview HTML document.
- */
 function escapeInlineScript(js: string): string {
   return js.replace(/<\/(script)/gi, "<\\/$1");
 }
 
 async function buildPreviewTailwindCss(componentCode: string): Promise<string> {
-  const baseConfig = previewTailwindConfig as unknown as Omit<Config, "content">;
-  const config = {
-    ...baseConfig,
-    content: [
-      {
-        raw: componentCode,
-        extension: "tsx",
-      },
-    ],
-  } satisfies Config;
+  try {
+    const baseConfig = previewTailwindConfig as unknown as Omit<Config, "content">;
+    const config = {
+      ...baseConfig,
+      content: [
+        {
+          raw: componentCode,
+          extension: "tsx",
+        },
+      ],
+    } satisfies Config;
 
-  const result = await postcss([tailwindcss(config)]).process(PREVIEW_TAILWIND_SOURCE, {
-    from: TAILWIND_INPUT_PATH,
-  });
+    const result = await withTimeout(
+      postcss([tailwindcss(config)]).process(PREVIEW_TAILWIND_SOURCE, {
+        from: TAILWIND_INPUT_PATH,
+      }),
+      TAILWIND_TIMEOUT_MS,
+      "Tailwind preview build",
+    );
 
-  return result.css;
+    return result.css;
+  } catch (error) {
+    throw new Error(error instanceof Error ? error.message : "Tailwind preview build failed.");
+  }
 }
 
-/**
- * Escape `</style>` sequences to prevent breaking inline `<style>` tags.
- * CSS is raw text inside `<style>` — HTML entities are NOT decoded,
- * so we must NOT use HTML escaping here.
- */
 function escapeInlineStyle(css: string): string {
   return css.replace(/<\/(style)/gi, "<\\/$1");
 }
@@ -358,11 +556,175 @@ function buildCompiledPreviewHtml(compiledJs: string, tailwindCss: string, title
   ].join("\n");
 }
 
-/**
- * High-level helper: compile a TSX component and return the full preview HTML.
- */
-export async function buildTailwindPreviewAsync(componentCode: string, title: string): Promise<string> {
-  const { code: compiledJs } = await compileReactComponent(componentCode);
-  const tailwindCss = await buildPreviewTailwindCss(componentCode);
-  return buildCompiledPreviewHtml(compiledJs, tailwindCss, title);
+function createMissingDependencyIssues(
+  dependencyCheck: DependencyValidationResult,
+): DesignWorkspaceCompilationIssue[] {
+  return dependencyCheck.missingPackages.map((packageName) => ({
+    type: "dependency",
+    message: `Cannot resolve workspace package \"${packageName}\".`,
+    suggestion: `Install ${packageName} in .selene-workspace/package.json or allow automatic recovery to install it.`,
+  }));
+}
+
+function buildReportMessage(report: DesignWorkspaceCompileReport): string {
+  const primary = report.errors[0]?.message;
+  if (primary) {
+    return primary;
+  }
+
+  if (report.dependencyCheck.missingPackages.length > 0) {
+    return `Missing dependencies: ${report.dependencyCheck.missingPackages.join(", ")}`;
+  }
+
+  return "Design preview compilation failed.";
+}
+
+function logCompilerFailure(
+  source: string,
+  report: DesignWorkspaceCompileReport,
+  message: string,
+): void {
+  logToolEvent({
+    level: "error",
+    toolName: "designWorkspaceCompiler",
+    event: "error",
+    error: message,
+    metadata: {
+      source,
+      recovered: report.recovered,
+      missingPackages: report.dependencyCheck.missingPackages,
+      autoInstall: report.autoInstall,
+      errors: report.errors,
+    },
+  });
+}
+
+export function isDesignWorkspaceCompileError(
+  error: unknown,
+): error is DesignWorkspaceCompileError {
+  return error instanceof DesignWorkspaceCompileError;
+}
+
+export async function buildTailwindPreviewWithMetadata(
+  componentCode: string,
+  title: string,
+  options: BuildTailwindPreviewOptions = {},
+): Promise<BuildTailwindPreviewResult> {
+  const startedAt = Date.now();
+  const source = options.source ?? "design-workspace";
+  let dependencyCheck = await validateWorkspaceDependencies(componentCode);
+  let autoInstall: DesignWorkspaceAutoInstallSummary | undefined;
+  let recovered = false;
+
+  if (
+    dependencyCheck.missingPackages.length > 0 &&
+    options.autoInstallMissingDependencies !== false
+  ) {
+    logToolEvent({
+      level: "warn",
+      toolName: "designWorkspaceCompiler",
+      event: "retry",
+      error: `Missing dependencies detected: ${dependencyCheck.missingPackages.join(", ")}`,
+      metadata: {
+        source,
+        missingPackages: dependencyCheck.missingPackages,
+      },
+    });
+
+    autoInstall = normalizeAutoInstallSummary(
+      await installSandboxPackages(dependencyCheck.missingPackages),
+    );
+
+    if (autoInstall?.success) {
+      recovered = true;
+      dependencyCheck = await validateWorkspaceDependencies(componentCode);
+    }
+  }
+
+  if (dependencyCheck.missingPackages.length > 0) {
+    const report: DesignWorkspaceCompileReport = {
+      warnings: [],
+      errors: createMissingDependencyIssues(dependencyCheck),
+      dependencyCheck: normalizeDependencySummary(dependencyCheck),
+      autoInstall,
+      recovered,
+      durationMs: Date.now() - startedAt,
+    };
+    const message = buildReportMessage(report);
+    logCompilerFailure(source, report, message);
+    throw new DesignWorkspaceCompileError(message, report);
+  }
+
+  try {
+    const compileResult = await compileReactComponent(componentCode, dependencyCheck);
+    const tailwindCss = await buildPreviewTailwindCss(componentCode);
+    const report: DesignWorkspaceCompileReport = {
+      warnings: compileResult.warnings,
+      diagnostics: compileResult.diagnostics,
+      errors: [],
+      dependencyCheck: normalizeDependencySummary(dependencyCheck),
+      autoInstall,
+      recovered,
+      durationMs: Date.now() - startedAt,
+    };
+
+    if (recovered) {
+      logToolEvent({
+        level: "info",
+        toolName: "designWorkspaceCompiler",
+        event: "success",
+        durationMs: report.durationMs,
+        metadata: {
+          source,
+          recovered,
+          autoInstall,
+        },
+      });
+    }
+
+    return {
+      html: buildCompiledPreviewHtml(compileResult.code, tailwindCss, title),
+      report,
+    };
+  } catch (error) {
+    const baseReport =
+      error instanceof DesignWorkspaceCompileError
+        ? error.report
+        : {
+            warnings: [],
+            errors: [
+              toCompilationIssue(
+                error instanceof Error ? error.message : "Compilation failed.",
+                undefined,
+                dependencyCheck,
+              ),
+            ],
+            dependencyCheck: normalizeDependencySummary(dependencyCheck),
+            recovered: false,
+            durationMs: 0,
+          } satisfies DesignWorkspaceCompileReport;
+
+    const report: DesignWorkspaceCompileReport = {
+      ...baseReport,
+      dependencyCheck: baseReport.dependencyCheck ?? normalizeDependencySummary(dependencyCheck),
+      autoInstall: baseReport.autoInstall ?? autoInstall,
+      recovered,
+      durationMs: Date.now() - startedAt,
+    };
+
+    const message = buildReportMessage(report);
+    logCompilerFailure(source, report, message);
+    throw new DesignWorkspaceCompileError(message, report);
+  }
+}
+
+export async function buildTailwindPreviewAsync(
+  componentCode: string,
+  title: string,
+): Promise<string> {
+  const { html } = await buildTailwindPreviewWithMetadata(componentCode, title, {
+    autoInstallMissingDependencies: true,
+    source: "design-workspace-preview",
+  });
+  return html;
 }

@@ -103,6 +103,13 @@ export async function PUT(request: NextRequest) {
       postEditLintEnabled: body.postEditLintEnabled !== undefined ? body.postEditLintEnabled : currentSettings.postEditLintEnabled,
       postEditTypecheckScope: body.postEditTypecheckScope !== undefined ? body.postEditTypecheckScope : currentSettings.postEditTypecheckScope,
       postEditRunInPatchTool: body.postEditRunInPatchTool !== undefined ? body.postEditRunInPatchTool : currentSettings.postEditRunInPatchTool,
+      designPostEditHooksPreset: body.designPostEditHooksPreset !== undefined ? body.designPostEditHooksPreset : currentSettings.designPostEditHooksPreset,
+      designPostEditHooksEnabled: body.designPostEditHooksEnabled !== undefined ? body.designPostEditHooksEnabled : currentSettings.designPostEditHooksEnabled,
+      designPostEditTypecheckEnabled: body.designPostEditTypecheckEnabled !== undefined ? body.designPostEditTypecheckEnabled : currentSettings.designPostEditTypecheckEnabled,
+      designPostEditImportValidationEnabled: body.designPostEditImportValidationEnabled !== undefined ? body.designPostEditImportValidationEnabled : currentSettings.designPostEditImportValidationEnabled,
+      designPostEditPreviewEnabled: body.designPostEditPreviewEnabled !== undefined ? body.designPostEditPreviewEnabled : currentSettings.designPostEditPreviewEnabled,
+      designTypecheckStrictMode: body.designTypecheckStrictMode !== undefined ? body.designTypecheckStrictMode : currentSettings.designTypecheckStrictMode,
+      designJsxValidationEnabled: body.designJsxValidationEnabled !== undefined ? body.designJsxValidationEnabled : currentSettings.designJsxValidationEnabled,
       promptCachingEnabled: body.promptCachingEnabled !== undefined ? body.promptCachingEnabled : currentSettings.promptCachingEnabled,
       // RTK (experimental)
       rtkEnabled: body.rtkEnabled !== undefined ? body.rtkEnabled : currentSettings.rtkEnabled,

@@ -57,11 +57,11 @@ export async function POST(req: NextRequest) {
         }
         const prompt = typeof body.prompt === "string" ? body.prompt.trim().slice(0, 10_000) : name;
         const description = typeof body.description === "string" ? body.description.trim().slice(0, 1000) : undefined;
-        const mode = isNonEmptyString(body.mode, 50) ? body.mode : "html";
+        const mode = "tailwind";
         const style = isNonEmptyString(body.style, 50) ? body.style : "default";
         const framework = isNonEmptyString(body.framework, 50)
           ? body.framework
-          : (mode === "tailwind" ? "react-tailwind" : "html-css");
+          : "react-tailwind";
         const category = isNonEmptyString(body.category, 50) ? body.category : "general";
         const tags = sanitizeStringArray(body.tags, 20, 100);
         const styleTags = sanitizeStringArray(body.styleTags, 20, 100);

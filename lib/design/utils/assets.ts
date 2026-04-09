@@ -1,149 +1,78 @@
 /**
- * Asset relevance scoring and prompt formatting utilities.
- * Extracted from Otter Cards assets-context.ts.
+ * Asset placeholder utilities for the design pipeline.
+ *
+ * Both the generation and editing pipelines need to:
+ * 1. Convert user-provided assets into `__ASSET_N__` placeholder tokens
+ *    (so the LLM never sees raw URLs / base64 data).
+ * 2. Substitute placeholders back to real URLs after generation.
+ * 3. Sanitize any raw filesystem media paths that leaked into the output.
  *
  * All functions are pure -- no side effects, no external dependencies.
  */
 
-/** Metadata about a user-uploaded asset (image, video, etc.) */
-export interface AssetInfo {
-  /** Unique identifier */
-  id: string;
-  /** Storage filename */
-  filename: string;
-  /** Original filename as uploaded by the user */
-  originalFilename: string;
-  /** Publicly accessible URL */
-  publicUrl: string;
-  /** MIME type (e.g. "image/png") */
-  mimeType: string;
-  /** AI-generated description of the asset */
-  description?: string;
-  /** AI-generated tags */
-  tags?: string[];
-  /** Dominant colors extracted by AI */
-  colors?: string[];
-  /** Visual style label (e.g. "minimalist", "retro") */
-  style?: string;
-  /** Mood label (e.g. "calm", "energetic") */
-  mood?: string;
-  /** Objects detected in the asset */
-  objects?: string[];
-  /** Suggested use case */
-  useCase?: string;
-}
+import type { AssetContext } from '../types';
+
+// ---------------------------------------------------------------------------
+// Build placeholder-based asset references for prompts
+// ---------------------------------------------------------------------------
 
 /**
- * Score and rank assets by relevance to a user prompt.
- *
- * Scoring weights:
- *  - description match: +3
- *  - tag match: +2 per tag
- *  - object match: +2 per object
- *  - style match: +1
- *  - mood match: +1
- *  - filename match: +1
- *
- * Returns the top 5 assets sorted by descending score.
- * Assets with score 0 are excluded.
+ * Build prompt-safe asset references using `__ASSET_N__` placeholders instead
+ * of raw URLs.  The inner design LLM sees (and copies) only the short token;
+ * we substitute it with the real URL after generation.  This prevents the LLM
+ * from trying to reproduce data-URI base64 strings in its output.
  */
-export function findRelevantAssets(prompt: string, assets: AssetInfo[]): AssetInfo[] {
-  if (!assets.length) return [];
+export function buildAssetPlaceholders(assets: AssetContext[] | undefined): {
+  promptAssets: Array<{ url: string; description?: string }> | undefined;
+  /** placeholder -> real URL */
+  assetMap: Map<string, string>;
+} {
+  const assetMap = new Map<string, string>();
+  if (!assets || assets.length === 0) return { promptAssets: undefined, assetMap };
 
-  const promptLower = prompt.toLowerCase();
-  const scored: Array<{ asset: AssetInfo; score: number }> = [];
+  const promptAssets = assets.map((a, i) => {
+    const placeholder = `__ASSET_${i + 1}__`;
+    assetMap.set(placeholder, a.url);
+    return {
+      url: placeholder,
+      description: a.metadata?.description
+        ? String(a.metadata.description)
+        : a.alt ?? undefined,
+    };
+  });
 
-  for (const asset of assets) {
-    let score = 0;
+  return { promptAssets, assetMap };
+}
 
-    // Description match
-    if (asset.description && asset.description.toLowerCase().includes(promptLower)) {
-      score += 3;
-    }
+// ---------------------------------------------------------------------------
+// Substitute placeholders back to real URLs
+// ---------------------------------------------------------------------------
 
-    // Tag matches (bidirectional substring check)
-    if (asset.tags) {
-      for (const tag of asset.tags) {
-        const tagLower = tag.toLowerCase();
-        if (promptLower.includes(tagLower) || tagLower.includes(promptLower)) {
-          score += 2;
-        }
-      }
-    }
-
-    // Object matches (bidirectional substring check)
-    if (asset.objects) {
-      for (const obj of asset.objects) {
-        const objLower = obj.toLowerCase();
-        if (promptLower.includes(objLower) || objLower.includes(promptLower)) {
-          score += 2;
-        }
-      }
-    }
-
-    // Style match
-    if (asset.style && promptLower.includes(asset.style.toLowerCase())) {
-      score += 1;
-    }
-
-    // Mood match
-    if (asset.mood && promptLower.includes(asset.mood.toLowerCase())) {
-      score += 1;
-    }
-
-    // Filename match
-    if (asset.originalFilename.toLowerCase().includes(promptLower)) {
-      score += 1;
-    }
-
-    if (score > 0) {
-      scored.push({ asset, score });
-    }
+/** Replace `__ASSET_N__` tokens in generated code with real URLs. */
+export function substituteAssetPlaceholders(code: string, assetMap: Map<string, string>): string {
+  let result = code;
+  for (const [placeholder, url] of assetMap) {
+    result = result.replaceAll(placeholder, url);
   }
-
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 5)
-    .map(item => item.asset);
+  return result;
 }
 
+// ---------------------------------------------------------------------------
+// Sanitize raw filesystem media paths
+// ---------------------------------------------------------------------------
+
 /**
- * Format a list of assets into a text block suitable for inclusion in an
- * AI system/user prompt.
- *
- * Each asset is rendered as a semicolon-delimited line with its filename,
- * description, tags, style, use case, and URL.
- *
- * Returns an empty string when the asset list is empty.
+ * Convert raw filesystem media paths in generated code to `/api/media/` URLs.
+ * Catches paths the outer agent embeds directly in the prompt text, bypassing
+ * the asset placeholder pipeline. Matches patterns like:
+ *   /Users/.../media/sessionId/role/file.png
+ *   /home/.../media/sessionId/role/file.png
+ *   .local-data/media/sessionId/role/file.png
  */
-export function formatAssetsForPrompt(assets: AssetInfo[]): string {
-  if (!assets.length) return '';
-
-  const assetDescriptions = assets
-    .map(asset => {
-      const parts = [`- ${asset.originalFilename}`];
-
-      if (asset.description) {
-        parts.push(`Description: ${asset.description}`);
-      }
-      if (asset.tags && asset.tags.length > 0) {
-        parts.push(`Tags: ${asset.tags.join(', ')}`);
-      }
-      if (asset.style) {
-        parts.push(`Style: ${asset.style}`);
-      }
-      if (asset.useCase) {
-        parts.push(`Use case: ${asset.useCase}`);
-      }
-      parts.push(`URL: ${asset.publicUrl}`);
-
-      return parts.join('; ');
-    })
-    .join('\n');
-
-  return `
-USER-PROVIDED ASSETS (MUST BE INCORPORATED):
-${assetDescriptions}
-
-IMPORTANT: The user has specifically uploaded these assets to be used in the design. You MUST incorporate them seamlessly into your card design. Use the image URLs directly in <img> tags or as CSS background-images. Make sure they integrate naturally with the overall design aesthetic while maintaining the requested style.`;
+export function sanitizeMediaPaths(code: string): string {
+  // Match absolute or relative paths containing /media/ followed by path segments ending in an image extension
+  return code.replace(
+    /(?:\/[^\s'"()]+|\.local-data)\/media\/([\w-]+\/[\w-]+\/[^\s'"()]+\.(?:png|jpe?g|gif|webp|svg))/gi,
+    '/api/media/$1',
+  );
 }

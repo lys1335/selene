@@ -1,3 +1,10 @@
+import type {
+  DesignWorkspaceConfig,
+  DesignWorkspaceCompileReport,
+  DesignWorkspaceValidationResult,
+} from "./config";
+import type { DesignWorkspaceHistory } from "./edit-history";
+
 export interface DesignComponent {
   id: string;
   name: string;
@@ -67,13 +74,14 @@ export interface DesignWorkspaceSessionState {
   error: string | null;
   inspectorEnabled: boolean;
   selectedElement: InspectedElement | null;
+  config: DesignWorkspaceConfig;
+  lastValidation: DesignWorkspaceValidationResult | null;
+  lastCompileReport: DesignWorkspaceCompileReport | null;
+  history: DesignWorkspaceHistory | null;
 }
 
 export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
-  // Session tracking
   sessionId: string | null;
-
-  // Actions
   open: () => void;
   close: () => void;
   setStatus: (status: DesignWorkspaceStatus) => void;
@@ -89,7 +97,12 @@ export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
   takeSnapshot: (label?: string, id?: string) => void;
   restoreSnapshot: (snapshotId: string) => void;
   clearError: () => void;
-  setError: (error: string) => void;
+  setError: (error: string | null) => void;
+  setConfig: (config: DesignWorkspaceConfig) => void;
+  updateConfig: (updates: Partial<DesignWorkspaceConfig>) => void;
+  setLastValidation: (validation: DesignWorkspaceValidationResult | null) => void;
+  setLastCompileReport: (report: DesignWorkspaceCompileReport | null) => void;
+  setHistory: (history: DesignWorkspaceHistory | null) => void;
   setActiveSession: (sessionId: string) => void;
   reset: () => void;
 }

@@ -15,8 +15,19 @@ import {
   markGalleryComponentUsed,
   saveDesignComponentWithPreview,
   toggleGalleryFavoriteForUser,
+  createProject,
+  updateProject,
+  deleteProject,
+  listProjects,
+  getProject,
+  addComponentToProject,
+  removeComponentFromProject,
+  archiveProject,
   type DesignGalleryItem,
+  type DesignProjectRow,
+  type DesignProjectWithComponents,
 } from "@/lib/design/gallery";
+import { resolveComponentCode } from "@/lib/ai/tools/design-workspace-tool";
 
 interface DesignGalleryToolOptions {
   sessionId?: string;
@@ -24,7 +35,20 @@ interface DesignGalleryToolOptions {
   characterId?: string;
 }
 
-type DesignGalleryAction = "save" | "search" | "get" | "favorite" | "reuse" | "delete";
+type DesignGalleryAction =
+  | "save"
+  | "search"
+  | "get"
+  | "favorite"
+  | "reuse"
+  | "delete"
+  | "createProject"
+  | "listProjects"
+  | "getProject"
+  | "updateProject"
+  | "deleteProject"
+  | "addToProject"
+  | "removeFromProject";
 
 interface DesignGalleryInput {
   action: DesignGalleryAction;
@@ -33,7 +57,7 @@ interface DesignGalleryInput {
   description?: string;
   prompt?: string;
   code?: string;
-  mode?: "html" | "tailwind";
+  mode?: "tailwind";
   style?: "default" | "apple-glass";
   framework?: string;
   category?: string;
@@ -42,6 +66,9 @@ interface DesignGalleryInput {
   query?: string;
   favoritesOnly?: boolean;
   limit?: number;
+  projectId?: string;
+  projectName?: string;
+  includeArchived?: boolean;
 }
 
 interface DesignGalleryToolResult {
@@ -50,6 +77,8 @@ interface DesignGalleryToolResult {
   data?: {
     component?: DesignGalleryItem;
     components?: DesignGalleryItem[];
+    project?: DesignProjectRow | DesignProjectWithComponents;
+    projects?: DesignProjectRow[];
     count?: number;
     message?: string;
   };
@@ -109,20 +138,34 @@ async function handleSave(
   if (!input.prompt?.trim()) return missingField("prompt", "save");
   if (!input.code?.trim()) return missingField("code", "save");
 
+  // Resolve `cached:<id>` references to actual component code
+  const resolvedCode = options.sessionId
+    ? resolveComponentCode(options.sessionId, input.code.trim())
+    : input.code.trim();
+
+  if (!resolvedCode) {
+    return {
+      success: false,
+      action: "save",
+      error: "Component code cache expired. Please regenerate the component before saving.",
+    };
+  }
+
   const userId = requireUserId(options);
   const saved = await saveDesignComponentWithPreview({
     userId,
     characterId: options.characterId,
     sessionId: options.sessionId,
+    projectId: input.projectId?.trim() || undefined,
     name: input.name.trim(),
     description: input.description?.trim() || undefined,
     prompt: input.prompt.trim(),
-    code: input.code.trim(),
-    framework: input.framework?.trim() || (input.mode === "tailwind" ? "react-tailwind" : "html-css"),
+    code: resolvedCode,
+    framework: input.framework?.trim() || "react-tailwind",
     category: input.category?.trim() || "general",
     tags: normalizeTags(input.tags),
     styleTags: normalizeTags(input.styleTags),
-    mode: input.mode || "html",
+    mode: "tailwind",
     style: input.style || "default",
   });
 
@@ -276,6 +319,199 @@ async function handleDelete(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Project handlers
+// ---------------------------------------------------------------------------
+
+async function handleCreateProject(
+  options: DesignGalleryToolOptions,
+  input: DesignGalleryInput
+): Promise<DesignGalleryToolResult> {
+  if (!input.projectName?.trim()) return missingField("projectName", "createProject");
+
+  const userId = requireUserId(options);
+  const project = await createProject(userId, {
+    name: input.projectName.trim(),
+    description: input.description?.trim() || undefined,
+    tags: normalizeTags(input.tags),
+  });
+
+  return {
+    success: true,
+    action: "createProject",
+    data: {
+      project,
+      message: `Created project "${project.name}".`,
+    },
+  };
+}
+
+async function handleListProjects(
+  options: DesignGalleryToolOptions,
+  input: DesignGalleryInput
+): Promise<DesignGalleryToolResult> {
+  const userId = requireUserId(options);
+  const projects = await listProjects({
+    userId,
+    search: input.query?.trim() || undefined,
+    includeArchived: input.includeArchived === true,
+    limit: normalizeLimit(input.limit),
+  });
+
+  return {
+    success: true,
+    action: "listProjects",
+    data: {
+      projects,
+      count: projects.length,
+      message: projects.length === 0
+        ? "No projects found."
+        : `Found ${projects.length} project${projects.length === 1 ? "" : "s"}.`,
+    },
+  };
+}
+
+async function handleGetProject(
+  options: DesignGalleryToolOptions,
+  input: DesignGalleryInput
+): Promise<DesignGalleryToolResult> {
+  if (!input.projectId?.trim()) return missingField("projectId", "getProject");
+
+  const userId = requireUserId(options);
+  const project = await getProject(userId, input.projectId.trim());
+  if (!project) {
+    return {
+      success: false,
+      action: "getProject",
+      error: `Project "${input.projectId}" was not found.`,
+    };
+  }
+
+  return {
+    success: true,
+    action: "getProject",
+    data: {
+      project,
+      count: project.components.length,
+      message: `Loaded project "${project.name}" with ${project.components.length} component${project.components.length === 1 ? "" : "s"}.`,
+    },
+  };
+}
+
+async function handleUpdateProject(
+  options: DesignGalleryToolOptions,
+  input: DesignGalleryInput
+): Promise<DesignGalleryToolResult> {
+  if (!input.projectId?.trim()) return missingField("projectId", "updateProject");
+
+  const userId = requireUserId(options);
+  const project = await updateProject(userId, input.projectId.trim(), {
+    name: input.projectName?.trim() || undefined,
+    description: input.description?.trim() || undefined,
+    tags: input.tags ? normalizeTags(input.tags) : undefined,
+  });
+
+  if (!project) {
+    return {
+      success: false,
+      action: "updateProject",
+      error: `Project "${input.projectId}" was not found.`,
+    };
+  }
+
+  return {
+    success: true,
+    action: "updateProject",
+    data: {
+      project,
+      message: `Updated project "${project.name}".`,
+    },
+  };
+}
+
+async function handleDeleteProject(
+  options: DesignGalleryToolOptions,
+  input: DesignGalleryInput
+): Promise<DesignGalleryToolResult> {
+  if (!input.projectId?.trim()) return missingField("projectId", "deleteProject");
+
+  const userId = requireUserId(options);
+  const project = await archiveProject(userId, input.projectId.trim());
+  if (!project) {
+    return {
+      success: false,
+      action: "deleteProject",
+      error: `Project "${input.projectId}" was not found.`,
+    };
+  }
+
+  return {
+    success: true,
+    action: "deleteProject",
+    data: {
+      project,
+      message: `Archived project "${project.name}".`,
+    },
+  };
+}
+
+async function handleAddToProject(
+  options: DesignGalleryToolOptions,
+  input: DesignGalleryInput
+): Promise<DesignGalleryToolResult> {
+  if (!input.componentId?.trim()) return missingField("componentId", "addToProject");
+  if (!input.projectId?.trim()) return missingField("projectId", "addToProject");
+
+  const userId = requireUserId(options);
+  const success = await addComponentToProject(userId, input.componentId.trim(), input.projectId.trim());
+  if (!success) {
+    return {
+      success: false,
+      action: "addToProject",
+      error: `Could not add component "${input.componentId}" to project "${input.projectId}". Verify both exist and belong to you.`,
+    };
+  }
+
+  const component = await getGalleryComponentForUser(userId, input.componentId.trim());
+
+  return {
+    success: true,
+    action: "addToProject",
+    data: {
+      component: component ?? undefined,
+      message: `Added component to project.`,
+    },
+  };
+}
+
+async function handleRemoveFromProject(
+  options: DesignGalleryToolOptions,
+  input: DesignGalleryInput
+): Promise<DesignGalleryToolResult> {
+  if (!input.componentId?.trim()) return missingField("componentId", "removeFromProject");
+
+  const userId = requireUserId(options);
+  const success = await removeComponentFromProject(userId, input.componentId.trim());
+  if (!success) {
+    return {
+      success: false,
+      action: "removeFromProject",
+      error: `Could not remove component "${input.componentId}" from its project. Verify it exists and belongs to a project.`,
+    };
+  }
+
+  const component = await getGalleryComponentForUser(userId, input.componentId.trim());
+
+  return {
+    success: true,
+    action: "removeFromProject",
+    data: {
+      component: component ?? undefined,
+      message: `Removed component from its project.`,
+    },
+  };
+}
+
 async function executeDesignGallery(
   options: DesignGalleryToolOptions,
   input: DesignGalleryInput
@@ -293,6 +529,20 @@ async function executeDesignGallery(
       return handleReuse(options, input);
     case "delete":
       return handleDelete(options, input);
+    case "createProject":
+      return handleCreateProject(options, input);
+    case "listProjects":
+      return handleListProjects(options, input);
+    case "getProject":
+      return handleGetProject(options, input);
+    case "updateProject":
+      return handleUpdateProject(options, input);
+    case "deleteProject":
+      return handleDeleteProject(options, input);
+    case "addToProject":
+      return handleAddToProject(options, input);
+    case "removeFromProject":
+      return handleRemoveFromProject(options, input);
     default:
       return {
         success: false,
@@ -310,29 +560,50 @@ export function createDesignGalleryTool(options: DesignGalleryToolOptions = {}) 
   );
 
   return tool({
-    description: `Save, search, favorite, reuse, and delete components from the design gallery.
+    description: `Save, search, favorite, reuse, and delete components from the design gallery. Manage design projects to organize components.
 
 Actions:
-- "save": Save generated component code to the gallery with an auto-generated preview thumbnail.
+- "save": Save generated component code to the gallery with an auto-generated preview thumbnail. Optionally assign to a project via projectId.
 - "search": List saved components, optionally filtered by query or favorites.
 - "get": Fetch one saved component by id.
 - "favorite": Toggle a saved component as favorite.
 - "reuse": Mark a saved component as reused and return it for the workspace.
-- "delete": Delete a saved component from the gallery.`,
+- "delete": Delete a saved component from the gallery.
+- "createProject": Create a new design project. Requires projectName.
+- "listProjects": List the user's projects, optionally filtered by query. Supports includeArchived.
+- "getProject": Get a single project with its components by projectId.
+- "updateProject": Update a project's name, description, or tags by projectId.
+- "deleteProject": Archive a project by projectId.
+- "addToProject": Add a component to a project. Requires componentId and projectId.
+- "removeFromProject": Remove a component from its project. Requires componentId.`,
     inputSchema: jsonSchema<DesignGalleryInput>({
       type: "object",
       title: "DesignGalleryInput",
       properties: {
         action: {
           type: "string",
-          enum: ["save", "search", "get", "favorite", "reuse", "delete"],
+          enum: [
+            "save",
+            "search",
+            "get",
+            "favorite",
+            "reuse",
+            "delete",
+            "createProject",
+            "listProjects",
+            "getProject",
+            "updateProject",
+            "deleteProject",
+            "addToProject",
+            "removeFromProject",
+          ],
         },
         componentId: { type: "string" },
         name: { type: "string" },
         description: { type: "string" },
         prompt: { type: "string" },
         code: { type: "string" },
-        mode: { type: "string", enum: ["html", "tailwind"] },
+        mode: { type: "string", enum: ["tailwind"] },
         style: { type: "string", enum: ["default", "apple-glass"] },
         framework: { type: "string" },
         category: { type: "string" },
@@ -341,6 +612,9 @@ Actions:
         query: { type: "string" },
         favoritesOnly: { type: "boolean" },
         limit: { type: "number", minimum: 1, maximum: MAX_LIMIT },
+        projectId: { type: "string" },
+        projectName: { type: "string" },
+        includeArchived: { type: "boolean" },
       },
       required: ["action"],
       additionalProperties: false,

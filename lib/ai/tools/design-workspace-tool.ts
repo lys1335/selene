@@ -12,28 +12,45 @@
 
 import { tool, jsonSchema } from "ai";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
+import { loadSettings } from "@/lib/settings/settings-manager";
 import { generateCard, editCard } from "../../design";
 import type { AssetContext } from "../../design/types";
 import {
   detectAvailableLibraries,
   getAvailableLibrariesPrompt,
-  registerRuntimeLibrary,
-  validatePackageSpec,
-  ensureSandboxDir,
-  SANDBOX_DIR,
   type DesignLibrary,
 } from "../../design/libraries";
 import {
   exportDesignAsset,
   type DesignExportFormat,
 } from "../../design/workspace/export";
-import { type DesignExportMode } from "../../design/workspace/preview";
+import {
+  buildDesignPreviewErrorHtml,
+  type DesignExportMode,
+} from "../../design/workspace/preview";
+import {
+  buildTailwindPreviewWithMetadata,
+  isDesignWorkspaceCompileError,
+} from "../../design/workspace/compiler";
+import {
+  DEFAULT_DESIGN_WORKSPACE_CONFIG,
+  getDesignWorkspaceConfigFromSettingsRecord,
+  type DesignWorkspaceCompileReport,
+  type DesignWorkspaceConfig,
+  type DesignWorkspaceValidationResult,
+} from "../../design/workspace/config";
+import {
+  finalizeDesignHistory,
+  initDesignHistory,
+  peekDesignHistory,
+  recordDesignHistory,
+  type DesignWorkspaceHistory,
+} from "../../design/workspace/edit-history";
+import { installSandboxPackages } from "../../design/workspace/dependencies";
+import { runPostEditValidation } from "../../design/workspace/validation";
 import { getFullPathFromMediaRef } from "../../storage/local-storage";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
-const execFileAsync = promisify(execFile);
 
 interface DesignWorkspaceToolOptions {
   sessionId?: string;
@@ -70,43 +87,76 @@ interface DesignWorkspaceInput {
   fps?: number;
 }
 
+interface DesignWorkspaceResultData {
+  componentId?: string;
+  code?: string;
+  name?: string;
+  snapshotId?: string;
+  format?: string;
+  message?: string;
+  prompt?: string;
+  mode?: string;
+  style?: string;
+  renderedHtml?: string;
+  /**
+   * Compiled preview HTML for the UI bridge (iframe rendering).
+   * Stripped from LLM-facing output to avoid sending ~700K+ tokens of bundled JS.
+   * The preview frame falls back to the compile API when this is absent.
+   * @internal UI-only — never serialized to model context.
+   */
+  previewHtml?: string;
+  url?: string;
+  localPath?: string;
+  filePath?: string;
+  fileName?: string;
+  width?: number;
+  height?: number;
+  durationMs?: number;
+  fps?: number;
+  availableLibraries?: string[];
+  compileReport?: DesignWorkspaceCompileReport;
+  postEditValidation?: DesignWorkspaceValidationResult;
+  history?: DesignWorkspaceHistory;
+  config?: DesignWorkspaceConfig;
+  missingPackages?: string[];
+  autoRecoveryAttempted?: boolean;
+  autoRecoveryResult?: "success" | "failed" | "not-needed";
+}
+
 interface DesignWorkspaceResult {
   success: boolean;
   action: string;
-  data?: {
-    componentId?: string;
-    code?: string;
-    name?: string;
-    snapshotId?: string;
-    format?: string;
-    message?: string;
-    prompt?: string;
-    mode?: string;
-    style?: string;
-    renderedHtml?: string;
-    url?: string;
-    localPath?: string;
-    filePath?: string;
-    fileName?: string;
-    width?: number;
-    height?: number;
-    durationMs?: number;
-    fps?: number;
-    availableLibraries?: string[];
-  };
+  data?: DesignWorkspaceResultData;
   error?: string;
 }
 
-let _librariesPromise: Promise<DesignLibrary[]> | null = null;
+interface CompiledPreviewSuccess {
+  ok: true;
+  previewHtml: string;
+  compileReport: DesignWorkspaceCompileReport;
+}
+
+interface CompiledPreviewFailure {
+  ok: false;
+  previewHtml: string;
+  compileReport: DesignWorkspaceCompileReport;
+  error: string;
+}
+
+let librariesPromise: Promise<DesignLibrary[]> | null = null;
 
 function getAvailableLibraries(): Promise<DesignLibrary[]> {
-  if (!_librariesPromise) {
-    _librariesPromise = detectAvailableLibraries().catch((err) => {
-      _librariesPromise = null;
+  if (!librariesPromise) {
+    librariesPromise = detectAvailableLibraries().catch((err) => {
+      librariesPromise = null;
       throw err;
     });
   }
-  return _librariesPromise;
+  return librariesPromise;
+}
+
+function resetAvailableLibrariesCache(): void {
+  librariesPromise = null;
 }
 
 const componentCache = (
@@ -208,7 +258,7 @@ async function resolveAssets(
         const storageRoot = path.resolve(
           process.env.LOCAL_DATA_PATH
             ? path.resolve(process.env.LOCAL_DATA_PATH, "media")
-            : path.resolve(process.cwd(), ".local-data", "media")
+            : path.resolve(process.cwd(), ".local-data", "media"),
         );
         const resolvedFull = path.resolve(fullPath);
         if (!resolvedFull.startsWith(storageRoot + path.sep) && resolvedFull !== storageRoot) {
@@ -224,7 +274,7 @@ async function resolveAssets(
             ctx.mediaType = mediaType;
           }
         } catch {
-          // File not accessible — proceed without multimodal
+          // File not accessible — proceed without multimodal support.
         }
       }
 
@@ -271,37 +321,209 @@ function buildExportSuccessMessage(format: DesignExportFormat): string {
   }
 }
 
+function getSessionId(options: DesignWorkspaceToolOptions): string {
+  return options.sessionId?.trim() || "UNSCOPED";
+}
+
+function getWorkspaceConfig(): DesignWorkspaceConfig {
+  try {
+    const settings = loadSettings() as unknown as Record<string, unknown>;
+    return getDesignWorkspaceConfigFromSettingsRecord(settings);
+  } catch {
+    return { ...DEFAULT_DESIGN_WORKSPACE_CONFIG };
+  }
+}
+
+function createEmptyCompileReport(message: string): DesignWorkspaceCompileReport {
+  return {
+    warnings: [],
+    errors: [
+      {
+        type: "unknown",
+        message,
+      },
+    ],
+    dependencyCheck: {
+      manifestPackages: [],
+      importedPackages: [],
+      checkedPackages: [],
+      missingManifestPackages: [],
+      missingImportedPackages: [],
+      missingPackages: [],
+    },
+    recovered: false,
+    durationMs: 0,
+  };
+}
+
+function ensureHistory(sessionId: string): void {
+  initDesignHistory(sessionId);
+}
+
+function recordHistory(
+  sessionId: string,
+  action: DesignWorkspaceInput["action"],
+  startedAt: number,
+  success: boolean,
+  options: {
+    componentId?: string;
+    validation?: DesignWorkspaceValidationResult;
+    metadata?: Record<string, unknown>;
+    error?: string;
+  } = {},
+): void {
+  recordDesignHistory(sessionId, {
+    action,
+    componentId: options.componentId,
+    durationMs: Date.now() - startedAt,
+    success,
+    validation: options.validation,
+    metadata: options.metadata,
+    error: options.error,
+  });
+}
+
+async function compilePreviewForTool(
+  code: string,
+  componentName: string,
+  source: string,
+): Promise<CompiledPreviewSuccess | CompiledPreviewFailure> {
+  try {
+    const { html, report } = await buildTailwindPreviewWithMetadata(code, componentName, {
+      autoInstallMissingDependencies: true,
+      source,
+    });
+
+    return {
+      ok: true,
+      previewHtml: html,
+      compileReport: report,
+    };
+  } catch (error) {
+    if (isDesignWorkspaceCompileError(error)) {
+      return {
+        ok: false,
+        previewHtml: buildDesignPreviewErrorHtml(error.message, {
+          title: componentName,
+          label: "Compilation Failed",
+        }),
+        compileReport: error.report,
+        error: error.message,
+      };
+    }
+
+    const message = error instanceof Error ? error.message : "Compilation failed.";
+    return {
+      ok: false,
+      previewHtml: buildDesignPreviewErrorHtml(message, {
+        title: componentName,
+        label: "Compilation Failed",
+      }),
+      compileReport: createEmptyCompileReport(message),
+      error: message,
+    };
+  }
+}
+
+function buildValidationMessage(validation: DesignWorkspaceValidationResult | undefined): string | undefined {
+  if (!validation) {
+    return undefined;
+  }
+
+  if (validation.passed) {
+    return `Post-edit checks passed (${validation.checks.length} checks).`;
+  }
+
+  const failedChecks = validation.checks.filter((check) => check.status === "fail").length;
+  return `Post-edit checks found ${failedChecks} issue${failedChecks === 1 ? "" : "s"}.`;
+}
+
+function buildCompileFailureResult(
+  action: DesignWorkspaceInput["action"],
+  baseData: DesignWorkspaceResultData,
+  compileFailure: CompiledPreviewFailure,
+): DesignWorkspaceResult {
+  return {
+    success: false,
+    action,
+    error: compileFailure.error,
+    data: {
+      ...baseData,
+      previewHtml: compileFailure.previewHtml,
+      compileReport: compileFailure.compileReport,
+      missingPackages: compileFailure.compileReport.dependencyCheck.missingPackages,
+      autoRecoveryAttempted: Boolean(compileFailure.compileReport.autoInstall?.attempted),
+      autoRecoveryResult: compileFailure.compileReport.autoInstall
+        ? compileFailure.compileReport.autoInstall.success
+          ? "success"
+          : "failed"
+        : "not-needed",
+    },
+  };
+}
+
+/**
+ * Strip heavyweight fields from the tool result before it reaches the LLM.
+ *
+ * `previewHtml` contains the entire compiled bundle (~100K–700K tokens for
+ * complex components) and is never useful for the model — it's only needed
+ * by the preview iframe.  The `useCompileTailwindPreview` hook re-fetches
+ * compiled HTML from the compile API independently, so removing it here
+ * doesn't break rendering.
+ *
+ * `renderedHtml` is similarly large compiled output that the LLM doesn't need.
+ */
+function stripHeavyFields(result: DesignWorkspaceResult): DesignWorkspaceResult {
+  if (!result.data) {
+    return result;
+  }
+  const { previewHtml, renderedHtml, ...lightData } = result.data;
+  return { ...result, data: lightData };
+}
+
 async function executeDesignWorkspace(
   options: DesignWorkspaceToolOptions,
-  input: DesignWorkspaceInput
+  input: DesignWorkspaceInput,
 ): Promise<DesignWorkspaceResult> {
+  let result: DesignWorkspaceResult;
+
   switch (input.action) {
     case "open":
-      return handleOpen();
+      result = await handleOpen(options);
+      break;
     case "install":
-      return handleInstall(input);
+      result = await handleInstall(options, input);
+      break;
     case "generate":
-      return handleGenerate(options, input);
+      result = await handleGenerate(options, input);
+      break;
     case "edit":
-      return handleEdit(options, input);
+      result = await handleEdit(options, input);
+      break;
     case "snapshot":
-      return handleSnapshot(input);
+      result = handleSnapshot(options, input);
+      break;
     case "restore":
-      return handleRestore(input);
+      result = await handleRestore(options, input);
+      break;
     case "export":
-      return handleExport(options, input);
+      result = await handleExport(options, input);
+      break;
     case "close":
-      return handleClose();
+      result = handleClose(options);
+      break;
     default:
-      return { success: false, action: String(input.action), error: `Unknown action: ${input.action}` };
+      result = { success: false, action: String(input.action), error: `Unknown action: ${input.action}` };
   }
+
+  return stripHeavyFields(result);
 }
 
 export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = {}) {
   const executeWithLogging = withToolLogging(
     "designWorkspace",
     options.sessionId,
-    async (input: DesignWorkspaceInput) => executeDesignWorkspace(options, input)
+    async (input: DesignWorkspaceInput) => executeDesignWorkspace(options, input),
   );
 
   return tool({
@@ -429,133 +651,106 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
   });
 }
 
-async function handleOpen(): Promise<DesignWorkspaceResult> {
+async function handleOpen(options: DesignWorkspaceToolOptions): Promise<DesignWorkspaceResult> {
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
+
   const libraries = await getAvailableLibraries();
   const available = libraries.filter((library) => library.available).map((library) => library.package);
+  const config = getWorkspaceConfig();
+  const history = peekDesignHistory(sessionId);
+
+  recordHistory(sessionId, "open", startedAt, true, {
+    metadata: {
+      availableLibraries: available,
+    },
+  });
+
   return {
     success: true,
     action: "open",
     data: {
       message: "Design workspace opened.",
       availableLibraries: available.length > 0 ? available : undefined,
+      config,
+      history: history ?? undefined,
     },
   };
 }
 
-// ---------------------------------------------------------------------------
-// Install handler
-// ---------------------------------------------------------------------------
+async function handleInstall(
+  options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+): Promise<DesignWorkspaceResult> {
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
 
-/** Install mutex to prevent concurrent npm installs in the sandbox. */
-let _installLock: Promise<void> | null = null;
-
-/**
- * Get the platform-appropriate npm command.
- * On Windows, npm is invoked as `npm.cmd` because `execFile` doesn't
- * use a shell and won't resolve `.cmd` extensions automatically.
- */
-function getNpmCommand(): string {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
-}
-
-async function handleInstall(input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
-  const packages = input.packages?.filter((p) => typeof p === "string" && p.trim());
+  const packages = input.packages?.filter((pkg) => typeof pkg === "string" && pkg.trim());
   if (!packages || packages.length === 0) {
+    const error = 'Provide a "packages" array with at least one npm package name.';
+    recordHistory(sessionId, "install", startedAt, false, { error });
     return {
       success: false,
       action: "install",
-      error: 'Provide a "packages" array with at least one npm package name.',
+      error,
     };
   }
 
-  // Minimal validation — only reject empty strings. npm is the real validator
-  // and the AI can read its error messages.
-  const validated = packages.map((p) => validatePackageSpec(p));
-  const invalid = validated.filter((r) => !r.valid);
-  if (invalid.length > 0) {
-    return {
-      success: false,
-      action: "install",
-      error: `Empty package specifier(s) found. Provide valid npm package names.`,
-    };
-  }
-
-  // Pass specs directly to npm — no rewriting, no second-guessing
-  const installArgs = validated.map((r) => r.spec);
-  // Extract package name from spec (handles @scope/name@version correctly)
-  const packageNames = validated.map((r) => {
-    const s = r.spec;
-    if (s.startsWith("@")) {
-      // Scoped: @scope/name or @scope/name@version
-      const slashIdx = s.indexOf("/");
-      if (slashIdx === -1) return s;
-      const afterSlash = s.slice(slashIdx + 1);
-      const atIdx = afterSlash.indexOf("@");
-      return atIdx === -1 ? s : s.slice(0, slashIdx + 1 + atIdx);
-    }
-    const atIdx = s.indexOf("@");
-    return atIdx === -1 ? s : s.slice(0, atIdx);
-  });
-
-  // Serialize installs — chain promises so concurrent calls queue properly
-  const doInstall = async () => {
-    await ensureSandboxDir();
-    const npmCmd = getNpmCommand();
-    await execFileAsync(npmCmd, ["install", "--save", "--ignore-scripts", ...installArgs], {
-      cwd: SANDBOX_DIR,
-      timeout: 120_000,
-      env: { ...process.env, NODE_ENV: "development" },
-    });
-  };
-
-  _installLock = (_installLock ?? Promise.resolve())
-    .catch(() => {}) // don't let a previous failure block the queue
-    .then(doInstall);
-
-  try {
-    await _installLock;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return {
-      success: false,
-      action: "install",
-      error: `npm install failed: ${message}`,
-    };
-  }
-
-  // Register each installed package in the runtime library registry
-  for (const name of packageNames) {
-    registerRuntimeLibrary({
-      name,
-      package: name,
-      description: `Installed package: ${name}`,
-      importExamples: [`import ... from "${name}"`],
-    });
-  }
-
-  // Reset the cached library detection so next call picks up new packages
-  _librariesPromise = null;
-
+  const installResult = await installSandboxPackages(packages);
+  resetAvailableLibrariesCache();
   const libraries = await getAvailableLibraries();
-  const available = libraries
-    .filter((library) => library.available)
-    .map((library) => library.package);
+  const available = libraries.filter((library) => library.available).map((library) => library.package);
+
+  if (!installResult.success) {
+    const error = installResult.error || "npm install failed.";
+    recordHistory(sessionId, "install", startedAt, false, {
+      error,
+      metadata: { packages: installResult.packageNames },
+    });
+    return {
+      success: false,
+      action: "install",
+      error,
+      data: {
+        availableLibraries: available.length > 0 ? available : undefined,
+        missingPackages: installResult.packageNames,
+        autoRecoveryAttempted: installResult.attempted,
+        autoRecoveryResult: "failed",
+      },
+    };
+  }
+
+  recordHistory(sessionId, "install", startedAt, true, {
+    metadata: { packages: installResult.packageNames },
+  });
 
   return {
     success: true,
     action: "install",
     data: {
-      message: `Successfully installed: ${packageNames.join(", ")}`,
+      message: `Successfully installed: ${installResult.packageNames.join(", ")}`,
       availableLibraries: available.length > 0 ? available : undefined,
+      autoRecoveryAttempted: installResult.attempted,
+      autoRecoveryResult: installResult.attempted ? "success" : "not-needed",
     },
   };
 }
 
-async function handleGenerate(options: DesignWorkspaceToolOptions, input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
-  const { prompt, mode = "tailwind", style = "default", assets: inputAssets } = input;
+async function handleGenerate(
+  options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+): Promise<DesignWorkspaceResult> {
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
 
+  const { prompt, mode = "tailwind", style = "default", assets: inputAssets } = input;
   if (!prompt?.trim() && !input.code?.trim()) {
-    return { success: false, action: "generate", error: 'Provide either "prompt" (for AI generation) or "code" (for direct rendering).' };
+    const error = 'Provide either "prompt" (for AI generation) or "code" (for direct rendering).';
+    recordHistory(sessionId, "generate", startedAt, false, { error });
+    return { success: false, action: "generate", error };
   }
 
   const assets = inputAssets?.length ? await resolveAssets(inputAssets) : undefined;
@@ -580,38 +775,77 @@ async function handleGenerate(options: DesignWorkspaceToolOptions, input: Design
   }
 
   if (generationError || !finalCode.trim()) {
+    const error = generationError ?? "Generation produced empty output. Try a different prompt.";
+    recordHistory(sessionId, "generate", startedAt, false, { error });
     return {
       success: false,
       action: "generate",
-      error: generationError ?? "Generation produced empty output. Try a different prompt.",
+      error,
     };
   }
 
   const componentId = generateId();
   const name = input.code?.trim() ? "Direct Component" : "Generated Component";
-  const sessionId = options.sessionId ?? "UNSCOPED";
   cacheComponent(sessionId, componentId, finalCode);
 
-  const libs = await getAvailableLibraries();
-  const availableLibs = libs.filter((library) => library.available).map((library) => library.package);
+  const previewResult = await compilePreviewForTool(finalCode, name, "design-workspace-generate");
+  const libraries = await getAvailableLibraries();
+  const availableLibraries = libraries.filter((library) => library.available).map((library) => library.package);
+  const baseData: DesignWorkspaceResultData = {
+    componentId,
+    code: finalCode,
+    name,
+    prompt: prompt?.trim() || undefined,
+    mode,
+    style,
+    availableLibraries: availableLibraries.length > 0 ? availableLibraries : undefined,
+  };
+
+  if (!previewResult.ok) {
+    recordHistory(sessionId, "generate", startedAt, false, {
+      componentId,
+      error: previewResult.error,
+      metadata: {
+        missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
+      },
+    });
+    return buildCompileFailureResult("generate", baseData, previewResult);
+  }
+
+  recordHistory(sessionId, "generate", startedAt, true, {
+    componentId,
+    metadata: {
+      recovered: previewResult.compileReport.recovered,
+    },
+  });
 
   return {
     success: true,
     action: "generate",
     data: {
-      componentId,
-      code: finalCode,
-      name,
-      prompt: prompt?.trim() ?? undefined,
-      mode,
-      style,
+      ...baseData,
       message: `Component "${name}" generated successfully.`,
-      availableLibraries: availableLibs.length > 0 ? availableLibs : undefined,
+      previewHtml: previewResult.previewHtml,
+      compileReport: previewResult.compileReport,
+      missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
+      autoRecoveryAttempted: Boolean(previewResult.compileReport.autoInstall?.attempted),
+      autoRecoveryResult: previewResult.compileReport.autoInstall
+        ? previewResult.compileReport.autoInstall.success
+          ? "success"
+          : "failed"
+        : "not-needed",
     },
   };
 }
 
-async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
+async function handleEdit(
+  options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+): Promise<DesignWorkspaceResult> {
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
+
   const {
     editPrompt,
     style = "default",
@@ -620,7 +854,10 @@ async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWork
     assets: inputAssets,
   } = input;
 
-  const sessionId = options.sessionId ?? "UNSCOPED";
+  let sourceCode = activeComponentCode?.trim() || undefined;
+  if (!sourceCode && activeComponentId) {
+    sourceCode = getCachedComponent(sessionId, activeComponentId);
+  }
 
   if (!editPrompt?.trim() && activeComponentCode?.trim()) {
     const finalCode = activeComponentCode.trim();
@@ -628,30 +865,69 @@ async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWork
       cacheComponent(sessionId, activeComponentId, finalCode);
     }
 
+    const previewResult = await compilePreviewForTool(
+      finalCode,
+      "Edited Component",
+      "design-workspace-edit-direct",
+    );
+    const config = getWorkspaceConfig();
+    const validation = previewResult.ok
+      ? await runPostEditValidation(finalCode, config, { previewBuildPassed: true })
+      : undefined;
+
+    if (!previewResult.ok) {
+      recordHistory(sessionId, "edit", startedAt, false, {
+        componentId: activeComponentId,
+        error: previewResult.error,
+        metadata: {
+          missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
+        },
+      });
+      return buildCompileFailureResult(
+        "edit",
+        {
+          componentId: activeComponentId,
+          code: finalCode,
+          config,
+        },
+        previewResult,
+      );
+    }
+
+    const validationMessage = buildValidationMessage(validation);
+    recordHistory(sessionId, "edit", startedAt, true, {
+      componentId: activeComponentId,
+      validation,
+    });
+
     return {
       success: true,
       action: "edit",
       data: {
         componentId: activeComponentId,
         code: finalCode,
-        message: "Component code replaced directly.",
+        message: validationMessage || "Component code replaced directly.",
+        previewHtml: previewResult.previewHtml,
+        compileReport: previewResult.compileReport,
+        postEditValidation: validation,
+        config,
       },
     };
   }
 
   if (!editPrompt?.trim()) {
-    return { success: false, action: "edit", error: 'Provide "editPrompt" for AI-driven editing, or "activeComponentCode" without "editPrompt" to directly replace the code.' };
+    const error = 'Provide "editPrompt" for AI-driven editing, or "activeComponentCode" without "editPrompt" to directly replace the code.';
+    recordHistory(sessionId, "edit", startedAt, false, { error });
+    return { success: false, action: "edit", error };
   }
 
-  let code = activeComponentCode?.trim() || undefined;
-  if (!code && activeComponentId) {
-    code = getCachedComponent(sessionId, activeComponentId);
-  }
-  if (!code) {
+  if (!sourceCode) {
+    const error = 'No component code available. Either pass "activeComponentCode" or ensure the component was generated in this session.';
+    recordHistory(sessionId, "edit", startedAt, false, { error });
     return {
       success: false,
       action: "edit",
-      error: 'No component code available. Either pass "activeComponentCode" or ensure the component was generated in this session.',
+      error,
     };
   }
 
@@ -660,7 +936,7 @@ async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWork
   let finalCode = "";
   let editError: string | undefined;
 
-  for await (const event of editCard({ code, editPrompt, style, assets })) {
+  for await (const event of editCard({ code: sourceCode, editPrompt, style, assets })) {
     if (event.type === "complete") {
       finalCode = event.content;
     }
@@ -670,10 +946,15 @@ async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWork
   }
 
   if (editError || !finalCode.trim()) {
+    const error = editError ?? "Edit produced empty output. Try rephrasing the instruction.";
+    recordHistory(sessionId, "edit", startedAt, false, {
+      componentId: activeComponentId,
+      error,
+    });
     return {
       success: false,
       action: "edit",
-      error: editError ?? "Edit produced empty output. Try rephrasing the instruction.",
+      error,
     };
   }
 
@@ -681,18 +962,67 @@ async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWork
     cacheComponent(sessionId, activeComponentId, finalCode);
   }
 
+  const componentName = activeComponentId ? "Edited Component" : "Component";
+  const previewResult = await compilePreviewForTool(finalCode, componentName, "design-workspace-edit");
+  const config = getWorkspaceConfig();
+  const validation = previewResult.ok
+    ? await runPostEditValidation(finalCode, config, { previewBuildPassed: true })
+    : undefined;
+
+  if (!previewResult.ok) {
+    recordHistory(sessionId, "edit", startedAt, false, {
+      componentId: activeComponentId,
+      error: previewResult.error,
+      metadata: {
+        missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
+      },
+    });
+    return buildCompileFailureResult(
+      "edit",
+      {
+        componentId: activeComponentId,
+        code: finalCode,
+        config,
+      },
+      previewResult,
+    );
+  }
+
+  const validationMessage = buildValidationMessage(validation);
+  recordHistory(sessionId, "edit", startedAt, true, {
+    componentId: activeComponentId,
+    validation,
+  });
+
   return {
     success: true,
     action: "edit",
     data: {
       componentId: activeComponentId,
       code: finalCode,
-      message: "Component edited successfully.",
+      message: validationMessage || "Component edited successfully.",
+      previewHtml: previewResult.previewHtml,
+      compileReport: previewResult.compileReport,
+      postEditValidation: validation,
+      config,
     },
   };
 }
 
-function handleSnapshot(input: DesignWorkspaceInput): DesignWorkspaceResult {
+function handleSnapshot(
+  options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+): DesignWorkspaceResult {
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
+
+  recordHistory(sessionId, "snapshot", startedAt, true, {
+    metadata: {
+      label: input.label,
+    },
+  });
+
   return {
     success: true,
     action: "snapshot",
@@ -703,10 +1033,23 @@ function handleSnapshot(input: DesignWorkspaceInput): DesignWorkspaceResult {
   };
 }
 
-function handleRestore(input: DesignWorkspaceInput): DesignWorkspaceResult {
+function handleRestore(
+  options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+): DesignWorkspaceResult {
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
+
   if (!input.snapshotId) {
-    return { success: false, action: "restore", error: 'Missing required field "snapshotId" for restore action.' };
+    const error = 'Missing required field "snapshotId" for restore action.';
+    recordHistory(sessionId, "restore", startedAt, false, { error });
+    return { success: false, action: "restore", error };
   }
+
+  recordHistory(sessionId, "restore", startedAt, true, {
+    metadata: { snapshotId: input.snapshotId },
+  });
 
   return {
     success: true,
@@ -720,18 +1063,27 @@ function handleRestore(input: DesignWorkspaceInput): DesignWorkspaceResult {
 
 async function handleExport(
   options: DesignWorkspaceToolOptions,
-  input: DesignWorkspaceInput
+  input: DesignWorkspaceInput,
 ): Promise<DesignWorkspaceResult> {
-  const sessionId = options.sessionId ?? "UNSCOPED";
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
+
   let activeComponentCode = input.activeComponentCode?.trim() || undefined;
   if (!activeComponentCode && input.activeComponentId) {
     activeComponentCode = getCachedComponent(sessionId, input.activeComponentId);
   }
+
   if (!activeComponentCode) {
+    const error = 'No component code available. Either pass "activeComponentCode" or ensure the component was generated in this session.';
+    recordHistory(sessionId, "export", startedAt, false, {
+      componentId: input.activeComponentId,
+      error,
+    });
     return {
       success: false,
       action: "export",
-      error: 'No component code available. Either pass "activeComponentCode" or ensure the component was generated in this session.',
+      error,
     };
   }
 
@@ -751,6 +1103,14 @@ async function handleExport(
       scale: clampNumber(input.scale, DEFAULT_EXPORT_SCALE, 1, MAX_EXPORT_SCALE),
       durationMs: clampNumber(input.durationMs, DEFAULT_EXPORT_DURATION_MS, 500, MAX_EXPORT_DURATION_MS),
       fps: clampNumber(input.fps, DEFAULT_EXPORT_FPS, 12, MAX_EXPORT_FPS),
+    });
+
+    recordHistory(sessionId, "export", startedAt, true, {
+      componentId: input.activeComponentId,
+      metadata: {
+        format: exportResult.format,
+        fileName: exportResult.fileName,
+      },
     });
 
     return {
@@ -774,18 +1134,33 @@ async function handleExport(
       },
     };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Export failed.";
+    recordHistory(sessionId, "export", startedAt, false, {
+      componentId: input.activeComponentId,
+      error: message,
+    });
     return {
       success: false,
       action: "export",
-      error: error instanceof Error ? error.message : "Export failed.",
+      error: message,
     };
   }
 }
 
-function handleClose(): DesignWorkspaceResult {
+function handleClose(options: DesignWorkspaceToolOptions): DesignWorkspaceResult {
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
+
+  recordHistory(sessionId, "close", startedAt, true);
+  const history = finalizeDesignHistory(sessionId);
+
   return {
     success: true,
     action: "close",
-    data: { message: "Design workspace closed." },
+    data: {
+      message: "Design workspace closed.",
+      history: history ?? undefined,
+    },
   };
 }

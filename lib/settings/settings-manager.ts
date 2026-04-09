@@ -210,6 +210,13 @@ export interface AppSettings {
     postEditLintEnabled?: boolean;               // Run ESLint after edits
     postEditTypecheckScope?: "auto" | "app" | "lib" | "electron" | "tooling" | "all";
     postEditRunInPatchTool?: boolean;            // Also run post-edit checks for patch-file operations
+    designPostEditHooksPreset?: PostEditHooksPreset;
+    designPostEditHooksEnabled?: boolean;
+    designPostEditTypecheckEnabled?: boolean;
+    designPostEditImportValidationEnabled?: boolean;
+    designPostEditPreviewEnabled?: boolean;
+    designTypecheckStrictMode?: boolean;
+    designJsxValidationEnabled?: boolean;
     dataPath?: string;
 
     // Prompt Caching (provider-gated at runtime; Anthropic/Claude Code/OpenRouter/Kimi)
@@ -328,6 +335,13 @@ const DEFAULT_SETTINGS: AppSettings = {
     postEditLintEnabled: false,
     postEditTypecheckScope: "auto",
     postEditRunInPatchTool: false,
+    designPostEditHooksPreset: "fast",
+    designPostEditHooksEnabled: true,
+    designPostEditTypecheckEnabled: true,
+    designPostEditImportValidationEnabled: true,
+    designPostEditPreviewEnabled: true,
+    designTypecheckStrictMode: false,
+    designJsxValidationEnabled: true,
     webScraperProvider: "local",
     webSearchProvider: "auto",
     embeddingProvider: "openrouter",

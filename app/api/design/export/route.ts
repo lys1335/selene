@@ -7,18 +7,15 @@ import {
 } from "@/lib/design/workspace/export";
 
 const VALID_FORMATS = new Set<DesignExportFormat>(["html", "react", "png", "video"]);
-const VALID_MODES = new Set<DesignExportMode>(["html", "tailwind"]);
-
 function normalizeFormat(value?: string): DesignExportFormat {
   return VALID_FORMATS.has(value as DesignExportFormat)
     ? (value as DesignExportFormat)
     : "html";
 }
 
-function normalizeMode(value?: string): DesignExportMode | undefined {
-  return VALID_MODES.has(value as DesignExportMode)
-    ? (value as DesignExportMode)
-    : undefined;
+function normalizeMode(_value?: string): DesignExportMode {
+  // All components use Tailwind mode now.
+  return "tailwind";
 }
 
 function clampInt(value: unknown, fallback: number, min: number, max: number): number {

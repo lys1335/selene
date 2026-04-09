@@ -22,7 +22,7 @@ import { useEffect, useRef } from "react";
 import { useDesignWorkspaceStore } from "@/lib/design/workspace";
 
 /** Shape of the event detail dispatched by the tool UI */
-export interface DesignToolEvent {
+interface DesignToolEvent {
   action: string;
   success: boolean;
   /** Session that originated this event — used for cross-chat isolation */
@@ -39,11 +39,15 @@ export interface DesignToolEvent {
     style?: string;
     /** Server-compiled preview HTML for Tailwind components. */
     previewHtml?: string;
+    compileReport?: import("@/lib/design/workspace/config").DesignWorkspaceCompileReport;
+    postEditValidation?: import("@/lib/design/workspace/config").DesignWorkspaceValidationResult;
+    history?: import("@/lib/design/workspace/edit-history").DesignWorkspaceHistory;
+    config?: import("@/lib/design/workspace/config").DesignWorkspaceConfig;
   };
   error?: string;
 }
 
-export function applyDesignToolResultToStore(detail: DesignToolEvent): void {
+function applyDesignToolResultToStore(detail: DesignToolEvent): void {
   const store = useDesignWorkspaceStore.getState();
   const { action, success, data, error } = detail;
 
@@ -68,7 +72,7 @@ export function applyDesignToolResultToStore(detail: DesignToolEvent): void {
           id: data.componentId,
           name: data.name ?? "Untitled",
           code: data.code,
-          mode: (data.mode as "html" | "tailwind") ?? "html",
+          mode: "tailwind",
           style: (data.style as "apple-glass" | "default") ?? "default",
           prompt: data.prompt ?? "",
           createdAt: now,

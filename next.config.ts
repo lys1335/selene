@@ -165,6 +165,9 @@ const nextConfig: NextConfig = {
     "postcss",
     "autoprefixer",
     "tailwindcss-animate",
+    // TypeScript compiler API used by design workspace validation —
+    // must stay external so Turbopack doesn't mangle the module reference.
+    "typescript",
   ],
   images: {
     remotePatterns: [

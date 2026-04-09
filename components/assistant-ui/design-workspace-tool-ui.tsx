@@ -2,33 +2,84 @@
 
 import { memo, useEffect, useMemo, useRef } from "react";
 import type { FC } from "react";
-import { Sparkles, PenSquare, Save, RotateCcw, Download, PanelRightOpen, PanelRightClose, AlertCircle, CheckCircle2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  PanelRightClose,
+  PanelRightOpen,
+  PenSquare,
+  RotateCcw,
+  Save,
+  Sparkles,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { dispatchDesignToolResult } from "@/components/design";
 import { useChatSessionId } from "@/components/chat-provider";
 import { parseNestedJsonString } from "@/lib/utils/parse-nested-json";
+import type { DesignWorkspaceCompileReport } from "@/lib/design/workspace/config";
+import type { DesignWorkspaceConfig } from "@/lib/design/workspace/config";
+import type { DesignWorkspaceValidationResult } from "@/lib/design/workspace/config";
+import type { DesignWorkspaceHistory } from "@/lib/design/workspace/edit-history";
 
-type DesignWorkspaceResult = {
+type ValidationCheck = {
+  name: string;
+  status: "pass" | "fail" | "skip";
+  message?: string;
+};
+
+interface HistoryActionSummary {
+  seq?: number;
+  action?: string;
+  success?: boolean;
+  durationMs?: number;
+  error?: string;
+}
+
+interface HistorySummary extends Omit<DesignWorkspaceHistory, "actions"> {
+  actions?: HistoryActionSummary[];
+}
+
+interface CompileReportSummary extends Omit<DesignWorkspaceCompileReport, "errors" | "dependencyCheck"> {
+  errors?: Array<{ message?: string; suggestion?: string }>;
+  dependencyCheck?: { missingPackages?: string[] };
+}
+
+interface ConfigSummary extends Partial<DesignWorkspaceConfig> {}
+
+interface ValidationSummary extends Omit<DesignWorkspaceValidationResult, "checks"> {
+  checks?: ValidationCheck[];
+}
+
+interface DesignWorkspaceResultData {
+  componentId?: string;
+  code?: string;
+  name?: string;
+  snapshotId?: string;
+  format?: string;
+  message?: string;
+  prompt?: string;
+  mode?: string;
+  style?: string;
+  missingPackages?: string[];
+  autoRecoveryAttempted?: boolean;
+  autoRecoveryResult?: "success" | "failed" | "not-needed";
+  compileReport?: CompileReportSummary;
+  postEditValidation?: ValidationSummary;
+  history?: HistorySummary;
+  config?: ConfigSummary;
+}
+
+interface DesignWorkspaceResult {
   success?: boolean;
   action?: string;
-  data?: {
-    componentId?: string;
-    code?: string;
-    name?: string;
-    snapshotId?: string;
-    format?: string;
-    message?: string;
-    prompt?: string;
-    mode?: string;
-    style?: string;
-    previewHtml?: string;
-  };
+  data?: DesignWorkspaceResultData;
   error?: string;
   status?: string;
   content?: string | Array<{ type?: string; text?: string }>;
   output?: unknown;
   result?: unknown;
-};
+}
 
 type ToolCallContentPartComponent = FC<{
   toolName: string;
@@ -40,7 +91,6 @@ type ToolCallContentPartComponent = FC<{
     mode?: string;
     style?: string;
     editPrompt?: string;
-    inlineMode?: boolean;
     label?: string;
     snapshotId?: string;
     format?: string;
@@ -205,8 +255,38 @@ function normalizeDesignWorkspaceResult(
   return undefined;
 }
 
-export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
+function isDesignWorkspaceResultData(value: unknown): value is DesignWorkspaceResultData {
+  return isRecord(value);
+}
 
+function toBridgeData(data: DesignWorkspaceResultData | undefined) {
+  if (!data) {
+    return undefined;
+  }
+
+  return {
+    componentId: data.componentId,
+    code: data.code,
+    name: data.name,
+    snapshotId: data.snapshotId,
+    format: data.format,
+    message: data.message,
+    prompt: data.prompt,
+    mode: data.mode,
+    style: data.style,
+    compileReport: data.compileReport as DesignWorkspaceCompileReport | undefined,
+    postEditValidation: data.postEditValidation as DesignWorkspaceValidationResult | undefined,
+    history: data.history as DesignWorkspaceHistory | undefined,
+    config: data.config as DesignWorkspaceConfig | undefined,
+  };
+}
+
+function getMissingPackages(data: DesignWorkspaceResultData | undefined): string[] | undefined {
+  const missingPackages = data?.missingPackages ?? data?.compileReport?.dependencyCheck?.missingPackages;
+  return Array.isArray(missingPackages) && missingPackages.length > 0 ? missingPackages : undefined;
+}
+
+export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
   args,
   result,
   output,
@@ -228,9 +308,6 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
 
   useEffect(() => {
     if (!resolvedResult || !action) return;
-    // Deduplicate: include sessionId to prevent stale dedup across session switches.
-    // Use toolCallId for uniqueness (handles edit actions where componentId may
-    // not be returned), fall back to action+id composite key.
     const baseKey = toolCallId
       ?? `${action}:${resolvedResult.data?.componentId || ""}:${resolvedResult.data?.snapshotId || ""}`;
     const key = sessionId ? `${sessionId}:${baseKey}` : baseKey;
@@ -240,59 +317,124 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
       action,
       success: Boolean(resolvedResult.success),
       sessionId: sessionId ?? undefined,
-      data: resolvedResult.data,
+      data: toBridgeData(isDesignWorkspaceResultData(resolvedResult.data) ? resolvedResult.data : undefined),
       error: resolvedResult.error,
     };
-    // Unidirectional flow: ToolUI → CustomEvent → Bridge → Store
     dispatchDesignToolResult(detail);
   }, [action, resolvedResult, sessionId, toolCallId]);
+
+  const data = isDesignWorkspaceResultData(resolvedResult?.data) ? resolvedResult.data : undefined;
+  const validation = data?.postEditValidation;
+  const compileReport = data?.compileReport;
+  const history = data?.history;
+  const missingPackages = getMissingPackages(data);
 
   return (
     <div
       className={cn(
-        "my-3 rounded-lg border p-4 font-mono shadow-sm",
-        isRunning && "border-border bg-muted/50",
-        success && "border-emerald-200 dark:border-emerald-800 bg-emerald-50/60 dark:bg-emerald-950/30",
-        error && "border-destructive/20 bg-destructive/5",
+        "my-2 rounded-lg p-3 font-mono shadow-sm transition-all duration-150",
+        "bg-terminal-cream/80",
+        isRunning && "animate-pulse",
       )}
     >
-      <div className="flex items-center gap-3">
-        <div
-          className={cn(
-            "flex h-9 w-9 items-center justify-center rounded-lg",
-            isRunning && "bg-muted",
-            success && "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400",
-            error && "bg-destructive/10 text-destructive",
-          )}
-        >
-          {isRunning ? (
-            <Icon className="h-4 w-4 animate-pulse" />
-          ) : success ? (
-            <CheckCircle2 className="h-4 w-4" />
-          ) : (
-            <AlertCircle className="h-4 w-4" />
-          )}
+      <div className="mb-1 flex items-center gap-2">
+        <div className={cn(
+          "flex h-8 w-8 items-center justify-center rounded-lg",
+          isRunning ? "bg-terminal-green/10 text-terminal-green" : error ? "bg-red-50 text-red-600" : "bg-terminal-green/10 text-terminal-green",
+        )}>
+          {isRunning ? <Icon className="h-4 w-4 animate-pulse" /> : success ? <CheckCircle2 className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}
         </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-medium text-foreground">{getActionLabel(action)}</div>
-          <div className="mt-0.5 text-xs text-muted-foreground break-words [overflow-wrap:anywhere]">
-            {isRunning
-              ? "Running..."
-              : resolvedResult?.data?.message || error || "Completed"}
-          </div>
-        </div>
+        <span className="text-sm font-medium text-terminal-dark">{getActionLabel(action)}</span>
+        <span className={cn(
+          "ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+          isRunning ? "bg-terminal-green/10 text-terminal-green" : error ? "bg-red-50 text-red-600" : "bg-terminal-green/10 text-terminal-green",
+        )}>
+          {isRunning ? "running" : error ? "failed" : "done"}
+        </span>
       </div>
 
-      {args?.prompt && (
-        <div className="mt-3 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
-          Prompt: <span className="text-foreground">{args.prompt}</span>
+      <div className="ml-10 break-words text-xs text-terminal-muted [overflow-wrap:anywhere]">
+        {isRunning ? "Running..." : data?.message || error || "Completed"}
+      </div>
+
+      {error && (
+        <div className="mt-2 rounded bg-red-50 p-2 text-xs font-mono text-red-600">
+          {error}
         </div>
       )}
 
-      {resolvedResult?.data?.name && resolvedResult?.data?.componentId && (
-        <div className="mt-3 text-xs text-muted-foreground">
-          Component: <span className="text-foreground">{resolvedResult.data.name}</span>
+      {missingPackages && (
+        <div className="mt-2 rounded bg-red-50 p-2 text-xs font-mono text-red-600">
+          Missing packages: {missingPackages.join(", ")}
+        </div>
+      )}
+
+      {compileReport?.errors && compileReport.errors.length > 0 && (
+        <details className="mt-2 text-xs text-terminal-muted">
+          <summary className="cursor-pointer hover:text-terminal-dark">Compilation details</summary>
+          <div className="mt-1 space-y-1 rounded bg-terminal-dark/5 p-2 text-terminal-dark">
+            {compileReport.errors.map((issue, index) => (
+              <div key={`${issue.message || "issue"}-${index}`}>
+                <div>{issue.message}</div>
+                {issue.suggestion ? <div className="text-terminal-muted">{issue.suggestion}</div> : null}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {validation && (
+        <details className="mt-2 text-xs text-terminal-muted">
+          <summary className="cursor-pointer hover:text-terminal-dark">
+            Post-edit checks ({validation.passed ? "passed" : "issues found"})
+          </summary>
+          <div className="mt-1 space-y-1 rounded bg-terminal-dark/5 p-2 text-terminal-dark">
+            {(validation.checks ?? []).map((check, index) => (
+              <div key={`${check.name}-${index}`} className="flex items-start gap-2">
+                <span className={cn(
+                  "mt-0.5 inline-block h-2 w-2 rounded-full",
+                  check.status === "pass" ? "bg-terminal-green" : check.status === "fail" ? "bg-red-500" : "bg-terminal-muted",
+                )} />
+                <div>
+                  <div>{check.name}</div>
+                  {check.message ? <div className="text-terminal-muted">{check.message}</div> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {history?.actions && history.actions.length > 0 && action === "close" && (
+        <details className="mt-2 text-xs text-terminal-muted">
+          <summary className="cursor-pointer hover:text-terminal-dark">
+            Workspace history ({history.actions.length} actions)
+          </summary>
+          <div className="mt-1 space-y-1 rounded bg-terminal-dark/5 p-2 text-terminal-dark">
+            {history.actions.map((record, index) => (
+              <div key={`${record.seq ?? index}-${record.action ?? "action"}`} className="flex items-center gap-2">
+                <span className={cn(
+                  "inline-block h-2 w-2 rounded-full",
+                  record.success ? "bg-terminal-green" : "bg-red-500",
+                )} />
+                <span>{record.action ?? "action"}</span>
+                {typeof record.durationMs === "number" ? <span className="text-terminal-muted">{record.durationMs}ms</span> : null}
+                {record.error ? <span className="text-red-600">{record.error}</span> : null}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {args?.prompt && (
+        <div className="mt-3 rounded-md bg-terminal-dark/5 px-3 py-2 text-xs text-terminal-muted">
+          Prompt: <span className="text-terminal-dark">{args.prompt}</span>
+        </div>
+      )}
+
+      {data?.name && data?.componentId && (
+        <div className="mt-3 text-xs text-terminal-muted">
+          Component: <span className="text-terminal-dark">{data.name}</span>
         </div>
       )}
     </div>

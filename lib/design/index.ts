@@ -12,14 +12,12 @@
 // -- Core pipeline functions ------------------------------------------------
 export { generateCard } from './generate';
 export { editCard } from './edit';
-export { generateDesignText } from './providers';
 
-// -- Types (re-exported for consumer convenience) ---------------------------
-export type {
-  GenerateOpts,
-  EditOpts,
-  StreamEvent,
-  AssetContext,
-  DesignToken,
-  FinishResult,
-} from './types';
+// -- Library registry -------------------------------------------------------
+export {
+  DESIGN_LIBRARIES,
+  detectAvailableLibraries,
+  getAvailableLibrariesPrompt,
+} from './libraries';
+export type { DesignLibrary } from './libraries';
+

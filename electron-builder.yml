@@ -47,7 +47,7 @@ extraResources:
       - "!**/.env*"
       - "!**/drizzle"
       - "!**/.cache"
-      - "!**/typescript"
+      # typescript is now needed at runtime by design workspace validation
       - "!**/@huggingface/transformers/node_modules/onnxruntime-node"
       - "!**/@huggingface/transformers/node_modules/onnxruntime-web"
       - "!**/*.map"
@@ -77,7 +77,7 @@ extraResources:
       - "!**/__tests__/**"
       # Dev/build-only packages (also removed in electron-prepare.js as primary defense)
       - "!electron/**"
-      - "!typescript/**"
+      # typescript is now needed at runtime (design workspace validation)
   # Turbopack external module wrappers (lives inside .next/node_modules, excluded by the !**/node_modules filter above)
   - from: ".next/standalone/.next/node_modules"
     to: "standalone/.next/node_modules"

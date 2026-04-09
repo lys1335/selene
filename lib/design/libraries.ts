@@ -268,20 +268,39 @@ export async function ensureSandboxDir(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
- * Minimal package spec validation.
+ * Package spec validation.
  *
- * Philosophy: this is an LLM-driven system — the AI is the trusted operator.
- * npm itself is the real validator and returns clear error messages the AI can
- * read. We only reject empty strings. Everything else — dist-tags, semver
- * ranges, file: references, git URLs, tarballs — is passed through to npm.
- *
- * Shell injection is already impossible because we use `execFile` (no shell).
+ * Shell injection is impossible because we use `execFile` (no shell).
+ * We reject local/remote install vectors (file:, link:, git, tarballs)
+ * to prevent local filesystem reads or credential leakage via git auth.
+ * Only npm registry packages (with optional semver/dist-tag) are allowed.
  */
 export function validatePackageSpec(spec: string): { valid: boolean; spec: string; error?: string } {
   const trimmed = spec.trim();
   if (!trimmed) {
     return { valid: false, spec: "", error: "Empty package specifier" };
   }
+
+  // Reject local/remote install vectors — only allow registry packages
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith("file:") ||
+    lower.startsWith("link:") ||
+    lower.startsWith("workspace:") ||
+    lower.startsWith("git:") ||
+    lower.startsWith("git+") ||
+    lower.startsWith("github:") ||
+    lower.startsWith("bitbucket:") ||
+    lower.startsWith("gitlab:") ||
+    lower.startsWith("http:") ||
+    lower.startsWith("https:") ||
+    lower.endsWith(".tgz") ||
+    lower.endsWith(".tar.gz") ||
+    (lower.includes("/") && !lower.startsWith("@"))
+  ) {
+    return { valid: false, spec: trimmed, error: "Only npm registry packages are allowed" };
+  }
+
   return { valid: true, spec: trimmed };
 }
 

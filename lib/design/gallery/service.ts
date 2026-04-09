@@ -6,7 +6,6 @@ import {
   listDesignComponents,
   saveDesignComponent,
   toggleDesignFavorite,
-  updateDesignComponent,
 } from "./queries";
 import type { DesignComponentRow, GallerySearchOpts, NewDesignComponent } from "./types";
 
@@ -14,13 +13,13 @@ export interface DesignGalleryItem extends DesignComponentRow {
   previewUrl: string | null;
 }
 
-export interface SaveDesignComponentWithPreviewInput extends NewDesignComponent {
+interface SaveDesignComponentWithPreviewInput extends NewDesignComponent {
   previewWidth?: number;
   previewHeight?: number;
   previewScale?: number;
 }
 
-export interface SaveDesignComponentWithPreviewResult {
+interface SaveDesignComponentWithPreviewResult {
   component: DesignGalleryItem;
   previewGenerated: boolean;
 }
@@ -33,11 +32,12 @@ function toPreviewUrl(previewPath: string | null): string | null {
   return `/api/media/${previewPath.replace(/^\/+/, "")}`;
 }
 
-function normalizeMode(mode?: string): DesignExportMode | undefined {
-  return mode === "html" || mode === "tailwind" ? mode : undefined;
+function normalizeMode(_mode?: string): DesignExportMode | undefined {
+  // All components use Tailwind mode now.
+  return "tailwind";
 }
 
-export function toDesignGalleryItem(row: DesignComponentRow): DesignGalleryItem {
+function toDesignGalleryItem(row: DesignComponentRow): DesignGalleryItem {
   return {
     ...row,
     previewUrl: toPreviewUrl(row.previewPath),
@@ -91,15 +91,6 @@ export async function getGalleryComponentForUser(
   id: string
 ): Promise<DesignGalleryItem | null> {
   const row = await getDesignComponent(userId, id);
-  return row ? toDesignGalleryItem(row) : null;
-}
-
-export async function updateGalleryComponentForUser(
-  userId: string,
-  id: string,
-  updates: Partial<NewDesignComponent>
-): Promise<DesignGalleryItem | null> {
-  const row = await updateDesignComponent(userId, id, updates);
   return row ? toDesignGalleryItem(row) : null;
 }
 

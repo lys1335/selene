@@ -505,6 +505,62 @@ describe("queryWithSdkOptions — SDK options forwarding", () => {
     expect(callArg.options.disallowedTools).toEqual(["Write"]);
   });
 
+  it("injects a Bash sanitizer hook even when no other hooks are configured", async () => {
+    await queryWithSdkOptions({
+      prompt: "hi",
+      sdkOptions: { allowedTools: ["Bash"] },
+    });
+
+    const callArg = (mockQuery as MockedFunction<typeof mockQuery>).mock.calls[0][0];
+    expect(callArg.options.hooks?.PreToolUse).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ matcher: "Bash" }),
+      ])
+    );
+  });
+
+  it("merges the Bash sanitizer hook alongside caller-provided hooks", async () => {
+    const customHook = { matcher: "Read", hooks: [vi.fn(async () => ({}))] };
+
+    await queryWithSdkOptions({
+      prompt: "hi",
+      sdkOptions: {
+        hooks: {
+          PreToolUse: [customHook],
+        },
+      },
+    });
+
+    const callArg = (mockQuery as MockedFunction<typeof mockQuery>).mock.calls[0][0];
+    expect(callArg.options.hooks?.PreToolUse).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ matcher: "Bash" }),
+        customHook,
+      ])
+    );
+  });
+
+  it("omits undefined sdk options except for the always-on Bash sanitizer hook", async () => {
+    await queryWithSdkOptions({ prompt: "hi", sdkOptions: {} });
+
+    const callArg = (mockQuery as MockedFunction<typeof mockQuery>).mock.calls[0][0];
+    expect(callArg.options.agents).toBeUndefined();
+    expect(callArg.options.hooks).toEqual({
+      PreToolUse: [expect.objectContaining({ matcher: "Bash" })],
+    });
+    expect(callArg.options.plugins).toBeUndefined();
+    expect(callArg.options.resume).toBeUndefined();
+  });
+
+  it("still injects the Bash sanitizer hook when sdkOptions is not provided", async () => {
+    await queryWithSdkOptions({ prompt: "hi" });
+
+    const callArg = (mockQuery as MockedFunction<typeof mockQuery>).mock.calls[0][0];
+    expect(callArg.options.hooks).toEqual({
+      PreToolUse: [expect.objectContaining({ matcher: "Bash" })],
+    });
+  });
+
   it("forwards persistSession: false for ephemeral queries", async () => {
     await queryWithSdkOptions({ prompt: "hi", sdkOptions: { persistSession: false } });
 
@@ -559,12 +615,14 @@ describe("queryWithSdkOptions — SDK options forwarding", () => {
     expect(callArg.options.plugins).toEqual(plugins);
   });
 
-  it("omits undefined sdk options from the query call", async () => {
+  it("keeps only the always-on Bash sanitizer hook when sdkOptions is empty", async () => {
     await queryWithSdkOptions({ prompt: "hi", sdkOptions: {} });
 
     const callArg = (mockQuery as MockedFunction<typeof mockQuery>).mock.calls[0][0];
     expect(callArg.options.agents).toBeUndefined();
-    expect(callArg.options.hooks).toBeUndefined();
+    expect(callArg.options.hooks).toEqual({
+      PreToolUse: [expect.objectContaining({ matcher: "Bash" })],
+    });
     expect(callArg.options.plugins).toBeUndefined();
     expect(callArg.options.resume).toBeUndefined();
   });

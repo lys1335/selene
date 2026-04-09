@@ -258,7 +258,6 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
 **Safety:**
 - Commands still run only from synced folders/worktrees
 - Removal commands inside the shell string are blocked
-- Path traversal like \`../\` is blocked
 - Prefer \`localGrep\`, \`readFile\`, \`editFile\`, and \`writeFile\` for direct codebase operations when possible`,
     inputSchema: bashSchema,
     execute: async (

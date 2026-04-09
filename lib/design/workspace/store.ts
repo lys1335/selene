@@ -11,6 +11,14 @@ import {
   type DesignSnapshot,
   type InspectedElement,
 } from "./types";
+import {
+  DEFAULT_DESIGN_WORKSPACE_CONFIG,
+  normalizeDesignWorkspaceConfig,
+  type DesignWorkspaceCompileReport,
+  type DesignWorkspaceConfig,
+  type DesignWorkspaceValidationResult,
+} from "./config";
+import type { DesignWorkspaceHistory } from "./edit-history";
 import { buildDesignPreviewHtml } from "./preview";
 
 function buildPreviewMarkup(component: Pick<DesignComponent, "code" | "mode" | "name">): string {
@@ -58,6 +66,10 @@ function extractSessionState(store: DesignWorkspaceState): DesignWorkspaceSessio
     error: store.error,
     inspectorEnabled: store.inspectorEnabled,
     selectedElement: store.selectedElement,
+    config: store.config,
+    lastValidation: store.lastValidation,
+    lastCompileReport: store.lastCompileReport,
+    history: store.history,
   };
 }
 
@@ -70,9 +82,13 @@ const initialSessionState: DesignWorkspaceSessionState = {
   selectedBreakpoint: DESIGN_BREAKPOINTS[0], // responsive
   previewHtml: "",
   showCode: false,
-  error: null as string | null,
+  error: null,
   inspectorEnabled: false,
-  selectedElement: null as InspectedElement | null,
+  selectedElement: null,
+  config: { ...DEFAULT_DESIGN_WORKSPACE_CONFIG },
+  lastValidation: null,
+  lastCompileReport: null,
+  history: null,
 };
 
 const initialState = {
@@ -247,8 +263,28 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     set({ error: null });
   },
 
-  setError: (error: string) => {
+  setError: (error: string | null) => {
     set({ error });
+  },
+
+  setConfig: (config: DesignWorkspaceConfig) => {
+    set({ config: normalizeDesignWorkspaceConfig(config) });
+  },
+
+  updateConfig: (updates: Partial<DesignWorkspaceConfig>) => {
+    set({ config: normalizeDesignWorkspaceConfig({ ...get().config, ...updates }) });
+  },
+
+  setLastValidation: (validation: DesignWorkspaceValidationResult | null) => {
+    set({ lastValidation: validation });
+  },
+
+  setLastCompileReport: (report: DesignWorkspaceCompileReport | null) => {
+    set({ lastCompileReport: report });
+  },
+
+  setHistory: (history: DesignWorkspaceHistory | null) => {
+    set({ history });
   },
 
   setActiveSession: (sessionId: string) => {

@@ -418,6 +418,59 @@ function buildPlanApprovalHookOutput(result: Record<string, unknown>): {
   };
 }
 
+function buildBashSanitizerHookMatcher(): HookCallbackMatcher {
+  const bashSanitizerHook: HookCallback = async (input) => {
+    const toolInput = (input as Record<string, unknown>).tool_input;
+    if (!isDictionary(toolInput)) {
+      return {};
+    }
+
+    const command = typeof toolInput.command === "string" ? toolInput.command.trim() : "";
+    if (!command) {
+      return {};
+    }
+
+    let changed = false;
+    const sanitizedInput: Record<string, unknown> = { ...toolInput };
+
+    // Claude sometimes leaks background-management args into ordinary Bash calls.
+    // Strip them before the SDK validates the command execution request.
+    if ("action" in sanitizedInput) {
+      delete sanitizedInput.action;
+      changed = true;
+    }
+    if ("processId" in sanitizedInput) {
+      delete sanitizedInput.processId;
+      changed = true;
+    }
+    if (sanitizedInput.run_in_background === false) {
+      delete sanitizedInput.run_in_background;
+      changed = true;
+    }
+
+    if (!changed) {
+      return {};
+    }
+
+    console.debug(
+      `[ClaudeCode] Sanitized Bash tool input for foreground command: ${command}`
+    );
+
+    return {
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse" as const,
+        permissionDecision: "allow" as const,
+        updatedInput: sanitizedInput,
+      },
+    };
+  };
+
+  return {
+    matcher: "Bash",
+    hooks: [bashSanitizerHook],
+  };
+}
+
 function extractSdkToolResultsFromUserMessage(
   msg: unknown,
 ): Array<{ toolCallId: string; output: unknown; toolName?: string }> {
@@ -1032,6 +1085,7 @@ function createStreamingClaudeCodeResponse(options: {
 
         const finalHooks = mergeHooks(mergedHookMap, {
           PreToolUse: [
+            buildBashSanitizerHookMatcher(),
             {
               matcher: "AskUserQuestion",
               hooks: [interactiveToolHook],
@@ -1674,6 +1728,10 @@ async function runClaudeAgentQuery(options: {
   const { mcpCtx, seleneMcpServers, resolvedCwd, mergedPlugins, mergedHookMap } =
     await resolveSeleneContext(sdk);
 
+  const finalHooks = mergeHooks(mergedHookMap, {
+    PreToolUse: [buildBashSanitizerHookMatcher()],
+  });
+
   const { executable: sdkExecutable, env: sdkEnv } = getSdkExecutableConfig();
 
   const query = claudeAgentQuery({
@@ -1702,7 +1760,7 @@ async function runClaudeAgentQuery(options: {
       ...(sdk?.agents ? { agents: sdk.agents } : {}),
       ...(sdk?.allowedTools ? { allowedTools: sdk.allowedTools } : {}),
       ...(sdk?.disallowedTools ? { disallowedTools: sdk.disallowedTools } : {}),
-      ...(mergedHookMap ? { hooks: mergedHookMap } : {}),
+      ...(finalHooks ? { hooks: finalHooks } : {}),
       ...(mergedPlugins ? { plugins: mergedPlugins } : {}),
       ...(sdk?.resume ? { resume: sdk.resume } : {}),
       ...(sdk?.sessionId ? { sessionId: sdk.sessionId } : {}),

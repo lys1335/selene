@@ -11,7 +11,6 @@ import {
 import { saveFile } from "@/lib/storage/local-storage";
 import {
   buildDesignPreviewHtml,
-  htmlToReactExport,
   inferDesignMode,
   type DesignExportMode,
 } from "./preview";
@@ -21,7 +20,7 @@ import { sanitizeHTML } from "@/lib/design/utils/sanitize";
 export type DesignExportFormat = "html" | "react" | "png" | "video";
 export type { DesignExportMode } from "./preview";
 
-export interface DesignExportOptions {
+interface DesignExportOptions {
   code: string;
   format: DesignExportFormat;
   mode?: DesignExportMode;
@@ -34,7 +33,7 @@ export interface DesignExportOptions {
   fps?: number;
 }
 
-export interface DesignExportResult {
+interface DesignExportResult {
   format: DesignExportFormat;
   code?: string;
   renderedHtml: string;
@@ -56,8 +55,8 @@ const DEFAULT_DURATION_MS = 2400;
 const DEFAULT_PNG_EXPORT_PROGRESS = 0.68;
 const MAX_VIDEO_FRAMES = 96;
 const DEFAULT_COMPONENT_NAME = "Design Component";
-const PREVIEW_READY_TIMEOUT_MS = 30_000;
-const VIDEO_EXPORT_TIMEOUT_MS = 5 * 60_000; // 5 minutes
+const PREVIEW_READY_TIMEOUT_MS = 8 * 60_000; // 8 minutes — complex animated/video components can take 6-7 min to render
+const VIDEO_EXPORT_TIMEOUT_MS = 12 * 60_000; // 12 minutes — covers preview-ready wait + frame capture + ffmpeg encoding
 
 const PUPPETEER_CSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; script-src 'unsafe-inline'">`;
 
@@ -127,7 +126,7 @@ async function waitForPageReady(page: import("puppeteer").Page): Promise<void> {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
 }
 
-const PUPPETEER_TIMEOUT_MS = 60_000;
+const PUPPETEER_TIMEOUT_MS = 10 * 60_000; // 10 minutes — matches extended preview-ready timeout
 
 async function createBrowser() {
   return puppeteer.launch({
@@ -360,7 +359,7 @@ export async function exportDesignAsset(opts: DesignExportOptions): Promise<Desi
   if (opts.format === "react") {
     return {
       format: "react",
-      code: mode === "tailwind" ? code : htmlToReactExport(code),
+      code,
       renderedHtml: await buildExportPreviewHtml({ code, mode, componentName }),
       fileName: `${sanitizeComponentName(componentName)}.tsx`,
       width: opts.width ?? DEFAULT_WIDTH,

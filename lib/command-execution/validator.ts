@@ -135,7 +135,7 @@ export function validateCommand(
     // 1. Command validation/confirmation (checked above)
     // 2. Path validation (checked in executeCommandWithValidation)
     // 3. Platform-specific shell quoting for args (handled by Node.js)
-    // We checks for path traversal here as an extra layer of defense.
+    // We check for path traversal here as an extra layer of defense.
 
     // Check for path traversal in arguments
     for (const arg of args) {
@@ -178,12 +178,10 @@ export function validateShellCommand(command: string): ValidationResult {
         };
     }
 
-    if (PATH_TRAVERSAL_PATTERN.test(trimmed)) {
-        return {
-            valid: false,
-            error: "Shell command contains a path traversal pattern.",
-        };
-    }
+    // NOTE: Path traversal is checked per-argument in validateCommand(),
+    // not here. Scanning the full shell string causes false positives
+    // when heredoc content contains path-like patterns (e.g. TypeScript
+    // import resolution code with "../" in string literals).
 
     for (const pattern of SHELL_REMOVAL_PATTERNS) {
         if (pattern.test(trimmed)) {
@@ -204,14 +202,4 @@ export function isCommandBlocked(command: string): boolean {
         REMOVAL_COMMANDS.some((cmd) => baseCommand === cmd) ||
         NETWORK_COMMANDS.some((cmd) => baseCommand === cmd)
     );
-}
-
-/**
- * Get list of blocked commands (for documentation/display)
- */
-function getBlockedCommands(): { dangerous: string[]; network: string[] } {
-    return {
-        dangerous: [...REMOVAL_COMMANDS],
-        network: [...NETWORK_COMMANDS],
-    };
 }

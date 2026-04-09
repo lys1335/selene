@@ -20,13 +20,13 @@ import type { StreamEvent } from "./types";
 
 // -- Public streaming entry point ------------------------------------------
 
-export interface ImageContentPart {
+interface ImageContentPart {
   base64Data: string;
   mediaType: string;
   label?: string;
 }
 
-export interface StreamDesignOpts {
+interface StreamDesignOpts {
   systemPrompt: string;
   userPrompt: string;
   /** Optional multimodal image parts to include in the user message. */
@@ -147,22 +147,3 @@ export async function* streamDesignGeneration(
   }
 }
 
-// -- Convenience: collect full response ------------------------------------
-
-/**
- * Run a design generation to completion and return the full text.
- * Throws on error events.
- */
-export async function generateDesignText(
-  opts: StreamDesignOpts,
-): Promise<string> {
-  for await (const event of streamDesignGeneration(opts)) {
-    if (event.type === "complete") {
-      return event.content;
-    }
-    if (event.type === "error") {
-      throw new Error(`[${event.error.code}] ${event.error.message}`);
-    }
-  }
-  throw new Error("Design generation stream ended without a complete event");
-}
