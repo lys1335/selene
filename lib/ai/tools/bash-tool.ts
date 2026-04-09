@@ -217,13 +217,14 @@ const bashSchema = jsonSchema<BashInput>({
     },
     processId: {
       type: "string",
-      description: "Check or manage an existing background bash process by its ID.",
+      description:
+        "ID of a background process to check or manage. Only use with processes started via run_in_background. Do NOT set this for regular commands.",
     },
     action: {
       type: "string",
       enum: ["status", "kill", "list"],
       description:
-        "Optional background management action. Defaults to 'status' when processId is provided.",
+        "Background process management ONLY. Do NOT set this when running a command — just provide 'command' alone. 'status' checks a process by processId, 'kill' stops it, 'list' shows all background processes.",
     },
   },
   required: [],
@@ -247,11 +248,12 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
 - chained shell commands like \`cd app && npm test\`
 - commands where quoting or pipes are easier as one string
 
-**Background mode:**
-- Set \`run_in_background: true\` for long-running commands
-- Poll with \`processId\` or \`action: "status"\`
-- Use \`action: "kill"\` to stop a background process
+**Background mode (long-running commands only):**
+- Set \`run_in_background: true\` to start in background — returns a processId
+- Later, pass that \`processId\` to check progress (defaults to status check)
+- Use \`action: "kill"\` with \`processId\` to stop a background process
 - Use \`action: "list"\` to inspect all background processes
+- For regular commands, just provide \`command\` — never set \`action\` or \`processId\`
 
 **Safety:**
 - Commands still run only from synced folders/worktrees
@@ -272,20 +274,19 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
         };
       }
 
-      const action = input.action ?? (input.processId ? "status" : undefined);
+      // If a command is provided, always treat as command execution —
+      // ignore action/processId even if the model hallucinated them.
+      const isCommandExecution = !!input.command;
+      const action = isCommandExecution
+        ? undefined
+        : input.action ?? (input.processId ? "status" : undefined);
 
-      // Validate action constraints
+      // Validate action constraints (only when NOT executing a command)
       if (action && action !== "list") {
         if (!input.processId) {
           return {
             status: "error",
             error: `bash action "${action}" requires processId.`,
-          };
-        }
-        if (input.command || input.run_in_background) {
-          return {
-            status: "error",
-            error: `bash action "${action}" cannot be combined with command or run_in_background.`,
           };
         }
       }
