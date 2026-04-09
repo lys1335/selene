@@ -49,6 +49,11 @@ import {
 import { installSandboxPackages } from "../../design/workspace/dependencies";
 import { runPostEditValidation } from "../../design/workspace/validation";
 import { getFullPathFromMediaRef } from "../../storage/local-storage";
+import {
+  saveDesignComponent,
+  getDesignComponent,
+  updateDesignComponent,
+} from "../../design/gallery/queries";
 import fs from "fs/promises";
 import path from "path";
 
@@ -801,6 +806,23 @@ async function handleGenerate(
   const name = input.code?.trim() ? "Direct Component" : "Generated Component";
   cacheComponent(sessionId, componentId, finalCode);
 
+  // Persist to DB so the component survives cache eviction / server restart
+  if (options.userId) {
+    saveDesignComponent({
+      id: componentId,
+      userId: options.userId,
+      characterId: options.characterId,
+      sessionId: options.sessionId,
+      name,
+      prompt: prompt?.trim() || input.code?.trim() || "",
+      code: finalCode,
+      mode,
+      style,
+    }).catch(() => {
+      // DB save is best-effort — don't block the tool response
+    });
+  }
+
   const previewResult = await compilePreviewForTool(finalCode, name, "design-workspace-generate");
   const libraries = await getAvailableLibraries();
   const availableLibraries = libraries.filter((library) => library.available).map((library) => library.package);
@@ -870,12 +892,31 @@ async function handleEdit(
   let sourceCode = activeComponentCode?.trim() || undefined;
   if (!sourceCode && activeComponentId) {
     sourceCode = getCachedComponent(sessionId, activeComponentId);
+    // Fall back to DB if the in-memory cache was evicted
+    if (!sourceCode && options.userId) {
+      try {
+        const dbComponent = await getDesignComponent(options.userId, activeComponentId);
+        if (dbComponent) {
+          sourceCode = dbComponent.code;
+          // Re-populate cache for subsequent edits
+          cacheComponent(sessionId, activeComponentId, sourceCode);
+        }
+      } catch {
+        // DB lookup failed — proceed without source code
+      }
+    }
   }
 
   if (!editPrompt?.trim() && activeComponentCode?.trim()) {
     const finalCode = activeComponentCode.trim();
     if (activeComponentId) {
       cacheComponent(sessionId, activeComponentId, finalCode);
+      // Persist direct code replacement to DB
+      if (options.userId) {
+        updateDesignComponent(options.userId, activeComponentId, {
+          code: finalCode,
+        }).catch(() => {});
+      }
     }
 
     const previewResult = await compilePreviewForTool(
@@ -973,6 +1014,15 @@ async function handleEdit(
 
   if (activeComponentId) {
     cacheComponent(sessionId, activeComponentId, finalCode);
+    // Persist the edit to DB
+    if (options.userId) {
+      updateDesignComponent(options.userId, activeComponentId, {
+        code: finalCode,
+        prompt: editPrompt?.trim() || undefined,
+      }).catch(() => {
+        // DB update is best-effort
+      });
+    }
   }
 
   const componentName = activeComponentId ? "Edited Component" : "Component";

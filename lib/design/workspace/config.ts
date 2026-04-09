@@ -78,7 +78,7 @@ export interface DesignWorkspaceCompileReport {
 export const DEFAULT_DESIGN_WORKSPACE_CONFIG: DesignWorkspaceConfig = {
   postEditHooksPreset: "fast",
   postEditHooksEnabled: true,
-  postEditTypecheckEnabled: true,
+  postEditTypecheckEnabled: false,
   postEditImportValidationEnabled: true,
   postEditPreviewEnabled: true,
   typecheckStrictMode: false,
@@ -110,7 +110,7 @@ export function normalizeDesignWorkspaceConfig(
     ),
     postEditTypecheckEnabled: readBoolean(
       value?.postEditTypecheckEnabled,
-      normalizedPreset !== "off",
+      normalizedPreset === "strict",
     ),
     postEditImportValidationEnabled: readBoolean(
       value?.postEditImportValidationEnabled,

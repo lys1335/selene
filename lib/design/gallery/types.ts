@@ -1,4 +1,6 @@
 export interface NewDesignComponent {
+  /** Optional pre-assigned ID. A random UUID is generated if omitted. */
+  id?: string;
   userId: string;
   characterId?: string;
   sessionId?: string;

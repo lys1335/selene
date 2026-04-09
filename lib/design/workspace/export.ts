@@ -11,7 +11,6 @@ import {
 import { saveFile } from "@/lib/storage/local-storage";
 import {
   buildDesignPreviewHtml,
-  inferDesignMode,
   type DesignExportMode,
 } from "./preview";
 import { buildTailwindPreviewAsync } from "./compiler";
@@ -72,7 +71,7 @@ async function buildExportPreviewHtml(opts: {
   animated?: boolean;
   exportProgress?: number;
 }): Promise<string> {
-  const mode = inferDesignMode(opts.code, opts.mode);
+  const mode = opts.mode ?? "tailwind";
   if (mode === "tailwind") {
     return buildTailwindPreviewAsync(opts.code, opts.componentName || DEFAULT_COMPONENT_NAME);
   }
@@ -341,7 +340,7 @@ export async function exportDesignAsset(opts: DesignExportOptions): Promise<Desi
     throw new Error("Component code is required for export.");
   }
 
-  const mode = inferDesignMode(code, opts.mode);
+  const mode = opts.mode ?? "tailwind";
   const componentName = opts.componentName || DEFAULT_COMPONENT_NAME;
   const sessionId = opts.sessionId || "design-workspace";
 

@@ -61,6 +61,7 @@ interface DesignWorkspaceResultData {
   prompt?: string;
   mode?: string;
   style?: string;
+  previewHtml?: string;
   missingPackages?: string[];
   autoRecoveryAttempted?: boolean;
   autoRecoveryResult?: "success" | "failed" | "not-needed";
@@ -274,6 +275,7 @@ function toBridgeData(data: DesignWorkspaceResultData | undefined) {
     prompt: data.prompt,
     mode: data.mode,
     style: data.style,
+    previewHtml: data.previewHtml,
     compileReport: data.compileReport as DesignWorkspaceCompileReport | undefined,
     postEditValidation: data.postEditValidation as DesignWorkspaceValidationResult | undefined,
     history: data.history as DesignWorkspaceHistory | undefined,

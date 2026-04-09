@@ -25,10 +25,6 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-export function inferDesignMode(_code: string, _mode?: DesignExportMode): DesignExportMode {
-  return "tailwind";
-}
-
 function buildTailwindPlaceholder(title: string): string {
   return [
     "<!DOCTYPE html>",

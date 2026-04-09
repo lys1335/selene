@@ -44,7 +44,7 @@ function now(): string {
 export async function saveDesignComponent(
   component: NewDesignComponent
 ): Promise<DesignComponentRow> {
-  const id = crypto.randomUUID();
+  const id = component.id ?? crypto.randomUUID();
   const ts = now();
 
   const [inserted] = await db
@@ -123,7 +123,7 @@ export async function listDesignComponents(opts: GallerySearchOpts & {
 }
 
 /** Update a component (partial), scoped to a user. */
-async function updateDesignComponent(
+export async function updateDesignComponent(
   userId: string,
   id: string,
   updates: Partial<NewDesignComponent>

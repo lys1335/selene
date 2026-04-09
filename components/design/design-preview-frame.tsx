@@ -469,7 +469,7 @@ export function DesignPreviewFrame() {
           <iframe
             ref={iframeRef}
             srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-same-origin"
             className="h-full w-full border-0"
             style={{ background: "transparent" }}
             title="Design preview"
@@ -495,7 +495,7 @@ export function DesignPreviewFrame() {
               <iframe
                 ref={iframeRef}
                 srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
-                sandbox="allow-scripts"
+                sandbox="allow-scripts allow-same-origin"
                 className="h-full w-full border-0"
                 style={{ background: "transparent" }}
                 title="Design preview"

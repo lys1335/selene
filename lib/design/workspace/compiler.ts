@@ -356,6 +356,57 @@ function createComponentPlugin(componentCode: string): esbuild.Plugin {
   };
 }
 
+/**
+ * esbuild plugin that handles external HTTP/HTTPS imports (e.g. Google Fonts CDN URLs).
+ *
+ * When user code does `import 'https://fonts.googleapis.com/css2?family=...'`,
+ * esbuild cannot resolve HTTP URLs as local modules. This plugin intercepts such
+ * imports and converts them to a tiny runtime DOM injection:
+ *   document.head.appendChild(<link rel="stylesheet" href="...">)
+ *
+ * This allows Google Fonts and other CDN stylesheet imports to work inside the
+ * sandboxed preview iframe without any network requests being blocked by esbuild.
+ */
+function createExternalUrlPlugin(): esbuild.Plugin {
+  return {
+    name: "selene-external-url",
+    setup(build) {
+      // Mark all https:// and http:// imports as handled by this plugin
+      build.onResolve({ filter: /^https?:\/\// }, (args) => ({
+        path: args.path,
+        namespace: "selene-external-url",
+      }));
+
+      // For stylesheet URLs (Google Fonts etc.), inject a <link> at runtime
+      build.onLoad({ filter: /.*/, namespace: "selene-external-url" }, (args) => {
+        const url = args.path;
+        const isStylesheet =
+          url.includes("fonts.googleapis.com") ||
+          url.endsWith(".css") ||
+          url.includes("stylesheet");
+
+        if (isStylesheet) {
+          // Inject a <link rel="stylesheet"> into the document head at runtime
+          return {
+            contents: `
+              (function() {
+                var link = document.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = ${JSON.stringify(url)};
+                document.head.appendChild(link);
+              })();
+            `,
+            loader: "js",
+          };
+        }
+
+        // For non-stylesheet external URLs, produce an empty module
+        return { contents: "", loader: "js" };
+      });
+    },
+  };
+}
+
 async function compileReactComponent(
   componentCode: string,
   dependencyCheck: DependencyValidationResult,
@@ -389,8 +440,15 @@ async function compileReactComponent(
           "react/jsx-runtime": resolve(PROJECT_ROOT, "node_modules/react/jsx-runtime"),
           "react/jsx-dev-runtime": resolve(PROJECT_ROOT, "node_modules/react/jsx-dev-runtime"),
         },
+        loader: {
+          ".woff2": "dataurl",
+          ".woff": "dataurl",
+          ".ttf": "dataurl",
+          ".otf": "dataurl",
+          ".eot": "dataurl",
+        },
         nodePaths: [SANDBOX_NODE_MODULES],
-        plugins: [createComponentPlugin(componentCode)],
+        plugins: [createExternalUrlPlugin(), createComponentPlugin(componentCode)],
       }),
       COMPILE_TIMEOUT_MS,
       "Design preview compilation",
@@ -511,6 +569,9 @@ function buildCompiledPreviewHtml(compiledJs: string, tailwindCss: string, title
     '  <meta charset="utf-8" />',
     '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
     `  <title>${escapeHtml(title)}</title>`,
+    "  <!-- Allow Google Fonts and other external font CDNs -->",
+    '  <link rel="preconnect" href="https://fonts.googleapis.com" />',
+    '  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />',
     "  <style>",
     safeThemeCss,
     "  </style>",

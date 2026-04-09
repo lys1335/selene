@@ -41,6 +41,7 @@ function runTypeScriptValidation(
     paths: { "*": ["*"] },
     esModuleInterop: true,
     jsx: ts.JsxEmit.ReactJSX,
+    lib: ["lib.es2020.d.ts", "lib.dom.d.ts"],
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     noEmit: true,
