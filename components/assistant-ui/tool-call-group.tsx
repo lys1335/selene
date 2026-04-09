@@ -101,7 +101,7 @@ const TOOLS_AUTO_EXPAND = new Set([
   "chromiumWorkspace",
   "promptLibrary",
   "designWorkspace",
-  "designGallery",
+
 ]);
 
 

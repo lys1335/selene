@@ -13,7 +13,7 @@ import { createUpdatePlanTool } from "../tools/update-plan-tool";
 import { createWorkspaceTool } from "../tools/workspace-tool";
 import { createChromiumWorkspaceTool } from "../tools/chromium-workspace-tool";
 import { createDesignWorkspaceTool } from "../tools/design-workspace-tool";
-import { createDesignGalleryTool } from "../tools/design-gallery-tool";
+
 import { createAskUserQuestionTool } from "../tools/ask-user-question-tool";
 import { createPromptLibraryTool } from "../tools/prompt-library-tool";
 import { getPromptLibraryRulesSummary, getSceneGuideSummary } from "@/data/prompt-library/optimization-rules";
@@ -659,33 +659,4 @@ Isolated, embedded browser for web automation. One tool, multiple actions.
       })
   );
 
-  // Design Gallery Tool - Save, search, and manage reusable design components
-  registry.register(
-    "designGallery",
-    {
-      displayName: "Design Gallery",
-      category: "utility",
-      keywords: [
-        "design",
-        "gallery",
-        "component",
-        "save",
-        "search",
-        "favorite",
-        "reuse",
-        "template",
-        "library",
-      ],
-      shortDescription:
-        "Save, search, favorite, reuse, and delete saved design components from the gallery",
-      loading: { deferLoading: true },
-      requiresSession: true,
-    } satisfies ToolMetadata,
-    ({ sessionId, userId, characterId }) =>
-      createDesignGalleryTool({
-        sessionId: sessionId || "UNSCOPED",
-        userId: userId || "UNSCOPED",
-        characterId,
-      })
-  );
 }

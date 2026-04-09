@@ -49,7 +49,7 @@ import { ChromiumWorkspaceToolUI } from "./chromium-workspace-tool-ui";
 import { AskFollowupQuestionToolUI } from "./ask-question-tool-ui";
 import { PromptLibraryToolUI } from "./prompt-library-tool-ui";
 import { DesignWorkspaceToolUI } from "./design-workspace-tool-ui";
-import { DesignGalleryToolUI } from "./design-gallery-tool-ui";
+
 import {
   ClaudeEditToolUI,
   ClaudeBashToolUI,
@@ -128,7 +128,7 @@ const TOOL_BY_NAME_MAP = mcpAwareToolMap({
   transcribe: TranscribeToolUI,
   chromiumWorkspace: ChromiumWorkspaceToolUI,
   designWorkspace: DesignWorkspaceToolUI,
-  designGallery: DesignGalleryToolUI,
+
   askUserQuestion: AskFollowupQuestionToolUI,
   askFollowupQuestion: AskFollowupQuestionToolUI,
   AskFollowupQuestion: AskFollowupQuestionToolUI,
