@@ -3,55 +3,99 @@ import "server-only";
 /**
  * Server-side React/TSX component compiler.
  *
- * Uses esbuild (already a project dependency) to compile TSX components and
- * bundle all their imports (React, Lucide, Framer Motion, etc.) into a single
- * self-executing script. This replaces the fragile CDN-based pipeline
- * (Babel Standalone + esm.sh dynamic imports) with a reliable, offline-capable
- * compilation step.
- *
- * The compiled output is an IIFE that:
- * 1. Contains React, ReactDOM, and all imported packages inline
- * 2. Finds the component's default export
- * 3. Renders it into #selene-design-preview-root
- *
- * Tailwind CSS is NOT bundled here — it's loaded via CDN in the preview HTML
- * since it needs to scan the rendered DOM at runtime.
+ * Uses esbuild to bundle a preview entry plus the user component into a single
+ * self-executing browser script. The component module is compiled as-is and
+ * imported through an esbuild virtual module, so the preview pipeline does not
+ * rewrite or regex-transform the model output.
  */
 
 import * as esbuild from "esbuild";
 import postcss from "postcss";
 import tailwindcss from "tailwindcss";
 import type { Config } from "tailwindcss";
-import { resolve, dirname } from "path";
-import { fileURLToPath } from "url";
+import { resolve } from "path";
+import { SANDBOX_NODE_MODULES } from "../libraries";
+import { getProjectRoot } from "../../utils/project-root";
 // Turbopack needs a static import it can trace in server bundles.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- CJS config is loaded as the module default at runtime
 import previewTailwindConfig from "../../../tailwind.preview.config.cjs";
 
-// ---------------------------------------------------------------------------
-// Project root resolution
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve the project root directory for esbuild import resolution.
- * Uses the module's own location to navigate to the project root, avoiding
- * dependence on process.cwd() which can differ in Electron or worker contexts.
- */
-function getProjectRoot(): string {
-  try {
-    // ESM: use import.meta.url
-    if (typeof import.meta?.url === "string") {
-      // This file is at lib/design/workspace/compiler.ts → root is 3 levels up
-      return resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
-    }
-  } catch {
-    // Fallback
-  }
-
-  // Fallback: process.cwd() (correct for Next.js server)
-  return process.cwd();
-}
+const VIRTUAL_COMPONENT_PATH = "__selene_preview_component__";
+const VIRTUAL_COMPONENT_NAMESPACE = "selene-preview-component";
+const PREVIEW_THEME_CSS = [
+  ":root {",
+  "  --terminal-cream: 34 63% 89%;",
+  "  --terminal-cream-dark: 37 52% 81%;",
+  "  --terminal-dark: 0 0% 10%;",
+  "  --terminal-bg: 0 0% 4%;",
+  "  --terminal-green: 18 49% 54%;",
+  "  --terminal-amber: 41 100% 50%;",
+  "  --terminal-text: 0 0% 88%;",
+  "  --terminal-muted: 0 0% 53%;",
+  "  --terminal-border: 0 0% 20%;",
+  "  --background: 32 55% 89%;",
+  "  --foreground: 0 0% 10%;",
+  "  --card: 32 55% 89%;",
+  "  --card-foreground: 0 0% 10%;",
+  "  --popover: 32 55% 89%;",
+  "  --popover-foreground: 0 0% 10%;",
+  "  --primary: 0 0% 10%;",
+  "  --primary-foreground: 32 55% 89%;",
+  "  --secondary: 32 40% 85%;",
+  "  --secondary-foreground: 0 0% 10%;",
+  "  --muted: 32 30% 82%;",
+  "  --muted-foreground: 0 0% 53%;",
+  "  --accent: 18 49% 54%;",
+  "  --accent-foreground: 0 0% 100%;",
+  "  --destructive: 0 84% 60%;",
+  "  --destructive-foreground: 32 55% 89%;",
+  "  --border: 0 0% 75%;",
+  "  --input: 0 0% 75%;",
+  "  --ring: 18 49% 54%;",
+  "  --radius: 0.5rem;",
+  "  --chart-1: 18 49% 54%;",
+  "  --chart-2: 41 100% 50%;",
+  "  --chart-3: 0 0% 53%;",
+  "  --chart-4: 32 55% 70%;",
+  "  --chart-5: 0 0% 30%;",
+  "}",
+  ".dark {",
+  "  --terminal-cream: 0 0% 14%;",
+  "  --terminal-cream-dark: 0 0% 18%;",
+  "  --terminal-dark: 34 63% 90%;",
+  "  --terminal-bg: 0 0% 8%;",
+  "  --terminal-green: 18 49% 54%;",
+  "  --terminal-amber: 41 100% 50%;",
+  "  --terminal-text: 0 0% 92%;",
+  "  --terminal-muted: 0 0% 70%;",
+  "  --terminal-border: 0 0% 28%;",
+  "  --background: 0 0% 14%;",
+  "  --foreground: 34 63% 90%;",
+  "  --card: 0 0% 17%;",
+  "  --card-foreground: 34 63% 90%;",
+  "  --popover: 0 0% 16%;",
+  "  --popover-foreground: 34 63% 90%;",
+  "  --primary: 34 63% 90%;",
+  "  --primary-foreground: 0 0% 10%;",
+  "  --secondary: 0 0% 20%;",
+  "  --secondary-foreground: 34 63% 90%;",
+  "  --muted: 0 0% 20%;",
+  "  --muted-foreground: 0 0% 65%;",
+  "  --accent: 18 49% 54%;",
+  "  --accent-foreground: 0 0% 100%;",
+  "  --destructive: 0 62.8% 30.6%;",
+  "  --destructive-foreground: 34 63% 90%;",
+  "  --border: 0 0% 24%;",
+  "  --input: 0 0% 24%;",
+  "  --ring: 18 49% 54%;",
+  "  --chart-1: 18 49% 54%;",
+  "  --chart-2: 41 100% 50%;",
+  "  --chart-3: 0 0% 65%;",
+  "  --chart-4: 34 63% 70%;",
+  "  --chart-5: 0 0% 50%;",
+  "}",
+].join("\n");
 
 const PROJECT_ROOT = getProjectRoot();
 const TAILWIND_INPUT_PATH = resolve(PROJECT_ROOT, "lib/design/workspace/preview.tailwind.css");
@@ -61,142 +105,109 @@ const PREVIEW_TAILWIND_SOURCE = [
   "@tailwind utilities;",
   "",
   "@layer base {",
-  "  html, body {",
+  "  html, body, #selene-design-preview-root {",
   "    margin: 0;",
   "    width: 100%;",
-  "    min-height: 100%;",
+  "    height: 100%;",
+  "    background: transparent;",
   "  }",
   "}",
   "",
 ].join("\n");
 
-// ---------------------------------------------------------------------------
-// Entry code builder
-// ---------------------------------------------------------------------------
+function createPreviewEntrySource(): string {
+  return [
+    "import React from 'react';",
+    "import { createRoot } from 'react-dom/client';",
+    `import Component from '${VIRTUAL_COMPONENT_PATH}';`,
+    "",
+    "class __SeleneErrorBoundary__ extends React.Component {",
+    "  constructor(props) {",
+    "    super(props);",
+    "    this.state = { error: null };",
+    "  }",
+    "",
+    "  static getDerivedStateFromError(error) {",
+    "    return { error };",
+    "  }",
+    "",
+    "  render() {",
+    "    if (this.state.error) {",
+    "      var msg = 'Render Error:\\n' + (this.state.error.stack || this.state.error.message);",
+    "      return React.createElement('pre', { style: { padding: '16px', fontFamily: 'ui-monospace, monospace', background: '#111827', color: '#ef4444', whiteSpace: 'pre-wrap', fontSize: '13px', margin: 0 } }, msg);",
+    "    }",
+    "    return this.props.children;",
+    "  }",
+    "}",
+    "",
+    "var __root__ = document.getElementById('selene-design-preview-root');",
+    "if (!__root__) {",
+    "  throw new Error('Preview root not found');",
+    "}",
+    "",
+    "if (typeof Component !== 'function') {",
+    "  throw new Error('Default export must be a React component function.');",
+    "}",
+    "",
+    "try {",
+    "  createRoot(__root__).render(",
+    "    React.createElement(__SeleneErrorBoundary__, null, React.createElement(Component))",
+    "  );",
+    "  requestAnimationFrame(function() {",
+    "    __root__.setAttribute('data-preview-ready', 'true');",
+    "  });",
+    "} catch (e) {",
+    "  var div = document.createElement('div');",
+    "  div.style.cssText = 'padding:16px;font-family:ui-monospace,monospace;background:#111827;color:#ef4444;white-space:pre-wrap;font-size:13px;';",
+    "  div.textContent = 'Mount Error:\\n' + (e.stack || e.message);",
+    "  __root__.replaceChildren(div);",
+    "}",
+  ].join("\n");
+}
 
-/**
- * Transform component source code into a compilable entry point that:
- * - Ensures React is imported (for React.useState etc.)
- * - Strips `export default` and captures the component name
- * - Adds ReactDOM rendering code
- *
- * Handles all common default export patterns:
- * - `export default function Name() {}`
- * - `export default function() {}`
- * - `export default Name;`
- * - `export default () => ...`
- * - `export default memo(Name)`
- * - `export default class Name {}`
- */
-function buildPreviewEntry(componentCode: string): string {
-  const lines: string[] = [];
+function createComponentPlugin(componentCode: string): esbuild.Plugin {
+  return {
+    name: "selene-preview-component",
+    setup(build) {
+      build.onResolve({ filter: new RegExp(`^${VIRTUAL_COMPONENT_PATH}$`) }, () => ({
+        path: VIRTUAL_COMPONENT_PATH,
+        namespace: VIRTUAL_COMPONENT_NAMESPACE,
+      }));
 
-  // Ensure React is in scope (many components use React.useState without importing).
-  // Check for any form of React import: default, named, or namespace.
-  const hasReactImport =
-    /import\s+React\b/.test(componentCode) ||
-    /import\s+\*\s+as\s+React\b/.test(componentCode) ||
-    /import\s+\{[^}]*\}\s+from\s+['"]react['"]/.test(componentCode);
-
-  if (!hasReactImport) {
-    lines.push("import React from 'react';");
-  } else if (!/import\s+React\b/.test(componentCode) && /React\./.test(componentCode)) {
-    // Has named imports from react (e.g., `import { useState }`) but also uses
-    // `React.useState` — add a default import to cover both.
-    lines.push("import React from 'react';");
-  }
-
-  // Always add ReactDOM for rendering
-  lines.push("import { createRoot } from 'react-dom/client';");
-  lines.push("");
-
-  // Process component code: strip export default, capture component name
-  let processedCode = componentCode;
-  let componentName = "__SeleneComponent__";
-
-  // Case 1: export default function ComponentName(...) { ... }
-  const namedDefaultMatch = componentCode.match(
-    /export\s+default\s+function\s+([A-Za-z_$][\w$]*)/
-  );
-  if (namedDefaultMatch) {
-    componentName = namedDefaultMatch[1];
-    processedCode = componentCode.replace(
-      /export\s+default\s+function/,
-      "function"
-    );
-  }
-  // Case 2: export default function(...) { ... } (anonymous)
-  else if (/export\s+default\s+function\s*[(<]/.test(componentCode)) {
-    processedCode = componentCode.replace(
-      /export\s+default\s+function/,
-      `function ${componentName}`
-    );
-  }
-  // Case 3: export default IdentifierName; (trailing named reference)
-  else if (/export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/m.test(componentCode)) {
-    const identMatch = componentCode.match(
-      /export\s+default\s+([A-Za-z_$][\w$]*)\s*;?\s*$/m
-    );
-    if (identMatch) {
-      componentName = identMatch[1];
-      processedCode = componentCode.replace(
-        /export\s+default\s+[A-Za-z_$][\w$]*\s*;?\s*$/m,
-        ""
-      );
-    }
-  }
-  // Case 4: Catch-all — any expression (arrow function, memo(), class, HOC, etc.)
-  // Converts `export default <expr>` → `const __SeleneComponent__ = <expr>`
-  else if (/export\s+default\s+/.test(componentCode)) {
-    processedCode = componentCode.replace(
-      /export\s+default\s+/,
-      `const ${componentName} = `
-    );
-  }
-
-  lines.push(processedCode);
-  lines.push("");
-  lines.push("// Mount the component");
-  lines.push(
-    `createRoot(document.getElementById('selene-design-preview-root')).render(React.createElement(${componentName}));`
-  );
-
-  return lines.join("\n");
+      build.onLoad({ filter: /.*/, namespace: VIRTUAL_COMPONENT_NAMESPACE }, () => ({
+        contents: componentCode,
+        loader: "tsx",
+        resolveDir: PROJECT_ROOT,
+      }));
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Compiler
 // ---------------------------------------------------------------------------
 
-export interface CompileResult {
-  /** The compiled JavaScript bundle (IIFE format). */
+interface CompileResult {
   code: string;
-  /** Any warnings from esbuild. */
   warnings: string[];
-  /** Structured error details from esbuild (if any non-fatal). */
   diagnostics?: Array<{ text: string; location?: { file: string; line: number; column: number } }>;
 }
 
 /**
  * Compile a React/TSX component into a self-contained JavaScript bundle.
  *
- * Resolves all imports (react, lucide-react, framer-motion, etc.) from the
- * host project's node_modules and bundles them into a single IIFE script.
- *
- * @param componentCode - Raw TSX source code with `export default function`
- * @returns Compiled JS bundle ready for inline `<script>` injection
+ * The preview entry imports the component via a virtual module so the model
+ * output stays untouched and standard ES module semantics handle the default
+ * export contract.
  */
-export async function compileReactComponent(
-  componentCode: string
-): Promise<CompileResult> {
-  const entry = buildPreviewEntry(componentCode);
-
+async function compileReactComponent(componentCode: string): Promise<CompileResult> {
   const result = await esbuild.build({
     stdin: {
-      contents: entry,
+      contents: createPreviewEntrySource(),
       resolveDir: PROJECT_ROOT,
       loader: "tsx",
     },
+    absWorkingDir: PROJECT_ROOT,
     bundle: true,
     format: "iife",
     write: false,
@@ -207,16 +218,34 @@ export async function compileReactComponent(
     logLevel: "silent",
     treeShaking: true,
     sourcemap: false,
+    platform: "browser",
     define: {
       "process.env.NODE_ENV": '"production"',
     },
+    alias: {
+      // Pin React to the main project copy so sandbox packages (e.g.
+      // @react-three/fiber) share the same React instance as the preview
+      // entry.  Two React instances cause "Cannot read properties of null
+      // (reading 'useMemo')" because hooks rely on a shared internals
+      // singleton.
+      "react": resolve(PROJECT_ROOT, "node_modules/react"),
+      "react-dom": resolve(PROJECT_ROOT, "node_modules/react-dom"),
+      "react/jsx-runtime": resolve(PROJECT_ROOT, "node_modules/react/jsx-runtime"),
+      "react/jsx-dev-runtime": resolve(PROJECT_ROOT, "node_modules/react/jsx-dev-runtime"),
+    },
+    nodePaths: [SANDBOX_NODE_MODULES],
+    plugins: [createComponentPlugin(componentCode)],
   });
 
-  const warnings = result.warnings.map((w) => w.text);
-  const diagnostics = result.warnings.map((w) => ({
-    text: w.text,
-    location: w.location
-      ? { file: w.location.file, line: w.location.line, column: w.location.column }
+  const warnings = result.warnings.map((warning) => warning.text);
+  const diagnostics = result.warnings.map((warning) => ({
+    text: warning.text,
+    location: warning.location
+      ? {
+          file: warning.location.file,
+          line: warning.location.line,
+          column: warning.location.column,
+        }
       : undefined,
   }));
 
@@ -240,7 +269,7 @@ function escapeHtml(value: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
+    .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
 
@@ -249,7 +278,7 @@ function escapeHtml(value: string): string {
  * the inline `<script>` tag in the preview HTML document.
  */
 function escapeInlineScript(js: string): string {
-  return js.replace(/<\/script>/gi, "<\\/script>");
+  return js.replace(/<\/(script)/gi, "<\\/$1");
 }
 
 async function buildPreviewTailwindCss(componentCode: string): Promise<string> {
@@ -264,9 +293,7 @@ async function buildPreviewTailwindCss(componentCode: string): Promise<string> {
     ],
   } satisfies Config;
 
-  const result = await postcss([
-    tailwindcss(config),
-  ]).process(PREVIEW_TAILWIND_SOURCE, {
+  const result = await postcss([tailwindcss(config)]).process(PREVIEW_TAILWIND_SOURCE, {
     from: TAILWIND_INPUT_PATH,
   });
 
@@ -274,40 +301,56 @@ async function buildPreviewTailwindCss(componentCode: string): Promise<string> {
 }
 
 /**
- * Build a complete HTML document for a compiled React component preview.
- *
- * The document includes:
- * - Tailwind CSS CDN (for runtime class → CSS generation)
- * - The compiled JS bundle (React + component + all deps)
- * - A #selene-design-preview-root element for React to mount into
- *
- * Uses the same root element ID as the HTML mode preview so that the
- * `waitForPageReady()` function in export.ts works for both modes.
+ * Escape `</style>` sequences to prevent breaking inline `<style>` tags.
+ * CSS is raw text inside `<style>` — HTML entities are NOT decoded,
+ * so we must NOT use HTML escaping here.
  */
-export function buildCompiledPreviewHtml(
-  compiledJs: string,
-  tailwindCss: string,
-  title: string
-): string {
+function escapeInlineStyle(css: string): string {
+  return css.replace(/<\/(style)/gi, "<\\/$1");
+}
+
+function buildCompiledPreviewHtml(compiledJs: string, tailwindCss: string, title: string): string {
   const safeJs = escapeInlineScript(compiledJs);
-  const safeCss = escapeHtml(tailwindCss);
+  const safeCss = escapeInlineStyle(tailwindCss);
+  const safeThemeCss = escapeInlineStyle(PREVIEW_THEME_CSS);
 
   return [
     "<!DOCTYPE html>",
-    '<html lang="en">',
+    '<html lang="en" class="dark">',
     "<head>",
     '  <meta charset="utf-8" />',
     '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
     `  <title>${escapeHtml(title)}</title>`,
     "  <style>",
+    safeThemeCss,
+    "  </style>",
+    "  <style>",
     safeCss,
     "  </style>",
     "  <style>",
-    "    html, body { margin: 0; height: 100%; width: 100%; overflow: auto; }",
+    "    html, body, #selene-design-preview-root { margin: 0; height: 100%; width: 100%; overflow: auto; background: transparent; }",
     "  </style>",
     "</head>",
     "<body>",
-    '  <div id="selene-design-preview-root" data-preview-ready="true"></div>',
+    '  <div id="selene-design-preview-root"></div>',
+    "  <script>",
+    "    function __showError__(label, msg) {",
+    "      var root = document.getElementById('selene-design-preview-root');",
+    "      if (!root) return;",
+    "      var div = document.createElement('div');",
+    "      div.style.cssText = 'padding:16px;font-family:ui-monospace,monospace;background:#111827;color:#ef4444;white-space:pre-wrap;font-size:13px;';",
+    "      div.textContent = label + ':\\n' + msg;",
+    "      root.replaceChildren(div);",
+    "    }",
+    "    window.onerror = function(msg, src, line, col, err) {",
+    "      __showError__('Runtime Error', err ? (err.stack || err.message) : String(msg));",
+    "      return true;",
+    "    };",
+    "    window.onunhandledrejection = function(event) {",
+    "      var reason = event.reason;",
+    "      __showError__('Unhandled Promise Rejection', reason ? (reason.stack || reason.message || String(reason)) : 'Unknown');",
+    "    };",
+    "  </script>",
     `  <script>${safeJs}<\/script>`,
     "</body>",
     "</html>",
@@ -317,13 +360,8 @@ export function buildCompiledPreviewHtml(
 
 /**
  * High-level helper: compile a TSX component and return the full preview HTML.
- *
- * This is the primary entry point for server-side Tailwind preview rendering.
  */
-export async function buildTailwindPreviewAsync(
-  componentCode: string,
-  title: string
-): Promise<string> {
+export async function buildTailwindPreviewAsync(componentCode: string, title: string): Promise<string> {
   const { code: compiledJs } = await compileReactComponent(componentCode);
   const tailwindCss = await buildPreviewTailwindCss(componentCode);
   return buildCompiledPreviewHtml(compiledJs, tailwindCss, title);

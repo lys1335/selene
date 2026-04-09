@@ -9,6 +9,7 @@ import {
   type DesignComponent,
   type DesignBreakpoint,
   type DesignSnapshot,
+  type InspectedElement,
 } from "./types";
 import { buildDesignPreviewHtml } from "./preview";
 
@@ -55,6 +56,8 @@ function extractSessionState(store: DesignWorkspaceState): DesignWorkspaceSessio
     previewHtml: store.previewHtml,
     showCode: store.showCode,
     error: store.error,
+    inspectorEnabled: store.inspectorEnabled,
+    selectedElement: store.selectedElement,
   };
 }
 
@@ -64,10 +67,12 @@ const initialSessionState: DesignWorkspaceSessionState = {
   components: [] as DesignComponent[],
   activeComponentId: null as string | null,
   snapshots: [] as DesignSnapshot[],
-  selectedBreakpoint: DESIGN_BREAKPOINTS[2], // desktop
+  selectedBreakpoint: DESIGN_BREAKPOINTS[0], // responsive
   previewHtml: "",
   showCode: false,
   error: null as string | null,
+  inspectorEnabled: false,
+  selectedElement: null as InspectedElement | null,
 };
 
 const initialState = {
@@ -170,6 +175,15 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     set({ showCode: !get().showCode });
   },
 
+  toggleInspector: () => {
+    const next = !get().inspectorEnabled;
+    set({ inspectorEnabled: next, selectedElement: next ? get().selectedElement : null });
+  },
+
+  setSelectedElement: (el: InspectedElement | null) => {
+    set({ selectedElement: el });
+  },
+
   takeSnapshot: (label?: string, id?: string) => {
     const current = get();
     if (!current.activeComponentId) {
@@ -254,13 +268,13 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     } else {
       set({
         ...initialSessionState,
-        selectedBreakpoint: { ...DESIGN_BREAKPOINTS[2] },
+        selectedBreakpoint: { ...DESIGN_BREAKPOINTS[0] },
         sessionId,
       });
     }
   },
 
   reset: () => {
-    set({ ...initialState, selectedBreakpoint: { ...DESIGN_BREAKPOINTS[2] } });
+    set({ ...initialState, selectedBreakpoint: { ...DESIGN_BREAKPOINTS[0] } });
   },
 }));

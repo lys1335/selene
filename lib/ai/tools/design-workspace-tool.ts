@@ -15,13 +15,25 @@ import { withToolLogging } from "@/lib/ai/tool-registry/logging";
 import { generateCard, editCard } from "../../design";
 import type { AssetContext } from "../../design/types";
 import {
+  detectAvailableLibraries,
+  getAvailableLibrariesPrompt,
+  registerRuntimeLibrary,
+  validatePackageSpec,
+  ensureSandboxDir,
+  SANDBOX_DIR,
+  type DesignLibrary,
+} from "../../design/libraries";
+import {
   exportDesignAsset,
   type DesignExportFormat,
 } from "../../design/workspace/export";
-import { inferDesignMode, type DesignExportMode } from "../../design/workspace/preview";
+import { type DesignExportMode } from "../../design/workspace/preview";
 import { getFullPathFromMediaRef } from "../../storage/local-storage";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import fs from "fs/promises";
 import path from "path";
+const execFileAsync = promisify(execFile);
 
 interface DesignWorkspaceToolOptions {
   sessionId?: string;
@@ -30,22 +42,23 @@ interface DesignWorkspaceToolOptions {
 }
 
 interface DesignWorkspaceInput {
-  action: "open" | "generate" | "edit" | "snapshot" | "restore" | "export" | "close";
+  action: "open" | "generate" | "edit" | "snapshot" | "restore" | "export" | "close" | "install";
+
+  /** npm package names to install. Required for "install" action. */
+  packages?: string[];
 
   prompt?: string;
-  mode?: "html" | "tailwind";
+  mode?: "tailwind";
   style?: "apple-glass" | "default";
 
   editPrompt?: string;
-  inlineMode?: boolean;
   activeComponentCode?: string;
-  /** ID of the component being edited — returned in the result for store targeting */
   activeComponentId?: string;
 
   label?: string;
   snapshotId?: string;
 
-  /** Image/asset URLs to incorporate into the design. For "generate" and "edit". */
+  code?: string;
   assets?: Array<{ url: string; description?: string }>;
 
   format?: "html" | "react" | "png" | "video";
@@ -79,13 +92,22 @@ interface DesignWorkspaceResult {
     height?: number;
     durationMs?: number;
     fps?: number;
+    availableLibraries?: string[];
   };
   error?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Server-side component cache (survives hot reloads via globalThis)
-// ---------------------------------------------------------------------------
+let _librariesPromise: Promise<DesignLibrary[]> | null = null;
+
+function getAvailableLibraries(): Promise<DesignLibrary[]> {
+  if (!_librariesPromise) {
+    _librariesPromise = detectAvailableLibraries().catch((err) => {
+      _librariesPromise = null;
+      throw err;
+    });
+  }
+  return _librariesPromise;
+}
 
 const componentCache = (
   (globalThis as Record<string, unknown>).__designComponentCache ??= new Map<string, string>()
@@ -96,19 +118,30 @@ function cacheKey(sessionId: string, componentId: string): string {
 }
 
 function cacheComponent(sessionId: string, componentId: string, code: string): void {
-  componentCache.set(cacheKey(sessionId, componentId), code);
-  // FIFO eviction at 200 entries
+  const key = cacheKey(sessionId, componentId);
+  componentCache.delete(key);
+  componentCache.set(key, code);
   if (componentCache.size > 200) {
     const firstKey = componentCache.keys().next().value;
     if (firstKey) componentCache.delete(firstKey);
   }
 }
 
-function getCachedComponent(sessionId: string, componentId: string): string | undefined {
-  return componentCache.get(cacheKey(sessionId, componentId));
+export function getCachedComponent(sessionId: string, componentId: string): string | undefined {
+  const key = cacheKey(sessionId, componentId);
+  const value = componentCache.get(key);
+  if (value !== undefined) {
+    componentCache.delete(key);
+    componentCache.set(key, value);
+  }
+  return value;
 }
 
-// ---------------------------------------------------------------------------
+export function resolveComponentCode(sessionId: string, code: string): string | null {
+  if (!code.startsWith("cached:")) return code;
+  const id = code.slice("cached:".length);
+  return getCachedComponent(sessionId, id) ?? null;
+}
 
 const DEFAULT_EXPORT_SESSION_ID = "design-workspace";
 const DEFAULT_EXPORT_WIDTH = 1440;
@@ -129,21 +162,12 @@ const IMAGE_MEDIA_TYPES: Record<string, string> = {
   ".webp": "image/webp",
 };
 
-/**
- * Parse a `data:` URI into its base64 payload and MIME type.
- * Returns null for non-data URIs or malformed values.
- */
 function parseDataUri(uri: string): { base64Data: string; mediaType: string } | null {
   const match = uri.match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
   if (!match) return null;
   return { mediaType: match[1], base64Data: match[2] };
 }
 
-/**
- * Convert a raw filesystem media path to an `/api/media/` URL.
- * Handles paths like `/Users/.../seline/.local-data/media/sessionId/role/file.png`
- * by extracting the relative portion after `/media/`.
- */
 function filesystemPathToMediaUrl(filePath: string): string | null {
   const mediaMarker = /[/\\]media[/\\]/;
   const match = filePath.match(mediaMarker);
@@ -152,13 +176,6 @@ function filesystemPathToMediaUrl(filePath: string): string | null {
   return relativePart ? `/api/media/${relativePart}` : null;
 }
 
-/**
- * Resolve input assets into `AssetContext[]` with multimodal data.
- *
- * The outer chat agent may pass `/api/media/...` paths, `data:` URIs,
- * or raw filesystem paths. In all cases we normalize to an `/api/media/`
- * URL and extract base64 for multimodal vision.
- */
 async function resolveAssets(
   inputAssets: Array<{ url: string; description?: string }>,
 ): Promise<AssetContext[]> {
@@ -171,7 +188,6 @@ async function resolveAssets(
         metadata: asset.description ? { description: asset.description } : undefined,
       };
 
-      // Data URIs — extract base64 for multimodal
       const parsed = parseDataUri(asset.url);
       if (parsed) {
         ctx.base64Data = parsed.base64Data;
@@ -179,7 +195,6 @@ async function resolveAssets(
         return ctx;
       }
 
-      // Normalize filesystem paths to /api/media/ URLs
       if (!asset.url.startsWith("/api/media/") && !asset.url.startsWith("http")) {
         const mediaUrl = filesystemPathToMediaUrl(asset.url);
         if (mediaUrl) {
@@ -187,13 +202,9 @@ async function resolveAssets(
         }
       }
 
-      // /api/media/ paths — read from disk for multimodal
       const mediaRef = ctx.url.startsWith("/api/media/") ? ctx.url : asset.url;
       const fullPath = getFullPathFromMediaRef(mediaRef);
       if (fullPath) {
-        // Path traversal protection: resolved path must live under the storage root.
-        // getFullPathFromMediaRef already validates via resolveUnderStorage, but we
-        // add an explicit check here as defense-in-depth against any future changes.
         const storageRoot = path.resolve(
           process.env.LOCAL_DATA_PATH
             ? path.resolve(process.env.LOCAL_DATA_PATH, "media")
@@ -201,7 +212,6 @@ async function resolveAssets(
         );
         const resolvedFull = path.resolve(fullPath);
         if (!resolvedFull.startsWith(storageRoot + path.sep) && resolvedFull !== storageRoot) {
-          // Path escapes media storage directory — skip this asset
           return ctx;
         }
 
@@ -227,32 +237,12 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
-function nameFromPrompt(prompt: string): string {
-  const words = prompt.trim().split(/\s+/).filter(Boolean).slice(0, 4);
-  if (words.length === 0) return "Untitled Component";
-  return words
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
 function clampNumber(value: number | undefined, fallback: number, min: number, max: number): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return fallback;
   }
 
   return Math.min(max, Math.max(min, Math.round(value)));
-}
-
-function normalizeExportMode(mode?: string, code?: string): DesignExportMode {
-  if (mode === "tailwind" || mode === "html") {
-    return mode;
-  }
-
-  if (code) {
-    return inferDesignMode(code);
-  }
-
-  return "html";
 }
 
 function normalizeExportFormat(format?: string): DesignExportFormat {
@@ -288,6 +278,8 @@ async function executeDesignWorkspace(
   switch (input.action) {
     case "open":
       return handleOpen();
+    case "install":
+      return handleInstall(input);
     case "generate":
       return handleGenerate(options, input);
     case "edit":
@@ -313,12 +305,13 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
   );
 
   return tool({
-    description: `Control the design workspace to generate, edit, snapshot, and export UI components.
+    description: `Control the design workspace to generate, edit, snapshot, export UI components, and install external libraries.
 
 **Actions:**
 - "open": Open the design workspace panel.
-- "generate": Generate a new UI component from a text prompt. Requires \`prompt\`. Optional: \`mode\`, \`style\`, \`assets\` (array of {url, description} for user-uploaded images to incorporate).
-- "edit": Edit the active component with a text instruction. Requires \`editPrompt\`. Pass \`activeComponentId\` to reference a previously generated component (code is cached server-side). Optional: \`activeComponentCode\` (override), \`assets\`.
+- "install": Install npm packages for use in designs. Provide \`packages\` array (e.g. ["three", "@react-three/fiber"]). Packages are installed via npm and become available for import in generated components.
+- "generate": Generate a new UI component. Provide \`code\` (direct TSX) to render your own code, OR \`prompt\` for AI generation. Optional: \`mode\`, \`style\`, \`assets\`.
+- "edit": Edit the active component. Provide \`activeComponentCode\` WITHOUT \`editPrompt\` to directly replace the code, OR provide \`editPrompt\` for AI-driven full-file rewriting. Pass \`activeComponentId\` to reference a previously generated component. Optional: \`style\`, \`assets\`.
 - "snapshot": Take a snapshot of the current workspace state.
 - "restore": Restore a previous snapshot. Requires \`snapshotId\`.
 - "export": Export the active component as HTML, React, PNG, or MP4. Pass \`activeComponentId\` or \`activeComponentCode\`.
@@ -330,22 +323,31 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
       properties: {
         action: {
           type: "string",
-          enum: ["open", "generate", "edit", "snapshot", "restore", "export", "close"],
+          enum: ["open", "generate", "edit", "snapshot", "restore", "export", "close", "install"],
           description: "The workspace action to perform.",
+        },
+        packages: {
+          type: "array",
+          items: { type: "string" },
+          description: 'npm package names to install (e.g. ["three", "@react-three/fiber"]). Required for "install" action.',
         },
         prompt: {
           type: "string",
-          description: 'Text description of the component to generate. Required for "generate".',
+          description: 'Text description of the component to generate. Required for "generate" unless "code" is provided.',
+        },
+        code: {
+          type: "string",
+          description: 'Direct TSX/React component code. If provided for "generate", skips AI generation and renders this code directly. The code should be a complete React component with `export default`.',
         },
         mode: {
           type: "string",
-          enum: ["html", "tailwind"],
-          description: 'Generation or export mode. Optional for "generate" and "export".',
+          enum: ["tailwind"],
+          description: 'Generation mode (always "tailwind"). Optional for "generate" and "export".',
         },
         style: {
           type: "string",
           enum: ["apple-glass", "default"],
-          description: 'Visual style (default "default"). For "generate".',
+          description: 'Visual style for generation or editing. Defaults to "default".',
         },
         assets: {
           type: "array",
@@ -362,11 +364,7 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
         },
         editPrompt: {
           type: "string",
-          description: 'Natural-language edit instruction. Required for "edit".',
-        },
-        inlineMode: {
-          type: "boolean",
-          description: 'Whether to apply edits inline (default true). For "edit".',
+          description: 'Natural-language edit instruction for AI-driven editing. Required for "edit" unless providing "activeComponentCode" for direct replacement.',
         },
         activeComponentCode: {
           type: "string",
@@ -431,19 +429,133 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
   });
 }
 
-function handleOpen(): DesignWorkspaceResult {
+async function handleOpen(): Promise<DesignWorkspaceResult> {
+  const libraries = await getAvailableLibraries();
+  const available = libraries.filter((library) => library.available).map((library) => library.package);
   return {
     success: true,
     action: "open",
-    data: { message: "Design workspace opened." },
+    data: {
+      message: "Design workspace opened.",
+      availableLibraries: available.length > 0 ? available : undefined,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Install handler
+// ---------------------------------------------------------------------------
+
+/** Install mutex to prevent concurrent npm installs in the sandbox. */
+let _installLock: Promise<void> | null = null;
+
+/**
+ * Get the platform-appropriate npm command.
+ * On Windows, npm is invoked as `npm.cmd` because `execFile` doesn't
+ * use a shell and won't resolve `.cmd` extensions automatically.
+ */
+function getNpmCommand(): string {
+  return process.platform === "win32" ? "npm.cmd" : "npm";
+}
+
+async function handleInstall(input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
+  const packages = input.packages?.filter((p) => typeof p === "string" && p.trim());
+  if (!packages || packages.length === 0) {
+    return {
+      success: false,
+      action: "install",
+      error: 'Provide a "packages" array with at least one npm package name.',
+    };
+  }
+
+  // Minimal validation — only reject empty strings. npm is the real validator
+  // and the AI can read its error messages.
+  const validated = packages.map((p) => validatePackageSpec(p));
+  const invalid = validated.filter((r) => !r.valid);
+  if (invalid.length > 0) {
+    return {
+      success: false,
+      action: "install",
+      error: `Empty package specifier(s) found. Provide valid npm package names.`,
+    };
+  }
+
+  // Pass specs directly to npm — no rewriting, no second-guessing
+  const installArgs = validated.map((r) => r.spec);
+  // Extract package name from spec (handles @scope/name@version correctly)
+  const packageNames = validated.map((r) => {
+    const s = r.spec;
+    if (s.startsWith("@")) {
+      // Scoped: @scope/name or @scope/name@version
+      const slashIdx = s.indexOf("/");
+      if (slashIdx === -1) return s;
+      const afterSlash = s.slice(slashIdx + 1);
+      const atIdx = afterSlash.indexOf("@");
+      return atIdx === -1 ? s : s.slice(0, slashIdx + 1 + atIdx);
+    }
+    const atIdx = s.indexOf("@");
+    return atIdx === -1 ? s : s.slice(0, atIdx);
+  });
+
+  // Serialize installs — chain promises so concurrent calls queue properly
+  const doInstall = async () => {
+    await ensureSandboxDir();
+    const npmCmd = getNpmCommand();
+    await execFileAsync(npmCmd, ["install", "--save", "--ignore-scripts", ...installArgs], {
+      cwd: SANDBOX_DIR,
+      timeout: 120_000,
+      env: { ...process.env, NODE_ENV: "development" },
+    });
+  };
+
+  _installLock = (_installLock ?? Promise.resolve())
+    .catch(() => {}) // don't let a previous failure block the queue
+    .then(doInstall);
+
+  try {
+    await _installLock;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      action: "install",
+      error: `npm install failed: ${message}`,
+    };
+  }
+
+  // Register each installed package in the runtime library registry
+  for (const name of packageNames) {
+    registerRuntimeLibrary({
+      name,
+      package: name,
+      description: `Installed package: ${name}`,
+      importExamples: [`import ... from "${name}"`],
+    });
+  }
+
+  // Reset the cached library detection so next call picks up new packages
+  _librariesPromise = null;
+
+  const libraries = await getAvailableLibraries();
+  const available = libraries
+    .filter((library) => library.available)
+    .map((library) => library.package);
+
+  return {
+    success: true,
+    action: "install",
+    data: {
+      message: `Successfully installed: ${packageNames.join(", ")}`,
+      availableLibraries: available.length > 0 ? available : undefined,
+    },
   };
 }
 
 async function handleGenerate(options: DesignWorkspaceToolOptions, input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
-  const { prompt, mode = "html", style = "default", assets: inputAssets } = input;
+  const { prompt, mode = "tailwind", style = "default", assets: inputAssets } = input;
 
-  if (!prompt?.trim()) {
-    return { success: false, action: "generate", error: 'Missing or empty "prompt" for generate action.' };
+  if (!prompt?.trim() && !input.code?.trim()) {
+    return { success: false, action: "generate", error: 'Provide either "prompt" (for AI generation) or "code" (for direct rendering).' };
   }
 
   const assets = inputAssets?.length ? await resolveAssets(inputAssets) : undefined;
@@ -451,12 +563,19 @@ async function handleGenerate(options: DesignWorkspaceToolOptions, input: Design
   let finalCode = "";
   let generationError: string | undefined;
 
-  for await (const event of generateCard({ prompt, mode, style, assets })) {
-    if (event.type === "complete") {
-      finalCode = event.content;
-    }
-    if (event.type === "error") {
-      generationError = event.error.message;
+  if (input.code?.trim()) {
+    finalCode = input.code.trim();
+  } else {
+    const libraries = await getAvailableLibraries();
+    const availableLibrariesBlock = getAvailableLibrariesPrompt(libraries);
+
+    for await (const event of generateCard({ prompt: prompt!, mode, style, assets, availableLibrariesBlock })) {
+      if (event.type === "complete") {
+        finalCode = event.content;
+      }
+      if (event.type === "error") {
+        generationError = event.error.message;
+      }
     }
   }
 
@@ -469,16 +588,13 @@ async function handleGenerate(options: DesignWorkspaceToolOptions, input: Design
   }
 
   const componentId = generateId();
-  const name = nameFromPrompt(prompt);
-
-  // Cache the generated code so subsequent edits don't need to re-pass it
+  const name = input.code?.trim() ? "Direct Component" : "Generated Component";
   const sessionId = options.sessionId ?? "UNSCOPED";
   cacheComponent(sessionId, componentId, finalCode);
 
-  // previewHtml is NOT included in the tool result to keep the response slim.
-  // For Tailwind components, the compiled preview can be 100K+ (bundled React
-  // runtime, lucide-react, etc.). The client-side preview frame falls back to
-  // the compile-preview API automatically via useCompileTailwindPreview().
+  const libs = await getAvailableLibraries();
+  const availableLibs = libs.filter((library) => library.available).map((library) => library.package);
+
   return {
     success: true,
     action: "generate",
@@ -486,23 +602,47 @@ async function handleGenerate(options: DesignWorkspaceToolOptions, input: Design
       componentId,
       code: finalCode,
       name,
-      prompt: prompt.trim(),
+      prompt: prompt?.trim() ?? undefined,
       mode,
       style,
       message: `Component "${name}" generated successfully.`,
+      availableLibraries: availableLibs.length > 0 ? availableLibs : undefined,
     },
   };
 }
 
 async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
-  const { editPrompt, inlineMode = true, activeComponentCode, activeComponentId, assets: inputAssets } = input;
+  const {
+    editPrompt,
+    style = "default",
+    activeComponentCode,
+    activeComponentId,
+    assets: inputAssets,
+  } = input;
 
-  if (!editPrompt?.trim()) {
-    return { success: false, action: "edit", error: 'Missing required field "editPrompt" for edit action.' };
+  const sessionId = options.sessionId ?? "UNSCOPED";
+
+  if (!editPrompt?.trim() && activeComponentCode?.trim()) {
+    const finalCode = activeComponentCode.trim();
+    if (activeComponentId) {
+      cacheComponent(sessionId, activeComponentId, finalCode);
+    }
+
+    return {
+      success: true,
+      action: "edit",
+      data: {
+        componentId: activeComponentId,
+        code: finalCode,
+        message: "Component code replaced directly.",
+      },
+    };
   }
 
-  // Resolve component code: explicit param > server-side cache
-  const sessionId = options.sessionId ?? "UNSCOPED";
+  if (!editPrompt?.trim()) {
+    return { success: false, action: "edit", error: 'Provide "editPrompt" for AI-driven editing, or "activeComponentCode" without "editPrompt" to directly replace the code.' };
+  }
+
   let code = activeComponentCode?.trim() || undefined;
   if (!code && activeComponentId) {
     code = getCachedComponent(sessionId, activeComponentId);
@@ -520,7 +660,7 @@ async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWork
   let finalCode = "";
   let editError: string | undefined;
 
-  for await (const event of editCard({ code, editPrompt, inlineMode, assets })) {
+  for await (const event of editCard({ code, editPrompt, style, assets })) {
     if (event.type === "complete") {
       finalCode = event.content;
     }
@@ -537,12 +677,10 @@ async function handleEdit(options: DesignWorkspaceToolOptions, input: DesignWork
     };
   }
 
-  // Update cache with edited code for subsequent edits
   if (activeComponentId) {
     cacheComponent(sessionId, activeComponentId, finalCode);
   }
 
-  // previewHtml excluded — same rationale as handleGenerate.
   return {
     success: true,
     action: "edit",
@@ -598,7 +736,7 @@ async function handleExport(
   }
 
   const format = normalizeExportFormat(input.format);
-  const mode = normalizeExportMode(input.mode, activeComponentCode);
+  const mode: DesignExportMode = "tailwind";
   const componentName = input.componentName?.trim() || "Design Component";
 
   try {

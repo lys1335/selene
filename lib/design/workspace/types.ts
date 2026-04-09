@@ -2,7 +2,7 @@ export interface DesignComponent {
   id: string;
   name: string;
   code: string;
-  mode: "html" | "tailwind";
+  mode: "tailwind";
   style: "apple-glass" | "default";
   prompt: string;
   createdAt: string;
@@ -24,12 +24,35 @@ export interface DesignBreakpoint {
 }
 
 export const DESIGN_BREAKPOINTS: DesignBreakpoint[] = [
+  { name: "responsive", width: 0, height: 0 },
   { name: "mobile", width: 375, height: 812 },
   { name: "tablet", width: 768, height: 1024 },
   { name: "desktop", width: 1440, height: 900 },
 ];
 
 export type DesignWorkspaceStatus = "idle" | "generating" | "editing" | "exporting";
+
+/** Element info captured by the in-iframe inspector and sent via postMessage. */
+export interface InspectedElement {
+  tagName: string;
+  id: string;
+  className: string;
+  textContent: string;
+  selector: string;
+  boundingRect: { x: number; y: number; width: number; height: number };
+  computedStyles: {
+    width: string;
+    height: string;
+    padding: string;
+    margin: string;
+    display: string;
+    position: string;
+    color: string;
+    backgroundColor: string;
+    fontSize: string;
+    fontFamily: string;
+  };
+}
 
 /** Serialisable session state that gets cached when switching sessions. */
 export interface DesignWorkspaceSessionState {
@@ -42,6 +65,8 @@ export interface DesignWorkspaceSessionState {
   previewHtml: string;
   showCode: boolean;
   error: string | null;
+  inspectorEnabled: boolean;
+  selectedElement: InspectedElement | null;
 }
 
 export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
@@ -59,6 +84,8 @@ export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
   setPreviewHtml: (html: string) => void;
   setBreakpoint: (breakpoint: DesignBreakpoint) => void;
   toggleCode: () => void;
+  toggleInspector: () => void;
+  setSelectedElement: (el: InspectedElement | null) => void;
   takeSnapshot: (label?: string, id?: string) => void;
   restoreSnapshot: (snapshotId: string) => void;
   clearError: () => void;

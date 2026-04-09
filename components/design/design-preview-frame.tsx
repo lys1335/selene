@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useDesignWorkspaceStore, DESIGN_BREAKPOINTS } from "@/lib/design/workspace";
 import { Button } from "@/components/ui/button";
-import { Monitor, Tablet, Smartphone } from "lucide-react";
+import { Monitor, Tablet, Smartphone, Crosshair, Maximize } from "lucide-react";
+import type { InspectedElement } from "@/lib/design/workspace/types";
 
 const BREAKPOINT_ICONS: Record<string, ReactNode> = {
+  responsive: <Maximize className="h-4 w-4" />,
   mobile: <Smartphone className="h-4 w-4" />,
   tablet: <Tablet className="h-4 w-4" />,
   desktop: <Monitor className="h-4 w-4" />,
@@ -22,7 +24,7 @@ function hashCode(str: string): number {
 
 /** Check if the preview HTML is a loading placeholder (not compiled content). */
 function isPlaceholderHtml(html: string): boolean {
-  return !html.trim() || html.includes("Compiling component");
+  return !html.trim() || html.includes('data-selene-placeholder="true"');
 }
 
 /** Escape text for safe inline HTML rendering. */
@@ -31,6 +33,216 @@ function escapeForHtml(text: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+// ---------------------------------------------------------------------------
+// Inspector script — injected into the iframe when inspector mode is active.
+// Self-contained, no external deps. Communicates via postMessage.
+// ---------------------------------------------------------------------------
+const INSPECTOR_SCRIPT = `
+(function() {
+  if (window.__seleneInspector) return;
+  window.__seleneInspector = true;
+
+  var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Overlay canvas
+  var overlay = document.createElement('div');
+  overlay.id = '__selene-inspector-overlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2147483646;';
+  document.documentElement.appendChild(overlay);
+
+  // Tooltip
+  var tooltip = document.createElement('div');
+  tooltip.id = '__selene-inspector-tooltip';
+  tooltip.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;background:rgba(0,0,0,0.85);color:#fff;font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;padding:4px 8px;border-radius:4px;white-space:nowrap;display:none;max-width:360px;overflow:hidden;text-overflow:ellipsis;';
+  document.documentElement.appendChild(tooltip);
+
+  // Box-model highlight elements
+  var marginBox = document.createElement('div');
+  marginBox.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483645;background:rgba(246,178,107,0.3);';
+  var paddingBox = document.createElement('div');
+  paddingBox.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483645;background:rgba(147,196,125,0.3);';
+  var contentBox = document.createElement('div');
+  contentBox.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483645;background:rgba(111,168,220,0.3);';
+  document.documentElement.appendChild(marginBox);
+  document.documentElement.appendChild(paddingBox);
+  document.documentElement.appendChild(contentBox);
+
+  var hoveredEl = null;
+
+  function getCssSelector(el) {
+    if (!(el instanceof Element)) return '';
+    if (el.id) return '#' + CSS.escape(el.id);
+    var parts = [];
+    var current = el;
+    while (current && current !== document.documentElement) {
+      var tag = current.tagName.toLowerCase();
+      if (current.id) { parts.unshift('#' + CSS.escape(current.id)); break; }
+      var parent = current.parentElement;
+      if (parent) {
+        var siblings = Array.from(parent.children).filter(function(c) { return c.tagName === current.tagName; });
+        if (siblings.length > 1) {
+          var idx = siblings.indexOf(current) + 1;
+          tag += ':nth-of-type(' + idx + ')';
+        }
+      }
+      parts.unshift(tag);
+      current = parent;
+    }
+    return parts.join(' > ');
+  }
+
+  function parseNum(v) { return parseFloat(v) || 0; }
+
+  function highlight(el) {
+    if (!el || el === document.documentElement || el === document.body) {
+      hideHighlight();
+      return;
+    }
+    var rect = el.getBoundingClientRect();
+    var cs = getComputedStyle(el);
+    var mt = parseNum(cs.marginTop), mr = parseNum(cs.marginRight), mb = parseNum(cs.marginBottom), ml = parseNum(cs.marginLeft);
+    var pt = parseNum(cs.paddingTop), pr = parseNum(cs.paddingRight), pb = parseNum(cs.paddingBottom), pl = parseNum(cs.paddingLeft);
+
+    // Margin box
+    marginBox.style.top = (rect.top - mt) + 'px';
+    marginBox.style.left = (rect.left - ml) + 'px';
+    marginBox.style.width = (rect.width + ml + mr) + 'px';
+    marginBox.style.height = (rect.height + mt + mb) + 'px';
+    marginBox.style.display = 'block';
+
+    // Padding box (same as border box here)
+    paddingBox.style.top = rect.top + 'px';
+    paddingBox.style.left = rect.left + 'px';
+    paddingBox.style.width = rect.width + 'px';
+    paddingBox.style.height = rect.height + 'px';
+    paddingBox.style.display = 'block';
+
+    // Content box
+    contentBox.style.top = (rect.top + pt) + 'px';
+    contentBox.style.left = (rect.left + pl) + 'px';
+    contentBox.style.width = (rect.width - pl - pr) + 'px';
+    contentBox.style.height = (rect.height - pt - pb) + 'px';
+    contentBox.style.display = 'block';
+  }
+
+  function hideHighlight() {
+    marginBox.style.display = 'none';
+    paddingBox.style.display = 'none';
+    contentBox.style.display = 'none';
+    tooltip.style.display = 'none';
+  }
+
+  function showTooltip(el, x, y) {
+    var rect = el.getBoundingClientRect();
+    var cs = getComputedStyle(el);
+    var tag = el.tagName.toLowerCase();
+    var cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/).join('.') : '';
+    var idStr = el.id ? '#' + el.id : '';
+    var dims = Math.round(rect.width) + ' x ' + Math.round(rect.height);
+    tooltip.textContent = tag + idStr + cls + '  ' + dims;
+    tooltip.style.display = 'block';
+
+    // Position: prefer below-right of cursor, flip if needed
+    var tx = x + 12;
+    var ty = y + 12;
+    if (tx + tooltip.offsetWidth > window.innerWidth) tx = x - tooltip.offsetWidth - 4;
+    if (ty + tooltip.offsetHeight > window.innerHeight) ty = y - tooltip.offsetHeight - 4;
+    tooltip.style.left = tx + 'px';
+    tooltip.style.top = ty + 'px';
+  }
+
+  function buildPayload(el) {
+    var rect = el.getBoundingClientRect();
+    var cs = getComputedStyle(el);
+    var text = (el.textContent || '').trim();
+    if (text.length > 120) text = text.slice(0, 120) + '...';
+    return {
+      type: 'selene-inspector-select',
+      element: {
+        tagName: el.tagName.toLowerCase(),
+        id: el.id || '',
+        className: (typeof el.className === 'string') ? el.className : '',
+        textContent: text,
+        selector: getCssSelector(el),
+        boundingRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        computedStyles: {
+          width: cs.width,
+          height: cs.height,
+          padding: cs.padding,
+          margin: cs.margin,
+          display: cs.display,
+          position: cs.position,
+          color: cs.color,
+          backgroundColor: cs.backgroundColor,
+          fontSize: cs.fontSize,
+          fontFamily: cs.fontFamily
+        }
+      }
+    };
+  }
+
+  function isInspectorElement(el) {
+    return el === overlay || el === tooltip || el === marginBox || el === paddingBox || el === contentBox;
+  }
+
+  function onMouseMove(e) {
+    var target = e.target;
+    if (!target || isInspectorElement(target)) return;
+    // Skip SVG internal elements — highlight the nearest SVGSVGElement
+    if (target instanceof SVGElement && !(target instanceof SVGSVGElement)) {
+      target = target.closest('svg') || target;
+    }
+    hoveredEl = target;
+    highlight(target);
+    showTooltip(target, e.clientX, e.clientY);
+  }
+
+  function onClick(e) {
+    if (!hoveredEl || isInspectorElement(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    var payload = buildPayload(hoveredEl);
+    window.parent.postMessage(payload, '*');
+  }
+
+  document.addEventListener('mousemove', onMouseMove, true);
+  document.addEventListener('click', onClick, true);
+
+  // Listen for cleanup message from parent
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'selene-inspector-cleanup') {
+      document.removeEventListener('mousemove', onMouseMove, true);
+      document.removeEventListener('click', onClick, true);
+      hideHighlight();
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+      if (tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
+      if (marginBox.parentNode) marginBox.parentNode.removeChild(marginBox);
+      if (paddingBox.parentNode) paddingBox.parentNode.removeChild(paddingBox);
+      if (contentBox.parentNode) contentBox.parentNode.removeChild(contentBox);
+      window.__seleneInspector = false;
+    }
+  });
+})();
+`;
+
+/**
+ * Inject inspector script into preview HTML when inspector mode is enabled.
+ * Appends a <script> tag before the closing </body> or </html> tag.
+ */
+function injectInspectorScript(html: string, enabled: boolean): string {
+  if (!enabled) return html;
+  const scriptTag = `<script>${INSPECTOR_SCRIPT}<\/script>`;
+  // Insert before </body> if present, else before </html>, else append
+  if (html.includes("</body>")) {
+    return html.replace("</body>", `${scriptTag}</body>`);
+  }
+  if (html.includes("</html>")) {
+    return html.replace("</html>", `${scriptTag}</html>`);
+  }
+  return html + scriptTag;
 }
 
 /**
@@ -49,7 +261,6 @@ function escapeForHtml(text: string): string {
 function useCompileTailwindPreview() {
   const components = useDesignWorkspaceStore((s) => s.components);
   const activeComponentId = useDesignWorkspaceStore((s) => s.activeComponentId);
-  const previewHtml = useDesignWorkspaceStore((s) => s.previewHtml);
   const setPreviewHtml = useDesignWorkspaceStore((s) => s.setPreviewHtml);
 
   // Track which component+code hash we last compiled to avoid redundant API calls.
@@ -59,24 +270,17 @@ function useCompileTailwindPreview() {
     if (!activeComponentId) return;
 
     const component = components.find((c) => c.id === activeComponentId);
-    if (!component || component.mode !== "tailwind") return;
+    if (!component) return;
 
     // Build a content-based cache key using component ID + code hash
     const cacheKey = `${activeComponentId}:${hashCode(component.code)}`;
 
-    // If preview is already compiled (not a placeholder) AND the cache key
-    // matches, the bridge already provided compiled HTML — skip the fetch.
-    if (!isPlaceholderHtml(previewHtml) && lastCompiledRef.current === cacheKey) {
-      return;
-    }
-
-    // Don't re-request the same content
+    // Don't re-request the same content we already compiled
     if (lastCompiledRef.current === cacheKey) return;
 
-    // Capture the component ID at request time for stale-response detection
+    // Capture the component ID at request time for stale-response detection.
     const requestComponentId = activeComponentId;
     const requestCode = component.code;
-
     const controller = new AbortController();
 
     fetch("/api/design/compile-preview", {
@@ -85,9 +289,26 @@ function useCompileTailwindPreview() {
       body: JSON.stringify({ code: requestCode, name: component.name }),
       signal: controller.signal,
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as {
+          html?: string;
+          error?: string;
+          details?: Array<{ text?: string }>;
+        };
+
+        if (!res.ok) {
+          const detailText = Array.isArray(data.details)
+            ? data.details.map((detail) => detail.text).filter(Boolean).join("\n")
+            : "";
+          const message = [data.error || `Compile API returned ${res.status}`, detailText]
+            .filter(Boolean)
+            .join("\n\n");
+          throw new Error(message);
+        }
+
+        return data;
+      })
       .then((data: { html?: string; error?: string }) => {
-        // Guard: only apply if this component is still active
         const currentId = useDesignWorkspaceStore.getState().activeComponentId;
         if (currentId !== requestComponentId) return;
 
@@ -95,7 +316,6 @@ function useCompileTailwindPreview() {
           lastCompiledRef.current = cacheKey;
           setPreviewHtml(data.html);
         } else if (data.error) {
-          // Show compilation error in preview with proper escaping
           const safeError = escapeForHtml(data.error);
           setPreviewHtml(
             `<!DOCTYPE html><html><body style="margin:0;padding:16px;font-family:ui-monospace,monospace;background:#111827;color:#f9fafb;"><pre style="white-space:pre-wrap;color:#ef4444;">Compilation Error:\n${safeError}</pre></body></html>`
@@ -105,10 +325,19 @@ function useCompileTailwindPreview() {
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         console.error("[design-preview] compilation failed:", err);
+        const currentId = useDesignWorkspaceStore.getState().activeComponentId;
+        if (currentId !== requestComponentId) return;
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        const safeMsg = escapeForHtml(msg);
+        setPreviewHtml(
+          `<!DOCTYPE html><html><body style="margin:0;padding:16px;font-family:ui-monospace,monospace;background:#111827;color:#f9fafb;"><pre style="white-space:pre-wrap;color:#ef4444;">Compilation Failed:\n${safeMsg}</pre></body></html>`
+        );
       });
 
-    return () => controller.abort();
-  }, [activeComponentId, components, previewHtml, setPreviewHtml]);
+    return () => {
+      controller.abort();
+    };
+  }, [activeComponentId, components, setPreviewHtml]);
 }
 
 /**
@@ -145,26 +374,46 @@ export function DesignPreviewFrame() {
   const previewHtml = useDesignWorkspaceStore((s) => s.previewHtml);
   const selectedBreakpoint = useDesignWorkspaceStore((s) => s.selectedBreakpoint);
   const setBreakpoint = useDesignWorkspaceStore((s) => s.setBreakpoint);
+  const inspectorEnabled = useDesignWorkspaceStore((s) => s.inspectorEnabled);
+  const toggleInspector = useDesignWorkspaceStore((s) => s.toggleInspector);
+  const setSelectedElement = useDesignWorkspaceStore((s) => s.setSelectedElement);
 
   // Auto-compile Tailwind components when switching or on first load
   useCompileTailwindPreview();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const available = useContainerSize(containerRef);
 
-  // Padding around the scaled preview inside the container
+  // Listen for inspector postMessage from the iframe — validate source
+  useEffect(() => {
+    function handleMessage(e: MessageEvent) {
+      // Only accept messages from our own iframe, not arbitrary windows
+      if (e.source !== iframeRef.current?.contentWindow) return;
+      if (e.data?.type === "selene-inspector-select" && e.data.element) {
+        setSelectedElement(e.data.element as InspectedElement);
+      }
+    }
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [setSelectedElement]);
+
+  // Responsive mode: iframe fills the entire container (like a real browser)
+  // Fixed breakpoints: scale to fit the container with padding
+  const isResponsive = selectedBreakpoint.width === 0;
   const PADDING = 24;
-  const viewportW = selectedBreakpoint.width;
-  const viewportH = selectedBreakpoint.height;
+  const viewportW = isResponsive ? available.width : selectedBreakpoint.width;
+  const viewportH = isResponsive ? available.height : selectedBreakpoint.height;
 
   // Compute scale so the true-size iframe fits in the available space.
-  // Never upscale (cap at 1).
+  // Never upscale (cap at 1). In responsive mode, scale is always 1.
   const computeScale = useCallback(() => {
+    if (isResponsive) return 1;
     if (available.width === 0 || available.height === 0) return 1;
     const usableW = available.width - PADDING * 2;
     const usableH = available.height - PADDING * 2;
     return Math.min(usableW / viewportW, usableH / viewportH, 1);
-  }, [available.width, available.height, viewportW, viewportH]);
+  }, [isResponsive, available.width, available.height, viewportW, viewportH]);
 
   const scale = computeScale();
 
@@ -187,48 +436,73 @@ export function DesignPreviewFrame() {
             size="sm"
             role="tab"
             aria-selected={selectedBreakpoint.name === bp.name}
-            aria-label={`${bp.name} breakpoint (${bp.width}px)`}
+            aria-label={bp.width ? `${bp.name} breakpoint (${bp.width}px)` : `${bp.name} mode`}
             onClick={() => setBreakpoint(bp)}
             className="gap-1.5"
           >
             {BREAKPOINT_ICONS[bp.name]}
             <span className="capitalize">{bp.name}</span>
-            <span className="text-xs opacity-60">{bp.width}px</span>
+            {bp.width > 0 && <span className="text-xs opacity-60">{bp.width}px</span>}
           </Button>
         ))}
+        <div className="mx-1 h-5 w-px bg-border" />
+        <Button
+          variant={inspectorEnabled ? "default" : "ghost"}
+          size="sm"
+          aria-label="Toggle element inspector"
+          aria-pressed={inspectorEnabled}
+          onClick={toggleInspector}
+          className="gap-1.5"
+        >
+          <Crosshair className="h-4 w-4" />
+          <span>Inspect</span>
+        </Button>
       </div>
 
       {/* Preview area — measured container */}
       <div
         ref={containerRef}
-        className="flex flex-1 items-center justify-center overflow-auto bg-muted/30"
+        className={`flex flex-1 overflow-auto bg-muted/30 ${isResponsive ? "" : "items-center justify-center"}`}
       >
-        {/* Outer shell: reflects the scaled dimensions so scrolling works correctly */}
-        <div
-          style={{
-            width: viewportW * scale,
-            height: viewportH * scale,
-            flexShrink: 0,
-          }}
-        >
-          {/* Scaled stage: renders the iframe at true viewport size, then scales down */}
+        {isResponsive ? (
+          /* Responsive mode: iframe fills container directly — like a real browser */
+          <iframe
+            ref={iframeRef}
+            srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
+            sandbox="allow-scripts"
+            className="h-full w-full border-0"
+            style={{ background: "transparent" }}
+            title="Design preview"
+          />
+        ) : (
+          /* Fixed breakpoint: scale to fit with padding */
           <div
-            className="overflow-hidden"
             style={{
-              width: viewportW,
-              height: viewportH,
-              transform: `scale(${scale})`,
-              transformOrigin: "top left",
+              width: viewportW * scale,
+              height: viewportH * scale,
+              flexShrink: 0,
             }}
           >
-            <iframe
-              srcDoc={previewHtml}
-              sandbox="allow-scripts"
-              className="h-full w-full border-0"
-              title="Design preview"
-            />
+            <div
+              className="overflow-hidden"
+              style={{
+                width: viewportW,
+                height: viewportH,
+                transform: `scale(${scale})`,
+                transformOrigin: "top left",
+              }}
+            >
+              <iframe
+                ref={iframeRef}
+                srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
+                sandbox="allow-scripts"
+                className="h-full w-full border-0"
+                style={{ background: "transparent" }}
+                title="Design preview"
+              />
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
