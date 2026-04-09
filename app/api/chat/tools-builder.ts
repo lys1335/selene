@@ -145,6 +145,10 @@ export async function buildToolsForRequest(
   const registry = ToolRegistry.getInstance();
 
   // First, get non-deferred tools to build the initial active set.
+  // When devWorkspace is enabled, force-include workspace in the initial active set
+  // so the model sees it without needing searchTools discovery.
+  const eagerIncludeTools = devWorkspaceEnabled ? ["workspace"] : undefined;
+
   const nonDeferredTools = registry.getTools({
     sessionId,
     userId,
@@ -152,6 +156,7 @@ export async function buildToolsForRequest(
     characterAvatarUrl: characterAvatarUrl || undefined,
     characterAppearanceDescription: characterAppearanceDescription || undefined,
     includeDeferredTools: false,
+    includeTools: eagerIncludeTools,
     agentEnabledTools,
     provider: ctx.provider,
   });

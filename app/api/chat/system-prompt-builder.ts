@@ -263,8 +263,10 @@ export async function buildSystemPromptForRequest(
     } else {
       workspaceBlock =
         `\n\n[Developer Workspace]\n` +
-        `You have the "workspace" tool available. When the user asks you to work on code changes, ` +
-        `offer to create an isolated workspace (git worktree) so their main branch stays clean. ` +
+        `You have the "workspace" tool available. When the user asks you to execute a task on a standalone workspace, worktree, or isolated branch, ` +
+        `create an isolated workspace (git worktree) so their main branch stays clean.\n` +
+        `Do NOT use executeCommand/bash to create branches (git checkout -b, git switch -c, git worktree add) — ` +
+        `use the workspace tool instead, as raw git commands bypass the workspace UI and frontend integration.\n` +
         `File tools will automatically work in the worktree once created.\n` +
         `Use: workspace({ action: "create", branch: "feature/...", repoPath: "/path/to/repo" })`;
     }
