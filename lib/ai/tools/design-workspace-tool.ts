@@ -473,12 +473,25 @@ function buildCompileFailureResult(
  *
  * `renderedHtml` is similarly large compiled output that the LLM doesn't need.
  */
+/**
+ * Strip bloated fields from the tool result before the LLM sees it.
+ * Small error-preview HTML (< 5 KB) is kept so the UI can render
+ * error states; only the huge compiled bundles are stripped.
+ */
 function stripHeavyFields(result: DesignWorkspaceResult): DesignWorkspaceResult {
   if (!result.data) {
     return result;
   }
+  const HEAVY_THRESHOLD = 5_000; // chars
   const { previewHtml, renderedHtml, ...lightData } = result.data;
-  return { ...result, data: lightData };
+
+  // Keep small error-preview HTML; strip large compiled bundles.
+  const keep: Record<string, unknown> = {};
+  if (previewHtml && previewHtml.length < HEAVY_THRESHOLD) {
+    keep.previewHtml = previewHtml;
+  }
+
+  return { ...result, data: { ...lightData, ...keep } };
 }
 
 async function executeDesignWorkspace(

@@ -28,6 +28,7 @@ import {
   type DesignWorkspaceDiagnostic,
 } from "./config";
 import { logToolEvent } from "@/lib/ai/tool-registry/logging";
+import { escapeHtml } from "./preview";
 // Turbopack needs a static import it can trace in server bundles.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore -- CJS config is loaded as the module default at runtime
@@ -461,15 +462,6 @@ async function compileReactComponent(
       },
     );
   }
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function escapeInlineScript(js: string): string {

@@ -642,14 +642,14 @@ function PropertiesContent() {
             {lastValidation ? (
               <div>
                 <div className="font-medium">Post-edit checks: {lastValidation.passed ? "passed" : "issues found"}</div>
-                <div className="text-muted-foreground">{lastValidation.checks.length} checks</div>
+                <div className="text-muted-foreground">{lastValidation.checks?.length ?? 0} checks</div>
               </div>
             ) : null}
             {lastCompileReport ? (
               <div>
-                <div className="font-medium">Last compile: {lastCompileReport.errors.length === 0 ? "ok" : "failed"}</div>
-                {lastCompileReport.dependencyCheck.missingPackages.length > 0 ? (
-                  <div className="text-red-600">Missing packages: {lastCompileReport.dependencyCheck.missingPackages.join(", ")}</div>
+                <div className="font-medium">Last compile: {(lastCompileReport.errors?.length ?? 0) === 0 ? "ok" : "failed"}</div>
+                {(lastCompileReport.dependencyCheck?.missingPackages?.length ?? 0) > 0 ? (
+                  <div className="text-red-600">Missing packages: {lastCompileReport.dependencyCheck!.missingPackages.join(", ")}</div>
                 ) : null}
               </div>
             ) : null}

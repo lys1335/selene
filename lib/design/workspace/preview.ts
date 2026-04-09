@@ -6,10 +6,7 @@ export type DesignExportMode = "tailwind";
 
 interface BuildDesignPreviewOptions {
   code: string;
-  mode?: DesignExportMode;
   componentName?: string;
-  animated?: boolean;
-  exportProgress?: number;
 }
 
 const DEFAULT_COMPONENT_NAME = "Design Component";
@@ -19,7 +16,7 @@ const ERROR_THEME = {
   accent: "#ef4444",
 };
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

@@ -25,7 +25,6 @@ function buildPreviewMarkup(component: Pick<DesignComponent, "code" | "mode" | "
   try {
     return buildDesignPreviewHtml({
       code: component.code,
-      mode: component.mode,
       componentName: component.name,
     });
   } catch (error) {
