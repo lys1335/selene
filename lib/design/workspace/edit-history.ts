@@ -3,7 +3,7 @@ import type { DesignWorkspaceValidationResult } from "./config";
 export interface DesignEditRecord {
   seq: number;
   timestamp: string;
-  action: "open" | "generate" | "edit" | "snapshot" | "restore" | "export" | "close" | "install";
+  action: "open" | "generate" | "edit" | "patch" | "readSource" | "snapshot" | "restore" | "export" | "close" | "install";
   componentId?: string;
   durationMs: number;
   success: boolean;

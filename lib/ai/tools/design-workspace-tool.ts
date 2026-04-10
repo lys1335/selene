@@ -64,7 +64,7 @@ interface DesignWorkspaceToolOptions {
 }
 
 interface DesignWorkspaceInput {
-  action: "open" | "generate" | "edit" | "snapshot" | "restore" | "export" | "close" | "install";
+  action: "open" | "generate" | "edit" | "patch" | "readSource" | "snapshot" | "restore" | "export" | "close" | "install";
 
   /** npm package names to install. Required for "install" action. */
   packages?: string[];
@@ -82,6 +82,13 @@ interface DesignWorkspaceInput {
 
   code?: string;
   assets?: Array<{ url: string; description?: string }>;
+
+  /** String to find in the active component code. For "patch" action. */
+  oldString?: string;
+  /** Replacement string. For "patch" action. */
+  newString?: string;
+  /** Replace all occurrences (default: false). For "patch" action. */
+  replaceAll?: boolean;
 
   format?: "html" | "react" | "png" | "video";
   componentName?: string;
@@ -126,6 +133,8 @@ interface DesignWorkspaceResultData {
   missingPackages?: string[];
   autoRecoveryAttempted?: boolean;
   autoRecoveryResult?: "success" | "failed" | "not-needed";
+  /** Flat, agent-readable error summary. Present only when compilation fails. */
+  agentErrorSummary?: string;
 }
 
 interface DesignWorkspaceResult {
@@ -443,6 +452,42 @@ function buildValidationMessage(validation: DesignWorkspaceValidationResult | un
   return `Post-edit checks found ${failedChecks} issue${failedChecks === 1 ? "" : "s"}.`;
 }
 
+function buildAgentErrorSummary(report: DesignWorkspaceCompileReport): string {
+  const lines: string[] = [];
+
+  if (report.errors.length > 0) {
+    for (const err of report.errors.slice(0, 5)) {
+      const loc = err.location ? ` (line ${err.location.line})` : "";
+      const sug = err.suggestion ? ` → Fix: ${err.suggestion}` : "";
+      lines.push(`[${err.type}]${loc} ${err.message}${sug}`);
+    }
+    if (report.errors.length > 5) {
+      lines.push(`... and ${report.errors.length - 5} more errors`);
+    }
+  }
+
+  const missing = report.dependencyCheck.missingPackages;
+  if (missing.length > 0) {
+    lines.push(`Missing packages: ${missing.join(", ")} — use action "install" to add them.`);
+  }
+
+  if (report.diagnostics?.length) {
+    const diagCount = report.diagnostics.length;
+    if (lines.length === 0) {
+      // Only show diagnostics if no structured errors
+      for (const d of report.diagnostics.slice(0, 3)) {
+        const loc = d.location ? ` (line ${d.location.line})` : "";
+        lines.push(`${d.text}${loc}`);
+      }
+      if (diagCount > 3) {
+        lines.push(`... and ${diagCount - 3} more diagnostics`);
+      }
+    }
+  }
+
+  return lines.length > 0 ? lines.join("\n") : "Compilation failed (no structured error details available).";
+}
+
 function buildCompileFailureResult(
   action: DesignWorkspaceInput["action"],
   baseData: DesignWorkspaceResultData,
@@ -457,6 +502,7 @@ function buildCompileFailureResult(
       previewHtml: compileFailure.previewHtml,
       compileReport: compileFailure.compileReport,
       missingPackages: compileFailure.compileReport.dependencyCheck.missingPackages,
+      agentErrorSummary: buildAgentErrorSummary(compileFailure.compileReport),
       autoRecoveryAttempted: Boolean(compileFailure.compileReport.autoInstall?.attempted),
       autoRecoveryResult: compileFailure.compileReport.autoInstall
         ? compileFailure.compileReport.autoInstall.success
@@ -518,6 +564,12 @@ async function executeDesignWorkspace(
     case "edit":
       result = await handleEdit(options, input);
       break;
+    case "patch":
+      result = await handlePatch(options, input);
+      break;
+    case "readSource":
+      result = await handleReadSource(options, input);
+      break;
     case "snapshot":
       result = handleSnapshot(options, input);
       break;
@@ -552,6 +604,8 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
 - "install": Install npm packages for use in designs. Provide \`packages\` array (e.g. ["three", "@react-three/fiber"]). Packages are installed via npm and become available for import in generated components.
 - "generate": Generate a new UI component. Provide \`code\` (direct TSX) to render your own code, OR \`prompt\` for AI generation. Optional: \`mode\`, \`style\`, \`assets\`.
 - "edit": Edit the active component. Provide \`activeComponentCode\` WITHOUT \`editPrompt\` to directly replace the code, OR provide \`editPrompt\` for AI-driven full-file rewriting. Pass \`activeComponentId\` to reference a previously generated component. Optional: \`style\`, \`assets\`.
+- "patch": Surgically edit the active component using find-and-replace. Provide \`oldString\` (text to find) and \`newString\` (replacement). Pass \`replaceAll: true\` to replace all occurrences. Much faster than full "edit" for small changes. Requires \`activeComponentId\`.
+- "readSource": Read back the source code of a component. Pass \`activeComponentId\` to retrieve cached/stored code. Returns the full component TSX source.
 - "snapshot": Take a snapshot of the current workspace state.
 - "restore": Restore a previous snapshot. Requires \`snapshotId\`.
 - "export": Export the active component as HTML, React, PNG, or MP4. Pass \`activeComponentId\` or \`activeComponentCode\`.
@@ -563,7 +617,7 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
       properties: {
         action: {
           type: "string",
-          enum: ["open", "generate", "edit", "snapshot", "restore", "export", "close", "install"],
+          enum: ["open", "generate", "edit", "patch", "readSource", "snapshot", "restore", "export", "close", "install"],
           description: "The workspace action to perform.",
         },
         packages: {
@@ -613,6 +667,18 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
         activeComponentId: {
           type: "string",
           description: 'ID of the component to edit or export. Used to look up cached code server-side.',
+        },
+        oldString: {
+          type: "string",
+          description: 'The exact text to find in the component code. Required for "patch" action.',
+        },
+        newString: {
+          type: "string",
+          description: 'The replacement text. Required for "patch" action.',
+        },
+        replaceAll: {
+          type: "boolean",
+          description: 'If true, replace all occurrences of oldString. Default: false (replace first occurrence only). For "patch" action.',
         },
         label: {
           type: "string",
@@ -1068,6 +1134,218 @@ async function handleEdit(
       compileReport: previewResult.compileReport,
       postEditValidation: validation,
       config,
+    },
+  };
+}
+
+async function handlePatch(
+  options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+): Promise<DesignWorkspaceResult> {
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
+
+  const { oldString, newString, replaceAll: replaceAllOccurrences, activeComponentId, activeComponentCode } = input;
+
+  if (oldString === undefined || oldString === null) {
+    return { success: false, action: "patch", error: '"oldString" is required for patch action.' };
+  }
+  if (newString === undefined || newString === null) {
+    return { success: false, action: "patch", error: '"newString" is required for patch action.' };
+  }
+  if (oldString === newString) {
+    return { success: false, action: "patch", error: '"oldString" and "newString" are identical — nothing to patch.' };
+  }
+
+  // Resolve source code
+  let sourceCode = activeComponentCode?.trim() || undefined;
+  if (!sourceCode && activeComponentId) {
+    sourceCode = getCachedComponent(sessionId, activeComponentId);
+    if (!sourceCode && options.userId) {
+      try {
+        const dbComponent = await getDesignComponent(options.userId, activeComponentId);
+        if (dbComponent) {
+          sourceCode = dbComponent.code;
+          cacheComponent(sessionId, activeComponentId, sourceCode);
+        }
+      } catch {
+        // DB lookup failed
+      }
+    }
+  }
+
+  if (!sourceCode) {
+    return {
+      success: false,
+      action: "patch",
+      error: 'No component code available. Pass "activeComponentId" or "activeComponentCode".',
+    };
+  }
+
+  // Check that oldString exists in the source
+  const occurrences = sourceCode.split(oldString).length - 1;
+  if (occurrences === 0) {
+    return {
+      success: false,
+      action: "patch",
+      error: `"oldString" not found in component code. The text to replace must match exactly (including whitespace and indentation).`,
+    };
+  }
+
+  if (occurrences > 1 && !replaceAllOccurrences) {
+    return {
+      success: false,
+      action: "patch",
+      error: `"oldString" found ${occurrences} times. Set "replaceAll: true" to replace all, or provide a longer/more unique "oldString".`,
+    };
+  }
+
+  // Apply the patch
+  const patchedCode = replaceAllOccurrences
+    ? sourceCode.split(oldString).join(newString)
+    : sourceCode.replace(oldString, newString);
+
+  // Update cache and DB
+  if (activeComponentId) {
+    cacheComponent(sessionId, activeComponentId, patchedCode);
+    if (options.userId) {
+      updateDesignComponent(options.userId, activeComponentId, {
+        code: patchedCode,
+      }).catch(() => {});
+    }
+  }
+
+  // Compile and validate
+  const componentName = activeComponentId ? "Patched Component" : "Component";
+  const previewResult = await compilePreviewForTool(patchedCode, componentName, "design-workspace-patch");
+  const config = getWorkspaceConfig();
+  const validation = previewResult.ok
+    ? await runPostEditValidation(patchedCode, config, { previewBuildPassed: true })
+    : undefined;
+
+  if (!previewResult.ok) {
+    // Revert the cache to the original source on compile failure
+    if (activeComponentId) {
+      cacheComponent(sessionId, activeComponentId, sourceCode);
+      if (options.userId) {
+        updateDesignComponent(options.userId, activeComponentId, {
+          code: sourceCode,
+        }).catch(() => {});
+      }
+    }
+    recordHistory(sessionId, "patch", startedAt, false, {
+      componentId: activeComponentId,
+      error: previewResult.error,
+      metadata: {
+        missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
+      },
+    });
+    return buildCompileFailureResult(
+      "patch",
+      {
+        componentId: activeComponentId,
+        code: patchedCode,
+        config,
+      },
+      previewResult,
+    );
+  }
+
+  const linesChanged = countChangedLines(sourceCode, patchedCode);
+  const validationMessage = buildValidationMessage(validation);
+  recordHistory(sessionId, "patch", startedAt, true, {
+    componentId: activeComponentId,
+    validation,
+  });
+
+  return {
+    success: true,
+    action: "patch",
+    data: {
+      componentId: activeComponentId,
+      code: patchedCode,
+      message: validationMessage || `Patch applied: ${occurrences} replacement${occurrences > 1 ? "s" : ""}, ~${linesChanged} line${linesChanged !== 1 ? "s" : ""} changed.`,
+      previewHtml: previewResult.previewHtml,
+      compileReport: previewResult.compileReport,
+      postEditValidation: validation,
+      config,
+    },
+  };
+}
+
+function countChangedLines(before: string, after: string): number {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  let changed = 0;
+  const maxLen = Math.max(a.length, b.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (a[i] !== b[i]) changed++;
+  }
+  return changed;
+}
+
+async function handleReadSource(
+  options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+): Promise<DesignWorkspaceResult> {
+  const sessionId = getSessionId(options);
+  const { activeComponentId, activeComponentCode } = input;
+
+  // If direct code is provided, just echo it back (useful for resolving "cached:" refs)
+  if (activeComponentCode?.trim()) {
+    const resolved = resolveComponentCode(sessionId, activeComponentCode.trim());
+    return {
+      success: true,
+      action: "readSource",
+      data: {
+        componentId: activeComponentId,
+        code: resolved || activeComponentCode.trim(),
+        message: "Component source code retrieved.",
+      },
+    };
+  }
+
+  if (!activeComponentId) {
+    return {
+      success: false,
+      action: "readSource",
+      error: 'Provide "activeComponentId" to read back component source code.',
+    };
+  }
+
+  // Try cache first
+  let code = getCachedComponent(sessionId, activeComponentId);
+
+  // Fall back to DB
+  if (!code && options.userId) {
+    try {
+      const dbComponent = await getDesignComponent(options.userId, activeComponentId);
+      if (dbComponent) {
+        code = dbComponent.code;
+        // Re-populate cache
+        cacheComponent(sessionId, activeComponentId, code);
+      }
+    } catch {
+      // DB lookup failed
+    }
+  }
+
+  if (!code) {
+    return {
+      success: false,
+      action: "readSource",
+      error: `Component "${activeComponentId}" not found in cache or database. It may have been evicted or belongs to a different session.`,
+    };
+  }
+
+  return {
+    success: true,
+    action: "readSource",
+    data: {
+      componentId: activeComponentId,
+      code,
+      message: `Component source retrieved (${code.length} chars, ~${Math.ceil(code.split('\n').length)} lines).`,
     },
   };
 }
