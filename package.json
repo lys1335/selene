@@ -140,7 +140,7 @@
     "ai": "^6.0.7",
     "animejs": "^4.2.2",
     "autoprefixer": "^10.4.27",
-    "axios": "^1.7.9",
+    "axios": "^1.15.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.5.0",
     "canvas-confetti": "^1.9.4",
