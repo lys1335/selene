@@ -169,7 +169,7 @@
     "mathjs": "^15.1.0",
     "mime-types": "^3.0.2",
     "nanoid": "^5.0.9",
-    "next": "^16.1.6",
+    "next": "^16.2.3",
     "next-intl": "^4.6.1",
     "node-edge-tts": "^1.2.10",
     "onnxruntime-node": "^1.24.3",
