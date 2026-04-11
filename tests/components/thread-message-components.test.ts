@@ -3,7 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   getAttachmentDisplayName,
   getAttachmentImageUrl,
+  getToolComponentByName,
 } from "@/components/assistant-ui/thread-message-components";
+
+describe("tool component mapping", () => {
+  it("routes lowercase bash to the structured Bash renderer", () => {
+    expect(getToolComponentByName("bash")?.name).toBe("ClaudeBashToolUI");
+    expect(getToolComponentByName("Bash")?.name).toBe("ClaudeBashToolUI");
+  });
+});
 
 describe("getAttachmentImageUrl", () => {
   it("returns inline image content URLs", () => {

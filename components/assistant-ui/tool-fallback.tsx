@@ -90,7 +90,7 @@ function parseNestedJsonValue(text: string, maxDepth: number = 3): unknown | und
   return current;
 }
 
-function unwrapMcpTextWrappedResult(result: ToolResult | string): ToolResult {
+export function unwrapMcpTextWrappedResult(result: ToolResult | string): ToolResult {
   if (typeof result === "string") {
     const parsed = parseNestedJsonValue(result);
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -164,7 +164,7 @@ function hasVisualMedia(result?: unknown): boolean {
   return false;
 }
 
-function isToolErrorResult(result?: ToolResult): boolean {
+export function isToolErrorResult(result?: ToolResult): boolean {
   if (!result) return false;
   const status = typeof result.status === "string" ? result.status.toLowerCase() : "";
   return status === "error" || status === "failed" || status === "denied" || typeof result.error === "string";
@@ -174,6 +174,15 @@ const TOOL_RESULT_TEXT_CLASS = "text-sm text-terminal-muted font-mono transition
 const TOOL_RESULT_PRE_CLASS = "overflow-x-auto rounded bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] p-2 text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-terminal-dark dark:text-terminal-dark/90";
 const TOOL_RESULT_ERROR_PRE_CLASS = "overflow-x-auto rounded bg-red-50 dark:bg-red-900/20 p-2 text-xs whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-red-600 dark:text-red-400";
 const TOOL_ARGS_PREVIEW_MAX_CHARS = 2_000;
+
+export function hasStructuredCommandOutput(result: ToolResult): boolean {
+  return (
+    typeof result.stdout === "string" ||
+    typeof result.stderr === "string" ||
+    typeof result.exitCode === "number" ||
+    result.exitCode === null
+  );
+}
 
 // Memoized Icon Component with Phosphor Icons
 const ToolIcon: FC<{
@@ -231,11 +240,39 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
   const tResults = useTranslations("assistantUi.toolResults");
   const canonicalToolName = getCanonicalToolName(toolName);
   const normalizedResult = unwrapMcpTextWrappedResult(result);
+  const isCommandLikeTool = canonicalToolName.toLowerCase() === "bash" || canonicalToolName === "executeCommand";
 
-  if (isToolErrorResult(normalizedResult)) {
+  if (isToolErrorResult(normalizedResult) && (!isCommandLikeTool || !hasStructuredCommandOutput(normalizedResult))) {
     return (
       <div className="rounded bg-red-50 p-2 font-mono text-sm text-red-600 transition-all duration-150 [overflow-wrap:anywhere]">
         {normalizedResult.error || tResults("errorOccurred")}
+      </div>
+    );
+  }
+
+  if (isCommandLikeTool && hasStructuredCommandOutput(normalizedResult)) {
+    return (
+      <div className="mt-2 space-y-2 transition-opacity duration-150">
+        {normalizedResult.error && (
+          <div className="rounded bg-red-50 p-2 font-mono text-sm text-red-600 transition-all duration-150 [overflow-wrap:anywhere]">
+            {normalizedResult.error}
+          </div>
+        )}
+        {normalizedResult.exitCode !== undefined && normalizedResult.exitCode !== null && normalizedResult.exitCode !== 0 && (
+          <div className="text-xs font-mono text-terminal-amber">
+            {tResults("exitCode")} {normalizedResult.exitCode}
+          </div>
+        )}
+        {normalizedResult.stdout && (
+          <pre className={cn("max-h-64", TOOL_RESULT_PRE_CLASS)}>
+            {normalizedResult.stdout}
+          </pre>
+        )}
+        {normalizedResult.stderr && (
+          <pre className={cn("max-h-64", TOOL_RESULT_ERROR_PRE_CLASS)}>
+            {normalizedResult.stderr}
+          </pre>
+        )}
       </div>
     );
   }
@@ -677,22 +714,6 @@ const ToolResultDisplay: FC<{ toolName: string; result: ToolResult }> = memo(({ 
     );
   }
 
-  if (typeof normalizedResult.stdout === "string" || typeof normalizedResult.stderr === "string") {
-    return (
-      <div className="mt-2 space-y-2 transition-opacity duration-150">
-        {normalizedResult.stdout && (
-          <pre className={cn("max-h-64", TOOL_RESULT_PRE_CLASS)}>
-            {normalizedResult.stdout}
-          </pre>
-        )}
-        {normalizedResult.stderr && (
-          <pre className={cn("max-h-64", TOOL_RESULT_ERROR_PRE_CLASS)}>
-            {normalizedResult.stderr}
-          </pre>
-        )}
-      </div>
-    );
-  }
 
   // Show batch results
   if (Array.isArray(normalizedResult.results) && normalizedResult.results.length > 0) {

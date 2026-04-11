@@ -137,6 +137,7 @@ const TOOL_BY_NAME_MAP = mcpAwareToolMap({
   promptLibrary: PromptLibraryToolUI,
   // Claude Code native tools
   Edit: ClaudeEditToolUI,
+  bash: ClaudeBashToolUI,
   Bash: ClaudeBashToolUI,
   Read: ClaudeReadToolUI,
   Write: ClaudeWriteToolUI,
@@ -154,6 +155,10 @@ const TOOL_BY_NAME_MAP = mcpAwareToolMap({
   TaskStop: ClaudeTaskStopToolUI,
   delegateToSubagent: DelegationToolUI,
 });
+
+export function getToolComponentByName(toolName: string) {
+  return TOOL_BY_NAME_MAP[toolName];
+}
 
 export function getAttachmentImageUrl(attachment: {
   contentType?: string;
