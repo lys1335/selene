@@ -6,11 +6,13 @@ import {
   AlertCircle,
   CheckCircle2,
   Download,
+  List,
   PanelRightClose,
   PanelRightOpen,
   PenSquare,
   RotateCcw,
   Save,
+  Search,
   Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -107,13 +109,13 @@ function getActionIcon(action?: string) {
     case "generate":
       return Sparkles;
     case "edit":
+    case "patch":
       return PenSquare;
-    case "snapshot":
-      return Save;
-    case "restore":
-      return RotateCcw;
-    case "export":
-      return Download;
+    case "list":
+      return List;
+    case "status":
+    case "readSource":
+      return Search;
     case "open":
       return PanelRightOpen;
     case "close":
@@ -126,15 +128,17 @@ function getActionIcon(action?: string) {
 function getActionLabel(action?: string): string {
   switch (action) {
     case "generate":
-      return "Generate component";
+      return "Generate design";
     case "edit":
-      return "Edit component";
-    case "snapshot":
-      return "Take snapshot";
-    case "restore":
-      return "Restore snapshot";
-    case "export":
-      return "Export component";
+      return "Edit design";
+    case "patch":
+      return "Patch design";
+    case "readSource":
+      return "Read source";
+    case "list":
+      return "List designs";
+    case "status":
+      return "Inspect design";
     case "open":
       return "Open design workspace";
     case "close":
@@ -288,6 +292,14 @@ function getMissingPackages(data: DesignWorkspaceResultData | undefined): string
   return Array.isArray(missingPackages) && missingPackages.length > 0 ? missingPackages : undefined;
 }
 
+function shouldShowSource(action: string | undefined, code: string | undefined): boolean {
+  if (!code) {
+    return false;
+  }
+
+  return action === "generate" || action === "edit" || action === "patch";
+}
+
 export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
   args,
   result,
@@ -330,6 +342,7 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
   const compileReport = data?.compileReport;
   const history = data?.history;
   const missingPackages = getMissingPackages(data);
+  const showSource = shouldShowSource(action, data?.code);
 
   return (
     <div
@@ -425,6 +438,15 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
               </div>
             ))}
           </div>
+        </details>
+      )}
+
+      {showSource && data?.code && (
+        <details className="mt-2 text-xs text-terminal-muted">
+          <summary className="cursor-pointer hover:text-terminal-dark">Source</summary>
+          <pre className="mt-1 max-h-96 overflow-auto rounded bg-terminal-dark/5 p-2 text-terminal-dark whitespace-pre-wrap [overflow-wrap:anywhere]">
+            {data.code}
+          </pre>
         </details>
       )}
 

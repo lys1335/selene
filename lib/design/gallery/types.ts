@@ -45,6 +45,7 @@ export interface DesignComponentRow {
 export interface GallerySearchOpts {
   userId: string;
   query?: string;
+  sessionId?: string;
   category?: string;
   framework?: string;
   tags?: string[];
@@ -52,6 +53,12 @@ export interface GallerySearchOpts {
   projectId?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface ScopedDesignListOpts {
+  userId?: string;
+  sessionId?: string;
+  limit?: number;
 }
 
 // ---------------------------------------------------------------------------

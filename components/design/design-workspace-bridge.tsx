@@ -86,6 +86,7 @@ function applyDesignToolResultToStore(detail: DesignToolEvent): void {
       break;
 
     case "edit":
+    case "patch":
       if (data?.code) {
         const targetId = data.componentId ?? store.activeComponentId;
         if (targetId) {
@@ -94,22 +95,17 @@ function applyDesignToolResultToStore(detail: DesignToolEvent): void {
             store.setPreviewHtml(data.previewHtml);
           }
         } else {
-          store.setError("Edit could not be applied: no active component.");
+          store.setError(`${action === "patch" ? "Patch" : "Edit"} could not be applied: no active component.`);
         }
       }
       break;
 
-    case "snapshot":
-      store.takeSnapshot(data?.name);
+    case "readSource":
+    case "list":
+    case "status":
+    case "install":
       break;
 
-    case "restore":
-      if (data?.snapshotId) {
-        store.restoreSnapshot(data.snapshotId);
-      }
-      break;
-
-    // export actions don't need store updates — the result goes to the agent
   }
 }
 

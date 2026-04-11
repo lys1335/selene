@@ -1,5 +1,5 @@
 /**
- * Design workspace API client — shared by gallery, properties, export, and
+ * Design workspace API client — shared by the designs library, export, and
  * workspace settings flows.
  */
 
@@ -9,12 +9,9 @@ import {
   type DesignWorkspaceConfig,
 } from "@/lib/design/workspace/config";
 
-// ─── Types ───────────────────────────────────────────────────
-
 export type ExportFormat = "html" | "react" | "png" | "video";
 
-/** Shape returned by the gallery search API. Matches DesignGalleryItem on the server. */
-export interface GalleryComponent {
+export interface WorkspaceDesignRecord {
   id: string;
   name: string;
   description: string | null;
@@ -27,6 +24,7 @@ export interface GalleryComponent {
   previewUrl: string | null;
   mode: string;
   style: string;
+  sessionId: string | null;
   useCount: number;
   lastUsedAt: string | null;
   isFavorite: boolean;
@@ -34,7 +32,7 @@ export interface GalleryComponent {
   updatedAt: string;
 }
 
-// ─── Export API ──────────────────────────────────────────────
+export type GalleryComponent = WorkspaceDesignRecord;
 
 export async function requestExport(
   code: string,
@@ -60,15 +58,14 @@ export async function requestExport(
   }
 }
 
-// ─── Gallery save ───────────────────────────────────────────
-
-export async function requestSaveToGallery(component: {
+export async function requestSaveDesign(component: {
   name: string;
   code: string;
   mode: string;
   style: string;
   prompt: string;
-}): Promise<{ success: boolean; error?: string }> {
+  sessionId?: string;
+}): Promise<{ success: boolean; data?: { component: WorkspaceDesignRecord }; error?: string }> {
   const response = await fetch("/api/design/gallery", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -79,12 +76,29 @@ export async function requestSaveToGallery(component: {
       mode: component.mode,
       style: component.style,
       prompt: component.prompt,
+      sessionId: component.sessionId,
     }),
   });
   return response.json();
 }
 
-// ─── Workspace settings ─────────────────────────────────────
+export const requestSaveToGallery = requestSaveDesign;
+
+export async function fetchWorkspaceDesignApi(
+  action: string,
+  params: Record<string, unknown> = {},
+  signal?: AbortSignal,
+): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+  const response = await fetch("/api/design/gallery", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, ...params }),
+    signal,
+  });
+  return response.json();
+}
+
+export const fetchGalleryApi = fetchWorkspaceDesignApi;
 
 export async function requestDesignWorkspaceSettings(): Promise<{
   success: boolean;
@@ -135,20 +149,4 @@ export async function requestUpdateDesignWorkspaceSettings(
       error: error instanceof Error ? error.message : "Failed to save design workspace settings.",
     };
   }
-}
-
-// ─── Generic gallery API call ───────────────────────────────
-
-export async function fetchGalleryApi(
-  action: string,
-  params: Record<string, unknown> = {},
-  signal?: AbortSignal,
-): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
-  const response = await fetch("/api/design/gallery", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, ...params }),
-    signal,
-  });
-  return response.json();
 }

@@ -1,10 +1,12 @@
 export {
   listGalleryComponents,
+  listWorkspaceDesigns,
+  findWorkspaceDesign,
   getGalleryComponentForUser,
   toggleGalleryFavoriteForUser,
   deleteGalleryComponentForUser,
   markGalleryComponentUsed,
-  saveDesignComponentWithPreview,
+  saveDesignComponentRecord,
 } from "./service";
 export type { DesignGalleryItem } from "./service";
 

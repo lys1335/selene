@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/local-auth";
 import {
   listGalleryComponents,
+  listWorkspaceDesigns,
   getGalleryComponentForUser,
   toggleGalleryFavoriteForUser,
   deleteGalleryComponentForUser,
   markGalleryComponentUsed,
-  saveDesignComponentWithPreview,
+  saveDesignComponentRecord,
 } from "@/lib/design/gallery";
 
 function isNonEmptyString(val: unknown, maxLen: number): val is string {
@@ -65,8 +66,9 @@ export async function POST(req: NextRequest) {
         const category = isNonEmptyString(body.category, 50) ? body.category : "general";
         const tags = sanitizeStringArray(body.tags, 20, 100);
         const styleTags = sanitizeStringArray(body.styleTags, 20, 100);
+        const sessionId = isNonEmptyString(body.sessionId, 255) ? body.sessionId : undefined;
 
-        const saved = await saveDesignComponentWithPreview({
+        const saved = await saveDesignComponentRecord({
           userId,
           name,
           code,
@@ -78,11 +80,11 @@ export async function POST(req: NextRequest) {
           category,
           tags,
           styleTags,
-          sessionId: undefined,
+          sessionId,
         });
         return NextResponse.json({
           success: true,
-          data: { component: saved.component },
+          data: { component: saved },
         });
       }
 
@@ -100,6 +102,37 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           success: true,
           data: { components, count: components.length },
+        });
+      }
+
+      case "workspace-list": {
+        const query = typeof body.query === "string" ? body.query.trim().slice(0, 200) : "";
+        const limit = typeof body.limit === "number" && Number.isFinite(body.limit)
+          ? Math.min(Math.max(1, Math.floor(body.limit)), 100)
+          : 60;
+        const sessionId = isNonEmptyString(body.sessionId, 255) ? body.sessionId : undefined;
+        const scope = isNonEmptyString(body.scope, 32) ? body.scope : "current";
+        const favoritesOnly = body.favoritesOnly === true;
+        const components = await listWorkspaceDesigns({
+          userId,
+          sessionId,
+          limit,
+        });
+
+        const filtered = components.filter((component) => {
+          if (favoritesOnly && !component.isFavorite) return false;
+          if (scope === "current" && sessionId && component.sessionId !== sessionId) return false;
+          if (scope === "saved" && sessionId && component.sessionId === sessionId) return false;
+          if (query) {
+            const haystack = `${component.name} ${component.description || ""} ${component.prompt}`.toLowerCase();
+            if (!haystack.includes(query.toLowerCase())) return false;
+          }
+          return true;
+        });
+
+        return NextResponse.json({
+          success: true,
+          data: { components: filtered, count: filtered.length },
         });
       }
 

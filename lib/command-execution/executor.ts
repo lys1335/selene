@@ -151,7 +151,7 @@ export async function startBackgroundProcess(
     processId: string;
     error?: string;
 }> {
-    const { command, args, stdin, cwd, characterId, confirmRemoval } = options;
+    const { command, args, stdin, cwd, characterId, confirmRemoval, windowsVerbatimArguments } = options;
     const timeout = options.timeout ?? BACKGROUND_TIMEOUT;
     const maxOutputSize = options.maxOutputSize ?? MAX_BACKGROUND_OUTPUT;
     const shouldRetryThroughShellOnMessage = (message: string): boolean => {
@@ -190,6 +190,7 @@ export async function startBackgroundProcess(
             // close stdin immediately below to give the child EOF instead.
             stdio: ["pipe", "pipe", "pipe"],
             windowsHide: true,
+            windowsVerbatimArguments: windowsVerbatimArguments ?? false,
             env: finalEnv,
         });
 
@@ -468,6 +469,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
         fallbackReasonForDirectExecution,
         toolCallId,
         onProgress,
+        windowsVerbatimArguments,
     } = options;
 
     const timeout = resolveTimeout(command, options.timeout);
@@ -603,6 +605,7 @@ export async function executeCommand(options: ExecuteOptions): Promise<ExecuteRe
                 shell: needsWindowsShell(finalCommand),
                 stdio: ["pipe", "pipe", "pipe"],
                 windowsHide: true,
+                windowsVerbatimArguments: windowsVerbatimArguments ?? false,
                 env: finalEnv,
             });
             if (shouldWriteToStdin) {

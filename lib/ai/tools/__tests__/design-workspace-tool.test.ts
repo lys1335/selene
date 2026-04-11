@@ -159,7 +159,9 @@ describe("Design Workspace Tool — New Action Contracts", () => {
   describe("patch action contract", () => {
     it("should be documented in the action union type", () => {
       const action: "patch" = "patch";
+      const statusAction: "status" = "status";
       expect(action).toBe("patch");
+      expect(statusAction).toBe("status");
     });
 
     // Test the patch string replacement logic (mirrors handlePatch internals)

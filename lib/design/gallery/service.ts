@@ -1,28 +1,20 @@
-import { exportDesignAsset, type DesignExportMode } from "@/lib/design/workspace/export";
 import {
   deleteDesignComponent,
+  findDesignComponentForScope,
   getDesignComponent,
   incrementDesignUseCount,
   listDesignComponents,
+  listDesignComponentsForScope,
   saveDesignComponent,
   toggleDesignFavorite,
 } from "./queries";
-import type { DesignComponentRow, GallerySearchOpts, NewDesignComponent } from "./types";
+import type { DesignComponentRow, GallerySearchOpts, NewDesignComponent, ScopedDesignListOpts } from "./types";
 
 export interface DesignGalleryItem extends DesignComponentRow {
   previewUrl: string | null;
 }
 
-interface SaveDesignComponentWithPreviewInput extends NewDesignComponent {
-  previewWidth?: number;
-  previewHeight?: number;
-  previewScale?: number;
-}
-
-interface SaveDesignComponentWithPreviewResult {
-  component: DesignGalleryItem;
-  previewGenerated: boolean;
-}
+interface SaveDesignComponentInput extends NewDesignComponent {}
 
 function toPreviewUrl(previewPath: string | null): string | null {
   if (!previewPath) {
@@ -32,11 +24,6 @@ function toPreviewUrl(previewPath: string | null): string | null {
   return `/api/media/${previewPath.replace(/^\/+/, "")}`;
 }
 
-function normalizeMode(_mode?: string): DesignExportMode | undefined {
-  // All components use Tailwind mode now.
-  return "tailwind";
-}
-
 function toDesignGalleryItem(row: DesignComponentRow): DesignGalleryItem {
   return {
     ...row,
@@ -44,39 +31,11 @@ function toDesignGalleryItem(row: DesignComponentRow): DesignGalleryItem {
   };
 }
 
-async function generateGalleryPreview(component: SaveDesignComponentWithPreviewInput): Promise<string | null> {
-  try {
-    const result = await exportDesignAsset({
-      code: component.code,
-      format: "png",
-      mode: normalizeMode(component.mode),
-      componentName: component.name,
-      sessionId: component.sessionId || `design-gallery-${component.userId}`,
-      width: component.previewWidth ?? 1200,
-      height: component.previewHeight ?? 900,
-      scale: component.previewScale ?? 1,
-    });
-
-    return result.localPath ?? null;
-  } catch (error) {
-    console.warn("[design/gallery] Preview generation failed — saving without thumbnail:", error);
-    return null;
-  }
-}
-
-export async function saveDesignComponentWithPreview(
-  component: SaveDesignComponentWithPreviewInput
-): Promise<SaveDesignComponentWithPreviewResult> {
-  const previewPath = component.previewPath ?? await generateGalleryPreview(component);
-  const row = await saveDesignComponent({
-    ...component,
-    previewPath: previewPath ?? component.previewPath,
-  });
-
-  return {
-    component: toDesignGalleryItem(row),
-    previewGenerated: Boolean(previewPath),
-  };
+export async function saveDesignComponentRecord(
+  component: SaveDesignComponentInput
+): Promise<DesignGalleryItem> {
+  const row = await saveDesignComponent(component);
+  return toDesignGalleryItem(row);
 }
 
 export async function listGalleryComponents(
@@ -84,6 +43,20 @@ export async function listGalleryComponents(
 ): Promise<DesignGalleryItem[]> {
   const rows = await listDesignComponents(opts);
   return rows.map(toDesignGalleryItem);
+}
+
+export async function listWorkspaceDesigns(
+  opts: ScopedDesignListOpts
+): Promise<DesignGalleryItem[]> {
+  const rows = await listDesignComponentsForScope(opts);
+  return rows.map(toDesignGalleryItem);
+}
+
+export async function findWorkspaceDesign(
+  opts: { id: string; userId?: string; sessionId?: string }
+): Promise<DesignGalleryItem | null> {
+  const row = await findDesignComponentForScope(opts);
+  return row ? toDesignGalleryItem(row) : null;
 }
 
 export async function getGalleryComponentForUser(

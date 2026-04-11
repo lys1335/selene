@@ -46,7 +46,10 @@ import {
   runPostToolUseFailureHooks,
 } from "@/lib/plugins/hook-integration";
 import { guardToolResultForStreaming } from "@/lib/ai/tool-result-stream-guard";
-import { normalizeSdkPassthroughOutput } from "./sdk-passthrough-normalizer";
+import {
+  buildMissingSdkPassthroughOutput,
+  normalizeSdkPassthroughOutput,
+} from "./sdk-passthrough-normalizer";
 import {
   normalizeWebSearchQuery,
   getWebSearchSourceCount,
@@ -505,11 +508,17 @@ export async function buildToolsForRequest(
               console.warn(
                 `[CHAT API] SDK passthrough wait ended without result: ${toolCallId} tool=${registeredToolName}`
               );
+              return buildMissingSdkPassthroughOutput(registeredToolName, args, {
+                reason: `No bridged SDK tool result arrived for toolCallId=${toolCallId}. The underlying tool likely failed before publishing a structured result.`,
+              });
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               console.warn(
                 `[CHAT API] SDK passthrough bridge wait failed: toolCallId=${toolCallId} tool=${registeredToolName} bridge=sdkToolResultBridge error=${message}`
               );
+              return buildMissingSdkPassthroughOutput(registeredToolName, args, {
+                reason: `SDK passthrough bridge wait failed for toolCallId=${toolCallId}: ${message}`,
+              });
             }
           }
 

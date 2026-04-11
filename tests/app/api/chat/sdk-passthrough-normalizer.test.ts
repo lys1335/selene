@@ -1,7 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { normalizeSdkPassthroughOutput } from "@/app/api/chat/sdk-passthrough-normalizer";
+import {
+  buildMissingSdkPassthroughOutput,
+  normalizeSdkPassthroughOutput,
+} from "@/app/api/chat/sdk-passthrough-normalizer";
 
 describe("normalizeSdkPassthroughOutput", () => {
+  it("builds a structured fallback error when an SDK passthrough result never arrives", () => {
+    const output = buildMissingSdkPassthroughOutput(
+      "Bash",
+      {
+        command: "python - <<'PY'\nprint('hello')\nPY",
+        action: "status",
+      },
+      {
+        reason: "No bridged SDK tool result arrived for toolCallId=toolu_123.",
+      }
+    );
+
+    expect(output.status).toBe("error");
+    expect(output.error).toContain("Bash failed before the Claude Code SDK returned a structured tool result");
+    expect(output.command).toContain("python - <<'PY'");
+    expect(output.stderr).toContain("No bridged SDK tool result arrived");
+    expect(output.stderr).toContain("POSIX heredoc syntax");
+    expect(output.stderr).toContain("omit `action` and `processId`");
+    expect(output.sdkPassthroughMissing).toBe(true);
+  });
+
   it("normalizes calculator discovery string outputs into canonical success objects", () => {
     const output = normalizeSdkPassthroughOutput(
       "mcp__selene-platform__calculator",

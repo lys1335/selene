@@ -85,6 +85,65 @@ export async function getDesignComponent(
   return row ? toRow(row) : null;
 }
 
+/**
+ * Resolve a component for internal tools when user scope may be unavailable.
+ * Falls back to session scoping so the active chat can still recover persisted work.
+ */
+export async function findDesignComponentForScope(opts: {
+  id: string;
+  userId?: string;
+  sessionId?: string;
+}): Promise<DesignComponentRow | null> {
+  const conditions: SQL[] = [eq(designComponents.id, opts.id)];
+
+  if (opts.userId) {
+    conditions.push(eq(designComponents.userId, opts.userId));
+  } else if (opts.sessionId) {
+    conditions.push(eq(designComponents.sessionId, opts.sessionId));
+  } else {
+    return null;
+  }
+
+  const row = await db.query.designComponents.findFirst({
+    where: and(...conditions),
+  });
+
+  return row ? toRow(row) : null;
+}
+
+/**
+ * List persisted components for a tool session.
+ * Uses user scope when available, otherwise falls back to session scope.
+ */
+export async function listDesignComponentsForScope(opts: {
+  userId?: string;
+  sessionId?: string;
+  limit?: number;
+}): Promise<DesignComponentRow[]> {
+  const conditions: SQL[] = [];
+
+  if (opts.userId) {
+    conditions.push(eq(designComponents.userId, opts.userId));
+  } else if (opts.sessionId) {
+    conditions.push(eq(designComponents.sessionId, opts.sessionId));
+  } else {
+    return [];
+  }
+
+  if (opts.sessionId) {
+    conditions.push(eq(designComponents.sessionId, opts.sessionId));
+  }
+
+  const rows = await db
+    .select()
+    .from(designComponents)
+    .where(and(...conditions))
+    .orderBy(desc(designComponents.updatedAt))
+    .limit(opts.limit ?? 50);
+
+  return rows.map(toRow);
+}
+
 /** List components for a user with optional filters. */
 export async function listDesignComponents(opts: GallerySearchOpts & {
   search?: string;

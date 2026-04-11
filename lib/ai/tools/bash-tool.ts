@@ -82,13 +82,20 @@ function extractApplyPatchHeredoc(command: string): { stdin: string; patchText: 
   return { stdin, patchText: body };
 }
 
-function wrapShellCommand(command: string): { command: string; args: string[]; stdin?: string } {
+function wrapShellCommand(command: string): { command: string; args: string[]; stdin?: string; windowsVerbatimArguments?: boolean } {
   if (process.platform === "win32") {
     const shellCommand = process.env.ComSpec || "cmd.exe";
-    const wrapped = `${command} & set "SELENE_EXIT=!ERRORLEVEL!" & echo ${CWD_MARKER}!CD! & exit /b !SELENE_EXIT!`;
+    // Wrap the entire command in outer double quotes.  With /s /c, cmd.exe
+    // strips the first and last quote characters, preserving inner quotes
+    // and special characters (|, <, >, &) that appear inside quoted
+    // arguments of the user's command.  windowsVerbatimArguments prevents
+    // Node.js from applying C-runtime escaping which would break cmd.exe's
+    // own quote handling.
+    const inner = `${command} & set "SELENE_EXIT=!ERRORLEVEL!" & echo ${CWD_MARKER}!CD! & exit /b !SELENE_EXIT!`;
     return {
       command: shellCommand,
-      args: ["/v:on", "/d", "/s", "/c", wrapped],
+      args: ["/v:on", "/d", "/s", "/c", `"${inner}"`],
+      windowsVerbatimArguments: true,
     };
   }
 
@@ -449,6 +456,7 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
             cwd: executionDir,
             timeout,
             characterId,
+            windowsVerbatimArguments: shellCommand.windowsVerbatimArguments,
           },
           syncedFolders
         );
@@ -479,6 +487,7 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
           characterId,
           toolCallId,
           onProgress: forwardProgress,
+          windowsVerbatimArguments: shellCommand.windowsVerbatimArguments,
         },
         syncedFolders
       );

@@ -7,7 +7,7 @@
 
 import { existsSync } from "fs";
 import { tmpdir } from "os";
-import { basename, isAbsolute, join } from "path";
+import { basename, dirname, isAbsolute, join } from "path";
 import {
     buildEnvironmentForTarget,
     initializeProcessEnvironment,
@@ -54,9 +54,21 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
     const resourcesPath = getResourcesPath();
     const nodeBinDir = resourcesPath ? join(resourcesPath, "standalone", "node_modules", ".bin") : null;
     const toolsBinDir = resourcesPath ? join(resourcesPath, "standalone", "tools", "bin") : null;
-    const ripgrepBinDir = resourcesPath
+    // In production builds, ripgrep lives inside the standalone node_modules.
+    // In dev mode (no resourcesPath), resolve it from the workspace node_modules
+    // so `rg` is available in bash/executeCommand without requiring a global install.
+    let ripgrepBinDir: string | null = resourcesPath
         ? join(resourcesPath, "standalone", "node_modules", "@vscode", "ripgrep", "bin")
         : null;
+    if (!ripgrepBinDir) {
+        try {
+            const { rgPath } = require("@vscode/ripgrep") as { rgPath: string };
+            const candidate = dirname(rgPath);
+            if (existsSync(candidate)) {
+                ripgrepBinDir = candidate;
+            }
+        } catch { /* @vscode/ripgrep not installed — skip */ }
+    }
     const bundledNodePath = nodeBinDir
         ? join(nodeBinDir, process.platform === "win32" ? "node.exe" : "node")
         : null;
