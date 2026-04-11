@@ -9,6 +9,7 @@ import {
   hasStopIntent,
   sanitizeLivePromptContent,
 } from "@/lib/background-tasks/live-prompt-helpers";
+import { sanitizeInspectMessageContext } from "@/lib/design/workspace/inspect-context";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -31,7 +32,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     // Suppress unused variable warning — dbUser validates the user exists
     void dbUser;
 
-    let body: { content?: unknown };
+    let body: { content?: unknown; inspectContext?: unknown };
     try {
       body = await req.json();
     } catch {
@@ -39,6 +40,7 @@ export async function POST(req: Request, { params }: RouteParams) {
     }
 
     const { content } = body;
+    const inspectContext = sanitizeInspectMessageContext(body.inspectContext);
 
     if (!content || typeof content !== "string" || !content.trim()) {
       return NextResponse.json({ error: "content is required" }, { status: 400 });
@@ -54,6 +56,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       id: entryId,
       content: sanitized,
       stopIntent,
+      metadata: inspectContext ? { inspectContext } : undefined,
     });
 
     if (!queued) {

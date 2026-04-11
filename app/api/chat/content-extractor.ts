@@ -13,6 +13,7 @@ import {
   extractPasteBlocks,
   reinsertPasteBlocks,
 } from "./content-sanitizer";
+import { sanitizeInspectMessageContext, buildInspectPromptText } from "@/lib/design/workspace/inspect-context";
 import { reconcileToolCallPairs, toModelToolResultOutput, normalizeToolCallInput } from "./tool-call-utils";
 
 const IMAGE_MIME_TYPES: Record<string, string> = {
@@ -90,6 +91,7 @@ type MessageInput = {
   metadata?: {
     custom?: {
       attachments?: AttachmentPathMetadata[];
+      inspectContext?: unknown;
     };
   };
 };
@@ -518,18 +520,25 @@ export async function extractContent(
   convertUserImagesToBase64 = false,
   sessionId?: string,
 ): Promise<string | ModelContentPart[]> {
+  const inspectContext = sanitizeInspectMessageContext(msg.metadata?.custom?.inspectContext);
+  const inspectPromptText = buildInspectPromptText(inspectContext);
   const hasStructuredParts = Array.isArray(msg.parts) && msg.parts.length > 0;
   const hasMetadataAttachments = Array.isArray(msg.metadata?.custom?.attachments)
     && msg.metadata.custom.attachments.length > 0;
   const hasExperimentalAttachments = Array.isArray(msg.experimental_attachments)
     && msg.experimental_attachments.length > 0;
   const hasStructuredContent =
-    hasStructuredParts || hasMetadataAttachments || hasExperimentalAttachments;
+    hasStructuredParts || hasMetadataAttachments || hasExperimentalAttachments || Boolean(inspectPromptText);
   if (!hasStructuredContent) {
     const directContent = getStringContent(msg.content, sessionId);
     if (directContent) {
       return directContent;
     }
+  }
+
+  if (inspectPromptText && !hasStructuredParts && !hasMetadataAttachments && !hasExperimentalAttachments) {
+    const directContent = getStringContent(msg.content, sessionId);
+    return directContent ? `${inspectPromptText}\n\n${directContent}` : inspectPromptText;
   }
 
   const isUserMessage = msg.role === "user";
@@ -548,6 +557,10 @@ export async function extractContent(
 
     const contentParts: ModelContentPart[] = [];
     let hasExplicitTextPart = false;
+
+    if (inspectPromptText) {
+      contentParts.push({ type: "text", text: inspectPromptText });
+    }
 
     for (const part of msg.parts) {
       if (part.type === "text" && part.text?.trim()) {
@@ -714,7 +727,12 @@ export async function extractContent(
       // image is already in contentParts from the structured parts/attachments.
       const isBase64Placeholder = trimmedDirectContent === BASE64_IMAGE_PLACEHOLDER;
       if (trimmedDirectContent && !isBase64Placeholder) {
-        contentParts.unshift({ type: "text", text: trimmedDirectContent });
+        const directTextPart = { type: "text", text: trimmedDirectContent } satisfies ModelContentPart;
+        if (inspectPromptText && contentParts.length > 0) {
+          contentParts.splice(1, 0, directTextPart);
+        } else {
+          contentParts.unshift(directTextPart);
+        }
       }
     }
 
@@ -748,6 +766,10 @@ export async function extractContent(
     const attachmentLookup = buildAttachmentLookup(msg);
     const seenAttachmentUrls = new Set<string>();
     const contentParts: ModelContentPart[] = [];
+
+    if (inspectPromptText) {
+      contentParts.push({ type: "text", text: inspectPromptText });
+    }
 
     if (typeof msg.content === "string" && msg.content) {
       appendTextPartIfPresent(

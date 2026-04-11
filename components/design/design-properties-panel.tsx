@@ -208,7 +208,10 @@ function DetailsContent() {
     showCode,
     toggleCode,
     selectedElement,
+    selectedElements,
     setSelectedElement,
+    removeSelectedElement,
+    clearSelectedElements,
     config,
     updateConfig,
     lastValidation,
@@ -223,7 +226,10 @@ function DetailsContent() {
       showCode: s.showCode,
       toggleCode: s.toggleCode,
       selectedElement: s.selectedElement,
+      selectedElements: s.selectedElements,
       setSelectedElement: s.setSelectedElement,
+      removeSelectedElement: s.removeSelectedElement,
+      clearSelectedElements: s.clearSelectedElements,
       config: s.config,
       updateConfig: s.updateConfig,
       lastValidation: s.lastValidation,
@@ -358,55 +364,68 @@ function DetailsContent() {
   return (
     <ScrollArea className="h-full">
       <div className="space-y-4 p-3">
-        {selectedElement && (
+        {selectedElements.length > 0 && (
           <div className="space-y-2 rounded-md border border-border bg-muted/40 p-2.5">
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                 <Crosshair className="h-3 w-3" />
-                Selected Element
+                {selectedElements.length === 1 ? "Selected Element" : `Selected Elements (${selectedElements.length})`}
               </label>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-5 px-1.5 text-[11px]"
-                onClick={() => setSelectedElement(null)}
-                aria-label="Deselect element"
+                onClick={clearSelectedElements}
+                aria-label="Deselect all elements"
               >
                 <X className="h-3 w-3" />
               </Button>
             </div>
-            <div className="space-y-1 text-[11px]">
-              <div className="flex items-baseline gap-1">
-                <span className="font-medium">&lt;{selectedElement.tagName}&gt;</span>
-                {selectedElement.id && (
-                  <span className="text-blue-600 dark:text-blue-400">#{selectedElement.id}</span>
+            {selectedElements.map((el) => (
+              <div key={el.selector} className="space-y-1 rounded border border-border/50 bg-background/50 p-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-baseline gap-1 text-[11px]">
+                    <span className="font-medium">&lt;{el.tagName}&gt;</span>
+                    {el.id && (
+                      <span className="text-blue-600 dark:text-blue-400">#{el.id}</span>
+                    )}
+                  </div>
+                  {selectedElements.length > 1 && (
+                    <button
+                      onClick={() => removeSelectedElement(el.selector)}
+                      className="text-muted-foreground hover:text-red-500 transition-colors"
+                      aria-label={`Remove ${el.tagName} from selection`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {el.className && (
+                  <div className="flex flex-wrap gap-0.5">
+                    {el.className
+                      .trim()
+                      .split(/\s+/)
+                      .slice(0, 6)
+                      .map((cls, i) => (
+                        <Badge key={i} variant="secondary" className="px-1 py-0 text-[11px]">
+                          .{cls}
+                        </Badge>
+                      ))}
+                  </div>
                 )}
+                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
+                  {(["width", "height", "padding", "margin"] as const).map((prop) => (
+                    <div key={prop} className="flex justify-between">
+                      <span className="text-muted-foreground capitalize">{prop}</span>
+                      <span className="font-mono">{el.computedStyles[prop]}</span>
+                    </div>
+                  ))}
+                </div>
+                <pre className="overflow-auto rounded bg-muted p-1 font-mono text-[11px] text-foreground">
+                  {el.selector}
+                </pre>
               </div>
-              {selectedElement.className && (
-                <div className="flex flex-wrap gap-0.5">
-                  {selectedElement.className
-                    .trim()
-                    .split(/\s+/)
-                    .slice(0, 6)
-                    .map((cls, i) => (
-                      <Badge key={i} variant="secondary" className="px-1 py-0 text-[11px]">
-                        .{cls}
-                      </Badge>
-                    ))}
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
-              {(["width", "height", "padding", "margin"] as const).map((prop) => (
-                <div key={prop} className="flex justify-between">
-                  <span className="text-muted-foreground capitalize">{prop}</span>
-                  <span className="font-mono">{selectedElement.computedStyles[prop]}</span>
-                </div>
-              ))}
-            </div>
-            <pre className="overflow-auto rounded bg-muted p-1 font-mono text-[11px] text-foreground">
-              {selectedElement.selector}
-            </pre>
+            ))}
           </div>
         )}
 

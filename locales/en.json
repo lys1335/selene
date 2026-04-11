@@ -986,7 +986,10 @@
       "ariaStartRecording": "Start voice recording",
       "pastedTextChip": "Pasted text",
       "removePastedText": "Remove pasted text",
-      "textPasted": "Text pasted"
+      "textPasted": "Text pasted",
+      "inspectLabel": "Inspect",
+      "inspectClearAll": "Clear all",
+      "inspectRemoveElement": "Remove {element} from selection"
     },
     "queue": {
       "messagesQueued": "{count} message{count, plural, one {} other {s}} queued",

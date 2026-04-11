@@ -1,4 +1,8 @@
 import type { LivePromptEntry } from "./live-prompt-queue-registry";
+import {
+  buildInspectPromptText,
+  sanitizeInspectMessageContext,
+} from "@/lib/design/workspace/inspect-context";
 
 function sanitizeDelegationCompletionEntry(entry: LivePromptEntry): string {
   const delegationId = entry.metadata?.delegationId || entry.id;
@@ -13,6 +17,20 @@ function sanitizeDelegationCompletionEntry(entry: LivePromptEntry): string {
 
 function buildDelegationCompletionInstruction(entries: LivePromptEntry[]): string {
   return entries.map((entry) => sanitizeDelegationCompletionEntry(entry)).join("\n\n");
+}
+
+function buildGenericInstructionText(entry: LivePromptEntry, index: number): string {
+  const inspectContext = sanitizeInspectMessageContext(entry.metadata?.inspectContext);
+  const inspectPromptText = buildInspectPromptText(inspectContext);
+  const messageText = sanitizeLivePromptContent(entry.content);
+  const lines = [`Instruction ${index + 1}:`];
+
+  if (inspectPromptText) {
+    lines.push(inspectPromptText);
+  }
+
+  lines.push(`Message: ${messageText}`);
+  return lines.join("\n");
 }
 
 const STOP_INTENT_PATTERNS = [
@@ -58,15 +76,13 @@ export function buildUserInjectionContent(entries: LivePromptEntry[]): string {
     return buildDelegationCompletionInstruction(delegationCompletions);
   }
 
-  const lines = entries
-    .map(e => `- ${sanitizeLivePromptContent(e.content)}`)
-    .join("\n");
+  const sections = entries.map((entry, index) => buildGenericInstructionText(entry, index));
 
   return [
     "[Mid-run instruction(s) from user — received while you were processing a tool step]",
-    lines,
+    ...sections,
     "Please acknowledge and incorporate these into your current work.",
-  ].join("\n");
+  ].join("\n\n");
 }
 
 /**

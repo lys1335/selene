@@ -49,11 +49,17 @@ import {
 } from "../../design/gallery/service";
 import fs from "fs/promises";
 import path from "path";
+import {
+  buildInspectPromptText,
+  type InspectMessageContext,
+} from "../../design/workspace/inspect-context";
 
 interface DesignWorkspaceToolOptions {
   sessionId?: string;
   userId?: string;
   characterId?: string;
+  /** Inspect context from the user's message, when available. */
+  inspectContext?: InspectMessageContext | null;
 }
 
 export function getCachedComponent(_sessionId: string, _componentId: string): string | undefined {
@@ -87,6 +93,14 @@ interface DesignWorkspaceInput {
   newString?: string;
   /** Replace all occurrences (default: false). For "patch" action. */
   replaceAll?: boolean;
+
+  /**
+   * Array of sequential patches for multi-location edits (e.g., wrapping).
+   * Each patch is applied in order to the result of the previous one.
+   * For "patch" action. Use instead of oldString/newString when the edit
+   * requires changes at multiple locations in the source.
+   */
+  patches?: Array<{ oldString: string; newString: string; replaceAll?: boolean }>;
 }
 
 interface ListedDesignSummary {
@@ -608,7 +622,7 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
 - "install": Install npm packages for use in designs. Provide \`packages\` array (e.g. ["three", "@react-three/fiber"]).
 - "generate": Generate a new UI component. Provide \`code\` (direct TSX) to render your own code, OR \`prompt\` for AI generation. Optional: \`mode\`, \`style\`, \`assets\`.
 - "edit": Edit a persisted component. Provide \`activeComponentId\`. Provide \`activeComponentCode\` WITHOUT \`editPrompt\` to directly replace the code, OR provide \`editPrompt\` for AI-driven full-file rewriting.
-- "patch": Surgically edit a persisted component using exact find-and-replace. Requires \`activeComponentId\`, \`oldString\`, and \`newString\`.
+- "patch": Surgically edit a persisted component using exact find-and-replace. Requires \`activeComponentId\`. Use \`oldString\` + \`newString\` for single-location edits, or \`patches\` array for multi-location edits (e.g., wrapping content in a new parent element requires inserting both an opening and closing tag). For wrapping operations, include the full block being wrapped in \`oldString\` and the wrapped version in \`newString\`, OR use \`patches\` to apply sequential insertions atomically.
 - "readSource": Read back the source code of a persisted component. Pass \`activeComponentId\`.
 - "list": List designs available to the current workspace session.
 - "status": Inspect whether a design is persisted and available. Pass \`activeComponentId\`.
@@ -682,6 +696,20 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
         replaceAll: {
           type: "boolean",
           description: 'If true, replace all occurrences of oldString. Default: false (replace first occurrence only). For "patch" action.',
+        },
+        patches: {
+          type: "array",
+          description: 'Array of sequential patches for multi-location edits. Each patch has oldString, newString, and optional replaceAll. Applied in order. Use instead of oldString/newString when wrapping content or making changes at multiple source locations. For "patch" action.',
+          items: {
+            type: "object",
+            properties: {
+              oldString: { type: "string", description: "The exact text to find." },
+              newString: { type: "string", description: "The replacement text." },
+              replaceAll: { type: "boolean", description: "Replace all occurrences. Default: false." },
+            },
+            required: ["oldString", "newString"],
+            additionalProperties: false,
+          },
         },
       },
       required: ["action"],
@@ -954,7 +982,18 @@ async function handleEdit(
     const assets = inputAssets?.length ? await resolveAssets(inputAssets) : undefined;
     let editError: string | undefined;
 
-    for await (const event of editCard({ code: resolved.code, editPrompt: editPrompt!, style, assets })) {
+    // Enrich edit prompt with inspect context when the user selected elements.
+    // The AI model already sees [Inspect Focus] in the user message via content-extractor,
+    // but we also inject it here so the edit pipeline sees element selectors directly.
+    let enrichedEditPrompt = editPrompt!;
+    if (options.inspectContext) {
+      const inspectPromptText = buildInspectPromptText(options.inspectContext);
+      if (inspectPromptText) {
+        enrichedEditPrompt = `${inspectPromptText}\n\n${enrichedEditPrompt}`;
+      }
+    }
+
+    for await (const event of editCard({ code: resolved.code, editPrompt: enrichedEditPrompt, style, assets })) {
       if (event.type === "complete") {
         finalCode = event.content;
       }
@@ -1057,6 +1096,51 @@ async function handleEdit(
   };
 }
 
+/**
+ * Lightweight JSX tag-balance check. Counts self-closing and open/close tags
+ * and returns the first unclosed tag name if the tree is unbalanced.
+ * This is intentionally approximate — it catches the most common wrapping
+ * mistake (inserting an opening tag without its closing counterpart) without
+ * requiring a full parser.
+ */
+export function findUnclosedJsxTag(code: string): string | null {
+  // Strip string literals and comments to avoid false positives
+  const stripped = code
+    .replace(/\/\/.*$/gm, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+    .replace(/`(?:[^`\\]|\\.)*`/g, "``");
+
+  // Match JSX tags: <Tag, </Tag, or self-closing />
+  const tagPattern = /<\/?([A-Z][A-Za-z0-9.]*)[^>]*?\/?>/g;
+  const stack: string[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = tagPattern.exec(stripped)) !== null) {
+    const fullMatch = match[0];
+    const tagName = match[1];
+
+    if (fullMatch.endsWith("/>")) {
+      // Self-closing — no effect on balance
+      continue;
+    }
+
+    if (fullMatch.startsWith("</")) {
+      // Closing tag
+      if (stack.length > 0 && stack[stack.length - 1] === tagName) {
+        stack.pop();
+      }
+      // Mismatched close — don't error, just skip (could be fragment)
+    } else {
+      // Opening tag
+      stack.push(tagName);
+    }
+  }
+
+  return stack.length > 0 ? stack[stack.length - 1] : null;
+}
+
 async function handlePatch(
   options: DesignWorkspaceToolOptions,
   input: DesignWorkspaceInput,
@@ -1065,21 +1149,45 @@ async function handlePatch(
   const sessionId = getSessionId(options);
   ensureHistory(sessionId);
 
-  const { oldString, newString, replaceAll: replaceAllOccurrences, activeComponentId, activeComponentCode } = input;
+  const { oldString, newString, replaceAll: replaceAllOccurrences, activeComponentId, activeComponentCode, patches } = input;
 
   if (!activeComponentId) {
     const error = 'Provide "activeComponentId" to patch a persisted design.';
     recordHistory(sessionId, "patch", startedAt, false, { error });
     return { success: false, action: "patch", error };
   }
-  if (oldString === undefined || oldString === null) {
-    return { success: false, action: "patch", error: '"oldString" is required for patch action.' };
-  }
-  if (newString === undefined || newString === null) {
-    return { success: false, action: "patch", error: '"newString" is required for patch action.' };
-  }
-  if (oldString === newString) {
-    return { success: false, action: "patch", error: '"oldString" and "newString" are identical — nothing to patch.' };
+
+  // Build the list of patch operations — either from `patches` array or single oldString/newString
+  type PatchOp = { oldString: string; newString: string; replaceAll?: boolean };
+  let patchOps: PatchOp[];
+
+  if (patches && Array.isArray(patches) && patches.length > 0) {
+    // Multi-patch mode
+    for (let i = 0; i < patches.length; i++) {
+      const p = patches[i];
+      if (!p.oldString && p.oldString !== "") {
+        return { success: false, action: "patch", error: `patches[${i}]: "oldString" is required.` };
+      }
+      if (p.newString === undefined || p.newString === null) {
+        return { success: false, action: "patch", error: `patches[${i}]: "newString" is required.` };
+      }
+      if (p.oldString === p.newString) {
+        return { success: false, action: "patch", error: `patches[${i}]: "oldString" and "newString" are identical.` };
+      }
+    }
+    patchOps = patches;
+  } else {
+    // Single-patch mode (backwards compatible)
+    if (oldString === undefined || oldString === null) {
+      return { success: false, action: "patch", error: '"oldString" is required for patch action (or provide "patches" array for multi-location edits).' };
+    }
+    if (newString === undefined || newString === null) {
+      return { success: false, action: "patch", error: '"newString" is required for patch action.' };
+    }
+    if (oldString === newString) {
+      return { success: false, action: "patch", error: '"oldString" and "newString" are identical — nothing to patch.' };
+    }
+    patchOps = [{ oldString, newString, replaceAll: replaceAllOccurrences }];
   }
 
   const resolved = await resolveDesignSource(options, { activeComponentId, activeComponentCode });
@@ -1098,26 +1206,47 @@ async function handlePatch(
     };
   }
 
-  const occurrences = resolved.code.split(oldString).length - 1;
-  if (occurrences === 0) {
+  // Apply patches sequentially
+  let patchedCode = resolved.code;
+  let totalReplacements = 0;
+
+  for (let i = 0; i < patchOps.length; i++) {
+    const op = patchOps[i];
+    const occurrences = patchedCode.split(op.oldString).length - 1;
+
+    if (occurrences === 0) {
+      const patchLabel = patchOps.length > 1 ? ` (patches[${i}])` : "";
+      return {
+        success: false,
+        action: "patch",
+        error: `"oldString" not found in design source${patchLabel}. The text to replace must match exactly (including whitespace and indentation).${i > 0 ? ` Note: ${i} prior patch(es) were already applied — use "readSource" to see the current state.` : ""}`,
+      };
+    }
+
+    if (occurrences > 1 && !op.replaceAll) {
+      const patchLabel = patchOps.length > 1 ? ` (patches[${i}])` : "";
+      return {
+        success: false,
+        action: "patch",
+        error: `"oldString" found ${occurrences} times${patchLabel}. Set "replaceAll: true" to replace all, or provide a longer/more unique "oldString".`,
+      };
+    }
+
+    patchedCode = op.replaceAll
+      ? patchedCode.split(op.oldString).join(op.newString)
+      : patchedCode.replace(op.oldString, op.newString);
+    totalReplacements += op.replaceAll ? occurrences : 1;
+  }
+
+  // JSX balance check — catch wrapping mistakes before persisting
+  const unclosedTag = findUnclosedJsxTag(patchedCode);
+  if (unclosedTag) {
     return {
       success: false,
       action: "patch",
-      error: '"oldString" not found in design source. The text to replace must match exactly (including whitespace and indentation).',
+      error: `Patch produced unbalanced JSX: <${unclosedTag}> appears to be unclosed. For wrapping operations, include the full block being wrapped in "oldString" and the complete wrapped version (with both opening and closing tags) in "newString". Alternatively, use "patches" array to apply opening and closing tag insertions as separate sequential patches, or use the "edit" action for AI-driven full-file rewriting.`,
     };
   }
-
-  if (occurrences > 1 && !replaceAllOccurrences) {
-    return {
-      success: false,
-      action: "patch",
-      error: `"oldString" found ${occurrences} times. Set "replaceAll: true" to replace all, or provide a longer/more unique "oldString".`,
-    };
-  }
-
-  const patchedCode = replaceAllOccurrences
-    ? resolved.code.split(oldString).join(newString)
-    : resolved.code.replace(oldString, newString);
 
   let persisted: DesignGalleryItem;
   try {
@@ -1182,7 +1311,7 @@ async function handlePatch(
     action: "patch",
     data: {
       ...baseData,
-      message: validationMessage || `Patch applied: ${occurrences} replacement${occurrences > 1 ? "s" : ""}, ~${linesChanged} line${linesChanged !== 1 ? "s" : ""} changed.`,
+      message: validationMessage || `Patch applied: ${totalReplacements} replacement${totalReplacements > 1 ? "s" : ""}${patchOps.length > 1 ? ` across ${patchOps.length} patches` : ""}, ~${linesChanged} line${linesChanged !== 1 ? "s" : ""} changed.`,
       previewHtml: previewResult.previewHtml,
       compileReport: previewResult.compileReport,
       postEditValidation: validation,

@@ -435,6 +435,10 @@ function buildMessageCustomMetadata(
   if (tokenCount) {
     customMetadata.tokenCount = tokenCount;
   }
+  if (dbMeta?.custom?.inspectContext) {
+    customMetadata.inspectContext = dbMeta.custom.inspectContext;
+  }
+
   const existingAttachments = Array.isArray(dbMeta?.custom?.attachments)
     ? dbMeta?.custom?.attachments
     : [];

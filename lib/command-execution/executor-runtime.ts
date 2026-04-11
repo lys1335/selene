@@ -268,6 +268,36 @@ export function resolveBundledNodeCommand(
         };
     }
 
+    // Resolve apply_patch to its Node.js script.
+    // In production builds, toolsBinDir is in PATH so apply_patch.cmd/.sh is found
+    // automatically. In dev mode, toolsBinDir is null and the bare command fails on
+    // Windows (cmd.exe can't find it). Resolve to `node scripts/bundled-tools/apply_patch.js`.
+    if (normalized === "apply_patch") {
+        // Production: check toolsBinDir first
+        if (runtime.toolsBinDir) {
+            const cmdExt = process.platform === "win32" ? ".cmd" : "";
+            const bundledPath = join(runtime.toolsBinDir, `apply_patch${cmdExt}`);
+            if (existsSync(bundledPath)) {
+                return { command: bundledPath, args, env, resolution: `resolved 'apply_patch' to bundled binary at ${runtime.toolsBinDir}` };
+            }
+        }
+        // Dev mode fallback: run via node + scripts/bundled-tools/apply_patch.js
+        // Walk up from this file to find the project root (contains scripts/bundled-tools/)
+        const projectRoot = join(__dirname, "..", "..");
+        const devScript = join(projectRoot, "scripts", "bundled-tools", "apply_patch.js");
+        if (existsSync(devScript)) {
+            const nodeCmd = runtime.bundledNodePath || "node";
+            return {
+                command: nodeCmd,
+                args: [devScript, ...args],
+                env,
+                resolution: `resolved 'apply_patch' via node + ${devScript}`,
+            };
+        }
+        // Last resort: return as-is and let PATH resolution attempt it
+        return { command, args, env, resolution: null };
+    }
+
     // Resolve ffmpeg/ffprobe to the bundled binary from ffmpeg-static.
     if ((normalized === "ffmpeg" || normalized === "ffprobe") && runtime.ffmpegDir) {
         const realBinary = join(runtime.ffmpegDir, normalized);

@@ -20,11 +20,18 @@ import {
   SparklesIcon,
   UndoIcon,
   MicIcon,
+  CrosshairIcon,
 } from "lucide-react";
 import { resilientFetch, resilientPost } from "@/lib/utils/resilient-fetch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useDesignWorkspaceStore } from "@/lib/design/workspace";
+import {
+  buildInspectMessageContext,
+  formatInspectSelectionLabel,
+  type InspectMessageContext,
+} from "@/lib/design/workspace/inspect-context";
 import { useCharacter } from "./character-context";
 import { useOptionalDeepResearch } from "./deep-research-context";
 import { DeepResearchPanel } from "./deep-research-panel";
@@ -79,11 +86,40 @@ interface QueuedMessage {
   id: string;
   content: string;
   mode: "chat" | "deep-research";
+  inspectContext?: InspectMessageContext | null;
   // "queued-classic": waiting for run to end before replaying
   // "queued-live": currently being submitted to the live queue API
   // "injected-live": successfully delivered to the running model
   // "fallback": live injection failed, will replay after run ends
   status: "queued-classic" | "queued-live" | "injected-live" | "fallback";
+}
+
+function buildInspectChipLabel(element: {
+  tagName: string;
+  className: string;
+  textContent: string;
+}): string {
+  return formatInspectSelectionLabel({
+    tagName: element.tagName,
+    textContent: element.textContent,
+    classes: element.className.trim().split(/\s+/).filter(Boolean).slice(0, 2),
+  });
+}
+
+function buildUserMessageMetadata(inspectContext: InspectMessageContext | null) {
+  return inspectContext ? { custom: { inspectContext } } : undefined;
+}
+
+function appendQueuedUserMessage(
+  threadRuntime: ReturnType<typeof useThreadRuntime>,
+  message: QueuedMessage,
+): void {
+  if (!threadRuntime) return;
+  threadRuntime.append({
+    role: "user",
+    content: [{ type: "text", text: message.content }],
+    metadata: buildUserMessageMetadata(message.inspectContext ?? null),
+  });
 }
 
 export const Composer: FC<{
@@ -150,12 +186,32 @@ export const Composer: FC<{
 
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
 
+  // Design workspace inspect state — for attaching inspect context on send
+  const inspectorEnabled = useDesignWorkspaceStore((s) => s.inspectorEnabled);
+  const selectedElements = useDesignWorkspaceStore((s) => s.selectedElements);
+  const activeComponentId = useDesignWorkspaceStore((s) => s.activeComponentId);
+  const designComponents = useDesignWorkspaceStore((s) => s.components);
+  const removeSelectedElement = useDesignWorkspaceStore((s) => s.removeSelectedElement);
+  const clearSelectedElements = useDesignWorkspaceStore((s) => s.clearSelectedElements);
+
+  const inspectContext = useMemo((): InspectMessageContext | null => {
+    if (!inspectorEnabled || selectedElements.length === 0) return null;
+    const component = activeComponentId
+      ? designComponents.find((c) => c.id === activeComponentId) ?? null
+      : null;
+    return buildInspectMessageContext({
+      selectedElements,
+      component: component ? { id: component.id, name: component.name } : null,
+      sessionId,
+    });
+  }, [inspectorEnabled, selectedElements, activeComponentId, designComponents, sessionId]);
+
   // Attempt to inject a message into the currently active run's live prompt queue.
   // The server resolves the active runId from the session index — no runId needed on the client.
   // Uses exponential backoff (200, 400, 800, 1600, 3200ms) with a max of 5 attempts.
   // Returns true if successfully queued, false if no active run or all retries failed.
   const queueLivePromptForActiveRun = useCallback(
-    async (content: string): Promise<boolean> => {
+    async (content: string, inspectCtx?: InspectMessageContext | null): Promise<boolean> => {
       const MAX_RETRIES = 5;
       const BASE_DELAY_MS = 200;
 
@@ -169,7 +225,7 @@ export const Composer: FC<{
         try {
           const { data, status } = await resilientPost<{ queued: boolean; reason?: string }>(
             `/api/sessions/${sessionId}/live-prompt-queue`,
-            { content },
+            { content, ...(inspectCtx ? { inspectContext: inspectCtx } : {}) },
             { timeout: 5_000, retries: 0 }
           );
 
@@ -662,11 +718,12 @@ export const Composer: FC<{
               id: msgId,
               content: expandedMessage,
               mode: "chat",
+              inspectContext,
               status: "queued-live",
             }]);
 
             // Fire injection in the background; chip lifecycle driven by result
-            void queueLivePromptForActiveRun(expandedMessage).then(injected => {
+            void queueLivePromptForActiveRun(expandedMessage, inspectContext).then(injected => {
               if (injected) {
                 // Successfully delivered — show brief confirmation then remove chip
                 setQueuedMessages(prev =>
@@ -690,6 +747,7 @@ export const Composer: FC<{
               id: msgId,
               content: expandedMessage,
               mode: isDeepResearchMode ? "deep-research" : "chat",
+              inspectContext,
               status: "queued-classic",
             }]);
           }
@@ -702,16 +760,34 @@ export const Composer: FC<{
         if (captureSession.isUnifiedSession) {
           captureSession.endSession();
         }
+        // Clear inspect selections after queuing
+        if (inspectContext) clearSelectedElements();
       } else {
-        threadRuntime.composer.setText(expandedMessage);
-        threadRuntime.composer.send();
+        if (inspectContext) {
+          // Use threadRuntime.append() to include inspect metadata (composer.send() doesn't support metadata)
+          const composerAttachments = (threadRuntime.composer.getState().attachments ?? []).filter(
+            (a): a is CompleteAttachment =>
+              a.status.type === "complete" || a.status.type === "requires-action",
+          );
+          threadRuntime.append({
+            role: "user",
+            content: [{ type: "text", text: expandedMessage }],
+            attachments: composerAttachments,
+            metadata: buildUserMessageMetadata(inspectContext),
+          });
+          if (hasAttachments) threadRuntime.composer.clearAttachments();
+          clearSelectedElements();
+        } else {
+          threadRuntime.composer.setText(expandedMessage);
+          threadRuntime.composer.send();
+          // Belt-and-suspenders: send() clears attachments internally via
+          // _emptyTextAndAttachments(), but clear explicitly to match the
+          // Tiptap path and guard against future runtime changes.
+          if (hasAttachments) threadRuntime.composer.clearAttachments();
+        }
         clearDraft();
         updateCursorPosition(0);
         clearEnhancement();
-        // Belt-and-suspenders: send() clears attachments internally via
-        // _emptyTextAndAttachments(), but clear explicitly to match the
-        // Tiptap path and guard against future runtime changes.
-        if (hasAttachments) threadRuntime.composer.clearAttachments();
         if (captureSession.isUnifiedSession) {
           captureSession.endSession();
         }
@@ -731,6 +807,8 @@ export const Composer: FC<{
       lastTranscriptRef,
       wasAiEnhancedRef,
       captureSession,
+      inspectContext,
+      clearSelectedElements,
     ]
   );
 
@@ -841,6 +919,7 @@ export const Composer: FC<{
         role: "user",
         content: finalComposerText ? [{ type: "text", text: finalComposerText }] : [],
         attachments: [...composerAttachments, ...inlineAttachments],
+        metadata: buildUserMessageMetadata(inspectContext),
       });
 
       tiptapRef.current?.clear();
@@ -851,6 +930,7 @@ export const Composer: FC<{
       }
       // End unified capture session after send (don't clear attachments — already sent)
       if (captureSession.isUnifiedSession) captureSession.endSession();
+      if (inspectContext) clearSelectedElements();
     },
     [
       attachmentCount,
@@ -862,6 +942,8 @@ export const Composer: FC<{
       isQueueBlocked,
       t,
       threadRuntime,
+      inspectContext,
+      clearSelectedElements,
     ]
   );
 
@@ -1330,6 +1412,39 @@ export const Composer: FC<{
         <div className="flex flex-wrap gap-2 p-2 empty:hidden">
           <ComposerPrimitive.Attachments components={{ Attachment: ComposerAttachment }} />
         </div>
+
+        {/* Inspect context chips — show selected design elements */}
+        {inspectorEnabled && selectedElements.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 px-3 py-1.5 border-b border-terminal-dark/10">
+            <CrosshairIcon className="size-3 text-blue-500 shrink-0" />
+            <span className="text-[11px] font-mono text-muted-foreground mr-1">Inspect:</span>
+            {selectedElements.map((el) => (
+              <span
+                key={el.selector}
+                className="inline-flex items-center gap-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 text-[11px] font-mono text-blue-700 dark:text-blue-300"
+              >
+                {buildInspectChipLabel(el)}
+                <button
+                  type="button"
+                  onClick={() => removeSelectedElement(el.selector)}
+                  className="ml-0.5 text-blue-400 hover:text-red-500 transition-colors"
+                  aria-label={`Remove ${el.tagName} from selection`}
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </span>
+            ))}
+            {selectedElements.length > 1 && (
+              <button
+                type="button"
+                onClick={clearSelectedElements}
+                className="text-[11px] font-mono text-muted-foreground hover:text-red-500 transition-colors ml-1"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+        )}
 
 {/* Reward suggestion is shown as inline ghost text in the textarea */}
 

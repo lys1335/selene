@@ -119,15 +119,6 @@ const PREVIEW_TAILWIND_SOURCE = [
   "@tailwind components;",
   "@tailwind utilities;",
   "",
-  "@layer base {",
-  "  html, body, #selene-design-preview-root {",
-  "    margin: 0;",
-  "    width: 100%;",
-  "    height: 100%;",
-  "    background: transparent;",
-  "  }",
-  "}",
-  "",
 ].join("\n");
 
 interface BuildTailwindPreviewOptions {
@@ -428,11 +419,11 @@ async function compileReactComponent(
         jsx: "automatic",
         jsxImportSource: "react",
         logLevel: "silent",
-        treeShaking: true,
+        treeShaking: false,
         sourcemap: false,
         platform: "browser",
         define: {
-          "process.env.NODE_ENV": '"production"',
+          "process.env.NODE_ENV": '"development"',
         },
         alias: {
           "react": resolve(PROJECT_ROOT, "node_modules/react"),
@@ -579,7 +570,7 @@ function buildCompiledPreviewHtml(compiledJs: string, tailwindCss: string, title
     safeCss,
     "  </style>",
     "  <style>",
-    "    html, body, #selene-design-preview-root { margin: 0; height: 100%; width: 100%; overflow: auto; background: transparent; }",
+    "    html, body, #selene-design-preview-root { margin: 0; width: 100%; height: 100%; }",
     "  </style>",
     "</head>",
     "<body>",

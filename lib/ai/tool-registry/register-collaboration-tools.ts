@@ -13,6 +13,7 @@ import { createUpdatePlanTool } from "../tools/update-plan-tool";
 import { createWorkspaceTool } from "../tools/workspace-tool";
 import { createChromiumWorkspaceTool } from "../tools/chromium-workspace-tool";
 import { createDesignWorkspaceTool } from "../tools/design-workspace-tool";
+import { createApplyPatchTool } from "../tools/apply-patch-tool";
 
 import { createAskUserQuestionTool } from "../tools/ask-user-question-tool";
 import { createPromptLibraryTool } from "../tools/prompt-library-tool";
@@ -243,6 +244,54 @@ Apply batch operations across multiple files atomically. All operations validate
     } satisfies ToolMetadata,
     ({ sessionId, characterId }) =>
       createPatchFileTool({
+        sessionId: sessionId || "UNSCOPED",
+        characterId: characterId ?? null,
+      })
+  );
+
+  // Apply Patch Tool - First-class patch application (no shell/heredoc needed)
+  registry.register(
+    "applyPatch",
+    {
+      displayName: "Apply Patch",
+      category: "knowledge",
+      keywords: [
+        "patch",
+        "apply",
+        "apply_patch",
+        "diff",
+        "edit",
+        "modify",
+        "update",
+        "file",
+        "heredoc",
+      ],
+      shortDescription:
+        "Apply a unified patch to modify, create, or delete files directly — no shell wrapping needed",
+      fullInstructions: `## Apply Patch
+
+Apply file patches directly without shell wrapping. Accepts the patch text as a parameter — works identically on Windows, macOS, and Linux.
+
+**Format:**
+\`\`\`
+*** Begin Patch
+*** Update File: path/to/file.ts
+@@
+ context line
+-old line
++new line
+*** Add File: path/to/new.ts
++content
+*** Delete File: path/to/old.ts
+*** End Patch
+\`\`\`
+
+**Preferred over bash heredoc** — avoids platform-specific shell syntax issues.`,
+      loading: { deferLoading: true },
+      requiresSession: true,
+    } satisfies ToolMetadata,
+    ({ sessionId, characterId }) =>
+      createApplyPatchTool({
         sessionId: sessionId || "UNSCOPED",
         characterId: characterId ?? null,
       })

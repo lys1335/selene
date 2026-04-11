@@ -524,6 +524,7 @@ export async function POST(req: Request) {
         ...((lastMessage.metadata?.custom?.attachments ?? []).filter((attachment): attachment is NonNullable<typeof attachment> => !!attachment)),
         ...((lastMessage.experimental_attachments ?? []).filter((attachment): attachment is NonNullable<typeof attachment> => !!attachment)),
       ];
+      const persistedInspectContext = (lastMessage.metadata?.custom as Record<string, unknown> | undefined)?.inspectContext ?? null;
       const extractedContent = await extractContent(messageForDB);
       const normalizedContent: unknown[] = Array.isArray(extractedContent)
         ? extractedContent
@@ -531,18 +532,17 @@ export async function POST(req: Request) {
 
       const isValidUUID = lastMessage.id && uuidRegex.test(lastMessage.id);
       const userMessageIndex = await nextOrderingIndex(sessionId);
+      const customMetadata: Record<string, unknown> = {};
+      if (persistedAttachments.length > 0) customMetadata.attachments = persistedAttachments;
+      if (persistedInspectContext) customMetadata.inspectContext = persistedInspectContext;
       const result = await createMessage({
         ...(isValidUUID && { id: lastMessage.id }),
         sessionId,
         role: 'user',
         content: normalizedContent,
         orderingIndex: userMessageIndex,
-        metadata: persistedAttachments.length > 0
-          ? {
-              custom: {
-                attachments: persistedAttachments,
-              },
-            }
+        metadata: Object.keys(customMetadata).length > 0
+          ? { custom: customMetadata }
           : {},
       });
       let savedUserMessageId = result?.id;
@@ -1171,12 +1171,17 @@ export async function POST(req: Request) {
               for (const prompt of pendingPrompts) {
                 try {
                   const orderingIndex = await nextOrderingIndex(sessionId);
+                  const promptCustom: Record<string, unknown> = {};
+                  if (prompt.metadata?.inspectContext) promptCustom.inspectContext = prompt.metadata.inspectContext;
                   const injected = await createMessage({
                     sessionId,
                     role: "user",
                     content: [{ type: "text", text: prompt.content }],
                     orderingIndex,
-                    metadata: { livePromptInjected: true },
+                    metadata: {
+                      livePromptInjected: true,
+                      ...(Object.keys(promptCustom).length > 0 ? { custom: promptCustom } : {}),
+                    },
                   });
                 } catch (dbError) {
                   console.warn("[CHAT API] Failed to persist injected user message:", dbError);

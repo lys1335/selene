@@ -71,15 +71,46 @@ function normalizeTimeout(timeout?: number): number {
 /**
  * Detect `apply_patch <<'DELIM'\n...\nDELIM` heredoc patterns in the command
  * string and extract the patch content for stdin-based execution.
+ * Also handles commands prefixed with `cd ... &&` or other shell preambles,
+ * and PowerShell here-string syntax (`@'\n...\n'@ | apply_patch`).
  * Returns null if the command is not an apply_patch heredoc.
  */
-function extractApplyPatchHeredoc(command: string): { stdin: string; patchText: string } | null {
-  const match = command.match(/^apply_patch\s+<<\s*['"]?(\w+)['"]?\n([\s\S]*?)\n\1\s*$/);
-  if (!match) return null;
-  const body = match[2];
-  if (!body || !body.includes("*** Begin Patch")) return null;
-  const stdin = body.endsWith("\n") ? body : `${body}\n`;
-  return { stdin, patchText: body };
+function extractApplyPatchHeredoc(command: string): { stdin: string; patchText: string; cwd?: string } | null {
+  // Normalize Windows line endings
+  const normalized = command.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  // --- Strategy 1: heredoc anywhere in the command ---
+  const applyIdx = normalized.indexOf("apply_patch");
+  if (applyIdx !== -1) {
+    const prefix = normalized.slice(0, applyIdx).trim();
+    const fromApplyPatch = normalized.slice(applyIdx);
+
+    // Use greedy [\s\S]* with $ anchor for correct last-delimiter semantics
+    const match = fromApplyPatch.match(/^apply_patch\s+<<\s*['"]?(\w+)['"]?\n([\s\S]*)\n\1\s*$/);
+    if (match) {
+      const body = match[2];
+      if (!body || !body.includes("*** Begin Patch")) return null;
+
+      // Extract cd target from prefix if present (e.g. `cd /d C:\foo &&`)
+      let cwd: string | undefined;
+      const cdMatch = prefix.match(/cd\s+(?:\/d\s+)?["']?([^"'&;]+?)["']?\s*(?:&&|;)\s*$/);
+      if (cdMatch) cwd = cdMatch[1]?.trim();
+
+      const stdin = body.endsWith("\n") ? body : `${body}\n`;
+      return { stdin, patchText: body, cwd };
+    }
+  }
+
+  // --- Strategy 2: PowerShell here-string: @'\n...\n'@ | apply_patch ---
+  const psMatch = normalized.match(/^@'\n([\s\S]*)\n'@\s*\|\s*apply_patch\s*$/);
+  if (psMatch) {
+    const body = psMatch[1];
+    if (!body || !body.includes("*** Begin Patch")) return null;
+    const stdin = body.endsWith("\n") ? body : `${body}\n`;
+    return { stdin, patchText: body };
+  }
+
+  return null;
 }
 
 function wrapShellCommand(command: string): { command: string; args: string[]; stdin?: string; windowsVerbatimArguments?: boolean } {
@@ -413,12 +444,13 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
       // execute apply_patch directly with stdin instead of wrapping in a shell.
       const patchHeredoc = extractApplyPatchHeredoc(command);
       if (patchHeredoc) {
+        const effectiveCwd = patchHeredoc.cwd || executionDir;
         const result = await executeCommandWithValidation(
           {
             command: "apply_patch",
             args: [],
             stdin: patchHeredoc.stdin,
-            cwd: executionDir,
+            cwd: effectiveCwd,
             timeout,
             characterId,
             toolCallId,

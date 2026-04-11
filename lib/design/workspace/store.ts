@@ -65,6 +65,7 @@ function extractSessionState(store: DesignWorkspaceState): DesignWorkspaceSessio
     error: store.error,
     inspectorEnabled: store.inspectorEnabled,
     selectedElement: store.selectedElement,
+    selectedElements: store.selectedElements,
     config: store.config,
     lastValidation: store.lastValidation,
     lastCompileReport: store.lastCompileReport,
@@ -84,6 +85,7 @@ const initialSessionState: DesignWorkspaceSessionState = {
   error: null,
   inspectorEnabled: false,
   selectedElement: null,
+  selectedElements: [],
   config: { ...DEFAULT_DESIGN_WORKSPACE_CONFIG },
   lastValidation: null,
   lastCompileReport: null,
@@ -175,6 +177,8 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     set({
       activeComponentId: component ? id : null,
       previewHtml: component ? buildPreviewMarkup(component) : "",
+      selectedElement: null,
+      selectedElements: [],
     });
   },
 
@@ -192,11 +196,50 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
 
   toggleInspector: () => {
     const next = !get().inspectorEnabled;
-    set({ inspectorEnabled: next, selectedElement: next ? get().selectedElement : null });
+    set({
+      inspectorEnabled: next,
+      selectedElement: next ? get().selectedElement : null,
+      selectedElements: next ? get().selectedElements : [],
+    });
   },
 
   setSelectedElement: (el: InspectedElement | null) => {
-    set({ selectedElement: el });
+    set({ selectedElement: el, selectedElements: el ? [el] : [] });
+  },
+
+  setSelectedElements: (elements: InspectedElement[]) => {
+    const normalized = elements.filter((element, index, source) => {
+      const key = element.selector;
+      return key ? source.findIndex((candidate) => candidate.selector === key) === index : index === 0;
+    });
+    set({
+      selectedElements: normalized,
+      selectedElement: normalized[0] ?? null,
+    });
+  },
+
+  toggleSelectedElement: (el: InspectedElement) => {
+    const current = get().selectedElements;
+    const exists = current.some((candidate) => candidate.selector === el.selector);
+    const next = exists
+      ? current.filter((candidate) => candidate.selector !== el.selector)
+      : [...current, el];
+    set({
+      selectedElements: next,
+      selectedElement: next[0] ?? null,
+    });
+  },
+
+  removeSelectedElement: (selector: string) => {
+    const next = get().selectedElements.filter((element) => element.selector !== selector);
+    set({
+      selectedElements: next,
+      selectedElement: next[0] ?? null,
+    });
+  },
+
+  clearSelectedElements: () => {
+    set({ selectedElements: [], selectedElement: null });
   },
 
   takeSnapshot: (label?: string, id?: string) => {

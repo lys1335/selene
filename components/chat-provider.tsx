@@ -360,6 +360,38 @@ type AttachmentMetadata = {
   kind?: string;
 };
 
+interface InspectContextMetadata {
+  version: number;
+  source: string;
+  sessionId?: string;
+  userId?: string;
+  componentId?: string;
+  componentName?: string;
+  userIntent?: string;
+  selectedAt: string;
+  elements: Array<{
+    tagName: string;
+    id?: string;
+    selector: string;
+    textContent?: string;
+    className?: string;
+    classes?: string[];
+    bounds?: {
+      x?: number;
+      y?: number;
+      width?: number;
+      height?: number;
+    };
+    hierarchy?: string[];
+  }>;
+}
+
+function isInspectContextMetadata(value: unknown): value is InspectContextMetadata {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<InspectContextMetadata>;
+  return Array.isArray(candidate.elements) && candidate.elements.length > 0;
+}
+
 type AttachmentAwarePending = PendingAttachment & {
   metadata?: AttachmentMetadata;
 };
@@ -489,16 +521,23 @@ export const toCreateMessageWithAttachmentMetadata: CustomToCreateMessageFunctio
     })
     .filter((attachment): attachment is NonNullable<typeof attachment> => attachment !== null);
 
+  const existingCustom =
+    ((message.metadata as { custom?: Record<string, unknown> } | undefined)?.custom) ?? {};
+  const inspectContext = isInspectContextMetadata(existingCustom.inspectContext)
+    ? existingCustom.inspectContext
+    : undefined;
+
   return {
     role: message.role,
     parts,
     metadata: {
       ...(message.metadata ?? {}),
-      ...(attachmentMetadata.length > 0
+      ...((attachmentMetadata.length > 0 || inspectContext)
         ? {
             custom: {
-              ...(((message.metadata as { custom?: Record<string, unknown> } | undefined)?.custom) ?? {}),
-              attachments: attachmentMetadata,
+              ...existingCustom,
+              ...(attachmentMetadata.length > 0 ? { attachments: attachmentMetadata } : {}),
+              ...(inspectContext ? { inspectContext } : {}),
             },
           }
         : {}),

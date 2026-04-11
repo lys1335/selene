@@ -262,6 +262,115 @@ describe("bash-tool", () => {
     expect(result.inlineDiff).toContain("*** Begin Patch");
   });
 
+  it("extracts apply_patch heredoc with cd prefix (Windows pattern)", async () => {
+    commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
+      success: true,
+      stdout: "patched",
+      stderr: "",
+      exitCode: 0,
+      signal: null,
+      executionTime: 5,
+    });
+
+    const tool = createBashTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      {
+        command: [
+          "cd /d C:\\Users\\test\\project && apply_patch <<'PATCH'",
+          "*** Begin Patch",
+          "*** Update File: src/index.ts",
+          "@@",
+          "+console.log('hello');",
+          "*** End Patch",
+          "PATCH",
+        ].join("\n"),
+      },
+      createToolContext()
+    );
+
+    expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "apply_patch",
+        args: [],
+        stdin: "*** Begin Patch\n*** Update File: src/index.ts\n@@\n+console.log('hello');\n*** End Patch\n",
+        cwd: "C:\\Users\\test\\project",
+      }),
+      ["/workspace"]
+    );
+    expect(result.status).toBe("success");
+    expect(result.inlineDiff).toContain("*** Begin Patch");
+  });
+
+  it("extracts apply_patch from PowerShell here-string syntax", async () => {
+    commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
+      success: true,
+      stdout: "patched",
+      stderr: "",
+      exitCode: 0,
+      signal: null,
+      executionTime: 2,
+    });
+
+    const tool = createBashTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      {
+        command: "@'\n*** Begin Patch\n*** Add File: foo.txt\n+bar\n*** End Patch\n'@ | apply_patch",
+      },
+      createToolContext()
+    );
+
+    expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "apply_patch",
+        args: [],
+        stdin: "*** Begin Patch\n*** Add File: foo.txt\n+bar\n*** End Patch\n",
+      }),
+      ["/workspace"]
+    );
+    expect(result.status).toBe("success");
+  });
+
+  it("handles \\r\\n line endings in apply_patch heredoc", async () => {
+    commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
+      success: true,
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+      signal: null,
+      executionTime: 1,
+    });
+
+    const tool = createBashTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      {
+        command: "apply_patch <<'PATCH'\r\n*** Begin Patch\r\n*** Add File: test.txt\r\n+hello\r\n*** End Patch\r\nPATCH",
+      },
+      createToolContext()
+    );
+
+    expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "apply_patch",
+        args: [],
+        stdin: "*** Begin Patch\n*** Add File: test.txt\n+hello\n*** End Patch\n",
+      }),
+      ["/workspace"]
+    );
+    expect(result.status).toBe("success");
+  });
+
   it("starts background shell commands", async () => {
     commandExecutionMocks.startBackgroundProcess.mockResolvedValue({
       processId: "bg-123",
