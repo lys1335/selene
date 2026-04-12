@@ -22,7 +22,6 @@ import { removeLivePromptQueue, drainLivePromptQueue } from "@/lib/background-ta
 import { signalUndrainedMessages } from "@/lib/background-tasks/undrained-signal";
 import { nextOrderingIndex } from "@/lib/session/message-ordering";
 import { addDelegationCompletion } from "@/lib/ai/tools/delegation-completion-store";
-import { emitDelegationCompleted } from "@/lib/background-tasks/delegation-completion-signal";
 import { runStopHooks } from "@/lib/plugins/hook-integration";
 import { buildInterruptionMessage, buildInterruptionMetadata } from "@/lib/messages/interruption";
 import type { DBContentPart } from "@/lib/messages/converter";
@@ -77,7 +76,6 @@ function handleUndrainedQueueMessages(runId: string, sessionId: string): void {
       completedAt: Date.now(),
       resultContent: entry.content,
     });
-    emitDelegationCompleted(sessionId);
   }
 
   if (otherEntries.length > 0) {

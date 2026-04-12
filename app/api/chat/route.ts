@@ -33,6 +33,7 @@ import {
   createLivePromptQueue,
   drainLivePromptQueue,
   removeLivePromptQueue,
+  waitForQueueMessage,
 } from "@/lib/background-tasks/live-prompt-queue-registry";
 import { signalUndrainedMessages } from "@/lib/background-tasks/undrained-signal";
 import {
@@ -43,8 +44,6 @@ import {
   addDelegationCompletion,
   drainDelegationCompletions,
 } from "@/lib/ai/tools/delegation-completion-store";
-import { emitDelegationCompleted } from "@/lib/background-tasks/delegation-completion-signal";
-
 import { createHeartbeatStream } from "@/lib/utils/heartbeat-stream";
 import {
     classifyRecoverability,
@@ -159,7 +158,6 @@ function handleUndrainedQueueMessages(runId: string, sessionId: string): void {
       completedAt: Date.now(),
       resultContent: entry.content,
     });
-    emitDelegationCompleted(sessionId);
   }
 
   if (otherEntries.length > 0) {
@@ -1262,12 +1260,93 @@ export async function POST(req: Request) {
               const hasDelegations = hasRunningDelegationsForSession(characterId, sessionId);
               const hasBgTasks = hasRunningBackgroundTasksForSession(characterId, sessionId);
 
-              // Delegations now deliver their results automatically via the live
-              // prompt queue (including the full subagent response). The model
-              // will receive them as injected user messages — no need to force
-              // observe() tool calls. Let the turn end naturally so the model
-              // can output "waiting for results..." and resume when notified.
+              // When only delegations are running (no background bash tasks),
+              // BLOCK here until a delegation result arrives via the live prompt
+              // queue. This keeps the SSE stream alive (UI shows "Responding...")
+              // and avoids the need for observe() calls or SSE auto-resume hacks.
               if (hasDelegations && !hasBgTasks) {
+                console.debug(
+                  `[CHAT API] Step ${stepNumber}: Blocking prepareStep — waiting for delegation result(s)...`
+                );
+                try {
+                  await waitForQueueMessage(runId, streamAbortSignal);
+                } catch {
+                  // Aborted or queue removed — let the turn end naturally
+                  return { activeTools: currentActiveTools as string[] };
+                }
+                // Delegation result(s) arrived — drain and inject them.
+                // The queue was populated by notifyInitiatorSessionOfCompletion.
+                const delegationPrompts = drainLivePromptQueue(runId);
+                if (delegationPrompts.length > 0) {
+                  console.debug(
+                    `[CHAT API] Step ${stepNumber}: Injecting ${delegationPrompts.length} delegation result(s) after blocking wait`
+                  );
+
+                  // Split the streaming assistant message at the injection boundary
+                  if (syncStreamingMessage && streamingState) {
+                    await syncStreamingMessage(true);
+                    if (streamingState.messageId) {
+                      const preId = streamingState.messageId;
+                      void updateMessage(preId, { metadata: { livePromptInjected: true } }).catch(() => {});
+                    }
+                    streamingState.messageId = undefined;
+                    streamingState.parts = [];
+                    streamingState.toolCallParts = new Map();
+                    streamingState.loggedIncompleteToolCalls = new Set();
+                    streamingState.lastBroadcastAt = 0;
+                    streamingState.lastBroadcastSignature = "";
+                    streamingState.pendingBroadcast = false;
+                    streamingState.isCreating = false;
+                    assistantMessageId = crypto.randomUUID();
+                    streamingState.stepOffset = stepNumber;
+                  }
+
+                  // Persist each injected delegation result
+                  for (const prompt of delegationPrompts) {
+                    try {
+                      const orderingIndex = await nextOrderingIndex(sessionId);
+                      await createMessage({
+                        sessionId,
+                        role: "user",
+                        content: [{ type: "text", text: prompt.content }],
+                        orderingIndex,
+                        metadata: { livePromptInjected: true },
+                      });
+                    } catch (dbError) {
+                      console.warn("[CHAT API] Failed to persist injected delegation result:", dbError);
+                    }
+                  }
+
+                  const injectedUserMessage: UserModelMessage = {
+                    role: "user",
+                    content: buildUserInjectionContent(delegationPrompts),
+                  };
+
+                  // If more delegations are still running, force the model to
+                  // call a tool (even a no-op) so the loop continues to the next
+                  // step where prepareStep will block again waiting for the next
+                  // delegation result. Without this, the model outputs text and
+                  // the AI SDK loop ends — remaining delegations never get injected.
+                  const stillHasRunning = hasRunningDelegationsForSession(characterId, sessionId);
+                  const result: Record<string, unknown> = {
+                    activeTools: currentActiveTools as string[],
+                    messages: [...stepMessages, injectedUserMessage],
+                  };
+                  if (stillHasRunning) {
+                    result.toolChoice = "required" as const;
+                    result.system = "More delegations are still running. Acknowledge the result(s) you just received, then call any tool (e.g. delegateToSubagent action=\"observe\" or any lightweight tool) to keep the turn alive while waiting for remaining delegations.";
+                  }
+                  return result;
+                }
+                // Queue was drained by something else or empty — fall through
+                // Check if delegations are still running and need to keep blocking
+                if (hasRunningDelegationsForSession(characterId, sessionId)) {
+                  return {
+                    activeTools: currentActiveTools as string[],
+                    toolChoice: "required" as const,
+                    system: "Delegations are still running. Call delegateToSubagent action=\"observe\" or wait for results to arrive.",
+                  };
+                }
                 return { activeTools: currentActiveTools as string[] };
               }
 

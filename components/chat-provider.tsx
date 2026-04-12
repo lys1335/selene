@@ -1250,86 +1250,8 @@ export const ChatProvider: FC<ChatProviderProps> = ({
     lastStreamingRef.current = Date.now();
   }
 
-  // ── Delegation auto-resume ────────────────────────────────────────────────
-  // When a subagent delegation completes after the turn has ended, the SSE
-  // endpoint at /api/sessions/:id/delegation-events emits a notification.
-  // This effect connects to it and auto-sends a continuation message so the
-  // model can process the delegation results (injected by prepareStep).
-  const delegationESRef = useRef<EventSource | null>(null);
-  const chatRef = useRef(chat);
-  chatRef.current = chat;
-
-  useEffect(() => {
-    if (chat.status !== "ready" || !sessionId) return;
-
-    // Small delay to let final message state settle after streaming ends
-    const timer = setTimeout(() => {
-      // Check if recent messages involve delegation activity
-      const msgs = chatRef.current.messages;
-      const recent = msgs.slice(-6);
-      const hasDelegationActivity = recent.some((m) => {
-        const text = JSON.stringify(m.parts ?? []);
-        return (
-          text.includes("Delegation started in background") ||
-          text.includes("delegation-result") ||
-          text.includes("delegateToSubagent")
-        );
-      });
-
-      if (!hasDelegationActivity) return;
-
-      // Close any existing connection before opening a new one
-      delegationESRef.current?.close();
-
-      const es = new EventSource(
-        `/api/sessions/${sessionId}/delegation-events`,
-      );
-      delegationESRef.current = es;
-      let handled = false;
-
-      es.addEventListener("delegation-completed", () => {
-        if (handled || chatRef.current.status !== "ready") return;
-        handled = true;
-        es.close();
-        delegationESRef.current = null;
-        // Trigger a new turn — prepareStep will drain the completion store
-        // and inject the actual results as user messages.
-        void chatRef.current.sendMessage({
-          role: "user",
-          parts: [
-            {
-              type: "text" as const,
-              text: "Continue — delegation results are now available. Process them and respond.",
-            },
-          ],
-        });
-      });
-
-      es.addEventListener("timeout", () => {
-        es.close();
-        delegationESRef.current = null;
-      });
-
-      es.onerror = () => {
-        es.close();
-        delegationESRef.current = null;
-      };
-    }, 800);
-
-    return () => {
-      clearTimeout(timer);
-      delegationESRef.current?.close();
-      delegationESRef.current = null;
-    };
-  }, [chat.status, sessionId]);
-
-  // Cleanup delegation SSE on unmount
-  useEffect(() => {
-    return () => {
-      delegationESRef.current?.close();
-      delegationESRef.current = null;
-    };
-  }, []);
+  // Delegation results are now auto-delivered by blocking in prepareStep —
+  // no SSE auto-resume needed. The turn stays alive while subagents run.
 
   return (
     <ChatErrorBoundary

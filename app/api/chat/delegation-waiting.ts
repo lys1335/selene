@@ -118,12 +118,12 @@ export function shouldStopTurn(input: {
   // tools, and would continue to a second step — triggering another Claude
   // Code SDK query that produces a duplicate response.
   //
-  // Stop after the initial step UNLESS there's active background tasks
-  // (bash/executeCommand) that need follow-up steps to check status.
-  // Delegations auto-deliver results via live prompt queue — they don't
-  // need the turn to stay alive.
+  // Stop after the initial step UNLESS there's active async work
+  // (delegations or background tasks) that needs the turn alive.
+  // Delegations block in prepareStep waiting for results; background
+  // tasks need follow-up steps to check status.
   if (input.provider === "claudecode" && input.stepCount > 0) {
-    return !hasRunningBackgroundTasksForSession(input.characterId, input.initiatorSessionId);
+    return !hasActiveAsyncWork(input.characterId, input.initiatorSessionId);
   }
 
   // For other providers, never force-stop. The AI SDK loop ends naturally
