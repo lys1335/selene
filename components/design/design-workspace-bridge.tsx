@@ -43,6 +43,13 @@ interface DesignToolEvent {
     postEditValidation?: import("@/lib/design/workspace/config").DesignWorkspaceValidationResult;
     history?: import("@/lib/design/workspace/edit-history").DesignWorkspaceHistory;
     config?: import("@/lib/design/workspace/config").DesignWorkspaceConfig;
+    /** Project metadata returned by detect/browse/cast/open actions */
+    framework?: Record<string, unknown>;
+    projectStructure?: Record<string, unknown>;
+    castFile?: string;
+    castMode?: "page" | "component" | "route";
+    rendererInfo?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
   };
   error?: string;
 }
@@ -104,6 +111,111 @@ function applyDesignToolResultToStore(detail: DesignToolEvent): void {
     case "list":
     case "status":
     case "install":
+      // Informational actions — no store updates needed
+      break;
+
+    case "detect": {
+      // Parse framework and structure from the prompt field (JSON-encoded by the tool)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let framework: any | undefined;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let structure: any | undefined;
+
+      // Prefer explicit fields; fall back to parsing the prompt JSON
+      if (data?.framework) {
+        framework = data.framework;
+      }
+      if (data?.projectStructure) {
+        structure = data.projectStructure;
+      }
+      if ((!framework || !structure) && data?.prompt) {
+        try {
+          const parsed = JSON.parse(data.prompt);
+          if (!framework && parsed.framework) framework = parsed.framework;
+          if (!structure && parsed.structure) structure = parsed.structure;
+        } catch {
+          // prompt wasn't JSON — ignore
+        }
+      }
+
+      if (framework) {
+        store.setProjectContext({
+          projectRoot: "",
+          framework,
+          worktreePath: null,
+          worktreeBranch: null,
+          syncFolderId: null,
+          worktreeStatus: "none",
+          castFile: null,
+          castMode: null,
+          rendererInfo: null,
+          projectStructure: structure ?? null,
+        });
+      }
+      if (structure && store.projectContext) {
+        store.setProjectStructure(structure);
+      }
+      break;
+    }
+
+    case "browse": {
+      // Parse structure entries from prompt and update projectStructure
+      if (data?.projectStructure) {
+        if (store.projectContext) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          store.setProjectStructure(data.projectStructure as any);
+        }
+      } else if (data?.prompt) {
+        try {
+          const entries = JSON.parse(data.prompt);
+          if (Array.isArray(entries) && store.projectContext) {
+            // Entries are a flat list — update as a best-effort structure
+            const pages = entries.filter((e: { type: string }) => e.type === "page");
+            const components = entries.filter((e: { type: string }) => e.type === "component");
+            const layouts = entries.filter((e: { type: string }) => e.type === "layout");
+            const styles = entries.filter((e: { type: string }) => e.type === "style");
+            store.setProjectStructure({ pages, components, layouts, styles });
+          }
+        } catch {
+          // Not JSON — ignore
+        }
+      }
+      break;
+    }
+
+    case "cast":
+      if (data?.componentId && data.code) {
+        const now = new Date().toISOString();
+        store.addComponent({
+          id: data.componentId,
+          name: data.name ?? "Project Component",
+          code: data.code,
+          mode: "tailwind",
+          style: "default",
+          prompt: "",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      if (data?.previewHtml) {
+        store.setPreviewHtml(data.previewHtml);
+      }
+      // Update castFile and rendererInfo in project context
+      if (store.projectContext) {
+        if (data?.castFile || data?.componentId) {
+          const castFile = data?.castFile ?? null;
+          const castMode = data?.castMode ?? null;
+          store.setCastFile(castFile, castMode);
+        }
+        if (data?.rendererInfo) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          store.updateProjectContext({ rendererInfo: data.rendererInfo as any });
+        }
+      }
+      break;
+
+    case "sync-back":
+      // Sync-back is a finalization action — no preview update
       break;
 
   }
@@ -173,6 +285,32 @@ export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps)
   // (e.g., parent key change, route navigation) — the ref would otherwise
   // re-initialize to the current sessionId, making prev === current, skipping reset.
   const prevSessionIdRef = useRef<string | undefined | null>(null);
+
+  // Listen for cast requests from the project browser sidebar.
+  // Instead of fabricating a fake result, update the store's castFile to signal
+  // intent and dispatch a "cast-pending" event so the chat layer can trigger
+  // the actual designWorkspace tool call with the cast action.
+  useEffect(() => {
+    const handleCastRequest = (e: Event) => {
+      const detail = (e as CustomEvent).detail as {
+        targetFile?: string;
+        castMode?: "page" | "component" | "route";
+      };
+      const store = useDesignWorkspaceStore.getState();
+      if (store.projectContext && detail.targetFile) {
+        store.setCastFile(detail.targetFile, detail.castMode ?? "component");
+      }
+      // Emit a pending event so the chat/tool layer can pick it up and invoke
+      // the actual cast action (the bridge itself cannot trigger server-side tools).
+      window.dispatchEvent(
+        new CustomEvent("design-workspace-cast-pending", {
+          detail: { targetFile: detail.targetFile, castMode: detail.castMode, sessionId },
+        }),
+      );
+    };
+    window.addEventListener("design-workspace-cast-request", handleCastRequest);
+    return () => window.removeEventListener("design-workspace-cast-request", handleCastRequest);
+  }, [sessionId]);
 
   // Single merged effect: switch session on change, drain queue, bind listener.
   // Merged to guarantee ordering — session switch MUST happen before queue drain.

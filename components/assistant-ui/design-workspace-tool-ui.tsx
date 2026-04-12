@@ -71,6 +71,13 @@ interface DesignWorkspaceResultData {
   postEditValidation?: ValidationSummary;
   history?: HistorySummary;
   config?: ConfigSummary;
+  /** Project metadata fields (detect/browse/cast/open) */
+  framework?: Record<string, unknown>;
+  projectStructure?: Record<string, unknown>;
+  castFile?: string;
+  castMode?: "page" | "component" | "route";
+  rendererInfo?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 interface DesignWorkspaceResult {
@@ -284,6 +291,13 @@ function toBridgeData(data: DesignWorkspaceResultData | undefined) {
     postEditValidation: data.postEditValidation as DesignWorkspaceValidationResult | undefined,
     history: data.history as DesignWorkspaceHistory | undefined,
     config: data.config as DesignWorkspaceConfig | undefined,
+    // Project metadata fields — pass through so the bridge can update the store
+    framework: data.framework,
+    projectStructure: data.projectStructure,
+    castFile: data.castFile,
+    castMode: data.castMode,
+    rendererInfo: data.rendererInfo,
+    metadata: data.metadata,
   };
 }
 

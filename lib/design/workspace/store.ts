@@ -10,6 +10,8 @@ import {
   type DesignBreakpoint,
   type DesignSnapshot,
   type InspectedElement,
+  type ProjectContext,
+  type ProjectStructure,
 } from "./types";
 import {
   DEFAULT_DESIGN_WORKSPACE_CONFIG,
@@ -70,6 +72,7 @@ function extractSessionState(store: DesignWorkspaceState): DesignWorkspaceSessio
     lastValidation: store.lastValidation,
     lastCompileReport: store.lastCompileReport,
     history: store.history,
+    projectContext: store.projectContext,
   };
 }
 
@@ -90,6 +93,7 @@ const initialSessionState: DesignWorkspaceSessionState = {
   lastValidation: null,
   lastCompileReport: null,
   history: null,
+  projectContext: null,
 };
 
 const initialState = {
@@ -310,11 +314,21 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
   },
 
   setConfig: (config: DesignWorkspaceConfig) => {
-    set({ config: normalizeDesignWorkspaceConfig(config) });
+    const normalized = normalizeDesignWorkspaceConfig(config);
+    // Guard: sourceMode "project" requires an active projectContext
+    if (normalized.sourceMode === "project" && !get().projectContext) {
+      normalized.sourceMode = "sandbox";
+    }
+    set({ config: normalized });
   },
 
   updateConfig: (updates: Partial<DesignWorkspaceConfig>) => {
-    set({ config: normalizeDesignWorkspaceConfig({ ...get().config, ...updates }) });
+    const normalized = normalizeDesignWorkspaceConfig({ ...get().config, ...updates });
+    // Guard: sourceMode "project" requires an active projectContext
+    if (normalized.sourceMode === "project" && !get().projectContext) {
+      normalized.sourceMode = "sandbox";
+    }
+    set({ config: normalized });
   },
 
   setLastValidation: (validation: DesignWorkspaceValidationResult | null) => {
@@ -352,7 +366,66 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     }
   },
 
+  setProjectContext: (ctx: ProjectContext | null) => {
+    set({
+      projectContext: ctx,
+      config: normalizeDesignWorkspaceConfig({
+        ...get().config,
+        sourceMode: ctx ? "project" : "sandbox",
+        projectRoot: ctx?.projectRoot,
+      }),
+    });
+  },
+
+  updateProjectContext: (partial: Partial<ProjectContext>) => {
+    const current = get().projectContext;
+    if (!current) return;
+    const merged = { ...current, ...partial };
+
+    // Validate cross-field invariants
+    if (
+      (merged.worktreeStatus === "active" || merged.worktreeStatus === "finalizing") &&
+      merged.worktreePath == null
+    ) {
+      console.warn(
+        `[design-workspace] updateProjectContext rejected: worktreeStatus="${merged.worktreeStatus}" requires a non-null worktreePath`,
+      );
+      return;
+    }
+    if (merged.castFile != null && merged.castMode == null) {
+      console.warn(
+        `[design-workspace] updateProjectContext rejected: castFile is set but castMode is null`,
+      );
+      return;
+    }
+
+    set({ projectContext: merged });
+  },
+
+  setCastFile: (file: string | null, mode: "page" | "component" | "route" | null) => {
+    const current = get().projectContext;
+    if (!current) return;
+    set({ projectContext: { ...current, castFile: file, castMode: mode } });
+  },
+
+  setProjectStructure: (structure: ProjectStructure) => {
+    const current = get().projectContext;
+    if (!current) return;
+    set({ projectContext: { ...current, projectStructure: structure } });
+  },
+
+  clearProjectContext: () => {
+    set({
+      projectContext: null,
+      config: normalizeDesignWorkspaceConfig({
+        ...get().config,
+        sourceMode: "sandbox",
+        projectRoot: undefined,
+      }),
+    });
+  },
+
   reset: () => {
-    set({ ...initialState, selectedBreakpoint: { ...DESIGN_BREAKPOINTS[0] } });
+    set({ ...initialState, selectedBreakpoint: { ...DESIGN_BREAKPOINTS[0] }, projectContext: null });
   },
 }));

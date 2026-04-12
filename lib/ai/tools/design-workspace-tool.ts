@@ -53,6 +53,12 @@ import {
   buildInspectPromptText,
   type InspectMessageContext,
 } from "../../design/workspace/inspect-context";
+import { detectFramework, buildProjectStructure, validateProjectPath } from "@/lib/design/workspace/project-detection";
+import type { FrameworkType } from "@/lib/design/workspace/project-detection";
+import { createDesignWorktree, getActiveWorktree, cleanupDesignWorktree, getWorktreeDiff, type WorktreeInfo } from "@/lib/design/workspace/worktree-manager";
+import { castProjectFile, recastAfterEdit, applyEditToWorktree, readWorktreeFile, syncBackChanges } from "@/lib/design/workspace/component-casting";
+import { initializeRenderers } from "@/lib/design/workspace/framework-renderers/init";
+import { rendererRegistry } from "@/lib/design/workspace/framework-renderers/registry";
 
 interface DesignWorkspaceToolOptions {
   sessionId?: string;
@@ -71,7 +77,7 @@ export function resolveComponentCode(_sessionId: string, code: string): string |
 }
 
 interface DesignWorkspaceInput {
-  action: "open" | "generate" | "edit" | "patch" | "readSource" | "list" | "status" | "close" | "install";
+  action: "open" | "generate" | "edit" | "patch" | "readSource" | "list" | "status" | "close" | "install" | "detect" | "browse" | "cast" | "sync-back";
 
   /** npm package names to install. Required for "install" action. */
   packages?: string[];
@@ -101,6 +107,15 @@ interface DesignWorkspaceInput {
    * requires changes at multiple locations in the source.
    */
   patches?: Array<{ oldString: string; newString: string; replaceAll?: boolean }>;
+
+  projectSourcePath?: string;
+  targetFile?: string;
+  castMode?: "page" | "component" | "route";
+  frameworkOverride?: FrameworkType;
+  routePath?: string;
+  syncStrategy?: "merge" | "pr" | "cherry-pick";
+  syncFiles?: string[];
+  browseFilter?: "pages" | "components" | "layouts" | "styles" | "all";
 }
 
 interface ListedDesignSummary {
@@ -138,6 +153,15 @@ interface DesignWorkspaceResultData {
   };
   recoveryHint?: string;
   updatedAt?: string;
+  metadata?: Record<string, unknown>;
+  /** Project-mode fields */
+  castFile?: string;
+  castMode?: "page" | "component" | "route";
+  rendererInfo?: {
+    type: string;
+    port?: number;
+    baseUrl?: string;
+  };
 }
 
 interface DesignWorkspaceResult {
@@ -570,11 +594,14 @@ async function executeDesignWorkspace(
   options: DesignWorkspaceToolOptions,
   input: DesignWorkspaceInput,
 ): Promise<DesignWorkspaceResult> {
+  initializeRenderers();
   let result: DesignWorkspaceResult;
+  const sessionId = getSessionId(options);
+  const config = getWorkspaceConfig();
 
   switch (input.action) {
     case "open":
-      result = await handleOpen(options);
+      result = await handleOpen(options, input);
       break;
     case "install":
       result = await handleInstall(options, input);
@@ -598,7 +625,19 @@ async function executeDesignWorkspace(
       result = await handleStatus(options, input);
       break;
     case "close":
-      result = handleClose(options);
+      result = await handleClose(options);
+      break;
+    case "detect":
+      result = await handleDetect(input, sessionId);
+      break;
+    case "browse":
+      result = await handleBrowse(input, sessionId);
+      break;
+    case "cast":
+      result = await handleCast(input, sessionId, config);
+      break;
+    case "sync-back":
+      result = await handleSyncBack(input, sessionId);
       break;
     default:
       result = { success: false, action: String(input.action), error: `Unknown action: ${input.action}` };
@@ -626,7 +665,11 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
 - "readSource": Read back the source code of a persisted component. Pass \`activeComponentId\`.
 - "list": List designs available to the current workspace session.
 - "status": Inspect whether a design is persisted and available. Pass \`activeComponentId\`.
-- "close": Close the design workspace panel.`,
+- "close": Close the design workspace panel.
+- "detect": Detect framework and project structure from a local project path. Provide \`projectSourcePath\`.
+- "browse": Browse pages, components, layouts, and styles in a detected project. Provide \`projectSourcePath\` and optional \`browseFilter\`.
+- "cast": Cast a project file into the design workspace for live preview. Provide \`targetFile\` (relative path), optional \`castMode\` ("page"|"component"|"route"), and \`projectSourcePath\`.
+- "sync-back": Sync worktree changes back to the original project. Provide \`projectSourcePath\` and optional \`syncStrategy\` ("merge"|"pr"|"cherry-pick").`,
     inputSchema: jsonSchema<DesignWorkspaceInput>({
       type: "object",
       title: "DesignWorkspaceInput",
@@ -634,7 +677,7 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
       properties: {
         action: {
           type: "string",
-          enum: ["open", "generate", "edit", "patch", "readSource", "list", "status", "close", "install"],
+          enum: ["open", "generate", "edit", "patch", "readSource", "list", "status", "close", "install", "detect", "browse", "cast", "sync-back"],
           description: "The workspace action to perform.",
         },
         packages: {
@@ -711,6 +754,38 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
             additionalProperties: false,
           },
         },
+        projectSourcePath: {
+          type: "string",
+          description: "Absolute path to the synced folder / project root. Used with 'detect', 'cast', and 'open' (for project mode).",
+        },
+        targetFile: {
+          type: "string",
+          description: "Target file path relative to project root. Used with 'cast' action.",
+        },
+        castMode: {
+          type: "string",
+          enum: ["page", "component", "route"],
+          description: "How to render the target: as a full page, isolated component, or by route. Used with 'cast'.",
+        },
+        frameworkOverride: {
+          type: "string",
+          description: "Override auto-detected framework type.",
+        },
+        syncStrategy: {
+          type: "string",
+          enum: ["merge", "pr", "cherry-pick"],
+          description: "Strategy for syncing worktree changes back to source. Used with 'sync-back'.",
+        },
+        syncFiles: {
+          type: "array",
+          items: { type: "string" },
+          description: "Specific files to sync back (for cherry-pick strategy).",
+        },
+        browseFilter: {
+          type: "string",
+          enum: ["pages", "components", "layouts", "styles", "all"],
+          description: "Filter for browsing project structure. Used with 'browse'.",
+        },
       },
       required: ["action"],
       additionalProperties: false,
@@ -719,7 +794,229 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
   });
 }
 
-async function handleOpen(options: DesignWorkspaceToolOptions): Promise<DesignWorkspaceResult> {
+// ---------------------------------------------------------------------------
+// Project-native action handlers
+// ---------------------------------------------------------------------------
+
+async function handleDetect(
+  input: DesignWorkspaceInput,
+  sessionId: string,
+): Promise<DesignWorkspaceResult> {
+  const startedAt = Date.now();
+  ensureHistory(sessionId);
+  const projectPath = input.projectSourcePath;
+  if (!projectPath) {
+    return { success: false, action: "detect", error: "projectSourcePath is required for detect action." };
+  }
+
+  try {
+    const validation = await validateProjectPath(projectPath);
+    if (!validation.valid) {
+      return { success: false, action: "detect", error: `Invalid project path: ${validation.reason}` };
+    }
+
+    const framework = await detectFramework(projectPath);
+    const structure = await buildProjectStructure(projectPath, framework.type);
+
+    recordDesignHistory(sessionId, {
+      action: "open", // recorded as open since detect initializes context
+      durationMs: Date.now() - startedAt,
+      success: true,
+      metadata: { subAction: "detect", projectPath, framework: framework.type },
+    });
+
+    return {
+      success: true,
+      action: "detect",
+      data: {
+        message: `Detected ${framework.type} project (${framework.buildTool} build, ${framework.cssFramework} CSS, ${framework.packageManager} package manager).`,
+        config: undefined as any, // not needed for detect
+        // Encode project info in metadata-style fields
+        prompt: JSON.stringify({ framework, structure }, null, 2),
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      action: "detect",
+      error: `Detection failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+async function handleBrowse(
+  input: DesignWorkspaceInput,
+  sessionId: string,
+): Promise<DesignWorkspaceResult> {
+  ensureHistory(sessionId);
+  const projectPath = input.projectSourcePath;
+  if (!projectPath) {
+    return { success: false, action: "browse", error: "projectSourcePath is required for browse action." };
+  }
+
+  try {
+    const framework = await detectFramework(projectPath);
+    const structure = await buildProjectStructure(projectPath, framework.type);
+    const filter = input.browseFilter ?? "all";
+
+    let entries: Array<{ path: string; name: string; route?: string; type: string }> = [];
+    if (filter === "all" || filter === "pages") entries.push(...structure.pages);
+    if (filter === "all" || filter === "components") entries.push(...structure.components);
+    if (filter === "all" || filter === "layouts") entries.push(...structure.layouts);
+    if (filter === "all" || filter === "styles") entries.push(...structure.styles);
+
+    return {
+      success: true,
+      action: "browse",
+      data: {
+        message: `Found ${entries.length} entries (${structure.pages.length} pages, ${structure.components.length} components, ${structure.layouts.length} layouts, ${structure.styles.length} styles).`,
+        prompt: JSON.stringify(entries, null, 2),
+      },
+    };
+  } catch (error) {
+    return {
+      success: false,
+      action: "browse",
+      error: `Browse failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+async function handleCast(
+  input: DesignWorkspaceInput,
+  sessionId: string,
+  config: DesignWorkspaceConfig,
+): Promise<DesignWorkspaceResult> {
+  const startedAt = Date.now();
+  ensureHistory(sessionId);
+  const targetFile = input.targetFile;
+  const castMode = input.castMode ?? "page";
+
+  if (!targetFile) {
+    return { success: false, action: "cast", error: "targetFile is required for cast action." };
+  }
+
+  try {
+    // Ensure worktree exists — if not, need to detect + create first
+    let worktree = getActiveWorktree(sessionId);
+    if (!worktree && input.projectSourcePath) {
+      worktree = await createDesignWorktree(input.projectSourcePath, sessionId);
+    }
+    if (!worktree) {
+      return { success: false, action: "cast", error: "No active worktree. Provide projectSourcePath or run 'detect' first." };
+    }
+
+    // Detect framework
+    const framework = input.frameworkOverride ?? (await detectFramework(worktree.worktreePath)).type;
+
+    const result = await castProjectFile(sessionId, targetFile, castMode, framework, config);
+
+    // Extract renderer info for C14 — populate RendererInfo in the result
+    let rendererInfo: DesignWorkspaceResultData["rendererInfo"];
+    const activeRenderer = rendererRegistry.getActiveRenderer(worktree.worktreePath);
+    if (activeRenderer) {
+      rendererInfo = {
+        type: activeRenderer.tier === "dev-server" ? "dev-server" : "esbuild",
+      };
+      // Extract port/baseUrl from proxyUrl if available in the cast result
+      if (result.previewHtml) {
+        const proxyMatch = result.previewHtml.match(/src="(https?:\/\/127\.0\.0\.1:(\d+)[^"]*)"/);
+        if (proxyMatch) {
+          rendererInfo.port = parseInt(proxyMatch[2], 10);
+          rendererInfo.baseUrl = `http://127.0.0.1:${proxyMatch[2]}`;
+        }
+      }
+    }
+
+    recordDesignHistory(sessionId, {
+      action: "generate", // cast is conceptually like generate
+      componentId: result.componentId,
+      durationMs: Date.now() - startedAt,
+      success: true,
+      metadata: { subAction: "cast", targetFile, castMode, framework },
+    });
+
+    return {
+      success: true,
+      action: "cast",
+      data: {
+        componentId: result.componentId,
+        code: result.sourceCode,
+        previewHtml: result.previewHtml,
+        compileReport: result.compileReport,
+        message: `Cast ${targetFile} as ${castMode} (${framework}).`,
+        castFile: targetFile,
+        castMode,
+        rendererInfo,
+      },
+    };
+  } catch (error) {
+    recordDesignHistory(sessionId, {
+      action: "generate",
+      durationMs: Date.now() - startedAt,
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      metadata: { subAction: "cast", targetFile, castMode },
+    });
+    return {
+      success: false,
+      action: "cast",
+      error: `Cast failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+async function handleSyncBack(
+  input: DesignWorkspaceInput,
+  sessionId: string,
+): Promise<DesignWorkspaceResult> {
+  const startedAt = Date.now();
+  ensureHistory(sessionId);
+  const strategy = input.syncStrategy ?? "merge";
+
+  try {
+    const worktree = getActiveWorktree(sessionId);
+    if (!worktree) {
+      return { success: false, action: "sync-back", error: "No active worktree for this session." };
+    }
+
+    // Determine source root — the original project, not the worktree
+    // We need the projectSourcePath or derive it from worktree metadata
+    const sourceRoot = input.projectSourcePath;
+    if (!sourceRoot) {
+      return { success: false, action: "sync-back", error: "projectSourcePath is required for sync-back." };
+    }
+
+    const result = await syncBackChanges(sessionId, sourceRoot, strategy, input.syncFiles);
+
+    recordDesignHistory(sessionId, {
+      action: "close", // sync-back is conceptually a finalization
+      durationMs: Date.now() - startedAt,
+      success: result.success,
+      metadata: { subAction: "sync-back", strategy, appliedFiles: result.appliedFiles },
+    });
+
+    return {
+      success: result.success,
+      action: "sync-back",
+      data: {
+        message: result.success
+          ? `Synced ${result.appliedFiles.length} files back to source (${strategy}).`
+          : `Sync-back failed: ${result.error}`,
+        prompt: result.diff, // Include diff in response
+      },
+      error: result.error,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      action: "sync-back",
+      error: `Sync-back failed: ${error instanceof Error ? error.message : String(error)}`,
+    };
+  }
+}
+
+async function handleOpen(options: DesignWorkspaceToolOptions, input?: DesignWorkspaceInput): Promise<DesignWorkspaceResult> {
   const startedAt = Date.now();
   const sessionId = getSessionId(options);
   ensureHistory(sessionId);
@@ -729,9 +1026,34 @@ async function handleOpen(options: DesignWorkspaceToolOptions): Promise<DesignWo
   const config = getWorkspaceConfig();
   const history = peekDesignHistory(sessionId);
 
+  // Project-native mode: detect framework and create worktree
+  let metadata: Record<string, unknown> | undefined;
+  if (input?.projectSourcePath) {
+    try {
+      const validation = await validateProjectPath(input.projectSourcePath);
+      if (validation.valid) {
+        const framework = await detectFramework(input.projectSourcePath);
+        const structure = await buildProjectStructure(input.projectSourcePath, framework.type);
+        const worktree = await createDesignWorktree(input.projectSourcePath, sessionId);
+
+        // Include project info in the response
+        metadata = {
+          framework,
+          structure,
+          worktreePath: worktree.worktreePath,
+          worktreeBranch: worktree.branch,
+        };
+      }
+    } catch (projectError) {
+      // Non-fatal: log but continue with sandbox mode
+      console.warn("[design-workspace] Project detection failed, falling back to sandbox:", projectError);
+    }
+  }
+
   recordHistory(sessionId, "open", startedAt, true, {
     metadata: {
       availableLibraries: available,
+      ...metadata,
     },
   });
 
@@ -739,10 +1061,11 @@ async function handleOpen(options: DesignWorkspaceToolOptions): Promise<DesignWo
     success: true,
     action: "open",
     data: {
-      message: "Design workspace opened.",
+      message: metadata ? "Design workspace opened in project mode." : "Design workspace opened.",
       availableLibraries: available.length > 0 ? available : undefined,
       config,
       history: history ?? undefined,
+      metadata,
     },
   };
 }
@@ -949,6 +1272,12 @@ async function handleEdit(
     assets: inputAssets,
   } = input;
 
+  // ── Project-mode branch: edit worktree file instead of gallery design ──
+  const worktree = getActiveWorktree(sessionId);
+  if (worktree && input.targetFile) {
+    return handleEditProjectMode(options, input, sessionId, startedAt, worktree);
+  }
+
   if (!activeComponentId) {
     const error = 'Provide "activeComponentId" to edit a persisted design.';
     recordHistory(sessionId, "edit", startedAt, false, { error });
@@ -1150,6 +1479,12 @@ async function handlePatch(
   ensureHistory(sessionId);
 
   const { oldString, newString, replaceAll: replaceAllOccurrences, activeComponentId, activeComponentCode, patches } = input;
+
+  // ── Project-mode branch: patch worktree file instead of gallery design ──
+  const worktree = getActiveWorktree(sessionId);
+  if (worktree && input.targetFile) {
+    return handlePatchProjectMode(options, input, sessionId, startedAt, worktree);
+  }
 
   if (!activeComponentId) {
     const error = 'Provide "activeComponentId" to patch a persisted design.';
@@ -1538,10 +1873,238 @@ async function handleStatus(
   };
 }
 
-function handleClose(options: DesignWorkspaceToolOptions): DesignWorkspaceResult {
+// ---------------------------------------------------------------------------
+// Project-mode edit/patch handlers
+// ---------------------------------------------------------------------------
+
+async function handleEditProjectMode(
+  options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+  sessionId: string,
+  startedAt: number,
+  worktree: WorktreeInfo,
+): Promise<DesignWorkspaceResult> {
+  const { editPrompt, style = "default", activeComponentCode, targetFile, assets: inputAssets } = input;
+
+  if (!targetFile) {
+    return { success: false, action: "edit", error: "targetFile is required for project-mode edit." };
+  }
+
+  // Read current source from worktree
+  let currentCode: string;
+  try {
+    currentCode = await readWorktreeFile(sessionId, targetFile);
+  } catch (err) {
+    const error = `Failed to read worktree file: ${err instanceof Error ? err.message : String(err)}`;
+    recordHistory(sessionId, "edit", startedAt, false, { error });
+    return { success: false, action: "edit", error };
+  }
+
+  // Determine final code: direct replacement or AI-driven edit
+  let finalCode = activeComponentCode?.trim() || "";
+  if (!finalCode) {
+    if (!editPrompt?.trim()) {
+      const error = 'Provide "editPrompt" for AI-driven editing, or provide "activeComponentCode" to directly replace the source.';
+      recordHistory(sessionId, "edit", startedAt, false, { error });
+      return { success: false, action: "edit", error };
+    }
+
+    const assets = inputAssets?.length ? await resolveAssets(inputAssets) : undefined;
+    let editError: string | undefined;
+
+    let enrichedEditPrompt = editPrompt;
+    if (options.inspectContext) {
+      const inspectPromptText = buildInspectPromptText(options.inspectContext);
+      if (inspectPromptText) {
+        enrichedEditPrompt = `${inspectPromptText}\n\n${enrichedEditPrompt}`;
+      }
+    }
+
+    for await (const event of editCard({ code: currentCode, editPrompt: enrichedEditPrompt, style, assets })) {
+      if (event.type === "complete") finalCode = event.content;
+      if (event.type === "error") editError = event.error.message;
+    }
+
+    if (editError || !finalCode.trim()) {
+      const error = editError ?? "Edit produced empty output.";
+      recordHistory(sessionId, "edit", startedAt, false, { error });
+      return { success: false, action: "edit", error };
+    }
+  }
+
+  // Write edited code to worktree and re-cast for preview
+  try {
+    const config = getWorkspaceConfig();
+    const framework = input.frameworkOverride ?? (await detectFramework(worktree.worktreePath)).type;
+    const castResult = await recastAfterEdit(sessionId, targetFile, finalCode.trim(), framework, config);
+
+    recordHistory(sessionId, "edit", startedAt, true, {
+      componentId: castResult.componentId,
+      metadata: { subAction: "project-edit", targetFile },
+    });
+
+    return {
+      success: true,
+      action: "edit",
+      data: {
+        componentId: castResult.componentId,
+        code: finalCode.trim(),
+        name: targetFile,
+        message: `Project file "${targetFile}" edited and re-cast successfully.`,
+        previewHtml: castResult.previewHtml,
+        compileReport: castResult.compileReport,
+      },
+    };
+  } catch (err) {
+    const error = `Project edit failed: ${err instanceof Error ? err.message : String(err)}`;
+    recordHistory(sessionId, "edit", startedAt, false, { error, metadata: { targetFile } });
+    return { success: false, action: "edit", error, data: { code: finalCode.trim() } };
+  }
+}
+
+async function handlePatchProjectMode(
+  _options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+  sessionId: string,
+  startedAt: number,
+  worktree: WorktreeInfo,
+): Promise<DesignWorkspaceResult> {
+  const { oldString, newString, replaceAll: replaceAllOccurrences, targetFile, patches } = input;
+
+  if (!targetFile) {
+    return { success: false, action: "patch", error: "targetFile is required for project-mode patch." };
+  }
+
+  // Build patch operations
+  type PatchOp = { oldString: string; newString: string; replaceAll?: boolean };
+  let patchOps: PatchOp[];
+
+  if (patches && Array.isArray(patches) && patches.length > 0) {
+    for (let i = 0; i < patches.length; i++) {
+      const p = patches[i];
+      if (!p.oldString && p.oldString !== "") {
+        return { success: false, action: "patch", error: `patches[${i}]: "oldString" is required.` };
+      }
+      if (p.newString === undefined || p.newString === null) {
+        return { success: false, action: "patch", error: `patches[${i}]: "newString" is required.` };
+      }
+      if (p.oldString === p.newString) {
+        return { success: false, action: "patch", error: `patches[${i}]: "oldString" and "newString" are identical.` };
+      }
+    }
+    patchOps = patches;
+  } else {
+    if (oldString === undefined || oldString === null) {
+      return { success: false, action: "patch", error: '"oldString" is required for patch action (or provide "patches" array).' };
+    }
+    if (newString === undefined || newString === null) {
+      return { success: false, action: "patch", error: '"newString" is required for patch action.' };
+    }
+    if (oldString === newString) {
+      return { success: false, action: "patch", error: '"oldString" and "newString" are identical.' };
+    }
+    patchOps = [{ oldString, newString, replaceAll: replaceAllOccurrences }];
+  }
+
+  // Read current source from worktree
+  let currentCode: string;
+  try {
+    currentCode = await readWorktreeFile(sessionId, targetFile);
+  } catch (err) {
+    const error = `Failed to read worktree file: ${err instanceof Error ? err.message : String(err)}`;
+    recordHistory(sessionId, "patch", startedAt, false, { error });
+    return { success: false, action: "patch", error };
+  }
+
+  // Apply patches sequentially
+  let patchedCode = currentCode;
+  let totalReplacements = 0;
+
+  for (let i = 0; i < patchOps.length; i++) {
+    const op = patchOps[i];
+    const occurrences = patchedCode.split(op.oldString).length - 1;
+
+    if (occurrences === 0) {
+      const patchLabel = patchOps.length > 1 ? ` (patches[${i}])` : "";
+      return {
+        success: false,
+        action: "patch",
+        error: `"oldString" not found in project file${patchLabel}.${i > 0 ? ` Note: ${i} prior patch(es) were already applied.` : ""}`,
+      };
+    }
+
+    if (occurrences > 1 && !op.replaceAll) {
+      const patchLabel = patchOps.length > 1 ? ` (patches[${i}])` : "";
+      return {
+        success: false,
+        action: "patch",
+        error: `"oldString" found ${occurrences} times${patchLabel}. Set "replaceAll: true" to replace all.`,
+      };
+    }
+
+    patchedCode = op.replaceAll
+      ? patchedCode.split(op.oldString).join(op.newString)
+      : patchedCode.replace(op.oldString, op.newString);
+    totalReplacements += op.replaceAll ? occurrences : 1;
+  }
+
+  // JSX balance check
+  const unclosedTag = findUnclosedJsxTag(patchedCode);
+  if (unclosedTag) {
+    return {
+      success: false,
+      action: "patch",
+      error: `Patch produced unbalanced JSX: <${unclosedTag}> appears to be unclosed.`,
+    };
+  }
+
+  // Write patched code to worktree and re-cast
+  try {
+    const config = getWorkspaceConfig();
+    const framework = input.frameworkOverride ?? (await detectFramework(worktree.worktreePath)).type;
+    const castResult = await recastAfterEdit(sessionId, targetFile, patchedCode, framework, config);
+
+    const linesChanged = countChangedLines(currentCode, patchedCode);
+    recordHistory(sessionId, "patch", startedAt, true, {
+      componentId: castResult.componentId,
+      metadata: { subAction: "project-patch", targetFile, totalReplacements },
+    });
+
+    return {
+      success: true,
+      action: "patch",
+      data: {
+        componentId: castResult.componentId,
+        code: patchedCode,
+        name: targetFile,
+        message: `Project file "${targetFile}" patched: ${totalReplacements} replacement${totalReplacements > 1 ? "s" : ""}, ~${linesChanged} line${linesChanged !== 1 ? "s" : ""} changed.`,
+        previewHtml: castResult.previewHtml,
+        compileReport: castResult.compileReport,
+      },
+    };
+  } catch (err) {
+    const error = `Project patch failed: ${err instanceof Error ? err.message : String(err)}`;
+    recordHistory(sessionId, "patch", startedAt, false, { error, metadata: { targetFile } });
+    return { success: false, action: "patch", error, data: { code: patchedCode } };
+  }
+}
+
+async function handleClose(options: DesignWorkspaceToolOptions): Promise<DesignWorkspaceResult> {
   const startedAt = Date.now();
   const sessionId = getSessionId(options);
   ensureHistory(sessionId);
+
+  // Shut down any active renderer for this session's worktree, then clean up the worktree
+  try {
+    const worktree = getActiveWorktree(sessionId);
+    if (worktree) {
+      // Kill dev-server / renderer processes before removing the worktree directory
+      try { await rendererRegistry.shutdownRenderer(worktree.worktreePath); } catch { /* non-fatal */ }
+      await cleanupDesignWorktree(sessionId);
+    }
+  } catch {
+    // Non-fatal
+  }
 
   recordHistory(sessionId, "close", startedAt, true);
   const history = finalizeDesignHistory(sessionId);
