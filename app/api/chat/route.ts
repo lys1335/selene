@@ -39,7 +39,11 @@ import {
   buildUserInjectionContent,
   buildStopSystemMessage,
 } from "@/lib/background-tasks/live-prompt-helpers";
-import { clearDelegationCompletions } from "@/lib/ai/tools/delegation-completion-store";
+import {
+  addDelegationCompletion,
+  drainDelegationCompletions,
+} from "@/lib/ai/tools/delegation-completion-store";
+import { emitDelegationCompleted } from "@/lib/background-tasks/delegation-completion-signal";
 
 import { createHeartbeatStream } from "@/lib/utils/heartbeat-stream";
 import {
@@ -103,7 +107,7 @@ import {
   parseInvalidToolSchemaError,
 } from "./tool-schema-recovery";
 import { tagIntermediateDelegationParts } from "./delegation-scope-tagging";
-import { shouldStopTurn, hasRunningDelegationsForSession, hasActiveAsyncWork } from "./delegation-waiting";
+import { shouldStopTurn, hasRunningDelegationsForSession, hasRunningBackgroundTasksForSession, hasActiveAsyncWork } from "./delegation-waiting";
 import { createThinkTagFilter, shouldFilterThinkTags } from "@/lib/ai/streaming/think-tag-filter";
 import { thinkTagMiddleware, hasThinkTags } from "@/lib/ai/utils/think-tag-stream";
 import { ollamaModelSupportsThinking } from "@/lib/ai/providers/ollama-capabilities";
@@ -130,13 +134,35 @@ const hasStylyApiKey = () => !!process.env.STYLY_AI_API_KEY;
 
 /**
  * Drain any messages that were queued for live-prompt injection but never
- * processed by prepareStep. Rather than persisting them as dangling DB
- * messages, we set a per-session signal so the frontend can convert the
- * injected-live chips to "fallback" and replay them as a new run.
+ * processed by prepareStep. Delegation completion entries are moved to the
+ * persistent completion store (so the next turn can inject them); other
+ * entries are signaled as undrained for frontend replay.
  */
 function handleUndrainedQueueMessages(runId: string, sessionId: string): void {
   const undrained = drainLivePromptQueue(runId);
-  if (undrained.length > 0) {
+  if (undrained.length === 0) return;
+
+  const delegationEntries = undrained.filter(
+    (e) => e.metadata?.kind === "delegation_completion",
+  );
+  const otherEntries = undrained.filter(
+    (e) => e.metadata?.kind !== "delegation_completion",
+  );
+
+  for (const entry of delegationEntries) {
+    addDelegationCompletion({
+      delegationId: entry.metadata?.delegationId || entry.id,
+      delegateName: entry.metadata?.delegateName || "Sub-agent",
+      sessionId: "",
+      initiatorSessionId: sessionId,
+      characterId: "",
+      completedAt: Date.now(),
+      resultContent: entry.content,
+    });
+    emitDelegationCompleted(sessionId);
+  }
+
+  if (otherEntries.length > 0) {
     signalUndrainedMessages(sessionId);
   }
 }
@@ -927,7 +953,6 @@ export async function POST(req: Request) {
           if (activeSessionId) {
             handleUndrainedQueueMessages(agentRun.id, activeSessionId);
             removeLivePromptQueue(agentRun.id, activeSessionId);
-            clearDelegationCompletions(activeSessionId);
           }
           await completeAgentRun(agentRun.id, runStatus, shouldCancel
             ? { reason: "stream_interrupted" }
@@ -1119,7 +1144,37 @@ export async function POST(req: Request) {
 
             // Drain any mid-run user messages from the in-memory queue.
             // drainLivePromptQueue is atomic (splice-based) — no seenIds tracking needed.
-            const pendingPrompts = drainLivePromptQueue(runId);
+            const queuedPrompts = drainLivePromptQueue(runId);
+
+            // At step 0, also drain delegation completions from the persistent
+            // store. These are results that arrived while no run was active
+            // (between turns) — e.g. after an auto-resumed continuation.
+            let pendingPrompts = queuedPrompts;
+            if (stepNumber === 0) {
+              const storeCompletions = drainDelegationCompletions(sessionId);
+              if (storeCompletions.length > 0) {
+                const completionEntries = storeCompletions.map((c) => ({
+                  id: `deleg-store-${c.delegationId}`,
+                  content: c.resultContent || [
+                    `<delegation-result delegationId="${c.delegationId}" delegate="${c.delegateName}" status="${c.error ? "failed" : "completed"}">`,
+                    c.error || "Result content not available — use observe to read full response.",
+                    `</delegation-result>`,
+                  ].join("\n"),
+                  stopIntent: false,
+                  timestamp: c.completedAt,
+                  metadata: {
+                    kind: "delegation_completion" as const,
+                    delegationId: c.delegationId,
+                    delegateName: c.delegateName,
+                  },
+                }));
+                pendingPrompts = [...completionEntries, ...queuedPrompts];
+                console.debug(
+                  `[CHAT API] Step 0: Injecting ${completionEntries.length} delegation completion(s) from store`,
+                );
+              }
+            }
+
             if (pendingPrompts.length > 0) {
               const stopRequested = pendingPrompts.some(e => e.stopIntent);
               console.debug(
@@ -1205,8 +1260,21 @@ export async function POST(req: Request) {
             // AI SDK loop ends — nobody observes the results.
             if (stepNumber > 0 && hasActiveAsyncWork(characterId, sessionId)) {
               const hasDelegations = hasRunningDelegationsForSession(characterId, sessionId);
+              const hasBgTasks = hasRunningBackgroundTasksForSession(characterId, sessionId);
+
+              // Delegations now deliver their results automatically via the live
+              // prompt queue (including the full subagent response). The model
+              // will receive them as injected user messages — no need to force
+              // observe() tool calls. Let the turn end naturally so the model
+              // can output "waiting for results..." and resume when notified.
+              if (hasDelegations && !hasBgTasks) {
+                return { activeTools: currentActiveTools as string[] };
+              }
+
+              // Background processes (bash/executeCommand) still need forced
+              // tool calls to check their status.
               const systemMsg = hasDelegations
-                ? "You have active delegations still running. You MUST call observe() or delegateToSubagent with action='observe' to wait for and collect their results. Do NOT respond to the user until all delegations have completed and you have processed their results."
+                ? "You have active delegations and background processes still running. Check on the background processes using bash or executeCommand. Delegation results will be delivered automatically — do not call observe for them."
                 : "You have background processes still running. You MUST call bash or executeCommand with the processId to check their status, or wait for them to complete. Do NOT respond to the user until you have checked on all running processes.";
               return {
                 activeTools: currentActiveTools as string[],
@@ -1665,7 +1733,6 @@ export async function POST(req: Request) {
         removeChatAbortController(agentRun.id);
         if (activeSessionId) {
           removeLivePromptQueue(agentRun.id, activeSessionId);
-          clearDelegationCompletions(activeSessionId);
         }
         await completeAgentRun(agentRun.id, runStatus, shouldCancel
           ? { reason: "stream_interrupted" }

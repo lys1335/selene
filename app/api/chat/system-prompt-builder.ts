@@ -212,7 +212,7 @@ export async function buildSystemPromptForRequest(
     const completionLines = completedDelegations.map((completion) => {
       const ageSeconds = Math.max(0, Math.floor((Date.now() - completion.completedAt) / 1000));
       const suffix = completion.error ? ` with error: ${completion.error}` : "";
-      return `- ${completion.delegationId}: "${completion.delegateName}" completed ${ageSeconds}s ago${suffix}. Use delegateToSubagent action="observe" delegationId="${completion.delegationId}" to read the results.`;
+      return `- ${completion.delegationId}: "${completion.delegateName}" completed ${ageSeconds}s ago${suffix}. Results will be delivered automatically as inline messages.`;
     });
 
     systemPromptValue = appendBlock(

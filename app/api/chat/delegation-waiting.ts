@@ -33,7 +33,7 @@ export function registerBackgroundTask(
  * Check if a session has any background processes still running.
  * Cleans up finished processes from the registry as a side effect.
  */
-function hasRunningBackgroundTasksForSession(
+export function hasRunningBackgroundTasksForSession(
   characterId: string | null,
   sessionId: string,
 ): boolean {
@@ -118,13 +118,12 @@ export function shouldStopTurn(input: {
   // tools, and would continue to a second step — triggering another Claude
   // Code SDK query that produces a duplicate response.
   //
-  // Stop after the initial step UNLESS there's active async work
-  // (delegations / background tasks) that the model needs follow-up steps
-  // to observe. prepareStep already forces toolChoice="required" during
-  // async work, so those follow-up steps will be tool calls (observe),
-  // not standalone text that would duplicate the response.
+  // Stop after the initial step UNLESS there's active background tasks
+  // (bash/executeCommand) that need follow-up steps to check status.
+  // Delegations auto-deliver results via live prompt queue — they don't
+  // need the turn to stay alive.
   if (input.provider === "claudecode" && input.stepCount > 0) {
-    return !hasActiveAsyncWork(input.characterId, input.initiatorSessionId);
+    return !hasRunningBackgroundTasksForSession(input.characterId, input.initiatorSessionId);
   }
 
   // For other providers, never force-stop. The AI SDK loop ends naturally

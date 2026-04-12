@@ -1,4 +1,4 @@
-interface DelegationCompletion {
+export interface DelegationCompletion {
   delegationId: string;
   delegateName: string;
   sessionId: string;
@@ -6,6 +6,12 @@ interface DelegationCompletion {
   characterId: string;
   completedAt: number;
   error?: string;
+  /**
+   * The full delegation result content (e.g. `<delegation-result>` XML).
+   * Populated when the live prompt queue is not active (run ended) so the
+   * result can be injected by prepareStep in the next turn.
+   */
+  resultContent?: string;
 }
 
 type DelegationCompletionStore = Map<string, DelegationCompletion[]>;

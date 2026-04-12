@@ -341,7 +341,7 @@ export async function createSeleneSdkMcpServer(
             // sequentially, so blocking mode causes parallel delegation
             // requests to run one at a time. Background mode returns
             // immediately, letting all delegations start concurrently.
-            // The agent then uses observe(waitSeconds=180) to collect results.
+            // Results are auto-delivered via live prompt queue when subagents complete.
             if (
               name === "delegateToSubagent" &&
               args.action === "start" &&

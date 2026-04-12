@@ -34,6 +34,7 @@ import {
 } from "./delegate-to-subagent-types";
 import { appendToLivePromptQueueBySession } from "@/lib/background-tasks/live-prompt-queue-registry";
 import { addDelegationCompletion } from "./delegation-completion-store";
+import { emitDelegationCompleted } from "@/lib/background-tasks/delegation-completion-signal";
 
 // ---------------------------------------------------------------------------
 // Read-only accessor for external consumers (API routes, system prompt)
@@ -390,11 +391,35 @@ async function extractFinalResponse(sessionId: string): Promise<string | undefin
 // Background execution starter
 // ---------------------------------------------------------------------------
 
-/** Start or restart background execution for a delegation, tracking settlement. */
-function notifyInitiatorSessionOfCompletion(delegation: ActiveDelegation): void {
-  const completionMessage =
-    `[Delegation Complete] ${delegation.id} ("${delegation.delegateName}") has finished. ` +
-    `Use delegateToSubagent action="observe" delegationId="${delegation.id}" to read the results.`;
+/**
+ * Notify the initiator session that a delegation completed, including the
+ * actual subagent result so the model can react without calling observe().
+ */
+async function notifyInitiatorSessionOfCompletion(delegation: ActiveDelegation): Promise<void> {
+  // Fetch the actual final response from the subagent's session
+  let resultContent: string;
+  if (delegation.error) {
+    resultContent = `<error>${delegation.error}</error>`;
+  } else {
+    const finalResponse = await extractFinalResponse(delegation.sessionId);
+    // Cap to 4000 chars to avoid context blowup with many concurrent agents
+    const MAX_INLINE_RESULT_CHARS = 4000;
+    if (finalResponse && finalResponse.length > MAX_INLINE_RESULT_CHARS) {
+      resultContent = finalResponse.slice(0, MAX_INLINE_RESULT_CHARS) + "\n... [result truncated — use observe to read full response]";
+    } else {
+      resultContent = finalResponse || "No response captured.";
+    }
+  }
+
+  const elapsed = delegation.settledAt
+    ? delegation.settledAt - delegation.startedAt
+    : Date.now() - delegation.startedAt;
+
+  const completionMessage = [
+    `<delegation-result delegationId="${delegation.id}" delegate="${delegation.delegateName}" status="${delegation.error ? "failed" : "completed"}" elapsed="${elapsed}ms">`,
+    resultContent,
+    `</delegation-result>`,
+  ].join("\n");
 
   const queued = appendToLivePromptQueueBySession(delegation.initiatorSessionId, {
     id: `deleg-complete-${delegation.id}`,
@@ -411,6 +436,8 @@ function notifyInitiatorSessionOfCompletion(delegation: ActiveDelegation): void 
     return;
   }
 
+  // Live prompt queue not active (run ended). Store the result in the
+  // persistent completion store so the next turn's prepareStep can inject it.
   addDelegationCompletion({
     delegationId: delegation.id,
     delegateName: delegation.delegateName,
@@ -419,7 +446,11 @@ function notifyInitiatorSessionOfCompletion(delegation: ActiveDelegation): void 
     characterId: delegation.delegatorId,
     completedAt: delegation.settledAt ?? Date.now(),
     error: delegation.error,
+    resultContent: completionMessage,
   });
+
+  // Signal the SSE endpoint so the frontend can auto-resume the conversation.
+  emitDelegationCompleted(delegation.initiatorSessionId);
 }
 
 export function startBackgroundExecution(
@@ -442,11 +473,11 @@ export function startBackgroundExecution(
     userMessage,
     abortController,
   )
-    .then(() => {
+    .then(async () => {
       if (delegation.executionId !== executionId) return;
       delegation.settled = true;
       delegation.settledAt = Date.now();
-      notifyInitiatorSessionOfCompletion(delegation);
+      await notifyInitiatorSessionOfCompletion(delegation);
     })
     .catch((err) => {
       if (delegation.executionId !== executionId) return;

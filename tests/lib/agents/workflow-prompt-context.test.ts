@@ -27,11 +27,10 @@ describe("buildWorkflowPromptContext", () => {
     expect(prompt).toContain("## Initiator / Orchestrator Contract");
     expect(prompt).toContain("Delegate by calling start with a task. The call may block or return in background mode depending on the execution context.");
     expect(prompt).toContain("Launch multiple start calls in parallel for concurrent subagent work");
-    expect(prompt).toContain("If start returns with mode='background', the system auto-promoted it for concurrency");
-    expect(prompt).toContain("observe(waitSeconds=180)");
     expect(prompt).toContain("Multiple parallel delegations to the same subagent are supported — each gets its own session and delegationId.");
-    expect(prompt).toContain("## Background Mode");
+    expect(prompt).toContain("## Background Mode & Auto-Delivery");
     expect(prompt).toContain("mode='background'");
+    expect(prompt).toContain("Results are auto-delivered");
     expect(prompt).toContain("- resume: map to continue using delegationId");
     expect(prompt).not.toContain("run_in_background");
     expect(prompt).not.toContain("resume(agent_id)");
