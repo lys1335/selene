@@ -4,6 +4,33 @@ import type {
   DesignWorkspaceValidationResult,
 } from "./config";
 import type { DesignWorkspaceHistory } from "./edit-history";
+import type { DetectedFramework, FrameworkType, ProjectEntry, ProjectStructure } from "./project-detection";
+
+// ---------------------------------------------------------------------------
+// Project-native types
+// ---------------------------------------------------------------------------
+
+export type { DetectedFramework, FrameworkType, ProjectEntry, ProjectStructure };
+
+export interface RendererInfo {
+  type: "esbuild" | "vite" | "dev-server" | "php-server" | "static";
+  port?: number;
+  pid?: number;
+  baseUrl?: string;
+}
+
+export interface ProjectContext {
+  projectRoot: string;
+  framework: DetectedFramework;
+  worktreePath: string | null;
+  worktreeBranch: string | null;
+  syncFolderId: string | null;
+  worktreeStatus: "none" | "creating" | "active" | "finalizing" | "cleaned";
+  castFile: string | null;
+  castMode: "page" | "component" | "route" | null;
+  rendererInfo: RendererInfo | null;
+  projectStructure: ProjectStructure | null;
+}
 
 export interface DesignComponent {
   id: string;
@@ -79,6 +106,7 @@ export interface DesignWorkspaceSessionState {
   lastValidation: DesignWorkspaceValidationResult | null;
   lastCompileReport: DesignWorkspaceCompileReport | null;
   history: DesignWorkspaceHistory | null;
+  projectContext: ProjectContext | null;
 }
 
 export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
@@ -109,5 +137,10 @@ export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
   setLastCompileReport: (report: DesignWorkspaceCompileReport | null) => void;
   setHistory: (history: DesignWorkspaceHistory | null) => void;
   setActiveSession: (sessionId: string) => void;
+  setProjectContext: (ctx: ProjectContext | null) => void;
+  updateProjectContext: (partial: Partial<ProjectContext>) => void;
+  setCastFile: (file: string | null, mode: "page" | "component" | "route" | null) => void;
+  setProjectStructure: (structure: ProjectStructure) => void;
+  clearProjectContext: () => void;
   reset: () => void;
 }

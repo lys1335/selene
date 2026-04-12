@@ -350,12 +350,18 @@ function useCompileTailwindPreview() {
   const components = useDesignWorkspaceStore((s) => s.components);
   const activeComponentId = useDesignWorkspaceStore((s) => s.activeComponentId);
   const setPreviewHtml = useDesignWorkspaceStore((s) => s.setPreviewHtml);
+  const projectCtx = useDesignWorkspaceStore((s) => s.projectContext);
 
   // Track which component+code hash we last compiled to avoid redundant API calls.
   const lastCompiledRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!activeComponentId) return;
+
+    // In project mode with a running dev-server renderer, the preview is
+    // served via the renderer's baseUrl — skip client-side compilation to
+    // avoid overwriting server-produced previews.
+    if (projectCtx?.rendererInfo?.baseUrl) return;
 
     const component = components.find((c) => c.id === activeComponentId);
     if (!component) return;
@@ -425,7 +431,7 @@ function useCompileTailwindPreview() {
     return () => {
       controller.abort();
     };
-  }, [activeComponentId, components, setPreviewHtml]);
+  }, [activeComponentId, components, setPreviewHtml, projectCtx]);
 }
 
 /**
@@ -467,6 +473,7 @@ export function DesignPreviewFrame() {
   const setSelectedElement = useDesignWorkspaceStore((s) => s.setSelectedElement);
   const toggleSelectedElement = useDesignWorkspaceStore((s) => s.toggleSelectedElement);
   const setSelectedElements = useDesignWorkspaceStore((s) => s.setSelectedElements);
+  const projectContext = useDesignWorkspaceStore((s) => s.projectContext);
 
   // Auto-compile Tailwind components when switching or on first load
   useCompileTailwindPreview();
@@ -566,14 +573,25 @@ export function DesignPreviewFrame() {
       >
         {isResponsive ? (
           /* Responsive mode: iframe fills container directly — like a real browser */
-          <iframe
-            ref={iframeRef}
-            srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
-            sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
-            className="h-full w-full border-0"
-            style={{ background: "transparent" }}
-            title="Design preview"
-          />
+          projectContext?.rendererInfo?.baseUrl ? (
+            <iframe
+              ref={iframeRef}
+              src={`${projectContext.rendererInfo.baseUrl}/${projectContext.castFile ?? ""}`}
+              sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
+              className="h-full w-full border-0"
+              style={{ background: "transparent" }}
+              title="Design preview"
+            />
+          ) : (
+            <iframe
+              ref={iframeRef}
+              srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
+              sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
+              className="h-full w-full border-0"
+              style={{ background: "transparent" }}
+              title="Design preview"
+            />
+          )
         ) : (
           /* Fixed breakpoint: scale to fit with padding */
           <div
@@ -591,14 +609,25 @@ export function DesignPreviewFrame() {
                 transformOrigin: "top left",
               }}
             >
-              <iframe
-                ref={iframeRef}
-                srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
-                sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
-                className="h-full w-full border-0"
-                style={{ background: "transparent" }}
-                title="Design preview"
-              />
+              {projectContext?.rendererInfo?.baseUrl ? (
+                <iframe
+                  ref={iframeRef}
+                  src={`${projectContext.rendererInfo.baseUrl}/${projectContext.castFile ?? ""}`}
+                  sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
+                  className="h-full w-full border-0"
+                  style={{ background: "transparent" }}
+                  title="Design preview"
+                />
+              ) : (
+                <iframe
+                  ref={iframeRef}
+                  srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
+                  sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
+                  className="h-full w-full border-0"
+                  style={{ background: "transparent" }}
+                  title="Design preview"
+                />
+              )}
             </div>
           </div>
         )}

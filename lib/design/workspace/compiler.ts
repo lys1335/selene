@@ -12,18 +12,23 @@ import postcss from "postcss";
 import tailwindcss from "tailwindcss";
 import type { Config } from "tailwindcss";
 import { resolve } from "path";
+import { existsSync, readFileSync } from "fs";
 import { SANDBOX_NODE_MODULES } from "../libraries";
 import { getProjectRoot } from "../../utils/project-root";
 import {
   installSandboxPackages,
+  installProjectPackages,
   validateWorkspaceDependencies,
+  validateProjectDependencies,
   type DependencyValidationResult,
   type DependencyInstallResult,
 } from "./dependencies";
+import type { FrameworkType } from "./project-detection";
 import {
   type DesignWorkspaceAutoInstallSummary,
   type DesignWorkspaceCompilationIssue,
   type DesignWorkspaceCompileReport,
+  type DesignWorkspaceConfig,
   type DesignWorkspaceDependencySummary,
   type DesignWorkspaceDiagnostic,
 } from "./config";
@@ -771,4 +776,390 @@ export async function buildTailwindPreviewAsync(
     source: "design-workspace-preview",
   });
   return html;
+}
+
+// ---------------------------------------------------------------------------
+// Project-native compilation
+// ---------------------------------------------------------------------------
+
+/**
+ * esbuild plugin that injects the user component from a virtual module,
+ * resolving relative imports from the project worktree (not PROJECT_ROOT).
+ */
+function createProjectComponentPlugin(
+  componentCode: string,
+  resolveDir: string,
+): esbuild.Plugin {
+  return {
+    name: "selene-preview-component",
+    setup(build) {
+      build.onResolve({ filter: new RegExp(`^${VIRTUAL_COMPONENT_PATH}$`) }, () => ({
+        path: VIRTUAL_COMPONENT_PATH,
+        namespace: VIRTUAL_COMPONENT_NAMESPACE,
+      }));
+
+      build.onLoad({ filter: /.*/, namespace: VIRTUAL_COMPONENT_NAMESPACE }, () => ({
+        contents: componentCode,
+        loader: "tsx",
+        resolveDir,
+      }));
+    },
+  };
+}
+
+/**
+ * Compile a React component within the context of a user project.
+ *
+ * Unlike `buildTailwindPreviewWithMetadata()` (sandbox mode), this function:
+ * - Sets esbuild's `absWorkingDir` to `worktreePath`
+ * - Resolves imports from `worktreePath/node_modules`
+ * - Loads tsconfig from `worktreePath/tsconfig.json` if available
+ * - Loads project tailwind config when `config.useProjectTailwindConfig` is set
+ * - On missing-module failures, attempts `installProjectPackages()` and retries once
+ */
+export async function compileProjectComponent(
+  code: string,
+  worktreePath: string,
+  _framework: FrameworkType,
+  config: DesignWorkspaceConfig,
+): Promise<DesignWorkspaceCompileReport> {
+  const startedAt = Date.now();
+  const projectNodeModules = resolve(worktreePath, "node_modules");
+  const source = "design-workspace-project";
+
+  // Validate dependencies against the project's node_modules
+  let dependencyCheck = await validateProjectDependencies(
+    code,
+    projectNodeModules,
+  );
+  let autoInstall: DesignWorkspaceAutoInstallSummary | undefined;
+  let recovered = false;
+
+  // Auto-install missing deps if enabled
+  if (
+    dependencyCheck.missingPackages.length > 0 &&
+    config.autoInstallProjectDeps
+  ) {
+    logToolEvent({
+      level: "warn",
+      toolName: "designWorkspaceCompiler",
+      event: "retry",
+      error: `Missing project dependencies: ${dependencyCheck.missingPackages.join(", ")}`,
+      metadata: { source, missingPackages: dependencyCheck.missingPackages },
+    });
+
+    autoInstall = normalizeAutoInstallSummary(
+      await installProjectPackages(worktreePath, dependencyCheck.missingPackages),
+    );
+
+    if (autoInstall?.success) {
+      recovered = true;
+      dependencyCheck = await validateProjectDependencies(code, projectNodeModules);
+    }
+  }
+
+  // Bail out early if deps are still missing after install attempt
+  if (dependencyCheck.missingPackages.length > 0) {
+    const report: DesignWorkspaceCompileReport = {
+      warnings: [],
+      errors: createMissingDependencyIssues(dependencyCheck),
+      dependencyCheck: normalizeDependencySummary(dependencyCheck),
+      autoInstall,
+      recovered,
+      durationMs: Date.now() - startedAt,
+    };
+    const message = buildReportMessage(report);
+    logCompilerFailure(source, report, message);
+    throw new DesignWorkspaceCompileError(message, report);
+  }
+
+  // Build esbuild alias map — prefer project's react copies if available
+  const alias: Record<string, string> = {};
+  const reactDir = resolve(projectNodeModules, "react");
+  const reactDomDir = resolve(projectNodeModules, "react-dom");
+  if (existsSync(reactDir)) {
+    alias["react"] = reactDir;
+    alias["react/jsx-runtime"] = resolve(reactDir, "jsx-runtime");
+    alias["react/jsx-dev-runtime"] = resolve(reactDir, "jsx-dev-runtime");
+  } else {
+    alias["react"] = resolve(PROJECT_ROOT, "node_modules/react");
+    alias["react/jsx-runtime"] = resolve(PROJECT_ROOT, "node_modules/react/jsx-runtime");
+    alias["react/jsx-dev-runtime"] = resolve(PROJECT_ROOT, "node_modules/react/jsx-dev-runtime");
+  }
+  if (existsSync(reactDomDir)) {
+    alias["react-dom"] = reactDomDir;
+  } else {
+    alias["react-dom"] = resolve(PROJECT_ROOT, "node_modules/react-dom");
+  }
+
+  // Optionally load tsconfig from the project
+  const tsconfigRaw: string | undefined = (() => {
+    if (!config.useProjectTsConfig) return undefined;
+    const tsconfigPath = resolve(worktreePath, "tsconfig.json");
+    if (existsSync(tsconfigPath)) {
+      try {
+        return readFileSync(tsconfigPath, "utf8");
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  })();
+
+  try {
+    const compileResult = await compileProjectReactComponent(
+      code,
+      worktreePath,
+      projectNodeModules,
+      alias,
+      tsconfigRaw,
+      dependencyCheck,
+    );
+
+    // Build Tailwind CSS — use project config if available and enabled
+    const tailwindCss = config.useProjectTailwindConfig
+      ? await buildProjectTailwindCss(code, worktreePath)
+      : await buildPreviewTailwindCss(code);
+
+    const report: DesignWorkspaceCompileReport = {
+      warnings: compileResult.warnings,
+      diagnostics: compileResult.diagnostics,
+      errors: [],
+      dependencyCheck: normalizeDependencySummary(dependencyCheck),
+      autoInstall,
+      recovered,
+      durationMs: Date.now() - startedAt,
+    };
+
+    if (recovered) {
+      logToolEvent({
+        level: "info",
+        toolName: "designWorkspaceCompiler",
+        event: "success",
+        durationMs: report.durationMs,
+        metadata: { source, recovered, autoInstall },
+      });
+    }
+
+    return report;
+  } catch (error) {
+    // If compilation failed due to missing modules, try installing and retrying once
+    if (
+      !recovered &&
+      config.autoInstallProjectDeps &&
+      error instanceof DesignWorkspaceCompileError &&
+      error.report.errors.some((e) => e.type === "dependency")
+    ) {
+      const depNames = error.report.errors
+        .filter((e) => e.type === "dependency")
+        .map((e) => {
+          const m = e.message.match(/["'`](.+?)["'`]/);
+          return m?.[1];
+        })
+        .filter((n): n is string => !!n);
+
+      if (depNames.length > 0) {
+        const retryInstall = await installProjectPackages(worktreePath, depNames);
+        if (retryInstall.success) {
+          // Retry compilation once
+          return compileProjectComponent(code, worktreePath, _framework, {
+            ...config,
+            autoInstallProjectDeps: false, // prevent infinite recursion
+          });
+        }
+      }
+    }
+
+    const baseReport =
+      error instanceof DesignWorkspaceCompileError
+        ? error.report
+        : {
+            warnings: [],
+            errors: [
+              toCompilationIssue(
+                error instanceof Error ? error.message : "Compilation failed.",
+                undefined,
+                dependencyCheck,
+              ),
+            ],
+            dependencyCheck: normalizeDependencySummary(dependencyCheck),
+            recovered: false,
+            durationMs: 0,
+          } satisfies DesignWorkspaceCompileReport;
+
+    const report: DesignWorkspaceCompileReport = {
+      ...baseReport,
+      dependencyCheck: baseReport.dependencyCheck ?? normalizeDependencySummary(dependencyCheck),
+      autoInstall: baseReport.autoInstall ?? autoInstall,
+      recovered,
+      durationMs: Date.now() - startedAt,
+    };
+
+    const message = buildReportMessage(report);
+    logCompilerFailure(source, report, message);
+    throw new DesignWorkspaceCompileError(message, report);
+  }
+}
+
+/** esbuild compilation targeting a project worktree. */
+async function compileProjectReactComponent(
+  componentCode: string,
+  worktreePath: string,
+  projectNodeModules: string,
+  alias: Record<string, string>,
+  _tsconfigRaw: string | undefined,
+  dependencyCheck: DependencyValidationResult,
+): Promise<CompileResult> {
+  try {
+    const result = await withTimeout(
+      esbuild.build({
+        stdin: {
+          contents: createPreviewEntrySource(),
+          resolveDir: worktreePath,
+          loader: "tsx",
+        },
+        absWorkingDir: worktreePath,
+        bundle: true,
+        format: "iife",
+        write: false,
+        minify: false,
+        target: ["es2020"],
+        jsx: "automatic",
+        jsxImportSource: "react",
+        logLevel: "silent",
+        treeShaking: false,
+        sourcemap: false,
+        platform: "browser",
+        define: {
+          "process.env.NODE_ENV": '"development"',
+        },
+        alias,
+        loader: {
+          ".woff2": "dataurl",
+          ".woff": "dataurl",
+          ".ttf": "dataurl",
+          ".otf": "dataurl",
+          ".eot": "dataurl",
+        },
+        nodePaths: [projectNodeModules],
+        plugins: [
+          createExternalUrlPlugin(),
+          createProjectComponentPlugin(componentCode, worktreePath),
+        ],
+      }),
+      COMPILE_TIMEOUT_MS,
+      "Project design preview compilation",
+    );
+
+    const warnings = result.warnings.map((w) => w.text);
+    const diagnostics = result.warnings.map((w) => ({
+      text: w.text,
+      location: toDiagnosticLocation(w.location ?? undefined),
+    }));
+
+    if (result.outputFiles.length === 0) {
+      throw new Error("esbuild produced no output files");
+    }
+
+    return {
+      code: result.outputFiles[0].text,
+      warnings,
+      diagnostics: diagnostics.length > 0 ? diagnostics : undefined,
+    };
+  } catch (error) {
+    if (error instanceof DesignWorkspaceCompileError) throw error;
+
+    const errors =
+      typeof error === "object" && error !== null && "errors" in error && Array.isArray((error as { errors?: unknown[] }).errors)
+        ? ((error as { errors: esbuild.Message[] }).errors ?? [])
+        : [];
+
+    const warnings =
+      typeof error === "object" && error !== null && "warnings" in error && Array.isArray((error as { warnings?: unknown[] }).warnings)
+        ? ((error as { warnings: esbuild.Message[] }).warnings ?? []).map((w) => w.text)
+        : [];
+
+    const diagnostics =
+      typeof error === "object" && error !== null && "warnings" in error && Array.isArray((error as { warnings?: unknown[] }).warnings)
+        ? ((error as { warnings: esbuild.Message[] }).warnings ?? []).map((w) => ({
+            text: w.text,
+            location: toDiagnosticLocation(w.location ?? undefined),
+          }))
+        : undefined;
+
+    const issueList = errors.length > 0
+      ? errors.map((issue) =>
+          toCompilationIssue(issue.text, toDiagnosticLocation(issue.location ?? undefined), dependencyCheck),
+        )
+      : [
+          toCompilationIssue(
+            error instanceof Error ? error.message : "Compilation failed.",
+            undefined,
+            dependencyCheck,
+          ),
+        ];
+
+    throw new DesignWorkspaceCompileError(
+      issueList[0]?.message ?? "Compilation failed.",
+      {
+        warnings,
+        diagnostics,
+        errors: issueList,
+        dependencyCheck: normalizeDependencySummary(dependencyCheck),
+        recovered: false,
+        durationMs: 0,
+      },
+    );
+  }
+}
+
+/**
+ * Build Tailwind CSS using the project's tailwind config if it exists,
+ * falling back to the preview config.
+ */
+async function buildProjectTailwindCss(
+  componentCode: string,
+  worktreePath: string,
+): Promise<string> {
+  const configCandidates = [
+    "tailwind.config.js",
+    "tailwind.config.ts",
+    "tailwind.config.cjs",
+    "tailwind.config.mjs",
+  ];
+
+  let projectConfig: Config | undefined;
+  for (const candidate of configCandidates) {
+    const configPath = resolve(worktreePath, candidate);
+    if (existsSync(configPath)) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const loaded = require(configPath) as Config | { default: Config };
+        projectConfig = ("default" in loaded ? loaded.default : loaded) as Config;
+        break;
+      } catch {
+        // Fall through to next candidate or default
+      }
+    }
+  }
+
+  const baseConfig = (projectConfig ?? previewTailwindConfig) as unknown as Omit<Config, "content">;
+  const config = {
+    ...baseConfig,
+    content: [{ raw: componentCode, extension: "tsx" }],
+  } satisfies Config;
+
+  try {
+    const result = await withTimeout(
+      postcss([tailwindcss(config)]).process(PREVIEW_TAILWIND_SOURCE, {
+        from: TAILWIND_INPUT_PATH,
+      }),
+      TAILWIND_TIMEOUT_MS,
+      "Project Tailwind preview build",
+    );
+    return result.css;
+  } catch (error) {
+    // Fall back to default preview config on failure
+    return buildPreviewTailwindCss(componentCode);
+  }
 }
