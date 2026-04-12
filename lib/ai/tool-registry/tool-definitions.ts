@@ -301,7 +301,7 @@ Use vectorSearch instead for conceptual/intent-based queries where you don't kno
 Start narrow to avoid noisy output: set specific \`paths\`/\`fileTypes\`, keep \`maxResults\` near 20, then expand only if needed.
 
 **Examples:** \`localGrep({ pattern: "getUserById", maxResults: 20 })\` / \`localGrep({ pattern: "async.*await", regex: true, fileTypes: ["ts", "tsx"], maxResults: 20 })\``,
-      loading: { deferLoading: true },
+      loading: { alwaysLoad: true },
       requiresSession: true,
     } satisfies ToolMetadata,
     ({ sessionId, characterId }) =>
