@@ -604,7 +604,74 @@ export function convertDBMessagesToUIMessages(dbMessages: DBMessage[]): UIMessag
     } as UIMessage);
   }
 
-  return result;
+  // Post-processing: merge consecutive assistant messages that result from
+  // live prompt injection (sealed assistant → hidden user → continuation assistant).
+  // Without this merge, assistant-ui treats consecutive assistant messages as
+  // sibling branches and shows the "← 2 / 2 →" branch picker.
+  return mergeConsecutiveAssistantMessages(result);
+}
+
+/**
+ * Merge consecutive assistant messages into a single message.
+ *
+ * When a live prompt injection splits an assistant turn into two DB rows
+ * (sealed pre-injection + continuation post-injection), the hidden injected
+ * user message between them is skipped by the converter, leaving two
+ * consecutive assistant messages. assistant-ui interprets these as sibling
+ * branches and shows a "← 2 / 2 →" branch picker.
+ *
+ * This function collapses such sequences into one message, concatenating
+ * parts and using the first segment's ID (the original turn).
+ */
+function mergeConsecutiveAssistantMessages(messages: UIMessage[]): UIMessage[] {
+  if (messages.length <= 1) return messages;
+
+  const merged: UIMessage[] = [];
+
+  for (const msg of messages) {
+    const prev = merged[merged.length - 1];
+
+    if (prev && prev.role === "assistant" && msg.role === "assistant") {
+      // Merge: append the continuation's parts into the previous assistant message.
+      // Add a separator between segments for readability.
+      const continuationParts = msg.parts as UIMessage["parts"];
+
+      // If both have text parts, avoid double-blank — only add separator if needed
+      const lastPrevPart = prev.parts[prev.parts.length - 1];
+      const firstContPart = continuationParts[0];
+      if (
+        lastPrevPart?.type === "text" &&
+        firstContPart?.type === "text" &&
+        lastPrevPart.text !== "" &&
+        firstContPart.text !== ""
+      ) {
+        // Merge text parts with a newline separator
+        prev.parts[prev.parts.length - 1] = {
+          type: "text",
+          text: lastPrevPart.text + "\n\n" + firstContPart.text,
+        };
+        // Add remaining parts from continuation
+        for (let i = 1; i < continuationParts.length; i++) {
+          (prev.parts as any[]).push(continuationParts[i]);
+        }
+      } else {
+        // Different part types or empty text — just concatenate
+        for (const part of continuationParts) {
+          (prev.parts as any[]).push(part);
+        }
+      }
+
+      // Merge metadata (combine custom fields, keep usage from the last segment)
+      if ((msg.metadata as any)?.custom) {
+        if (!prev.metadata) prev.metadata = {} as any;
+        (prev.metadata as any).custom = { ...(prev.metadata as any).custom, ...(msg.metadata as any).custom };
+      }
+    } else {
+      merged.push({ ...msg });
+    }
+  }
+
+  return merged;
 }
 
 // ThreadMessageLike content part types (what runtime.thread.reset() expects)

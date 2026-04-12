@@ -252,12 +252,20 @@ describe("Ghost Branch Prevention", () => {
     const sessionWithMessages = await getSessionWithMessages(session.id);
     const uiMessages = convertDBMessagesToUIMessages(dbMessages as any);
 
-    // Should show: original user, pre-injection assistant, post-injection assistant
-    // Should hide: injected user message
+    // DB-level: 3 visible messages (user + 2 assistant segments)
+    // Injected user message is hidden
     expect(sessionWithMessages?.session.messageCount).toBe(3);
     expect(countVisibleConversationMessages(dbMessages as any)).toBe(3);
-    expect(uiMessages).toHaveLength(3);
-    expect(uiMessages.map(m => m.role)).toEqual(["user", "assistant", "assistant"]);
+
+    // UI-level: consecutive assistant segments are merged to prevent "2/2" branch picker
+    expect(uiMessages).toHaveLength(2);
+    expect(uiMessages.map(m => m.role)).toEqual(["user", "assistant"]);
+
+    // Merged assistant should contain both segments' text
+    const assistantParts = uiMessages[1].parts.filter((p: any) => p.type === "text");
+    const fullText = assistantParts.map((p: any) => p.text).join("");
+    expect(fullText).toContain("Pre-injection");
+    expect(fullText).toContain("Post-injection");
 
     // The injected user message should NOT appear in UI
     const hasInjectedUser = uiMessages.some(m =>
@@ -331,9 +339,20 @@ describe("Ghost Branch Prevention", () => {
 
     const uiMessages = convertDBMessagesToUIMessages(dbMessages as any);
 
-    // Should show: original user + 2 sealed assistants + final assistant = 4
-    // Should hide: 2 injected user messages
-    expect(uiMessages.map(m => m.role)).not.toContain("user_injected");
+    // 3 assistant segments (2 sealed + 1 final) are merged into 1 to prevent branch picker
+    // 2 injected user messages are hidden
+    // Result: [user, assistant(merged)]
+    expect(uiMessages).toHaveLength(2);
+    expect(uiMessages.map(m => m.role)).toEqual(["user", "assistant"]);
+
+    // Merged assistant should contain all 3 segments' text
+    const assistantText = uiMessages[1].parts
+      .filter((p: any) => p.type === "text")
+      .map((p: any) => p.text)
+      .join("");
+    expect(assistantText).toContain("Working on step 1...");
+    expect(assistantText).toContain("Got it, doing X and step 2...");
+    expect(assistantText).toContain("Done with everything including X and Y.");
 
     // No injected user content visible
     const hasInjectedContent = uiMessages.some(m =>
