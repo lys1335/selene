@@ -171,8 +171,11 @@ export async function POST(req: Request) {
   let configuredProvider: string | undefined;
   let activeSessionId: string | undefined;
   let sessionId = "";
+  let runId = "";
   let latestUserPromptText = "";
   let sdkToolResultBridge: ReturnType<typeof createSdkToolResultBridge> | null = null;
+  let streamAbortSignal: AbortSignal = req.signal;
+  let clientDisconnected = false;
   try {
     const isScheduledRun = req.headers.get("X-Scheduled-Run") === "true";
     const isInternalAuth = req.headers.get("X-Internal-Auth") === INTERNAL_API_SECRET;
@@ -507,7 +510,7 @@ export async function POST(req: Request) {
     }
     chatTaskRegistered = true;
 
-    const runId = agentRun.id;
+    runId = agentRun.id;
 
     // ── Edit/Reload truncation cleanup ──────────────────────────────────────
     // IMPORTANT: This must run BEFORE saving the new user message. When a user
@@ -979,19 +982,33 @@ export async function POST(req: Request) {
     // connection) would abort the LLM call and cancel the run. Now only the
     // explicit user-stop controller can abort the computation. The onFinish
     // callback still fires and persists results to DB even if the client is gone.
-    const streamAbortSignal = chatAbortController.signal;
+    streamAbortSignal = chatAbortController.signal;
 
     // Track client disconnect separately for graceful transport teardown.
     // When this fires, we stop piping chunks but let the LLM call finish.
-    let clientDisconnected = false;
     const markClientDisconnected = () => {
       if (clientDisconnected) return;
       clientDisconnected = true;
-      console.log(`[CHAT API] Client disconnected (session=${sessionId}, run=${runId}) — LLM call continues, onFinish will persist results`);
+      const abortReason = (() => {
+        try {
+          return req.signal.reason instanceof Error
+            ? `${req.signal.reason.name}: ${req.signal.reason.message}`
+            : String(req.signal.reason ?? "unknown");
+        } catch {
+          return "unavailable";
+        }
+      })();
+
+      console.warn(
+        `[CHAT API] Request abort observed (session=${sessionId}, run=${runId}, req.signal.aborted=${req.signal.aborted}, streamAbortSignal.aborted=${streamAbortSignal.aborted}, reason=${abortReason}) — client disconnected, LLM call continues and onFinish will persist results`
+      );
     };
     // Check if already aborted before attaching listener (AbortSignal doesn't
     // replay past aborts to late listeners).
     if (req.signal.aborted) {
+      console.warn(
+        `[CHAT API] Request already aborted before listener attach (session=${sessionId}, run=${runId}, req.signal.aborted=${req.signal.aborted})`
+      );
       markClientDisconnected();
     } else {
       req.signal.addEventListener("abort", markClientDisconnected, { once: true });
@@ -1793,6 +1810,18 @@ export async function POST(req: Request) {
       stack: error instanceof Error ? error.stack?.split("\n").slice(0, 8).join("\n") : undefined,
       provider: configuredProvider,
       sessionId,
+      reqSignalAborted: req.signal.aborted,
+      reqSignalReason: (() => {
+        try {
+          return req.signal.reason instanceof Error
+            ? `${req.signal.reason.name}: ${req.signal.reason.message}`
+            : String(req.signal.reason ?? "unknown");
+        } catch {
+          return "unavailable";
+        }
+      })(),
+      streamAbortSignalAborted: streamAbortSignal?.aborted ?? false,
+      clientDisconnected,
     });
 
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1801,6 +1830,25 @@ export async function POST(req: Request) {
     if (chatTaskRegistered && agentRun?.id) {
       try {
         const classification = classifyRecoverability({ provider: configuredProvider, error, message: errorMessage });
+        console.warn("[CHAT API] Finalizing chat error", {
+          sessionId,
+          runId,
+          reqSignalAborted: req.signal.aborted,
+          reqSignalReason: (() => {
+            try {
+              return req.signal.reason instanceof Error
+                ? `${req.signal.reason.name}: ${req.signal.reason.message}`
+                : String(req.signal.reason ?? "unknown");
+            } catch {
+              return "unavailable";
+            }
+          })(),
+          streamAbortSignalAborted: streamAbortSignal?.aborted ?? false,
+          clientDisconnected,
+          errorMessage,
+          classificationReason: classification.reason,
+          classificationRecoverable: classification.recoverable,
+        });
         const shouldCancel = shouldTreatStreamErrorAsCancellation({
           errorMessage,
           isCreditError,
