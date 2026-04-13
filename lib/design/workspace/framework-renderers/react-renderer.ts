@@ -224,6 +224,91 @@ function createExternalUrlPlugin(): esbuild.Plugin {
   };
 }
 
+/**
+ * Esbuild plugin that replaces Next.js framework modules (next/link, next/image, etc.)
+ * with lightweight browser-safe stubs. This prevents bundling Next.js client internals
+ * that depend on `process`, router context, and other server-side globals.
+ */
+function createNextShimPlugin(): esbuild.Plugin {
+  return {
+    name: "selene-next-shim",
+    setup(build) {
+      // Intercept bare next/* imports
+      build.onResolve({ filter: /^next\/(link|image|router|navigation|head|script|dynamic|font)/ }, (args) => ({
+        path: args.path,
+        namespace: "selene-next-shim",
+      }));
+
+      // Also intercept next/dist/* internal imports that leak through
+      build.onResolve({ filter: /^next\/dist\// }, (args) => ({
+        path: args.path,
+        namespace: "selene-next-shim",
+      }));
+
+      build.onLoad({ filter: /.*/, namespace: "selene-next-shim" }, (args) => {
+        const shims: Record<string, string> = {
+          "next/link": `
+            import React from 'react';
+            export default function Link({href, children, ...props}) {
+              return React.createElement('a', {href: typeof href === 'object' ? href.pathname || '/' : href, ...props}, children);
+            }`,
+          "next/image": `
+            import React from 'react';
+            export default function Image({src, alt, width, height, fill, ...props}) {
+              const style = fill ? {objectFit: 'cover', width: '100%', height: '100%'} : {};
+              return React.createElement('img', {src, alt, width: fill ? undefined : width, height: fill ? undefined : height, style, ...props});
+            }`,
+          "next/router": `
+            const router = { pathname: '/', query: {}, asPath: '/', push: () => Promise.resolve(true), replace: () => Promise.resolve(true), back: () => {}, reload: () => {}, events: { on: () => {}, off: () => {}, emit: () => {} } };
+            export function useRouter() { return router; }
+            export default { useRouter };`,
+          "next/navigation": `
+            export function useRouter() { return { push: () => {}, replace: () => {}, back: () => {}, refresh: () => {}, prefetch: () => Promise.resolve() }; }
+            export function usePathname() { return '/'; }
+            export function useSearchParams() { return new URLSearchParams(); }
+            export function useParams() { return {}; }
+            export function useSelectedLayoutSegment() { return null; }
+            export function useSelectedLayoutSegments() { return []; }
+            export function redirect(url) { console.warn('[Selene Preview] redirect() called:', url); }
+            export function notFound() { console.warn('[Selene Preview] notFound() called'); }`,
+          "next/head": `
+            import React from 'react';
+            export default function Head({children}) { return null; }`,
+          "next/script": `
+            import React from 'react';
+            export default function Script(props) { return null; }`,
+          "next/dynamic": `
+            import React from 'react';
+            export default function dynamic(loader, options) {
+              const LazyComponent = React.lazy(typeof loader === 'function' ? loader : () => loader);
+              return function DynamicComponent(props) {
+                return React.createElement(React.Suspense, {fallback: options?.loading ? React.createElement(options.loading) : null}, React.createElement(LazyComponent, props));
+              };
+            }`,
+        };
+
+        // For next/font/* - return empty export
+        if (args.path.startsWith("next/font")) {
+          return { contents: "export default function() { return { className: '', style: {} }; }", loader: "js" };
+        }
+
+        // For next/dist/* internal modules - return empty stubs
+        if (args.path.startsWith("next/dist/")) {
+          return { contents: "export default {}; export const __esModule = true;", loader: "js" };
+        }
+
+        const content = shims[args.path];
+        if (content) {
+          return { contents: content, loader: "tsx" };
+        }
+
+        // Fallback for unknown next/* modules
+        return { contents: "export default {}; export const __esModule = true;", loader: "js" };
+      });
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // HTML builder
 // ---------------------------------------------------------------------------
@@ -236,6 +321,7 @@ function buildPreviewHtml(compiledJs: string, tailwindCss: string, title: string
     "<!DOCTYPE html>",
     '<html lang="en" class="dark">',
     "<head>",
+    '  <script>window.process=window.process||{env:{NODE_ENV:"development"}};</script>',
     '  <meta charset="utf-8" />',
     '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
     `  <title>${escapeHtml(title)}</title>`,
@@ -448,7 +534,7 @@ export class ReactRenderer implements FrameworkRenderer {
     // Build tsconfig paths-based aliases if available
     const tsconfigRaw = await this.loadTsconfigPaths();
 
-    const plugins: esbuild.Plugin[] = [createExternalUrlPlugin()];
+    const plugins: esbuild.Plugin[] = [createNextShimPlugin(), createExternalUrlPlugin()];
 
     // If we have in-memory source code that differs from disk, use the override plugin
     plugins.push(createCodeOverridePlugin(absTarget, sourceCode));
@@ -474,6 +560,14 @@ export class ReactRenderer implements FrameworkRenderer {
         platform: "browser",
         define: {
           "process.env.NODE_ENV": '"development"',
+          "process.env.__NEXT_TRAILING_SLASH": 'false',
+          "process.env.__NEXT_I18N_SUPPORT": 'false',
+          "process.env.__NEXT_HAS_REWRITES": 'false',
+          "process.env.__NEXT_MANUAL_CLIENT_BASE_PATH": '""',
+          "process.env.__NEXT_CROSS_ORIGIN": '""',
+          "process.env.__NEXT_ROUTER_BASEPATH": '""',
+          "process.env.__NEXT_ACTIONS_DEPLOYMENT_ID": '""',
+          "process.env.__NEXT_OPTIMISTIC_CLIENT_CACHE": 'true',
         },
         alias,
         loader: {
@@ -566,9 +660,10 @@ export class ReactRenderer implements FrameworkRenderer {
             };
           } else {
             // Clear require cache for fresh load
-            delete require.cache[require.resolve(this.tailwindConfigPath)];
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const projectConfig = require(this.tailwindConfigPath) as Partial<Config>;
+            // eslint-disable-next-line no-eval
+            const runtimeRequire = eval("require") as NodeRequire;
+            delete runtimeRequire.cache[runtimeRequire.resolve(this.tailwindConfigPath)];
+            const projectConfig = runtimeRequire(this.tailwindConfigPath) as Partial<Config>;
             config = {
               ...projectConfig,
               content: [{ raw: componentCode, extension: "tsx" }],

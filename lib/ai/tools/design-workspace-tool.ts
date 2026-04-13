@@ -60,6 +60,45 @@ import { castProjectFile, recastAfterEdit, applyEditToWorktree, readWorktreeFile
 import { initializeRenderers } from "@/lib/design/workspace/framework-renderers/init";
 import { rendererRegistry } from "@/lib/design/workspace/framework-renderers/registry";
 
+// ---------------------------------------------------------------------------
+// Cast Registry — session-scoped in-memory tracking for cast components
+// Cast components are NOT persisted to the gallery DB; they live only as long
+// as the session is active. This registry makes them discoverable via status,
+// list, and readSource actions.
+// ---------------------------------------------------------------------------
+
+interface CastRegistryEntry {
+  componentId: string;
+  targetFile: string;
+  castMode: "page" | "component" | "route";
+  sourceCode: string;
+  previewHtml: string;
+  framework: string;
+  lastCastAt: number;
+}
+
+const castRegistry = new Map<string, Map<string, CastRegistryEntry>>();
+
+function getCastEntry(sessionId: string, componentId: string): CastRegistryEntry | null {
+  return castRegistry.get(sessionId)?.get(componentId) ?? null;
+}
+
+function setCastEntry(sessionId: string, entry: CastRegistryEntry): void {
+  if (!castRegistry.has(sessionId)) {
+    castRegistry.set(sessionId, new Map());
+  }
+  castRegistry.get(sessionId)!.set(entry.componentId, entry);
+}
+
+function listCastEntries(sessionId: string): CastRegistryEntry[] {
+  const entries = castRegistry.get(sessionId);
+  return entries ? Array.from(entries.values()) : [];
+}
+
+function clearCastRegistry(sessionId: string): void {
+  castRegistry.delete(sessionId);
+}
+
 interface DesignWorkspaceToolOptions {
   sessionId?: string;
   userId?: string;
@@ -121,7 +160,7 @@ interface DesignWorkspaceInput {
 interface ListedDesignSummary {
   id: string;
   name: string;
-  source: "session" | "saved";
+  source: "session" | "saved" | "cast";
   updatedAt?: string;
   isFavorite?: boolean;
 }
@@ -928,6 +967,17 @@ async function handleCast(
       }
     }
 
+    // Register in cast registry so status/list/readSource can find it
+    setCastEntry(sessionId, {
+      componentId: result.componentId,
+      targetFile,
+      castMode,
+      sourceCode: result.sourceCode,
+      previewHtml: result.previewHtml,
+      framework: typeof framework === 'string' ? framework : 'unknown',
+      lastCastAt: Date.now(),
+    });
+
     recordDesignHistory(sessionId, {
       action: "generate", // cast is conceptually like generate
       componentId: result.componentId,
@@ -1705,6 +1755,29 @@ async function handleReadSource(
     };
   }
 
+  // Check cast registry first (cast components aren't in the gallery DB)
+  const castEntry = getCastEntry(sessionId, activeComponentId);
+  if (castEntry) {
+    return {
+      success: true,
+      action: "readSource",
+      data: {
+        componentId: castEntry.componentId,
+        code: castEntry.sourceCode,
+        name: castEntry.targetFile,
+        status: "available",
+        storage: {
+          database: false,
+          userScoped: Boolean(getPersistedUserId(options)),
+          sessionScoped: true,
+        },
+        castFile: castEntry.targetFile,
+        castMode: castEntry.castMode,
+        message: `Cast component source retrieved (${castEntry.sourceCode.length} chars, ~${Math.ceil(castEntry.sourceCode.split("\n").length)} lines).`,
+      },
+    };
+  }
+
   const component = await findWorkspaceDesign({
     id: activeComponentId,
     userId: getPersistedUserId(options),
@@ -1755,24 +1828,41 @@ async function handleList(options: DesignWorkspaceToolOptions): Promise<DesignWo
       limit: 100,
     });
 
+    // Merge in cast registry entries (not in the gallery DB)
+    const castEntries = listCastEntries(sessionId);
+    const castSummaries: ListedDesignSummary[] = castEntries.map((entry) => ({
+      id: entry.componentId,
+      name: entry.targetFile,
+      source: "cast" as const,
+      updatedAt: new Date(entry.lastCastAt).toISOString(),
+    }));
+
+    // Deduplicate: cast entries override DB entries with the same ID
+    const dbIds = new Set(castSummaries.map((c) => c.id));
+    const dbSummaries: ListedDesignSummary[] = components
+      .filter((component) => !dbIds.has(component.id))
+      .map((component) => ({
+        id: component.id,
+        name: component.name,
+        source: (component.sessionId === sessionId ? "session" : "saved") as "session" | "saved",
+        updatedAt: component.updatedAt,
+        isFavorite: component.isFavorite,
+      }));
+
+    const allComponents = [...castSummaries, ...dbSummaries];
+
     recordHistory(sessionId, "list", startedAt, true, {
-      metadata: { count: components.length },
+      metadata: { count: allComponents.length, castCount: castSummaries.length },
     });
 
     return {
       success: true,
       action: "list",
       data: {
-        components: components.map((component) => ({
-          id: component.id,
-          name: component.name,
-          source: component.sessionId === sessionId ? "session" : "saved",
-          updatedAt: component.updatedAt,
-          isFavorite: component.isFavorite,
-        })),
-        message: components.length > 0
-          ? `Found ${components.length} persisted design${components.length === 1 ? "" : "s"} for this workspace.`
-          : "No persisted designs found for this workspace.",
+        components: allComponents,
+        message: allComponents.length > 0
+          ? `Found ${allComponents.length} design${allComponents.length === 1 ? "" : "s"} for this workspace (${castSummaries.length} cast, ${dbSummaries.length} persisted).`
+          : "No designs found for this workspace.",
       },
     };
   } catch (error) {
@@ -1819,6 +1909,31 @@ async function handleStatus(
       success: false,
       action: "status",
       error,
+    };
+  }
+
+  // Check cast registry first (cast components aren't in the gallery DB)
+  const castEntry = getCastEntry(sessionId, input.activeComponentId);
+  if (castEntry) {
+    recordHistory(sessionId, "status", startedAt, true, {
+      componentId: castEntry.componentId,
+    });
+    return {
+      success: true,
+      action: "status",
+      data: {
+        componentId: castEntry.componentId,
+        name: castEntry.targetFile,
+        status: "available",
+        storage: {
+          database: false,
+          userScoped: Boolean(getPersistedUserId(options)),
+          sessionScoped: true,
+        },
+        castFile: castEntry.targetFile,
+        castMode: castEntry.castMode,
+        message: `Cast component from ${castEntry.targetFile} (${castEntry.castMode}).`,
+      },
     };
   }
 
@@ -2106,6 +2221,7 @@ async function handleClose(options: DesignWorkspaceToolOptions): Promise<DesignW
     // Non-fatal
   }
 
+  clearCastRegistry(sessionId);
   recordHistory(sessionId, "close", startedAt, true);
   const history = finalizeDesignHistory(sessionId);
 

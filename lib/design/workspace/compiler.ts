@@ -1133,8 +1133,9 @@ async function buildProjectTailwindCss(
     const configPath = resolve(worktreePath, candidate);
     if (existsSync(configPath)) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const loaded = require(configPath) as Config | { default: Config };
+        // eslint-disable-next-line no-eval
+        const runtimeRequire = eval("require") as NodeRequire;
+        const loaded = runtimeRequire(configPath) as Config | { default: Config };
         projectConfig = ("default" in loaded ? loaded.default : loaded) as Config;
         break;
       } catch {
