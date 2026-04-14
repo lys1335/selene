@@ -17,6 +17,8 @@ import { useTranslations } from "next-intl";
 type ToolCallContentPartComponent = FC<{
   toolName: string;
   argsText?: string;
+  state?: string;
+  active?: boolean;
   args?: {
     action?: string;
     agentName?: string;
@@ -35,6 +37,7 @@ type ToolCallContentPartComponent = FC<{
 
 interface DelegationResult {
   completed?: boolean;
+  running?: boolean;
   status?: string;
   delegationId?: string;
   delegateAgent?: string;
@@ -85,7 +88,7 @@ function isErrorResult(dr: DelegationResult): boolean {
  * Dedicated UI for `delegateToSubagent` tool calls.
  * Shows agent name, delegation status, action, and result content.
  */
-export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result }) => {
+export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result, state, active }) => {
   const t = useTranslations("assistantUi.claudeTools.delegation");
   const [expanded, setExpanded] = useState(false);
 
@@ -102,13 +105,14 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
   const agentName = args?.agentName || "Sub-agent";
   const task = args?.task;
   const delegationIdFromArgs = args?.delegationId;
-  const isRunning = result === undefined;
 
   const dr = extractDelegationResult(result);
-  const hasError = isErrorResult(dr);
+  const isProjectedPending = active === true && state === "input-available" && result === undefined;
+  const isRunning = isProjectedPending || result === undefined;
+  const isWaiting = isProjectedPending || dr.running === true || (dr.completed !== true && dr.status === "waiting");
+  const hasError = !isWaiting && isErrorResult(dr);
   const delegationId = dr.delegationId || delegationIdFromArgs;
   const resolvedAgentName = dr.delegateAgent || agentName;
-  const isCompleted = dr.completed === true;
 
   // Extract the main content to display.
   // Observe action returns `lastResponse` (full final text) + `allResponses` (preview list).
@@ -144,8 +148,10 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
       ? "text-red-600 dark:text-red-400"
       : "text-emerald-600 dark:text-emerald-400";
 
-  const statusLabel = isRunning
-    ? t("delegating", { agent: resolvedAgentName })
+  const statusLabel = isWaiting
+    ? t("waiting", { agent: resolvedAgentName })
+    : isRunning
+      ? t("delegating", { agent: resolvedAgentName })
     : hasError
       ? t("failed", { agent: resolvedAgentName })
       : t("done", { agent: resolvedAgentName });
@@ -169,6 +175,12 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
         {action !== "start" && (
           <span className="text-[10px] text-terminal-muted shrink-0 bg-terminal-dark/5 dark:bg-terminal-dark/[0.06] rounded px-1 py-0.5">
             {action}
+          </span>
+        )}
+
+        {isWaiting && (
+          <span className="text-[10px] shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1 py-0.5 text-amber-700 dark:text-amber-300">
+            {t("waitingBadge")}
           </span>
         )}
 
@@ -245,7 +257,13 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result })
             </div>
           )}
 
-          {isRunning && (
+          {isWaiting && (
+            <div className="text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+              {t("waitingOnDelegation")}
+            </div>
+          )}
+
+          {isRunning && !isWaiting && (
             <div className="text-terminal-muted animate-pulse flex items-center gap-1.5">
               {t("subagentWorking")}
             </div>

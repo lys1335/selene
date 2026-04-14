@@ -28,12 +28,50 @@ import { NextRequest, NextResponse } from "next/server";
 import { ContextWindowManager } from "@/lib/context-window";
 import { getSession } from "@/lib/db/queries";
 import { requireAuth } from "@/lib/auth/local-auth";
-import { getSessionModelIdForSession, getSessionProviderForSession } from "@/lib/ai/session-model-resolver";
+import { getSessionModelIdForSession, getSessionProviderForSession, extractSessionModelConfig } from "@/lib/ai/session-model-resolver";
+import { ensureKimiTokenValid, ensureAntigravityTokenValid, ensureClaudeCodeTokenValid, ensureCodexTokenValid } from "@/lib/ai/providers";
 import type { LLMProvider } from "@/lib/ai/provider-types";
+import { loadSettings } from "@/lib/settings/settings-manager";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
 };
+
+/**
+ * Ensure OAuth tokens are fresh before resolving the session model.
+ *
+ * The session-model-resolver uses the synchronous `isProviderOperational()`
+ * which checks token validity without refreshing.  If a token has expired
+ * but is refreshable, the resolver would incorrectly mark the provider as
+ * unavailable and fall back to Anthropic.  The chat route already does this
+ * pre-flight refresh — this mirrors that behavior for the context-status
+ * read path so the model badge reflects the real active model.
+ */
+async function ensureOAuthTokensFresh(sessionMetadata: Record<string, unknown>): Promise<void> {
+  const sessionConfig = extractSessionModelConfig(sessionMetadata);
+  const settings = loadSettings();
+  // Determine which provider the session intends to use (before fallback logic).
+  const intendedProvider: LLMProvider | undefined =
+    sessionConfig?.sessionProvider || settings.llmProvider;
+
+  // Only refresh the token for the provider that will actually be evaluated.
+  // This keeps the context-status path fast — no unnecessary network calls.
+  switch (intendedProvider) {
+    case "kimi":
+      await ensureKimiTokenValid().catch(() => {});
+      break;
+    case "antigravity":
+      await ensureAntigravityTokenValid().catch(() => {});
+      break;
+    case "claudecode":
+      await ensureClaudeCodeTokenValid().catch(() => {});
+      break;
+    case "codex":
+      await ensureCodexTokenValid().catch(() => {});
+      break;
+    // anthropic, openrouter, minimax, blackboxai, ollama, vllm — no OAuth tokens to refresh
+  }
+}
 
 async function resolveSessionModel(
   request: NextRequest,
@@ -48,6 +86,10 @@ async function resolveSessionModel(
   }
 
   const sessionMetadata = (session.metadata as Record<string, unknown>) || {};
+
+  // Refresh OAuth tokens before the synchronous availability check in the resolver.
+  await ensureOAuthTokensFresh(sessionMetadata);
+
   const modelId = await getSessionModelIdForSession(sessionMetadata);
   const provider = await getSessionProviderForSession(sessionMetadata);
 
