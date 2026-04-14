@@ -59,6 +59,38 @@ import { createDesignWorktree, getActiveWorktree, cleanupDesignWorktree, getWork
 import { castProjectFile, recastAfterEdit, applyEditToWorktree, readWorktreeFile, syncBackChanges } from "@/lib/design/workspace/component-casting";
 import { initializeRenderers } from "@/lib/design/workspace/framework-renderers/init";
 import { rendererRegistry } from "@/lib/design/workspace/framework-renderers/registry";
+import { isPathAllowed, resolveWorkspaceAwarePaths } from "@/lib/ai/filesystem";
+
+// ---------------------------------------------------------------------------
+// Project path authorization
+// ---------------------------------------------------------------------------
+
+/**
+ * Gate a model-supplied `projectSourcePath` against synced folder roots.
+ * Returns the resolved path if allowed, or an error string if blocked.
+ */
+async function authorizeProjectPath(
+  projectPath: string,
+  characterId: string,
+  sessionId: string,
+): Promise<{ ok: true; resolvedPath: string } | { ok: false; error: string }> {
+  try {
+    const allowedPaths = await resolveWorkspaceAwarePaths(characterId, sessionId);
+    if (allowedPaths.length === 0) {
+      return { ok: false, error: "No synced folders configured. Cannot access project paths." };
+    }
+    const resolved = await isPathAllowed(projectPath, allowedPaths);
+    if (!resolved) {
+      return {
+        ok: false,
+        error: `Project path "${projectPath}" is not within any synced folder. Allowed: ${allowedPaths.join(", ")}`,
+      };
+    }
+    return { ok: true, resolvedPath: resolved };
+  } catch (err) {
+    return { ok: false, error: `Path authorization failed: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Cast Registry — session-scoped in-memory tracking for cast components
@@ -200,6 +232,8 @@ interface DesignWorkspaceResultData {
     type: string;
     port?: number;
     baseUrl?: string;
+    /** Full route-qualified preview URL from the renderer. */
+    previewUrl?: string;
   };
 }
 
@@ -667,13 +701,13 @@ async function executeDesignWorkspace(
       result = await handleClose(options);
       break;
     case "detect":
-      result = await handleDetect(input, sessionId);
+      result = await handleDetect(input, sessionId, options.characterId);
       break;
     case "browse":
-      result = await handleBrowse(input, sessionId);
+      result = await handleBrowse(input, sessionId, options.characterId);
       break;
     case "cast":
-      result = await handleCast(input, sessionId, config);
+      result = await handleCast(input, sessionId, config, options.characterId);
       break;
     case "sync-back":
       result = await handleSyncBack(input, sessionId);
@@ -840,6 +874,7 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
 async function handleDetect(
   input: DesignWorkspaceInput,
   sessionId: string,
+  characterId?: string,
 ): Promise<DesignWorkspaceResult> {
   const startedAt = Date.now();
   ensureHistory(sessionId);
@@ -848,20 +883,27 @@ async function handleDetect(
     return { success: false, action: "detect", error: "projectSourcePath is required for detect action." };
   }
 
+  // Authorization: verify projectSourcePath is within synced folder roots
+  const authResult = await authorizeProjectPath(projectPath, characterId ?? "", sessionId);
+  if (!authResult.ok) {
+    return { success: false, action: "detect", error: authResult.error };
+  }
+
   try {
-    const validation = await validateProjectPath(projectPath);
+    const validation = await validateProjectPath(authResult.resolvedPath);
     if (!validation.valid) {
       return { success: false, action: "detect", error: `Invalid project path: ${validation.reason}` };
     }
 
-    const framework = await detectFramework(projectPath);
-    const structure = await buildProjectStructure(projectPath, framework.type);
+    const safePath = authResult.resolvedPath;
+    const framework = await detectFramework(safePath);
+    const structure = await buildProjectStructure(safePath, framework.type);
 
     recordDesignHistory(sessionId, {
       action: "open", // recorded as open since detect initializes context
       durationMs: Date.now() - startedAt,
       success: true,
-      metadata: { subAction: "detect", projectPath, framework: framework.type },
+      metadata: { subAction: "detect", projectPath: safePath, framework: framework.type },
     });
 
     return {
@@ -886,6 +928,7 @@ async function handleDetect(
 async function handleBrowse(
   input: DesignWorkspaceInput,
   sessionId: string,
+  characterId?: string,
 ): Promise<DesignWorkspaceResult> {
   ensureHistory(sessionId);
   const projectPath = input.projectSourcePath;
@@ -893,9 +936,16 @@ async function handleBrowse(
     return { success: false, action: "browse", error: "projectSourcePath is required for browse action." };
   }
 
+  // Authorization: verify projectSourcePath is within synced folder roots
+  const authResult = await authorizeProjectPath(projectPath, characterId ?? "", sessionId);
+  if (!authResult.ok) {
+    return { success: false, action: "browse", error: authResult.error };
+  }
+
   try {
-    const framework = await detectFramework(projectPath);
-    const structure = await buildProjectStructure(projectPath, framework.type);
+    const safePath = authResult.resolvedPath;
+    const framework = await detectFramework(safePath);
+    const structure = await buildProjectStructure(safePath, framework.type);
     const filter = input.browseFilter ?? "all";
 
     let entries: Array<{ path: string; name: string; route?: string; type: string }> = [];
@@ -925,6 +975,7 @@ async function handleCast(
   input: DesignWorkspaceInput,
   sessionId: string,
   config: DesignWorkspaceConfig,
+  characterId?: string,
 ): Promise<DesignWorkspaceResult> {
   const startedAt = Date.now();
   ensureHistory(sessionId);
@@ -939,7 +990,11 @@ async function handleCast(
     // Ensure worktree exists — if not, need to detect + create first
     let worktree = getActiveWorktree(sessionId);
     if (!worktree && input.projectSourcePath) {
-      worktree = await createDesignWorktree(input.projectSourcePath, sessionId);
+      const authResult = await authorizeProjectPath(input.projectSourcePath, characterId ?? "", sessionId);
+      if (!authResult.ok) {
+        return { success: false, action: "cast", error: authResult.error };
+      }
+      worktree = await createDesignWorktree(authResult.resolvedPath, sessionId);
     }
     if (!worktree) {
       return { success: false, action: "cast", error: "No active worktree. Provide projectSourcePath or run 'detect' first." };
@@ -950,20 +1005,30 @@ async function handleCast(
 
     const result = await castProjectFile(sessionId, targetFile, castMode, framework, config);
 
-    // Extract renderer info for C14 — populate RendererInfo in the result
+    // Extract renderer info for C14 — populate RendererInfo in the result.
+    // For dev-server renderers, use the inspector proxy URL so the preview
+    // iframe loads through the proxy (which injects the inspector script).
+    // Store both baseUrl (proxy root) and previewUrl (full route-qualified URL
+    // from the renderer's render() output, which includes framework-specific
+    // route mapping like fileToRoute/bladeToRoute).
     let rendererInfo: DesignWorkspaceResultData["rendererInfo"];
     const activeRenderer = rendererRegistry.getActiveRenderer(worktree.worktreePath);
     if (activeRenderer) {
       rendererInfo = {
         type: activeRenderer.tier === "dev-server" ? "dev-server" : "esbuild",
       };
-      // Extract port/baseUrl from proxyUrl if available in the cast result
-      if (result.previewHtml) {
-        const proxyMatch = result.previewHtml.match(/src="(https?:\/\/127\.0\.0\.1:(\d+)[^"]*)"/);
-        if (proxyMatch) {
-          rendererInfo.port = parseInt(proxyMatch[2], 10);
-          rendererInfo.baseUrl = `http://127.0.0.1:${proxyMatch[2]}`;
-        }
+      const proxyUrl = (activeRenderer as { inspectorProxyUrl?: string | null }).inspectorProxyUrl;
+      if (proxyUrl) {
+        const port = new URL(proxyUrl).port;
+        rendererInfo.port = parseInt(port, 10);
+        rendererInfo.baseUrl = proxyUrl;
+      }
+      // Carry the full route-qualified preview URL from render() output.
+      // The renderer already applied framework-specific route resolution
+      // (fileToRoute, bladeToRoute, etc.) — the frontend should use this
+      // instead of reconstructing baseUrl + castFile.
+      if (result.rendererProxyUrl) {
+        rendererInfo.previewUrl = result.rendererProxyUrl;
       }
     }
 
@@ -1080,19 +1145,30 @@ async function handleOpen(options: DesignWorkspaceToolOptions, input?: DesignWor
   let metadata: Record<string, unknown> | undefined;
   if (input?.projectSourcePath) {
     try {
-      const validation = await validateProjectPath(input.projectSourcePath);
-      if (validation.valid) {
-        const framework = await detectFramework(input.projectSourcePath);
-        const structure = await buildProjectStructure(input.projectSourcePath, framework.type);
-        const worktree = await createDesignWorktree(input.projectSourcePath, sessionId);
+      // Authorization: verify projectSourcePath is within synced folder roots
+      const authResult = await authorizeProjectPath(
+        input.projectSourcePath,
+        options.characterId ?? "",
+        sessionId,
+      );
+      if (authResult.ok) {
+        const safePath = authResult.resolvedPath;
+        const validation = await validateProjectPath(safePath);
+        if (validation.valid) {
+          const framework = await detectFramework(safePath);
+          const structure = await buildProjectStructure(safePath, framework.type);
+          const worktree = await createDesignWorktree(safePath, sessionId);
 
-        // Include project info in the response
-        metadata = {
-          framework,
-          structure,
-          worktreePath: worktree.worktreePath,
-          worktreeBranch: worktree.branch,
-        };
+          // Include project info in the response
+          metadata = {
+            framework,
+            structure,
+            worktreePath: worktree.worktreePath,
+            worktreeBranch: worktree.branch,
+          };
+        }
+      } else {
+        console.warn("[design-workspace] Project path not authorized:", authResult.error);
       }
     } catch (projectError) {
       // Non-fatal: log but continue with sandbox mode

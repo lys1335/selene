@@ -282,17 +282,22 @@ export function resolveBundledNodeCommand(
             }
         }
         // Dev mode fallback: run via node + scripts/bundled-tools/apply_patch.js
-        // Walk up from this file to find the project root (contains scripts/bundled-tools/)
-        const projectRoot = join(__dirname, "..", "..");
-        const devScript = join(projectRoot, "scripts", "bundled-tools", "apply_patch.js");
-        if (existsSync(devScript)) {
-            const nodeCmd = runtime.bundledNodePath || "node";
-            return {
-                command: nodeCmd,
-                args: [devScript, ...args],
-                env,
-                resolution: `resolved 'apply_patch' via node + ${devScript}`,
-            };
+        // In production bundles (Electron), __dirname points to electron-dist/
+        // and the relative walk would be wrong. Only attempt this when toolsBinDir
+        // is absent (i.e. we're in a dev environment without bundled binaries).
+        if (!runtime.toolsBinDir) {
+            // Walk up from lib/command-execution/ to repo root
+            const projectRoot = join(__dirname, "..", "..");
+            const devScript = join(projectRoot, "scripts", "bundled-tools", "apply_patch.js");
+            if (existsSync(devScript)) {
+                const nodeCmd = runtime.bundledNodePath || "node";
+                return {
+                    command: nodeCmd,
+                    args: [devScript, ...args],
+                    env,
+                    resolution: `resolved 'apply_patch' via node + ${devScript}`,
+                };
+            }
         }
         // Last resort: return as-is and let PATH resolution attempt it
         return { command, args, env, resolution: null };

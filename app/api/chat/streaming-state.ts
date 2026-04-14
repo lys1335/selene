@@ -245,22 +245,37 @@ export function finalizeStreamingToolCalls(state: StreamingMessageState): boolea
  * Delegated tool calls can remain legitimately unresolved while the sub-agent is
  * still running. Keep those pending instead of sealing them into synthetic errors.
  */
+/** Max time a delegation can remain "pending" before we consider it stale (1h). */
+const DELEGATION_PENDING_TTL_MS = 60 * 60 * 1000;
+
 export function shouldKeepDelegatedToolCallPending(
   part: Pick<DBToolCallPart, "toolName" | "args" | "active">
 ): boolean {
   if (part.toolName !== "delegateToSubagent") return false;
 
+  const args = part.args as { delegationId?: string } | undefined;
+  const delegationId = args?.delegationId;
+
+  // Check active delegation registry first — this is the source of truth.
+  if (delegationId) {
+    const delegation = activeDelegations.get(delegationId);
+    if (delegation) {
+      if (delegation.settled) return false;
+      // M7: Don't keep pending forever after crashes — apply TTL.
+      const age = Date.now() - delegation.startedAt;
+      if (age > DELEGATION_PENDING_TTL_MS) return false;
+      return true;
+    }
+  }
+
   // Progress persistence projects unresolved delegated calls with `active: true`.
+  // This is a fallback for when the in-memory delegation registry has been
+  // cleared (e.g. server restart) but the persisted state still has the flag.
   if (part.active === true) {
     return true;
   }
 
-  const args = part.args as { delegationId?: string } | undefined;
-  const delegationId = args?.delegationId;
-  if (!delegationId) return false;
-
-  const delegation = activeDelegations.get(delegationId);
-  return delegation !== undefined && !delegation.settled;
+  return false;
 }
 
 /**

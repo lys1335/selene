@@ -8,16 +8,52 @@
  */
 
 import fs from "fs/promises";
-import { existsSync } from "fs";
-import { join, relative } from "path";
+import { existsSync, realpathSync } from "fs";
+import { join, resolve, relative, sep } from "path";
 import crypto from "crypto";
 import type { FrameworkType } from "./project-detection";
 import type { DesignWorkspaceConfig, DesignWorkspaceCompileReport } from "./config";
 import type { RendererOutput } from "./framework-renderers/types";
 import { rendererRegistry } from "./framework-renderers/registry";
+import { getInspectorScript } from "./inspector-script";
 import { getActiveWorktree, getWorktreeDiff, loadSnapshotManifest } from "./worktree-manager";
 import type { ManifestEntry } from "./worktree-manager";
 import { runGitCommand } from "@/lib/workspace/git-runner";
+
+// ---------------------------------------------------------------------------
+// Path traversal guard
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve `targetFile` against `worktreePath` and verify the result stays
+ * inside the worktree. Prevents both `../` traversal and symlink-based
+ * escapes by resolving through `realpathSync` when the target exists.
+ */
+function safeWorktreePath(worktreePath: string, targetFile: string): string {
+  const resolved = resolve(worktreePath, targetFile);
+  // Use realpath to follow symlinks — a symlinked file inside the worktree
+  // could point outside it. Fall back to the logical path for new files.
+  let canonical: string;
+  try {
+    canonical = realpathSync(resolved);
+  } catch {
+    // File doesn't exist yet (e.g. creating a new file) — use logical path
+    canonical = resolved;
+  }
+  let rootCanonical: string;
+  try {
+    rootCanonical = realpathSync(worktreePath);
+  } catch {
+    rootCanonical = resolve(worktreePath);
+  }
+  const normalizedRoot = rootCanonical + sep;
+  if (canonical !== rootCanonical && !canonical.startsWith(normalizedRoot)) {
+    throw new Error(
+      `Path traversal blocked: "${targetFile}" resolves outside the worktree root.`,
+    );
+  }
+  return resolved;
+}
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -36,6 +72,9 @@ export interface CastResult {
   castMode: "page" | "component" | "route";
   /** Compilation report from the renderer */
   compileReport?: DesignWorkspaceCompileReport;
+  /** Full route-qualified proxy URL from the renderer (dev-server tier only).
+   *  Includes framework-specific route mapping (fileToRoute, bladeToRoute). */
+  rendererProxyUrl?: string;
 }
 
 export interface SyncBackResult {
@@ -54,79 +93,10 @@ export interface SyncBackResult {
 }
 
 // ---------------------------------------------------------------------------
-// Inspector script
+// Inspector script — uses shared module for the full-featured inspector
 // ---------------------------------------------------------------------------
 
-const INSPECTOR_SCRIPT = `
-<script data-selene-inspector="true">
-(function() {
-  let inspectorEnabled = false;
-  let hoveredElement = null;
-  const overlay = document.createElement('div');
-  overlay.id = '__selene_inspector_overlay__';
-  overlay.style.cssText = 'position:fixed;pointer-events:none;z-index:999999;border:2px solid #3b82f6;background:rgba(59,130,246,0.1);display:none;';
-  document.body.appendChild(overlay);
-
-  window.addEventListener('message', function(e) {
-    if (e.data?.type === 'selene:inspector:toggle') {
-      inspectorEnabled = e.data.enabled;
-      if (!inspectorEnabled) {
-        overlay.style.display = 'none';
-        hoveredElement = null;
-      }
-    }
-  });
-
-  document.addEventListener('mousemove', function(e) {
-    if (!inspectorEnabled) return;
-    var el = e.target;
-    if (el === overlay || el === hoveredElement) return;
-    hoveredElement = el;
-    var rect = el.getBoundingClientRect();
-    overlay.style.display = 'block';
-    overlay.style.top = rect.top + 'px';
-    overlay.style.left = rect.left + 'px';
-    overlay.style.width = rect.width + 'px';
-    overlay.style.height = rect.height + 'px';
-  });
-
-  document.addEventListener('click', function(e) {
-    if (!inspectorEnabled) return;
-    e.preventDefault();
-    e.stopPropagation();
-    var el = e.target;
-    var rect = el.getBoundingClientRect();
-    var cs = window.getComputedStyle(el);
-    window.parent.postMessage({
-      type: 'selene:inspector:select',
-      element: {
-        tagName: el.tagName.toLowerCase(),
-        id: el.id || '',
-        className: el.className || '',
-        textContent: (el.textContent || '').slice(0, 160),
-        selector: buildSelector(el),
-        boundingRect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-        computedStyles: {
-          width: cs.width, height: cs.height,
-          padding: cs.padding, margin: cs.margin,
-          display: cs.display, position: cs.position,
-          color: cs.color, backgroundColor: cs.backgroundColor,
-          fontSize: cs.fontSize, fontFamily: cs.fontFamily,
-        }
-      }
-    }, '*');
-  }, true);
-
-  function buildSelector(el) {
-    if (el.id) return '#' + CSS.escape(el.id);
-    var selector = el.tagName.toLowerCase();
-    if (el.className && typeof el.className === 'string') {
-      selector += '.' + el.className.trim().split(/\\s+/).slice(0, 3).map(function(c) { return CSS.escape(c); }).join('.');
-    }
-    return selector;
-  }
-})();
-</script>`;
+const INSPECTOR_SCRIPT = `<script data-selene-inspector="true">${getInspectorScript("active")}<\/script>`;
 
 // ---------------------------------------------------------------------------
 // Cast functions
@@ -150,7 +120,7 @@ export async function castProjectFile(
     throw new Error("No active worktree for session");
   }
 
-  const fullPath = join(worktree.worktreePath, targetFile);
+  const fullPath = safeWorktreePath(worktree.worktreePath, targetFile);
   const sourceCode = await fs.readFile(fullPath, "utf-8");
 
   const ctx = {
@@ -191,6 +161,7 @@ export async function castProjectFile(
     castFile: targetFile,
     castMode,
     compileReport: output.compileReport,
+    rendererProxyUrl: output.proxyUrl,
   };
 }
 
@@ -212,7 +183,7 @@ export async function recastAfterEdit(
   }
 
   // Write the new code to the worktree file before re-rendering
-  const fullPath = join(worktree.worktreePath, targetFile);
+  const fullPath = safeWorktreePath(worktree.worktreePath, targetFile);
   await fs.writeFile(fullPath, newCode, "utf-8");
 
   const ctx = {
@@ -253,6 +224,7 @@ export async function recastAfterEdit(
     castFile: targetFile,
     castMode,
     compileReport: output.compileReport,
+    rendererProxyUrl: output.proxyUrl,
   };
 }
 
@@ -273,7 +245,7 @@ export async function applyEditToWorktree(
     throw new Error("No active worktree for session");
   }
 
-  const fullPath = join(worktree.worktreePath, targetFile);
+  const fullPath = safeWorktreePath(worktree.worktreePath, targetFile);
   try {
     await fs.writeFile(fullPath, newCode, "utf-8");
   } catch (err) {
@@ -295,7 +267,7 @@ export async function readWorktreeFile(
     throw new Error("No active worktree for session");
   }
 
-  const fullPath = join(worktree.worktreePath, targetFile);
+  const fullPath = safeWorktreePath(worktree.worktreePath, targetFile);
   try {
     return await fs.readFile(fullPath, "utf-8");
   } catch (err) {
@@ -328,6 +300,18 @@ export async function syncBackChanges(
     return { success: false, diff: "", appliedFiles: [], error: "No active worktree for session" };
   }
 
+  // Validate sourceRoot resolves to a real, accessible directory.
+  // This prevents model-supplied paths like `/etc/` or traversal tricks.
+  const resolvedSource = resolve(sourceRoot);
+  try {
+    const stat = await fs.stat(resolvedSource);
+    if (!stat.isDirectory()) {
+      return { success: false, diff: "", appliedFiles: [], error: `sourceRoot is not a directory: ${sourceRoot}` };
+    }
+  } catch {
+    return { success: false, diff: "", appliedFiles: [], error: `sourceRoot does not exist: ${sourceRoot}` };
+  }
+
   try {
     const diff = await getWorktreeDiff(sessionId);
     const worktreeCreatedAt = new Date(worktree.createdAt);
@@ -353,6 +337,19 @@ export async function syncBackChanges(
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+/**
+ * Resolve a relative `file` against a `root` and verify it stays inside `root`.
+ * Used for sync-back paths where `file` comes from git status output.
+ */
+function safeSyncPath(root: string, file: string): string {
+  const resolved = resolve(root, file);
+  const normalizedRoot = resolve(root) + sep;
+  if (resolved !== resolve(root) && !resolved.startsWith(normalizedRoot)) {
+    throw new Error(`Sync path traversal blocked: "${file}" resolves outside root.`);
+  }
+  return resolved;
 }
 
 // ---------------------------------------------------------------------------
@@ -391,18 +388,13 @@ function buildPreviewHtml(output: RendererOutput): string {
   }
 
   if (output.proxyUrl) {
-    // Wrap the dev-server proxy URL in a minimal HTML iframe shell
-    return injectInspectorScript(
-      `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Design Preview</title>
-<style>*{margin:0;padding:0;box-sizing:border-box}html,body,iframe{width:100%;height:100%;border:none}</style>
-</head>
-<body>
-<iframe src="${output.proxyUrl}" style="width:100%;height:100%;border:none;" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
-</body>
-</html>`,
-    );
+    // Dev-server renderers now route through the InspectorProxy, which injects
+    // the inspector script directly into the HTML responses from the dev server.
+    // No nested iframe wrapper is needed — the preview iframe loads the proxy
+    // URL directly, and the inspector runs in the same document as the components.
+    // Return empty string to signal the frontend to use the rendererInfo.baseUrl
+    // path (src= on the iframe) instead of srcDoc.
+    return "";
   }
 
   return injectInspectorScript(
@@ -591,9 +583,9 @@ async function syncMerge(
 
   // Handle modified/added files
   for (const file of changed) {
-    const src = join(worktreePath, file);
-    const dest = join(sourceRoot, file);
     try {
+      const src = safeSyncPath(worktreePath, file);
+      const dest = safeSyncPath(sourceRoot, file);
       if (!existsSync(src)) {
         continue;
       }
@@ -615,8 +607,8 @@ async function syncMerge(
 
   // Handle deleted files — remove them from source
   for (const file of deleted) {
-    const dest = join(sourceRoot, file);
     try {
+      const dest = safeSyncPath(sourceRoot, file);
       if (existsSync(dest)) {
         await fs.unlink(dest);
         appliedFiles.push(file);
@@ -730,11 +722,10 @@ async function syncCherryPick(
   const createdAt = worktreeCreatedAt ?? new Date(0);
 
   for (const file of targetFiles) {
-    const dest = join(sourceRoot, file);
-
     // Handle deleted files
     if (deletedSet.has(file)) {
       try {
+        const dest = safeSyncPath(sourceRoot, file);
         if (existsSync(dest)) {
           await fs.unlink(dest);
           appliedFiles.push(file);
@@ -745,8 +736,9 @@ async function syncCherryPick(
       continue;
     }
 
-    const src = join(worktreePath, file);
     try {
+      const src = safeSyncPath(worktreePath, file);
+      const dest = safeSyncPath(sourceRoot, file);
       if (!existsSync(src)) {
         continue;
       }

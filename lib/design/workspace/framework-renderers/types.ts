@@ -35,6 +35,11 @@ export interface FrameworkRenderer {
   /** Whether this renderer runs in-process or needs a subprocess */
   readonly tier: RendererTier;
 
+  /** Inspector proxy URL (dev-server tier only). Preview iframes should
+   *  load this URL instead of the raw dev-server URL so the inspector
+   *  script is injected into the served HTML pages. */
+  readonly inspectorProxyUrl?: string | null;
+
   /** Initialize renderer for a specific project worktree */
   startup(ctx: RendererContext): Promise<void>;
 

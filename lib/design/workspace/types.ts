@@ -17,6 +17,10 @@ export interface RendererInfo {
   port?: number;
   pid?: number;
   baseUrl?: string;
+  /** Full route-qualified preview URL from the renderer (includes route mapping).
+   *  Use this instead of `baseUrl + castFile` — the renderer already applied
+   *  framework-specific route resolution (fileToRoute, bladeToRoute, etc.). */
+  previewUrl?: string;
 }
 
 export interface ProjectContext {

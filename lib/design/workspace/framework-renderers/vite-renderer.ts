@@ -11,6 +11,8 @@ import type { FrameworkType } from "../project-detection";
 import { spawn, type ChildProcess } from "child_process";
 import { existsSync } from "fs";
 import { join } from "path";
+import { InspectorProxy } from "./inspector-proxy";
+import { findAvailablePort } from "./port-utils";
 
 const IS_WINDOWS = process.platform === "win32";
 
@@ -23,6 +25,12 @@ export class ViteRenderer implements FrameworkRenderer {
   private baseUrl: string | null = null;
   private ctx: RendererContext | null = null;
   private healthy = false;
+  private inspectorProxy: InspectorProxy | null = null;
+
+  /** The inspector proxy URL — use this instead of baseUrl for preview iframes */
+  get inspectorProxyUrl(): string | null {
+    return this.inspectorProxy?.getProxyUrl() ?? null;
+  }
 
   async startup(ctx: RendererContext): Promise<void> {
     this.ctx = ctx;
@@ -61,6 +69,11 @@ export class ViteRenderer implements FrameworkRenderer {
       try {
         // Wait for the dev server to be ready
         await this.waitForReady(ctx.config.devServerTimeoutMs);
+
+        // Start inspector proxy targeting the dev server
+        this.inspectorProxy = new InspectorProxy();
+        await this.inspectorProxy.startup(this.baseUrl!);
+
         this.healthy = true;
         return;
       } catch (err) {
@@ -94,9 +107,16 @@ export class ViteRenderer implements FrameworkRenderer {
       url = `${this.baseUrl}${routePath}`;
     }
 
+    // Return the inspector proxy URL so the preview iframe loads through
+    // the proxy (which injects the inspector script into HTML responses).
+    // The raw dev-server URL is kept as proxyUrl for internal reference.
+    const proxyBase = this.inspectorProxyUrl;
+    const proxyUrl = proxyBase
+      ? url.replace(this.baseUrl!, proxyBase)
+      : url;
+
     return {
-      proxyUrl: url,
-      html: this.buildProxyHtml(url),
+      proxyUrl: proxyUrl,
     };
   }
 
@@ -111,6 +131,11 @@ export class ViteRenderer implements FrameworkRenderer {
 
   async shutdown(): Promise<void> {
     this.healthy = false;
+    // Shut down inspector proxy first
+    if (this.inspectorProxy) {
+      try { await this.inspectorProxy.shutdown(); } catch { /* ignore */ }
+      this.inspectorProxy = null;
+    }
     if (this.process) {
       try {
         // Send SIGTERM, then force-kill after 5s
@@ -158,25 +183,6 @@ export class ViteRenderer implements FrameworkRenderer {
     return route;
   }
 
-  private buildProxyHtml(url: string): string {
-    return [
-      "<!DOCTYPE html>",
-      '<html lang="en">',
-      "<head>",
-      '  <meta charset="utf-8" />',
-      '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
-      "  <title>Design Workspace — Vite Preview</title>",
-      "  <style>",
-      "    html, body, iframe { margin: 0; padding: 0; width: 100%; height: 100%; border: none; }",
-      "  </style>",
-      "</head>",
-      "<body>",
-      `  <iframe src="${url}" style="width:100%;height:100%;border:none;" />`,
-      "</body>",
-      "</html>",
-    ].join("\n");
-  }
-
   private async waitForReady(timeoutMs: number): Promise<void> {
     const start = Date.now();
     const pollInterval = 500;
@@ -204,20 +210,4 @@ export class ViteRenderer implements FrameworkRenderer {
   }
 }
 
-/** Find an available TCP port in a range */
-async function findAvailablePort(min: number, max: number): Promise<number> {
-  const net = await import("net");
-
-  for (let port = min; port <= max; port++) {
-    const available = await new Promise<boolean>((resolve) => {
-      const server = net.createServer();
-      server.listen(port, "127.0.0.1", () => {
-        server.close(() => resolve(true));
-      });
-      server.on("error", () => resolve(false));
-    });
-    if (available) return port;
-  }
-
-  throw new Error(`No available ports in range ${min}-${max}`);
-}
+// Port allocation uses shared utility from ./port-utils.ts

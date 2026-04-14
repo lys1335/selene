@@ -136,13 +136,18 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result, s
         `\n\n... [${(mainContent.length - DISPLAY_LIMIT).toLocaleString()} more characters]`
       : mainContent;
 
-  const StatusIcon = isRunning
+  // M6: `isWaiting` can be true when `isRunning` is false (result arrived
+  // but dr.running === true, e.g. observe result for an in-flight delegation).
+  // Show spinner for both running and waiting states, not a green check.
+  const showSpinner = isRunning || isWaiting;
+
+  const StatusIcon = showSpinner
     ? null
     : hasError
       ? XCircleIcon
       : CheckCircleIcon;
 
-  const statusColor = isRunning
+  const statusColor = showSpinner
     ? "text-terminal-muted"
     : hasError
       ? "text-red-600 dark:text-red-400"
@@ -166,7 +171,7 @@ export const DelegationToolUI: ToolCallContentPartComponent = ({ args, result, s
         {StatusIcon && (
           <StatusIcon className={cn("h-3.5 w-3.5 shrink-0", statusColor)} />
         )}
-        {!StatusIcon && (
+        {!StatusIcon && showSpinner && (
           <Loader2Icon className="h-3.5 w-3.5 shrink-0 text-terminal-muted animate-spin" />
         )}
         <UsersIcon className="h-3 w-3 shrink-0 text-terminal-muted" />
