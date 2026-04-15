@@ -4,37 +4,6 @@ import type {
   DesignWorkspaceValidationResult,
 } from "./config";
 import type { DesignWorkspaceHistory } from "./edit-history";
-import type { DetectedFramework, FrameworkType, ProjectEntry, ProjectStructure } from "./project-detection";
-
-// ---------------------------------------------------------------------------
-// Project-native types
-// ---------------------------------------------------------------------------
-
-export type { DetectedFramework, FrameworkType, ProjectEntry, ProjectStructure };
-
-export interface RendererInfo {
-  type: "esbuild" | "vite" | "dev-server" | "php-server" | "static";
-  port?: number;
-  pid?: number;
-  baseUrl?: string;
-  /** Full route-qualified preview URL from the renderer (includes route mapping).
-   *  Use this instead of `baseUrl + castFile` — the renderer already applied
-   *  framework-specific route resolution (fileToRoute, bladeToRoute, etc.). */
-  previewUrl?: string;
-}
-
-export interface ProjectContext {
-  projectRoot: string;
-  framework: DetectedFramework;
-  worktreePath: string | null;
-  worktreeBranch: string | null;
-  syncFolderId: string | null;
-  worktreeStatus: "none" | "creating" | "active" | "finalizing" | "cleaned";
-  castFile: string | null;
-  castMode: "page" | "component" | "route" | null;
-  rendererInfo: RendererInfo | null;
-  projectStructure: ProjectStructure | null;
-}
 
 export interface DesignComponent {
   id: string;
@@ -67,17 +36,6 @@ export const DESIGN_BREAKPOINTS: DesignBreakpoint[] = [
   { name: "tablet", width: 768, height: 1024 },
   { name: "desktop", width: 1440, height: 900 },
 ];
-
-export type CastMode = "page" | "component" | "route";
-
-/** Atomic input for applying a cast result to the store in one Zustand set(). */
-export interface ApplyCastResultInput {
-  component: DesignComponent;
-  previewHtml?: string;
-  castFile?: string | null;
-  castMode?: CastMode | null;
-  rendererInfo?: RendererInfo | null;
-}
 
 export type DesignWorkspaceStatus = "idle" | "generating" | "editing" | "exporting";
 
@@ -121,7 +79,6 @@ export interface DesignWorkspaceSessionState {
   lastValidation: DesignWorkspaceValidationResult | null;
   lastCompileReport: DesignWorkspaceCompileReport | null;
   history: DesignWorkspaceHistory | null;
-  projectContext: ProjectContext | null;
 }
 
 export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
@@ -152,11 +109,5 @@ export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
   setLastCompileReport: (report: DesignWorkspaceCompileReport | null) => void;
   setHistory: (history: DesignWorkspaceHistory | null) => void;
   setActiveSession: (sessionId: string) => void;
-  setProjectContext: (ctx: ProjectContext | null) => void;
-  updateProjectContext: (partial: Partial<ProjectContext>) => void;
-  applyCastResult: (input: ApplyCastResultInput) => void;
-  setCastFile: (file: string | null, mode: CastMode | null) => void;
-  setProjectStructure: (structure: ProjectStructure) => void;
-  clearProjectContext: () => void;
   reset: () => void;
 }

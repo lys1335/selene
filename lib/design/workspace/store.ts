@@ -10,10 +10,6 @@ import {
   type DesignBreakpoint,
   type DesignSnapshot,
   type InspectedElement,
-  type ProjectContext,
-  type ProjectStructure,
-  type ApplyCastResultInput,
-  type CastMode,
 } from "./types";
 import {
   DEFAULT_DESIGN_WORKSPACE_CONFIG,
@@ -24,23 +20,6 @@ import {
 } from "./config";
 import type { DesignWorkspaceHistory } from "./edit-history";
 import { buildDesignPreviewHtml } from "./preview";
-
-/** Returns true when the store has a project-level preview (dev-server iframe). */
-function hasProjectPreview(rendererInfo: ProjectContext["rendererInfo"] | null | undefined): boolean {
-  return Boolean(rendererInfo?.previewUrl || rendererInfo?.baseUrl);
-}
-
-/** Upsert a component by ID (update if exists, append if new). */
-function upsertComponent(
-  components: DesignComponent[],
-  component: DesignComponent,
-): DesignComponent[] {
-  const index = components.findIndex((c) => c.id === component.id);
-  if (index === -1) return [...components, component];
-  const next = [...components];
-  next[index] = { ...next[index], ...component };
-  return next;
-}
 
 function buildPreviewMarkup(component: Pick<DesignComponent, "code" | "mode" | "name">): string {
   try {
@@ -91,7 +70,6 @@ function extractSessionState(store: DesignWorkspaceState): DesignWorkspaceSessio
     lastValidation: store.lastValidation,
     lastCompileReport: store.lastCompileReport,
     history: store.history,
-    projectContext: store.projectContext,
   };
 }
 
@@ -112,7 +90,6 @@ const initialSessionState: DesignWorkspaceSessionState = {
   lastValidation: null,
   lastCompileReport: null,
   history: null,
-  projectContext: null,
 };
 
 const initialState = {
@@ -137,12 +114,23 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
 
   addComponent: (component: DesignComponent) => {
     const current = get();
-    const projectPreview = hasProjectPreview(current.projectContext?.rendererInfo);
-    const nextComponents = upsertComponent(current.components, component);
+    // Deduplicate: if a component with the same ID already exists, select it
+    // and update its data to keep store and preview in sync
+    const existingIndex = current.components.findIndex((c) => c.id === component.id);
+    if (existingIndex !== -1) {
+      const nextComponents = [...current.components];
+      nextComponents[existingIndex] = { ...nextComponents[existingIndex], ...component };
+      set({
+        components: nextComponents,
+        activeComponentId: component.id,
+        previewHtml: buildPreviewMarkup(component),
+      });
+      return;
+    }
     set({
-      components: nextComponents,
+      components: [...current.components, component],
       activeComponentId: component.id,
-      previewHtml: projectPreview ? current.previewHtml : buildPreviewMarkup(component),
+      previewHtml: buildPreviewMarkup(component),
     });
   },
 
@@ -154,7 +142,7 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     );
     const nextState: Partial<DesignWorkspaceState> = { components: nextComponents };
 
-    if (current.activeComponentId === id && !hasProjectPreview(current.projectContext?.rendererInfo)) {
+    if (current.activeComponentId === id) {
       const updatedComponent = nextComponents.find((component) => component.id === id);
       if (updatedComponent) {
         nextState.previewHtml = buildPreviewMarkup(updatedComponent);
@@ -184,11 +172,11 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
 
   setActiveComponent: (id: string | null) => {
     const current = get();
+    // Normalize invalid IDs to null to prevent impossible state
     const component = id ? current.components.find((c) => c.id === id) : null;
-    const projectPreview = hasProjectPreview(current.projectContext?.rendererInfo);
     set({
       activeComponentId: component ? id : null,
-      previewHtml: projectPreview ? current.previewHtml : (component ? buildPreviewMarkup(component) : ""),
+      previewHtml: component ? buildPreviewMarkup(component) : "",
       selectedElement: null,
       selectedElements: [],
     });
@@ -305,7 +293,7 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     );
     const nextState: Partial<DesignWorkspaceState> = { components: nextComponents, error: null };
 
-    if (current.activeComponentId === snapshot.componentId && !hasProjectPreview(current.projectContext?.rendererInfo)) {
+    if (current.activeComponentId === snapshot.componentId) {
       const updatedComponent = nextComponents.find((component) => component.id === snapshot.componentId);
       nextState.previewHtml = updatedComponent ? buildPreviewMarkup(updatedComponent) : "";
     }
@@ -322,21 +310,11 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
   },
 
   setConfig: (config: DesignWorkspaceConfig) => {
-    const normalized = normalizeDesignWorkspaceConfig(config);
-    // Guard: sourceMode "project" requires an active projectContext
-    if (normalized.sourceMode === "project" && !get().projectContext) {
-      normalized.sourceMode = "sandbox";
-    }
-    set({ config: normalized });
+    set({ config: normalizeDesignWorkspaceConfig(config) });
   },
 
   updateConfig: (updates: Partial<DesignWorkspaceConfig>) => {
-    const normalized = normalizeDesignWorkspaceConfig({ ...get().config, ...updates });
-    // Guard: sourceMode "project" requires an active projectContext
-    if (normalized.sourceMode === "project" && !get().projectContext) {
-      normalized.sourceMode = "sandbox";
-    }
-    set({ config: normalized });
+    set({ config: normalizeDesignWorkspaceConfig({ ...get().config, ...updates }) });
   },
 
   setLastValidation: (validation: DesignWorkspaceValidationResult | null) => {
@@ -374,96 +352,7 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     }
   },
 
-  setProjectContext: (ctx: ProjectContext | null) => {
-    set({
-      projectContext: ctx,
-      config: normalizeDesignWorkspaceConfig({
-        ...get().config,
-        sourceMode: ctx ? "project" : "sandbox",
-        projectRoot: ctx?.projectRoot,
-      }),
-    });
-  },
-
-  updateProjectContext: (partial: Partial<ProjectContext>) => {
-    const current = get().projectContext;
-    if (!current) return;
-    const merged = { ...current, ...partial };
-
-    // Validate cross-field invariants
-    if (
-      (merged.worktreeStatus === "active" || merged.worktreeStatus === "finalizing") &&
-      merged.worktreePath == null
-    ) {
-      console.warn(
-        `[design-workspace] updateProjectContext rejected: worktreeStatus="${merged.worktreeStatus}" requires a non-null worktreePath`,
-      );
-      return;
-    }
-    if (merged.castFile != null && merged.castMode == null) {
-      console.warn(
-        `[design-workspace] updateProjectContext rejected: castFile is set but castMode is null`,
-      );
-      return;
-    }
-
-    set({ projectContext: merged });
-  },
-
-  applyCastResult: ({ component, previewHtml, castFile, castMode, rendererInfo }: ApplyCastResultInput) => {
-    set((state) => {
-      const nextComponents = upsertComponent(state.components, component);
-
-      const nextProjectContext = state.projectContext
-        ? {
-            ...state.projectContext,
-            ...(castFile !== undefined ? { castFile } : {}),
-            ...(castMode !== undefined ? { castMode } : {}),
-            ...(rendererInfo !== undefined ? { rendererInfo } : {}),
-          }
-        : state.projectContext;
-
-      const effectiveRendererInfo = nextProjectContext?.rendererInfo ?? null;
-
-      return {
-        components: nextComponents,
-        activeComponentId: component.id,
-        error: null,
-        previewHtml:
-          previewHtml !== undefined
-            ? previewHtml
-            : hasProjectPreview(effectiveRendererInfo)
-              ? state.previewHtml
-              : buildPreviewMarkup(component),
-        ...(nextProjectContext ? { projectContext: nextProjectContext } : {}),
-      };
-    });
-  },
-
-  setCastFile: (file: string | null, mode: CastMode | null) => {
-    const current = get().projectContext;
-    if (!current) return;
-    set({ projectContext: { ...current, castFile: file, castMode: mode } });
-  },
-
-  setProjectStructure: (structure: ProjectStructure) => {
-    const current = get().projectContext;
-    if (!current) return;
-    set({ projectContext: { ...current, projectStructure: structure } });
-  },
-
-  clearProjectContext: () => {
-    set({
-      projectContext: null,
-      config: normalizeDesignWorkspaceConfig({
-        ...get().config,
-        sourceMode: "sandbox",
-        projectRoot: undefined,
-      }),
-    });
-  },
-
   reset: () => {
-    set({ ...initialState, selectedBreakpoint: { ...DESIGN_BREAKPOINTS[0] }, projectContext: null });
+    set({ ...initialState, selectedBreakpoint: { ...DESIGN_BREAKPOINTS[0] } });
   },
 }));

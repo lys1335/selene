@@ -1,5 +1,3 @@
-import type { FrameworkType } from "./project-detection";
-
 export type DesignWorkspaceHooksPreset = "off" | "fast" | "strict";
 
 export interface DesignWorkspaceConfig {
@@ -10,16 +8,6 @@ export interface DesignWorkspaceConfig {
   postEditPreviewEnabled: boolean;
   typecheckStrictMode: boolean;
   jsxValidationEnabled: boolean;
-  sourceMode: "sandbox" | "project";
-  projectRoot?: string;
-  frameworkOverride?: FrameworkType;
-  worktreeLocation: "inside-project" | "temp-dir";
-  autoInstallProjectDeps: boolean;
-  devServerTimeoutMs: number;
-  maxDevServers: number;
-  rendererTier: "compile-only" | "all";
-  useProjectTsConfig: boolean;
-  useProjectTailwindConfig: boolean;
 }
 
 export interface DesignWorkspaceValidationCheck {
@@ -95,14 +83,6 @@ export const DEFAULT_DESIGN_WORKSPACE_CONFIG: DesignWorkspaceConfig = {
   postEditPreviewEnabled: true,
   typecheckStrictMode: false,
   jsxValidationEnabled: true,
-  sourceMode: "sandbox",
-  worktreeLocation: "inside-project",
-  autoInstallProjectDeps: true,
-  devServerTimeoutMs: 30_000,
-  maxDevServers: 3,
-  rendererTier: "all",
-  useProjectTsConfig: true,
-  useProjectTailwindConfig: true,
 };
 
 function isPreset(value: unknown): value is DesignWorkspaceHooksPreset {
@@ -148,16 +128,6 @@ export function normalizeDesignWorkspaceConfig(
       value?.jsxValidationEnabled,
       DEFAULT_DESIGN_WORKSPACE_CONFIG.jsxValidationEnabled,
     ),
-    sourceMode: value?.sourceMode === "project" ? "project" : "sandbox",
-    projectRoot: typeof value?.projectRoot === "string" ? value.projectRoot : undefined,
-    frameworkOverride: value?.frameworkOverride,
-    worktreeLocation: value?.worktreeLocation === "temp-dir" ? "temp-dir" : "inside-project",
-    autoInstallProjectDeps: readBoolean(value?.autoInstallProjectDeps, true),
-    devServerTimeoutMs: typeof value?.devServerTimeoutMs === "number" ? value.devServerTimeoutMs : 30_000,
-    maxDevServers: typeof value?.maxDevServers === "number" ? value.maxDevServers : 3,
-    rendererTier: value?.rendererTier === "compile-only" ? "compile-only" : "all",
-    useProjectTsConfig: readBoolean(value?.useProjectTsConfig, true),
-    useProjectTailwindConfig: readBoolean(value?.useProjectTailwindConfig, true),
   };
 }
 
@@ -192,14 +162,6 @@ export function getDesignWorkspaceConfigFromSettingsRecord(
       typeof settings?.designJsxValidationEnabled === "boolean"
         ? settings.designJsxValidationEnabled
         : undefined,
-    sourceMode: settings?.designSourceMode === "project" ? "project" : undefined,
-    worktreeLocation: settings?.designWorktreeLocation === "temp-dir" ? "temp-dir" : undefined,
-    autoInstallProjectDeps: typeof settings?.designAutoInstallProjectDeps === "boolean" ? settings.designAutoInstallProjectDeps : undefined,
-    devServerTimeoutMs: typeof settings?.designDevServerTimeoutMs === "number" ? settings.designDevServerTimeoutMs : undefined,
-    maxDevServers: typeof settings?.designMaxDevServers === "number" ? settings.designMaxDevServers : undefined,
-    useProjectTsConfig: typeof settings?.designUseProjectTsConfig === "boolean" ? settings.designUseProjectTsConfig : undefined,
-    useProjectTailwindConfig: typeof settings?.designUseProjectTailwindConfig === "boolean" ? settings.designUseProjectTailwindConfig : undefined,
-    rendererTier: settings?.designRendererTier === "compile-only" ? "compile-only" : undefined,
   });
 }
 
@@ -229,14 +191,6 @@ export function toDesignWorkspaceSettingsPatch(
   if (patch.jsxValidationEnabled !== undefined) {
     body.designJsxValidationEnabled = patch.jsxValidationEnabled;
   }
-  if (patch.sourceMode !== undefined) body.designSourceMode = patch.sourceMode;
-  if (patch.worktreeLocation !== undefined) body.designWorktreeLocation = patch.worktreeLocation;
-  if (patch.autoInstallProjectDeps !== undefined) body.designAutoInstallProjectDeps = patch.autoInstallProjectDeps;
-  if (patch.devServerTimeoutMs !== undefined) body.designDevServerTimeoutMs = patch.devServerTimeoutMs;
-  if (patch.maxDevServers !== undefined) body.designMaxDevServers = patch.maxDevServers;
-  if (patch.useProjectTsConfig !== undefined) body.designUseProjectTsConfig = patch.useProjectTsConfig;
-  if (patch.useProjectTailwindConfig !== undefined) body.designUseProjectTailwindConfig = patch.useProjectTailwindConfig;
-  if (patch.rendererTier !== undefined) body.designRendererTier = patch.rendererTier;
 
   return body;
 }

@@ -1,17 +1,15 @@
 import * as esbuild from "esbuild";
 import ts from "typescript";
-import { existsSync } from "fs";
-import { join, resolve } from "path";
+import { resolve } from "path";
 import {
   type DesignWorkspaceConfig,
   type DesignWorkspaceValidationCheck,
   type DesignWorkspaceValidationResult,
 } from "./config";
-import { validateWorkspaceDependencies, validateProjectDependencies, type DependencyValidationResult } from "./dependencies";
+import { validateWorkspaceDependencies, type DependencyValidationResult } from "./dependencies";
 import { buildTailwindPreviewWithMetadata } from "./compiler";
 import { getProjectRoot } from "../../utils/project-root";
 import { SANDBOX_NODE_MODULES } from "../libraries";
-import type { ProjectContext } from "./types";
 
 const PROJECT_ROOT = getProjectRoot();
 const VIRTUAL_FILE = resolve(PROJECT_ROOT, "__selene_design_workspace_validation__.tsx");
@@ -19,7 +17,6 @@ const VIRTUAL_FILE = resolve(PROJECT_ROOT, "__selene_design_workspace_validation
 interface RunPostEditValidationOptions {
   dependencyCheck?: DependencyValidationResult;
   previewBuildPassed?: boolean;
-  projectContext?: ProjectContext;
 }
 
 function buildCheck(
@@ -120,34 +117,18 @@ export async function runPostEditValidation(
     };
   }
 
-  // In project mode, use project dependency validation as the authoritative check
-  // instead of sandbox validation (which would produce false failures).
-  const isProjectMode = !!options.projectContext?.worktreePath;
-  let dependencyCheck: DependencyValidationResult;
-
-  if (isProjectMode) {
-    const projectNodeModules = join(options.projectContext!.worktreePath!, "node_modules");
-    dependencyCheck = options.dependencyCheck
-      ?? await validateProjectDependencies(componentCode, projectNodeModules);
-  } else {
-    dependencyCheck = options.dependencyCheck ?? await validateWorkspaceDependencies(componentCode);
-  }
-
+  const dependencyCheck = options.dependencyCheck ?? await validateWorkspaceDependencies(componentCode);
   if (config.postEditImportValidationEnabled) {
     if (dependencyCheck.missingPackages.length > 0) {
-      const context = isProjectMode ? " (project)" : "";
       checks.push(
         buildCheck(
           "import resolution",
           "fail",
-          `Missing packages${context}: ${dependencyCheck.missingPackages.join(", ")}`,
+          `Missing packages: ${dependencyCheck.missingPackages.join(", ")}`,
         ),
       );
     } else {
-      const detail = isProjectMode
-        ? "All packages resolve (including project dependencies)."
-        : "All referenced workspace packages resolve.";
-      checks.push(buildCheck("import resolution", "pass", detail));
+      checks.push(buildCheck("import resolution", "pass", "All referenced workspace packages resolve."));
     }
   } else {
     checks.push(buildCheck("import resolution", "skip", "Import validation is disabled."));
