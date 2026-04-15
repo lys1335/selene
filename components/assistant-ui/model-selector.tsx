@@ -227,7 +227,9 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ sessionId, status }) => 
     }
   }, [activeModelId, activeProvider, manualModelInput, manualProvider, persistSessionModel]);
 
-  if (!status?.model) return null;
+  if (!status?.model) {
+    return null;
+  }
 
   const triggerModelName = formatModelName(status.model.id);
   const triggerProvider = status.model.provider;

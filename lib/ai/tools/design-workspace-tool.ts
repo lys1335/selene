@@ -1,13 +1,9 @@
 /**
  * Design Workspace Tool
  *
- * AI tool for controlling the design workspace programmatically.
- * Allows agents to open/close the workspace, generate and edit components,
- * take and restore snapshots, and export results.
- *
- * The tool does NOT directly interact with the Zustand store (client-side).
- * Instead it returns structured results that the tool UI component uses
- * to update the store.
+ * Minimal iteration-first control surface for the design workspace.
+ * The durable source of truth is persisted design source code plus preview,
+ * not transient server cache state.
  */
 
 import { tool, jsonSchema } from "ai";
@@ -21,12 +17,7 @@ import {
   type DesignLibrary,
 } from "../../design/libraries";
 import {
-  exportDesignAsset,
-  type DesignExportFormat,
-} from "../../design/workspace/export";
-import {
   buildDesignPreviewErrorHtml,
-  type DesignExportMode,
 } from "../../design/workspace/preview";
 import {
   buildTailwindPreviewWithMetadata,
@@ -49,22 +40,38 @@ import {
 import { installSandboxPackages } from "../../design/workspace/dependencies";
 import { runPostEditValidation } from "../../design/workspace/validation";
 import { getFullPathFromMediaRef } from "../../storage/local-storage";
+import { updateDesignComponent } from "../../design/gallery/queries";
 import {
-  saveDesignComponent,
-  getDesignComponent,
-  updateDesignComponent,
-} from "../../design/gallery/queries";
+  findWorkspaceDesign,
+  listWorkspaceDesigns,
+  saveDesignComponentRecord,
+  type DesignGalleryItem,
+} from "../../design/gallery/service";
 import fs from "fs/promises";
 import path from "path";
+import {
+  buildInspectPromptText,
+  type InspectMessageContext,
+} from "../../design/workspace/inspect-context";
 
 interface DesignWorkspaceToolOptions {
   sessionId?: string;
   userId?: string;
   characterId?: string;
+  /** Inspect context from the user's message, when available. */
+  inspectContext?: InspectMessageContext | null;
+}
+
+export function getCachedComponent(_sessionId: string, _componentId: string): string | undefined {
+  return undefined;
+}
+
+export function resolveComponentCode(_sessionId: string, code: string): string | null {
+  return code.startsWith("cached:") ? null : code;
 }
 
 interface DesignWorkspaceInput {
-  action: "open" | "generate" | "edit" | "snapshot" | "restore" | "export" | "close" | "install";
+  action: "open" | "generate" | "edit" | "patch" | "readSource" | "list" | "status" | "close" | "install";
 
   /** npm package names to install. Required for "install" action. */
   packages?: string[];
@@ -77,47 +84,44 @@ interface DesignWorkspaceInput {
   activeComponentCode?: string;
   activeComponentId?: string;
 
-  label?: string;
-  snapshotId?: string;
-
+  /** Short, descriptive name for the component (e.g. "Pricing Card", "Login Form"). */
+  name?: string;
   code?: string;
   assets?: Array<{ url: string; description?: string }>;
 
-  format?: "html" | "react" | "png" | "video";
-  componentName?: string;
-  width?: number;
-  height?: number;
-  scale?: number;
-  durationMs?: number;
-  fps?: number;
+  /** String to find in the active component code. For "patch" action. */
+  oldString?: string;
+  /** Replacement string. For "patch" action. */
+  newString?: string;
+  /** Replace all occurrences (default: false). For "patch" action. */
+  replaceAll?: boolean;
+
+  /**
+   * Array of sequential patches for multi-location edits (e.g., wrapping).
+   * Each patch is applied in order to the result of the previous one.
+   * For "patch" action. Use instead of oldString/newString when the edit
+   * requires changes at multiple locations in the source.
+   */
+  patches?: Array<{ oldString: string; newString: string; replaceAll?: boolean }>;
+}
+
+interface ListedDesignSummary {
+  id: string;
+  name: string;
+  source: "session" | "saved";
+  updatedAt?: string;
+  isFavorite?: boolean;
 }
 
 interface DesignWorkspaceResultData {
   componentId?: string;
   code?: string;
   name?: string;
-  snapshotId?: string;
-  format?: string;
   message?: string;
   prompt?: string;
   mode?: string;
   style?: string;
-  renderedHtml?: string;
-  /**
-   * Compiled preview HTML for the UI bridge (iframe rendering).
-   * Stripped from LLM-facing output to avoid sending ~700K+ tokens of bundled JS.
-   * The preview frame falls back to the compile API when this is absent.
-   * @internal UI-only — never serialized to model context.
-   */
   previewHtml?: string;
-  url?: string;
-  localPath?: string;
-  filePath?: string;
-  fileName?: string;
-  width?: number;
-  height?: number;
-  durationMs?: number;
-  fps?: number;
   availableLibraries?: string[];
   compileReport?: DesignWorkspaceCompileReport;
   postEditValidation?: DesignWorkspaceValidationResult;
@@ -126,6 +130,16 @@ interface DesignWorkspaceResultData {
   missingPackages?: string[];
   autoRecoveryAttempted?: boolean;
   autoRecoveryResult?: "success" | "failed" | "not-needed";
+  agentErrorSummary?: string;
+  components?: ListedDesignSummary[];
+  status?: "available" | "missing" | "inline";
+  storage?: {
+    database: boolean;
+    userScoped: boolean;
+    sessionScoped: boolean;
+  };
+  recoveryHint?: string;
+  updatedAt?: string;
 }
 
 interface DesignWorkspaceResult {
@@ -148,6 +162,12 @@ interface CompiledPreviewFailure {
   error: string;
 }
 
+interface ResolvedDesignSource {
+  component: DesignGalleryItem | null;
+  code: string | null;
+  inline: boolean;
+}
+
 let librariesPromise: Promise<DesignLibrary[]> | null = null;
 
 function getAvailableLibraries(): Promise<DesignLibrary[]> {
@@ -163,51 +183,6 @@ function getAvailableLibraries(): Promise<DesignLibrary[]> {
 function resetAvailableLibrariesCache(): void {
   librariesPromise = null;
 }
-
-const componentCache = (
-  (globalThis as Record<string, unknown>).__designComponentCache ??= new Map<string, string>()
-) as Map<string, string>;
-
-function cacheKey(sessionId: string, componentId: string): string {
-  return `${sessionId}:${componentId}`;
-}
-
-function cacheComponent(sessionId: string, componentId: string, code: string): void {
-  const key = cacheKey(sessionId, componentId);
-  componentCache.delete(key);
-  componentCache.set(key, code);
-  if (componentCache.size > 200) {
-    const firstKey = componentCache.keys().next().value;
-    if (firstKey) componentCache.delete(firstKey);
-  }
-}
-
-export function getCachedComponent(sessionId: string, componentId: string): string | undefined {
-  const key = cacheKey(sessionId, componentId);
-  const value = componentCache.get(key);
-  if (value !== undefined) {
-    componentCache.delete(key);
-    componentCache.set(key, value);
-  }
-  return value;
-}
-
-export function resolveComponentCode(sessionId: string, code: string): string | null {
-  if (!code.startsWith("cached:")) return code;
-  const id = code.slice("cached:".length);
-  return getCachedComponent(sessionId, id) ?? null;
-}
-
-const DEFAULT_EXPORT_SESSION_ID = "design-workspace";
-const DEFAULT_EXPORT_WIDTH = 1440;
-const DEFAULT_EXPORT_HEIGHT = 900;
-const DEFAULT_EXPORT_SCALE = 2;
-const DEFAULT_EXPORT_DURATION_MS = 2400;
-const DEFAULT_EXPORT_FPS = 24;
-const MAX_EXPORT_DIMENSION = 4096;
-const MAX_EXPORT_SCALE = 4;
-const MAX_EXPORT_DURATION_MS = 8000;
-const MAX_EXPORT_FPS = 60;
 
 const IMAGE_MEDIA_TYPES: Record<string, string> = {
   ".png": "image/png",
@@ -292,42 +267,13 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
-function clampNumber(value: number | undefined, fallback: number, min: number, max: number): number {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return fallback;
-  }
-
-  return Math.min(max, Math.max(min, Math.round(value)));
-}
-
-function normalizeExportFormat(format?: string): DesignExportFormat {
-  return format === "react" || format === "png" || format === "video" ? format : "html";
-}
-
-function normalizeExportSessionId(sessionId?: string): string {
-  const trimmed = sessionId?.trim();
-  if (!trimmed || trimmed === "UNSCOPED") {
-    return DEFAULT_EXPORT_SESSION_ID;
-  }
-
-  return trimmed;
-}
-
-function buildExportSuccessMessage(format: DesignExportFormat): string {
-  switch (format) {
-    case "react":
-      return "Component exported as React JSX.";
-    case "png":
-      return "Component exported as PNG.";
-    case "video":
-      return "Component exported as MP4 video.";
-    default:
-      return "Component exported as HTML.";
-  }
-}
-
 function getSessionId(options: DesignWorkspaceToolOptions): string {
   return options.sessionId?.trim() || "UNSCOPED";
+}
+
+function getPersistedUserId(options: DesignWorkspaceToolOptions): string | undefined {
+  const userId = options.userId?.trim();
+  return userId && userId !== "UNSCOPED" ? userId : undefined;
 }
 
 function getWorkspaceConfig(): DesignWorkspaceConfig {
@@ -443,6 +389,38 @@ function buildValidationMessage(validation: DesignWorkspaceValidationResult | un
   return `Post-edit checks found ${failedChecks} issue${failedChecks === 1 ? "" : "s"}.`;
 }
 
+function buildAgentErrorSummary(report: DesignWorkspaceCompileReport): string {
+  const lines: string[] = [];
+
+  if (report.errors.length > 0) {
+    for (const err of report.errors.slice(0, 5)) {
+      const loc = err.location ? ` (line ${err.location.line})` : "";
+      const sug = err.suggestion ? ` → Fix: ${err.suggestion}` : "";
+      lines.push(`[${err.type}]${loc} ${err.message}${sug}`);
+    }
+    if (report.errors.length > 5) {
+      lines.push(`... and ${report.errors.length - 5} more errors`);
+    }
+  }
+
+  const missing = report.dependencyCheck.missingPackages;
+  if (missing.length > 0) {
+    lines.push(`Missing packages: ${missing.join(", ")} — use action "install" to add them.`);
+  }
+
+  if (report.diagnostics?.length && lines.length === 0) {
+    for (const diagnostic of report.diagnostics.slice(0, 3)) {
+      const loc = diagnostic.location ? ` (line ${diagnostic.location.line})` : "";
+      lines.push(`${diagnostic.text}${loc}`);
+    }
+    if (report.diagnostics.length > 3) {
+      lines.push(`... and ${report.diagnostics.length - 3} more diagnostics`);
+    }
+  }
+
+  return lines.length > 0 ? lines.join("\n") : "Compilation failed (no structured error details available).";
+}
+
 function buildCompileFailureResult(
   action: DesignWorkspaceInput["action"],
   baseData: DesignWorkspaceResultData,
@@ -457,6 +435,7 @@ function buildCompileFailureResult(
       previewHtml: compileFailure.previewHtml,
       compileReport: compileFailure.compileReport,
       missingPackages: compileFailure.compileReport.dependencyCheck.missingPackages,
+      agentErrorSummary: buildAgentErrorSummary(compileFailure.compileReport),
       autoRecoveryAttempted: Boolean(compileFailure.compileReport.autoInstall?.attempted),
       autoRecoveryResult: compileFailure.compileReport.autoInstall
         ? compileFailure.compileReport.autoInstall.success
@@ -467,30 +446,120 @@ function buildCompileFailureResult(
   };
 }
 
-/**
- * Strip heavyweight fields from the tool result before it reaches the LLM.
- *
- * `previewHtml` contains the entire compiled bundle (~100K–700K tokens for
- * complex components) and is never useful for the model — it's only needed
- * by the preview iframe.  The `useCompileTailwindPreview` hook re-fetches
- * compiled HTML from the compile API independently, so removing it here
- * doesn't break rendering.
- *
- * `renderedHtml` is similarly large compiled output that the LLM doesn't need.
- */
-/**
- * Strip bloated fields from the tool result before the LLM sees it.
- * Small error-preview HTML (< 5 KB) is kept so the UI can render
- * error states; only the huge compiled bundles are stripped.
- */
+function buildMissingComponentError(componentId: string, action: "edit" | "patch" | "readSource" | "status"): string {
+  return `Design "${componentId}" is not available for ${action}. Run action "list" to discover persisted designs for this session, or pass the latest source with "activeComponentCode".`;
+}
+
+async function resolveDesignSource(
+  options: DesignWorkspaceToolOptions,
+  input: Pick<DesignWorkspaceInput, "activeComponentCode" | "activeComponentId">,
+): Promise<ResolvedDesignSource> {
+  if (input.activeComponentCode?.trim()) {
+    return {
+      component: input.activeComponentId ? await findWorkspaceDesign({
+        id: input.activeComponentId,
+        userId: getPersistedUserId(options),
+        sessionId: getSessionId(options),
+      }) : null,
+      code: input.activeComponentCode.trim(),
+      inline: true,
+    };
+  }
+
+  if (!input.activeComponentId) {
+    return {
+      component: null,
+      code: null,
+      inline: false,
+    };
+  }
+
+  const component = await findWorkspaceDesign({
+    id: input.activeComponentId,
+    userId: getPersistedUserId(options),
+    sessionId: getSessionId(options),
+  });
+
+  return {
+    component,
+    code: component?.code ?? null,
+    inline: false,
+  };
+}
+
+async function persistNewDesign(
+  options: DesignWorkspaceToolOptions,
+  input: {
+    id: string;
+    name: string;
+    prompt: string;
+    code: string;
+    mode: string;
+    style: string;
+  },
+): Promise<DesignGalleryItem> {
+  const userId = getPersistedUserId(options);
+  if (!userId) {
+    throw new Error("Design workspace requires an authenticated user context to persist generated source.");
+  }
+
+  return saveDesignComponentRecord({
+    id: input.id,
+    userId,
+    characterId: options.characterId,
+    sessionId: getSessionId(options),
+    name: input.name,
+    prompt: input.prompt,
+    code: input.code,
+    mode: input.mode,
+    style: input.style,
+    framework: "react-tailwind",
+    category: "workspace",
+  });
+}
+
+async function persistExistingDesign(
+  component: DesignGalleryItem,
+  updates: {
+    code: string;
+    prompt?: string;
+    name?: string;
+    mode?: string;
+    style?: string;
+    sessionId?: string;
+    characterId?: string;
+  },
+): Promise<DesignGalleryItem> {
+  const updated = await updateDesignComponent(component.userId, component.id, {
+    code: updates.code,
+    prompt: updates.prompt,
+    name: updates.name,
+    mode: updates.mode,
+    style: updates.style,
+    sessionId: updates.sessionId,
+    characterId: updates.characterId,
+  });
+
+  if (!updated) {
+    throw new Error(`Failed to persist design "${component.id}".`);
+  }
+
+  return {
+    ...updated,
+    previewUrl: component.previewUrl,
+  };
+}
+
 function stripHeavyFields(result: DesignWorkspaceResult): DesignWorkspaceResult {
   if (!result.data) {
     return result;
   }
-  const HEAVY_THRESHOLD = 5_000; // chars
-  const { previewHtml, renderedHtml, ...lightData } = result.data;
 
-  // Keep small error-preview HTML; strip large compiled bundles.
+  const HEAVY_THRESHOLD = 5_000;
+  const { previewHtml, renderedHtml: _renderedHtml, ...lightData } = result.data as DesignWorkspaceResultData & {
+    renderedHtml?: string;
+  };
+
   const keep: Record<string, unknown> = {};
   if (previewHtml && previewHtml.length < HEAVY_THRESHOLD) {
     keep.previewHtml = previewHtml;
@@ -518,14 +587,17 @@ async function executeDesignWorkspace(
     case "edit":
       result = await handleEdit(options, input);
       break;
-    case "snapshot":
-      result = handleSnapshot(options, input);
+    case "patch":
+      result = await handlePatch(options, input);
       break;
-    case "restore":
-      result = await handleRestore(options, input);
+    case "readSource":
+      result = await handleReadSource(options, input);
       break;
-    case "export":
-      result = await handleExport(options, input);
+    case "list":
+      result = await handleList(options);
+      break;
+    case "status":
+      result = await handleStatus(options, input);
       break;
     case "close":
       result = handleClose(options);
@@ -545,16 +617,17 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
   );
 
   return tool({
-    description: `Control the design workspace to generate, edit, snapshot, export UI components, and install external libraries.
+    description: `Control the design workspace to generate, inspect, and iterate on UI components using code + preview.
 
 **Actions:**
 - "open": Open the design workspace panel.
-- "install": Install npm packages for use in designs. Provide \`packages\` array (e.g. ["three", "@react-three/fiber"]). Packages are installed via npm and become available for import in generated components.
+- "install": Install npm packages for use in designs. Provide \`packages\` array (e.g. ["three", "@react-three/fiber"]).
 - "generate": Generate a new UI component. Provide \`code\` (direct TSX) to render your own code, OR \`prompt\` for AI generation. Optional: \`mode\`, \`style\`, \`assets\`.
-- "edit": Edit the active component. Provide \`activeComponentCode\` WITHOUT \`editPrompt\` to directly replace the code, OR provide \`editPrompt\` for AI-driven full-file rewriting. Pass \`activeComponentId\` to reference a previously generated component. Optional: \`style\`, \`assets\`.
-- "snapshot": Take a snapshot of the current workspace state.
-- "restore": Restore a previous snapshot. Requires \`snapshotId\`.
-- "export": Export the active component as HTML, React, PNG, or MP4. Pass \`activeComponentId\` or \`activeComponentCode\`.
+- "edit": Edit a persisted component. Provide \`activeComponentId\`. Provide \`activeComponentCode\` WITHOUT \`editPrompt\` to directly replace the code, OR provide \`editPrompt\` for AI-driven full-file rewriting.
+- "patch": Surgically edit a persisted component using exact find-and-replace. Requires \`activeComponentId\`. Use \`oldString\` + \`newString\` for single-location edits, or \`patches\` array for multi-location edits (e.g., wrapping content in a new parent element requires inserting both an opening and closing tag). For wrapping operations, include the full block being wrapped in \`oldString\` and the wrapped version in \`newString\`, OR use \`patches\` to apply sequential insertions atomically.
+- "readSource": Read back the source code of a persisted component. Pass \`activeComponentId\`.
+- "list": List designs available to the current workspace session.
+- "status": Inspect whether a design is persisted and available. Pass \`activeComponentId\`.
 - "close": Close the design workspace panel.`,
     inputSchema: jsonSchema<DesignWorkspaceInput>({
       type: "object",
@@ -563,7 +636,7 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
       properties: {
         action: {
           type: "string",
-          enum: ["open", "generate", "edit", "snapshot", "restore", "export", "close", "install"],
+          enum: ["open", "generate", "edit", "patch", "readSource", "list", "status", "close", "install"],
           description: "The workspace action to perform.",
         },
         packages: {
@@ -575,6 +648,10 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
           type: "string",
           description: 'Text description of the component to generate. Required for "generate" unless "code" is provided.',
         },
+        name: {
+          type: "string",
+          description: 'Short, descriptive name for the component (e.g. "Pricing Card", "Login Form", "Hero Section"). Required for "generate". Used as the display name in the design workspace.',
+        },
         code: {
           type: "string",
           description: 'Direct TSX/React component code. If provided for "generate", skips AI generation and renders this code directly. The code should be a complete React component with `export default`.',
@@ -582,7 +659,7 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
         mode: {
           type: "string",
           enum: ["tailwind"],
-          description: 'Generation mode (always "tailwind"). Optional for "generate" and "export".',
+          description: 'Generation mode (always "tailwind"). Optional for "generate".',
         },
         style: {
           type: "string",
@@ -608,58 +685,37 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
         },
         activeComponentCode: {
           type: "string",
-          description: 'Component code override. Optional — if omitted, the server uses the cached code from the last generate/edit for this component.',
+          description: 'Component code override. Optional for direct replacement or explicit source-driven edits.',
         },
         activeComponentId: {
           type: "string",
-          description: 'ID of the component to edit or export. Used to look up cached code server-side.',
+          description: 'ID of the persisted component to edit, patch, inspect, or read.',
         },
-        label: {
+        oldString: {
           type: "string",
-          description: 'Human-readable label for the snapshot. For "snapshot".',
+          description: 'The exact text to find in the component code. Required for "patch" action.',
         },
-        snapshotId: {
+        newString: {
           type: "string",
-          description: 'ID of the snapshot to restore. Required for "restore".',
+          description: 'The replacement text. Required for "patch" action.',
         },
-        format: {
-          type: "string",
-          enum: ["html", "react", "png", "video"],
-          description: 'Export format (default "html"). For "export".',
+        replaceAll: {
+          type: "boolean",
+          description: 'If true, replace all occurrences of oldString. Default: false (replace first occurrence only). For "patch" action.',
         },
-        componentName: {
-          type: "string",
-          description: 'Optional export filename base and display name. For "export".',
-        },
-        width: {
-          type: "number",
-          minimum: 320,
-          maximum: MAX_EXPORT_DIMENSION,
-          description: 'Export width in pixels. Optional for "export".',
-        },
-        height: {
-          type: "number",
-          minimum: 320,
-          maximum: MAX_EXPORT_DIMENSION,
-          description: 'Export height in pixels. Optional for "export".',
-        },
-        scale: {
-          type: "number",
-          minimum: 1,
-          maximum: MAX_EXPORT_SCALE,
-          description: 'Raster export scale multiplier. Optional for "export".',
-        },
-        durationMs: {
-          type: "number",
-          minimum: 500,
-          maximum: MAX_EXPORT_DURATION_MS,
-          description: 'Video duration in milliseconds. Optional for MP4 export.',
-        },
-        fps: {
-          type: "number",
-          minimum: 12,
-          maximum: MAX_EXPORT_FPS,
-          description: 'Video frames per second. Optional for MP4 export.',
+        patches: {
+          type: "array",
+          description: 'Array of sequential patches for multi-location edits. Each patch has oldString, newString, and optional replaceAll. Applied in order. Use instead of oldString/newString when wrapping content or making changes at multiple source locations. For "patch" action.',
+          items: {
+            type: "object",
+            properties: {
+              oldString: { type: "string", description: "The exact text to find." },
+              newString: { type: "string", description: "The replacement text." },
+              replaceAll: { type: "boolean", description: "Replace all occurrences. Default: false." },
+            },
+            required: ["oldString", "newString"],
+            additionalProperties: false,
+          },
         },
       },
       required: ["action"],
@@ -803,42 +859,52 @@ async function handleGenerate(
   }
 
   const componentId = generateId();
-  const name = input.code?.trim() ? "Direct Component" : "Generated Component";
-  cacheComponent(sessionId, componentId, finalCode);
+  const name = input.name?.trim() || (input.code?.trim() ? "Direct Component" : "Generated Component");
 
-  // Persist to DB so the component survives cache eviction / server restart
-  if (options.userId) {
-    saveDesignComponent({
+  let persisted: DesignGalleryItem;
+  try {
+    persisted = await persistNewDesign(options, {
       id: componentId,
-      userId: options.userId,
-      characterId: options.characterId,
-      sessionId: options.sessionId,
       name,
       prompt: prompt?.trim() || input.code?.trim() || "",
       code: finalCode,
       mode,
       style,
-    }).catch(() => {
-      // DB save is best-effort — don't block the tool response
     });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to persist generated design.";
+    recordHistory(sessionId, "generate", startedAt, false, { error: message });
+    return {
+      success: false,
+      action: "generate",
+      error: message,
+      data: {
+        componentId,
+        code: finalCode,
+        name,
+        mode,
+        style,
+      },
+    };
   }
 
-  const previewResult = await compilePreviewForTool(finalCode, name, "design-workspace-generate");
+  const previewResult = await compilePreviewForTool(finalCode, persisted.name, "design-workspace-generate");
   const libraries = await getAvailableLibraries();
   const availableLibraries = libraries.filter((library) => library.available).map((library) => library.package);
   const baseData: DesignWorkspaceResultData = {
-    componentId,
+    componentId: persisted.id,
     code: finalCode,
-    name,
-    prompt: prompt?.trim() || undefined,
+    name: persisted.name,
+    prompt: persisted.prompt,
     mode,
     style,
     availableLibraries: availableLibraries.length > 0 ? availableLibraries : undefined,
+    updatedAt: persisted.updatedAt,
   };
 
   if (!previewResult.ok) {
     recordHistory(sessionId, "generate", startedAt, false, {
-      componentId,
+      componentId: persisted.id,
       error: previewResult.error,
       metadata: {
         missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
@@ -848,7 +914,7 @@ async function handleGenerate(
   }
 
   recordHistory(sessionId, "generate", startedAt, true, {
-    componentId,
+    componentId: persisted.id,
     metadata: {
       recovered: previewResult.compileReport.recovered,
     },
@@ -859,7 +925,7 @@ async function handleGenerate(
     action: "generate",
     data: {
       ...baseData,
-      message: `Component "${name}" generated successfully.`,
+      message: `Design "${persisted.name}" generated and saved successfully.`,
       previewHtml: previewResult.previewHtml,
       compileReport: previewResult.compileReport,
       missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
@@ -889,171 +955,130 @@ async function handleEdit(
     assets: inputAssets,
   } = input;
 
-  let sourceCode = activeComponentCode?.trim() || undefined;
-  if (!sourceCode && activeComponentId) {
-    sourceCode = getCachedComponent(sessionId, activeComponentId);
-    // Fall back to DB if the in-memory cache was evicted
-    if (!sourceCode && options.userId) {
-      try {
-        const dbComponent = await getDesignComponent(options.userId, activeComponentId);
-        if (dbComponent) {
-          sourceCode = dbComponent.code;
-          // Re-populate cache for subsequent edits
-          cacheComponent(sessionId, activeComponentId, sourceCode);
-        }
-      } catch {
-        // DB lookup failed — proceed without source code
-      }
-    }
-  }
-
-  if (!editPrompt?.trim() && activeComponentCode?.trim()) {
-    const finalCode = activeComponentCode.trim();
-    if (activeComponentId) {
-      cacheComponent(sessionId, activeComponentId, finalCode);
-      // Persist direct code replacement to DB
-      if (options.userId) {
-        updateDesignComponent(options.userId, activeComponentId, {
-          code: finalCode,
-        }).catch(() => {});
-      }
-    }
-
-    const previewResult = await compilePreviewForTool(
-      finalCode,
-      "Edited Component",
-      "design-workspace-edit-direct",
-    );
-    const config = getWorkspaceConfig();
-    const validation = previewResult.ok
-      ? await runPostEditValidation(finalCode, config, { previewBuildPassed: true })
-      : undefined;
-
-    if (!previewResult.ok) {
-      recordHistory(sessionId, "edit", startedAt, false, {
-        componentId: activeComponentId,
-        error: previewResult.error,
-        metadata: {
-          missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
-        },
-      });
-      return buildCompileFailureResult(
-        "edit",
-        {
-          componentId: activeComponentId,
-          code: finalCode,
-          config,
-        },
-        previewResult,
-      );
-    }
-
-    const validationMessage = buildValidationMessage(validation);
-    recordHistory(sessionId, "edit", startedAt, true, {
-      componentId: activeComponentId,
-      validation,
-    });
-
-    return {
-      success: true,
-      action: "edit",
-      data: {
-        componentId: activeComponentId,
-        code: finalCode,
-        message: validationMessage || "Component code replaced directly.",
-        previewHtml: previewResult.previewHtml,
-        compileReport: previewResult.compileReport,
-        postEditValidation: validation,
-        config,
-      },
-    };
-  }
-
-  if (!editPrompt?.trim()) {
-    const error = 'Provide "editPrompt" for AI-driven editing, or "activeComponentCode" without "editPrompt" to directly replace the code.';
+  if (!activeComponentId) {
+    const error = 'Provide "activeComponentId" to edit a persisted design.';
     recordHistory(sessionId, "edit", startedAt, false, { error });
     return { success: false, action: "edit", error };
   }
 
-  if (!sourceCode) {
-    const error = 'No component code available. Either pass "activeComponentCode" or ensure the component was generated in this session.';
-    recordHistory(sessionId, "edit", startedAt, false, { error });
+  const resolved = await resolveDesignSource(options, { activeComponentId, activeComponentCode });
+  if (!resolved.code || !resolved.component) {
+    const error = buildMissingComponentError(activeComponentId, "edit");
+    recordHistory(sessionId, "edit", startedAt, false, { componentId: activeComponentId, error });
     return {
       success: false,
       action: "edit",
       error,
+      data: {
+        componentId: activeComponentId,
+        status: "missing",
+        recoveryHint: 'Run action "list" to inspect persisted designs, or pass explicit source with "activeComponentCode".',
+      },
     };
   }
 
-  const assets = inputAssets?.length ? await resolveAssets(inputAssets) : undefined;
+  if (!editPrompt?.trim() && !activeComponentCode?.trim()) {
+    const error = 'Provide "editPrompt" for AI-driven editing, or provide "activeComponentCode" to directly replace the design source.';
+    recordHistory(sessionId, "edit", startedAt, false, { componentId: activeComponentId, error });
+    return { success: false, action: "edit", error };
+  }
 
-  let finalCode = "";
-  let editError: string | undefined;
+  let finalCode = activeComponentCode?.trim() || "";
+  if (!finalCode) {
+    const assets = inputAssets?.length ? await resolveAssets(inputAssets) : undefined;
+    let editError: string | undefined;
 
-  for await (const event of editCard({ code: sourceCode, editPrompt, style, assets })) {
-    if (event.type === "complete") {
-      finalCode = event.content;
+    // Enrich edit prompt with inspect context when the user selected elements.
+    // The AI model already sees [Inspect Focus] in the user message via content-extractor,
+    // but we also inject it here so the edit pipeline sees element selectors directly.
+    let enrichedEditPrompt = editPrompt!;
+    if (options.inspectContext) {
+      const inspectPromptText = buildInspectPromptText(options.inspectContext);
+      if (inspectPromptText) {
+        enrichedEditPrompt = `${inspectPromptText}\n\n${enrichedEditPrompt}`;
+      }
     }
-    if (event.type === "error") {
-      editError = event.error.message;
+
+    for await (const event of editCard({ code: resolved.code, editPrompt: enrichedEditPrompt, style, assets })) {
+      if (event.type === "complete") {
+        finalCode = event.content;
+      }
+      if (event.type === "error") {
+        editError = event.error.message;
+      }
+    }
+
+    if (editError || !finalCode.trim()) {
+      const error = editError ?? "Edit produced empty output. Try rephrasing the instruction.";
+      recordHistory(sessionId, "edit", startedAt, false, {
+        componentId: activeComponentId,
+        error,
+      });
+      return {
+        success: false,
+        action: "edit",
+        error,
+      };
     }
   }
 
-  if (editError || !finalCode.trim()) {
-    const error = editError ?? "Edit produced empty output. Try rephrasing the instruction.";
+  let persisted: DesignGalleryItem;
+  try {
+    persisted = await persistExistingDesign(resolved.component, {
+      code: finalCode.trim(),
+      prompt: editPrompt?.trim() || resolved.component.prompt,
+      style,
+      sessionId,
+      characterId: options.characterId,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to persist edited design.";
     recordHistory(sessionId, "edit", startedAt, false, {
       componentId: activeComponentId,
-      error,
+      error: message,
     });
     return {
       success: false,
       action: "edit",
-      error,
+      error: message,
+      data: {
+        componentId: activeComponentId,
+        code: finalCode.trim(),
+      },
     };
   }
 
-  if (activeComponentId) {
-    cacheComponent(sessionId, activeComponentId, finalCode);
-    // Persist the edit to DB
-    if (options.userId) {
-      updateDesignComponent(options.userId, activeComponentId, {
-        code: finalCode,
-        prompt: editPrompt?.trim() || undefined,
-      }).catch(() => {
-        // DB update is best-effort
-      });
-    }
-  }
-
-  const componentName = activeComponentId ? "Edited Component" : "Component";
-  const previewResult = await compilePreviewForTool(finalCode, componentName, "design-workspace-edit");
+  const previewResult = await compilePreviewForTool(finalCode.trim(), persisted.name, "design-workspace-edit");
   const config = getWorkspaceConfig();
-  const validation = previewResult.ok
-    ? await runPostEditValidation(finalCode, config, { previewBuildPassed: true })
-    : undefined;
+  const validation = await runPostEditValidation(finalCode.trim(), config, { previewBuildPassed: previewResult.ok });
+  const baseData: DesignWorkspaceResultData = {
+    componentId: persisted.id,
+    code: finalCode.trim(),
+    name: persisted.name,
+    prompt: persisted.prompt,
+    style: persisted.style as "apple-glass" | "default",
+    config,
+    updatedAt: persisted.updatedAt,
+  };
 
   if (!previewResult.ok) {
     recordHistory(sessionId, "edit", startedAt, false, {
-      componentId: activeComponentId,
+      componentId: persisted.id,
+      validation,
       error: previewResult.error,
       metadata: {
         missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
       },
     });
-    return buildCompileFailureResult(
-      "edit",
-      {
-        componentId: activeComponentId,
-        code: finalCode,
-        config,
-      },
-      previewResult,
-    );
+    return buildCompileFailureResult("edit", {
+      ...baseData,
+      postEditValidation: validation,
+    }, previewResult);
   }
 
   const validationMessage = buildValidationMessage(validation);
   recordHistory(sessionId, "edit", startedAt, true, {
-    componentId: activeComponentId,
+    componentId: persisted.id,
     validation,
   });
 
@@ -1061,70 +1086,80 @@ async function handleEdit(
     success: true,
     action: "edit",
     data: {
-      componentId: activeComponentId,
-      code: finalCode,
-      message: validationMessage || "Component edited successfully.",
+      ...baseData,
+      message: validationMessage || "Design edited successfully.",
       previewHtml: previewResult.previewHtml,
       compileReport: previewResult.compileReport,
       postEditValidation: validation,
-      config,
+      missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
+      autoRecoveryAttempted: Boolean(previewResult.compileReport.autoInstall?.attempted),
+      autoRecoveryResult: previewResult.compileReport.autoInstall
+        ? previewResult.compileReport.autoInstall.success
+          ? "success"
+          : "failed"
+        : "not-needed",
     },
   };
 }
 
-function handleSnapshot(
-  options: DesignWorkspaceToolOptions,
-  input: DesignWorkspaceInput,
-): DesignWorkspaceResult {
-  const startedAt = Date.now();
-  const sessionId = getSessionId(options);
-  ensureHistory(sessionId);
+/**
+ * Lightweight JSX tag-balance check. Counts self-closing and open/close tags
+ * and returns the first unclosed tag name if the tree is unbalanced.
+ * This is intentionally approximate — it catches the most common wrapping
+ * mistake (inserting an opening tag without its closing counterpart) without
+ * requiring a full parser.
+ */
+export function findUnclosedJsxTag(code: string): string | null {
+  // Strip string literals and comments to avoid false positives
+  let stripped = code
+    .replace(/\/\/.*$/gm, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+    .replace(/`(?:[^`\\]|\\.)*`/g, "``");
 
-  recordHistory(sessionId, "snapshot", startedAt, true, {
-    metadata: {
-      label: input.label,
-    },
-  });
+  // Strip TypeScript generics that look like JSX tags (e.g., useState<SceneState>(...))
+  // Pattern: identifier followed by <UppercaseName> then ( or , or > (generic context, not JSX)
+  stripped = stripped.replace(
+    /\b\w+<([A-Z][A-Za-z0-9.,\s|&\[\]<>]*)>(?=\s*[(\],;:=&|)])/g,
+    (match) => " ".repeat(match.length),
+  );
+  // Also strip standalone type annotations like `: Type<Generic>` and `as Type<Generic>`
+  stripped = stripped.replace(
+    /(?::\s*|as\s+)([A-Z][A-Za-z0-9.]*(?:<[^>]*>)?)/g,
+    (match) => " ".repeat(match.length),
+  );
 
-  return {
-    success: true,
-    action: "snapshot",
-    data: {
-      message: input.label ? `Snapshot "${input.label}" requested.` : "Snapshot requested.",
-      ...(input.label ? { name: input.label } : {}),
-    },
-  };
-}
+  // Match JSX tags: <Tag, </Tag, or self-closing />
+  const tagPattern = /<\/?([A-Z][A-Za-z0-9.]*)[^>]*?\/?>/g;
+  const stack: string[] = [];
+  let match: RegExpExecArray | null;
 
-function handleRestore(
-  options: DesignWorkspaceToolOptions,
-  input: DesignWorkspaceInput,
-): DesignWorkspaceResult {
-  const startedAt = Date.now();
-  const sessionId = getSessionId(options);
-  ensureHistory(sessionId);
+  while ((match = tagPattern.exec(stripped)) !== null) {
+    const fullMatch = match[0];
+    const tagName = match[1];
 
-  if (!input.snapshotId) {
-    const error = 'Missing required field "snapshotId" for restore action.';
-    recordHistory(sessionId, "restore", startedAt, false, { error });
-    return { success: false, action: "restore", error };
+    if (fullMatch.endsWith("/>")) {
+      // Self-closing — no effect on balance
+      continue;
+    }
+
+    if (fullMatch.startsWith("</")) {
+      // Closing tag
+      if (stack.length > 0 && stack[stack.length - 1] === tagName) {
+        stack.pop();
+      }
+      // Mismatched close — don't error, just skip (could be fragment)
+    } else {
+      // Opening tag
+      stack.push(tagName);
+    }
   }
 
-  recordHistory(sessionId, "restore", startedAt, true, {
-    metadata: { snapshotId: input.snapshotId },
-  });
-
-  return {
-    success: true,
-    action: "restore",
-    data: {
-      snapshotId: input.snapshotId,
-      message: `Snapshot "${input.snapshotId}" restore requested.`,
-    },
-  };
+  return stack.length > 0 ? stack[stack.length - 1] : null;
 }
 
-async function handleExport(
+async function handlePatch(
   options: DesignWorkspaceToolOptions,
   input: DesignWorkspaceInput,
 ): Promise<DesignWorkspaceResult> {
@@ -1132,82 +1167,393 @@ async function handleExport(
   const sessionId = getSessionId(options);
   ensureHistory(sessionId);
 
-  let activeComponentCode = input.activeComponentCode?.trim() || undefined;
-  if (!activeComponentCode && input.activeComponentId) {
-    activeComponentCode = getCachedComponent(sessionId, input.activeComponentId);
+  const { oldString, newString, replaceAll: replaceAllOccurrences, activeComponentId, activeComponentCode, patches } = input;
+
+  if (!activeComponentId) {
+    const error = 'Provide "activeComponentId" to patch a persisted design.';
+    recordHistory(sessionId, "patch", startedAt, false, { error });
+    return { success: false, action: "patch", error };
   }
 
-  if (!activeComponentCode) {
-    const error = 'No component code available. Either pass "activeComponentCode" or ensure the component was generated in this session.';
-    recordHistory(sessionId, "export", startedAt, false, {
-      componentId: input.activeComponentId,
-      error,
-    });
+  // Build the list of patch operations — either from `patches` array or single oldString/newString
+  type PatchOp = { oldString: string; newString: string; replaceAll?: boolean };
+  let patchOps: PatchOp[];
+
+  if (patches && Array.isArray(patches) && patches.length > 0) {
+    // Multi-patch mode
+    for (let i = 0; i < patches.length; i++) {
+      const p = patches[i];
+      if (!p.oldString && p.oldString !== "") {
+        return { success: false, action: "patch", error: `patches[${i}]: "oldString" is required.` };
+      }
+      if (p.newString === undefined || p.newString === null) {
+        return { success: false, action: "patch", error: `patches[${i}]: "newString" is required.` };
+      }
+      if (p.oldString === p.newString) {
+        return { success: false, action: "patch", error: `patches[${i}]: "oldString" and "newString" are identical.` };
+      }
+    }
+    patchOps = patches;
+  } else {
+    // Single-patch mode (backwards compatible)
+    if (oldString === undefined || oldString === null) {
+      return { success: false, action: "patch", error: '"oldString" is required for patch action (or provide "patches" array for multi-location edits).' };
+    }
+    if (newString === undefined || newString === null) {
+      return { success: false, action: "patch", error: '"newString" is required for patch action.' };
+    }
+    if (oldString === newString) {
+      return { success: false, action: "patch", error: '"oldString" and "newString" are identical — nothing to patch.' };
+    }
+    patchOps = [{ oldString, newString, replaceAll: replaceAllOccurrences }];
+  }
+
+  const resolved = await resolveDesignSource(options, { activeComponentId, activeComponentCode });
+  if (!resolved.code || !resolved.component) {
+    const error = buildMissingComponentError(activeComponentId, "patch");
+    recordHistory(sessionId, "patch", startedAt, false, { componentId: activeComponentId, error });
     return {
       success: false,
-      action: "export",
+      action: "patch",
       error,
+      data: {
+        componentId: activeComponentId,
+        status: "missing",
+        recoveryHint: 'Run action "readSource" before patching if you need the latest persisted source.',
+      },
     };
   }
 
-  const format = normalizeExportFormat(input.format);
-  const mode: DesignExportMode = "tailwind";
-  const componentName = input.componentName?.trim() || "Design Component";
+  // Apply patches sequentially
+  let patchedCode = resolved.code;
+  let totalReplacements = 0;
+
+  for (let i = 0; i < patchOps.length; i++) {
+    const op = patchOps[i];
+    const occurrences = patchedCode.split(op.oldString).length - 1;
+
+    if (occurrences === 0) {
+      const patchLabel = patchOps.length > 1 ? ` (patches[${i}])` : "";
+      return {
+        success: false,
+        action: "patch",
+        error: `"oldString" not found in design source${patchLabel}. The text to replace must match exactly (including whitespace and indentation).${i > 0 ? ` Note: ${i} prior patch(es) were already applied — use "readSource" to see the current state.` : ""}`,
+      };
+    }
+
+    if (occurrences > 1 && !op.replaceAll) {
+      const patchLabel = patchOps.length > 1 ? ` (patches[${i}])` : "";
+      return {
+        success: false,
+        action: "patch",
+        error: `"oldString" found ${occurrences} times${patchLabel}. Set "replaceAll: true" to replace all, or provide a longer/more unique "oldString".`,
+      };
+    }
+
+    patchedCode = op.replaceAll
+      ? patchedCode.split(op.oldString).join(op.newString)
+      : patchedCode.replace(op.oldString, op.newString);
+    totalReplacements += op.replaceAll ? occurrences : 1;
+  }
+
+  // JSX balance check — catch wrapping mistakes before persisting
+  const unclosedTag = findUnclosedJsxTag(patchedCode);
+  if (unclosedTag) {
+    return {
+      success: false,
+      action: "patch",
+      error: `Patch produced unbalanced JSX: <${unclosedTag}> appears to be unclosed. For wrapping operations, include the full block being wrapped in "oldString" and the complete wrapped version (with both opening and closing tags) in "newString". Alternatively, use "patches" array to apply opening and closing tag insertions as separate sequential patches, or use the "edit" action for AI-driven full-file rewriting.`,
+    };
+  }
+
+  let persisted: DesignGalleryItem;
+  try {
+    persisted = await persistExistingDesign(resolved.component, {
+      code: patchedCode,
+      sessionId,
+      characterId: options.characterId,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to persist patched design.";
+    recordHistory(sessionId, "patch", startedAt, false, {
+      componentId: activeComponentId,
+      error: message,
+    });
+    return {
+      success: false,
+      action: "patch",
+      error: message,
+      data: {
+        componentId: activeComponentId,
+        code: patchedCode,
+      },
+    };
+  }
+
+  const previewResult = await compilePreviewForTool(patchedCode, persisted.name, "design-workspace-patch");
+  const config = getWorkspaceConfig();
+  const validation = await runPostEditValidation(patchedCode, config, { previewBuildPassed: previewResult.ok });
+  const baseData: DesignWorkspaceResultData = {
+    componentId: persisted.id,
+    code: patchedCode,
+    name: persisted.name,
+    prompt: persisted.prompt,
+    config,
+    updatedAt: persisted.updatedAt,
+  };
+
+  if (!previewResult.ok) {
+    recordHistory(sessionId, "patch", startedAt, false, {
+      componentId: persisted.id,
+      validation,
+      error: previewResult.error,
+      metadata: {
+        missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
+      },
+    });
+    return buildCompileFailureResult("patch", {
+      ...baseData,
+      postEditValidation: validation,
+    }, previewResult);
+  }
+
+  const linesChanged = countChangedLines(resolved.code, patchedCode);
+  const validationMessage = buildValidationMessage(validation);
+  recordHistory(sessionId, "patch", startedAt, true, {
+    componentId: persisted.id,
+    validation,
+  });
+
+  return {
+    success: true,
+    action: "patch",
+    data: {
+      ...baseData,
+      message: validationMessage || `Patch applied: ${totalReplacements} replacement${totalReplacements > 1 ? "s" : ""}${patchOps.length > 1 ? ` across ${patchOps.length} patches` : ""}, ~${linesChanged} line${linesChanged !== 1 ? "s" : ""} changed.`,
+      previewHtml: previewResult.previewHtml,
+      compileReport: previewResult.compileReport,
+      postEditValidation: validation,
+      missingPackages: previewResult.compileReport.dependencyCheck.missingPackages,
+      autoRecoveryAttempted: Boolean(previewResult.compileReport.autoInstall?.attempted),
+      autoRecoveryResult: previewResult.compileReport.autoInstall
+        ? previewResult.compileReport.autoInstall.success
+          ? "success"
+          : "failed"
+        : "not-needed",
+    },
+  };
+}
+
+function countChangedLines(before: string, after: string): number {
+  const a = before.split("\n");
+  const b = after.split("\n");
+  let changed = 0;
+  const maxLen = Math.max(a.length, b.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (a[i] !== b[i]) changed++;
+  }
+  return changed;
+}
+
+async function handleReadSource(
+  options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+): Promise<DesignWorkspaceResult> {
+  const sessionId = getSessionId(options);
+  const { activeComponentId, activeComponentCode } = input;
+
+  if (activeComponentCode?.trim()) {
+    return {
+      success: true,
+      action: "readSource",
+      data: {
+        componentId: activeComponentId,
+        code: activeComponentCode.trim(),
+        status: "inline",
+        storage: {
+          database: false,
+          userScoped: Boolean(getPersistedUserId(options)),
+          sessionScoped: sessionId !== "UNSCOPED",
+        },
+        message: "Inline design source retrieved.",
+      },
+    };
+  }
+
+  if (!activeComponentId) {
+    return {
+      success: false,
+      action: "readSource",
+      error: 'Provide "activeComponentId" to read back persisted design source.',
+    };
+  }
+
+  const component = await findWorkspaceDesign({
+    id: activeComponentId,
+    userId: getPersistedUserId(options),
+    sessionId,
+  });
+
+  if (!component) {
+    return {
+      success: false,
+      action: "readSource",
+      error: buildMissingComponentError(activeComponentId, "readSource"),
+      data: {
+        componentId: activeComponentId,
+        status: "missing",
+        recoveryHint: 'Run action "list" to inspect persisted designs for this session.',
+      },
+    };
+  }
+
+  return {
+    success: true,
+    action: "readSource",
+    data: {
+      componentId: component.id,
+      code: component.code,
+      name: component.name,
+      status: "available",
+      storage: {
+        database: true,
+        userScoped: Boolean(getPersistedUserId(options) || component.userId),
+        sessionScoped: component.sessionId === sessionId,
+      },
+      updatedAt: component.updatedAt,
+      message: `Design source retrieved (${component.code.length} chars, ~${Math.ceil(component.code.split("\n").length)} lines).`,
+    },
+  };
+}
+
+async function handleList(options: DesignWorkspaceToolOptions): Promise<DesignWorkspaceResult> {
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
 
   try {
-    const exportResult = await exportDesignAsset({
-      code: activeComponentCode,
-      format,
-      mode,
-      componentName,
-      sessionId: normalizeExportSessionId(options.sessionId),
-      width: clampNumber(input.width, DEFAULT_EXPORT_WIDTH, 320, MAX_EXPORT_DIMENSION),
-      height: clampNumber(input.height, DEFAULT_EXPORT_HEIGHT, 320, MAX_EXPORT_DIMENSION),
-      scale: clampNumber(input.scale, DEFAULT_EXPORT_SCALE, 1, MAX_EXPORT_SCALE),
-      durationMs: clampNumber(input.durationMs, DEFAULT_EXPORT_DURATION_MS, 500, MAX_EXPORT_DURATION_MS),
-      fps: clampNumber(input.fps, DEFAULT_EXPORT_FPS, 12, MAX_EXPORT_FPS),
+    const components = await listWorkspaceDesigns({
+      userId: getPersistedUserId(options),
+      sessionId,
+      limit: 100,
     });
 
-    recordHistory(sessionId, "export", startedAt, true, {
-      componentId: input.activeComponentId,
-      metadata: {
-        format: exportResult.format,
-        fileName: exportResult.fileName,
-      },
+    recordHistory(sessionId, "list", startedAt, true, {
+      metadata: { count: components.length },
     });
 
     return {
       success: true,
-      action: "export",
+      action: "list",
       data: {
-        code: exportResult.code,
-        format: exportResult.format,
-        message: buildExportSuccessMessage(exportResult.format),
-        mode,
-        name: componentName,
-        renderedHtml: exportResult.renderedHtml,
-        url: exportResult.url,
-        localPath: exportResult.localPath,
-        filePath: exportResult.filePath,
-        fileName: exportResult.fileName,
-        width: exportResult.width,
-        height: exportResult.height,
-        durationMs: exportResult.durationMs,
-        fps: exportResult.fps,
+        components: components.map((component) => ({
+          id: component.id,
+          name: component.name,
+          source: component.sessionId === sessionId ? "session" : "saved",
+          updatedAt: component.updatedAt,
+          isFavorite: component.isFavorite,
+        })),
+        message: components.length > 0
+          ? `Found ${components.length} persisted design${components.length === 1 ? "" : "s"} for this workspace.`
+          : "No persisted designs found for this workspace.",
       },
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Export failed.";
-    recordHistory(sessionId, "export", startedAt, false, {
-      componentId: input.activeComponentId,
-      error: message,
-    });
+    const message = error instanceof Error ? error.message : "Failed to list persisted designs.";
+    recordHistory(sessionId, "list", startedAt, false, { error: message });
     return {
       success: false,
-      action: "export",
+      action: "list",
       error: message,
     };
   }
+}
+
+async function handleStatus(
+  options: DesignWorkspaceToolOptions,
+  input: DesignWorkspaceInput,
+): Promise<DesignWorkspaceResult> {
+  const startedAt = Date.now();
+  const sessionId = getSessionId(options);
+  ensureHistory(sessionId);
+
+  if (input.activeComponentCode?.trim()) {
+    recordHistory(sessionId, "status", startedAt, true);
+    return {
+      success: true,
+      action: "status",
+      data: {
+        componentId: input.activeComponentId,
+        status: "inline",
+        storage: {
+          database: false,
+          userScoped: Boolean(getPersistedUserId(options)),
+          sessionScoped: sessionId !== "UNSCOPED",
+        },
+        message: "Inline design source provided; no persisted lookup was required.",
+      },
+    };
+  }
+
+  if (!input.activeComponentId) {
+    const error = 'Provide "activeComponentId" to inspect design status.';
+    recordHistory(sessionId, "status", startedAt, false, { error });
+    return {
+      success: false,
+      action: "status",
+      error,
+    };
+  }
+
+  const component = await findWorkspaceDesign({
+    id: input.activeComponentId,
+    userId: getPersistedUserId(options),
+    sessionId,
+  });
+
+  if (!component) {
+    const error = buildMissingComponentError(input.activeComponentId, "status");
+    recordHistory(sessionId, "status", startedAt, false, {
+      componentId: input.activeComponentId,
+      error,
+    });
+    return {
+      success: false,
+      action: "status",
+      error,
+      data: {
+        componentId: input.activeComponentId,
+        status: "missing",
+        storage: {
+          database: false,
+          userScoped: Boolean(getPersistedUserId(options)),
+          sessionScoped: sessionId !== "UNSCOPED",
+        },
+        recoveryHint: 'Run action "list" to inspect available persisted designs.',
+      },
+    };
+  }
+
+  recordHistory(sessionId, "status", startedAt, true, {
+    componentId: component.id,
+  });
+
+  return {
+    success: true,
+    action: "status",
+    data: {
+      componentId: component.id,
+      name: component.name,
+      status: "available",
+      storage: {
+        database: true,
+        userScoped: Boolean(getPersistedUserId(options) || component.userId),
+        sessionScoped: component.sessionId === sessionId,
+      },
+      updatedAt: component.updatedAt,
+      message: `Design "${component.name}" is persisted and ready for iteration.`,
+    },
+  };
 }
 
 function handleClose(options: DesignWorkspaceToolOptions): DesignWorkspaceResult {

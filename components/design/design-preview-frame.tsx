@@ -199,14 +199,99 @@ const INSPECTOR_SCRIPT = `
     showTooltip(target, e.clientX, e.clientY);
   }
 
+  // --- Persistent selection overlays ---
+  var selectedOverlays = [];
+
+  function createSelectionOverlay(el) {
+    var rect = el.getBoundingClientRect();
+    var box = document.createElement('div');
+    box.className = '__selene-selection-overlay';
+    box.style.cssText = 'position:fixed;pointer-events:none;z-index:2147483644;border:2px solid #3b82f6;background:rgba(59,130,246,0.08);border-radius:2px;';
+    box.style.top = rect.top + 'px';
+    box.style.left = rect.left + 'px';
+    box.style.width = rect.width + 'px';
+    box.style.height = rect.height + 'px';
+    box.dataset.selector = getCssSelector(el);
+    document.documentElement.appendChild(box);
+    return box;
+  }
+
+  function refreshSelectionOverlays() {
+    selectedOverlays.forEach(function(entry) {
+      if (!entry.el || !entry.el.isConnected) { entry.box.remove(); return; }
+      var rect = entry.el.getBoundingClientRect();
+      entry.box.style.top = rect.top + 'px';
+      entry.box.style.left = rect.left + 'px';
+      entry.box.style.width = rect.width + 'px';
+      entry.box.style.height = rect.height + 'px';
+    });
+  }
+
+  function addSelection(el) {
+    var selector = getCssSelector(el);
+    var exists = selectedOverlays.some(function(entry) { return entry.selector === selector; });
+    if (exists) return;
+    if (selectedOverlays.length >= 8) return; // MAX_INSPECT_SELECTIONS
+    var box = createSelectionOverlay(el);
+    selectedOverlays.push({ el: el, box: box, selector: selector });
+  }
+
+  function removeSelection(selector) {
+    selectedOverlays = selectedOverlays.filter(function(entry) {
+      if (entry.selector === selector) { entry.box.remove(); return false; }
+      return true;
+    });
+  }
+
+  function clearSelections() {
+    selectedOverlays.forEach(function(entry) { entry.box.remove(); });
+    selectedOverlays = [];
+  }
+
+  function isSelected(el) {
+    var selector = getCssSelector(el);
+    return selectedOverlays.some(function(entry) { return entry.selector === selector; });
+  }
+
   function onClick(e) {
     if (!hoveredEl || isInspectorElement(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
+
+    var isMulti = e.ctrlKey || e.metaKey || e.shiftKey;
     var payload = buildPayload(hoveredEl);
+    payload.multiSelect = isMulti;
+
+    if (isMulti) {
+      // Toggle selection
+      var selector = getCssSelector(hoveredEl);
+      if (isSelected(hoveredEl)) {
+        removeSelection(selector);
+        payload.action = 'remove';
+      } else {
+        addSelection(hoveredEl);
+        payload.action = 'add';
+      }
+    } else {
+      // Single select — replace
+      clearSelections();
+      addSelection(hoveredEl);
+      payload.action = 'replace';
+    }
+
     window.parent.postMessage(payload, '*');
   }
+
+  // Refresh overlay positions on scroll/resize
+  var rafPending = false;
+  function scheduleRefresh() {
+    if (rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(function() { rafPending = false; refreshSelectionOverlays(); });
+  }
+  window.addEventListener('scroll', scheduleRefresh, true);
+  window.addEventListener('resize', scheduleRefresh);
 
   document.addEventListener('mousemove', onMouseMove, true);
   document.addEventListener('click', onClick, true);
@@ -216,7 +301,10 @@ const INSPECTOR_SCRIPT = `
     if (e.data && e.data.type === 'selene-inspector-cleanup') {
       document.removeEventListener('mousemove', onMouseMove, true);
       document.removeEventListener('click', onClick, true);
+      window.removeEventListener('scroll', scheduleRefresh, true);
+      window.removeEventListener('resize', scheduleRefresh);
       hideHighlight();
+      clearSelections();
       if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
       if (tooltip.parentNode) tooltip.parentNode.removeChild(tooltip);
       if (marginBox.parentNode) marginBox.parentNode.removeChild(marginBox);
@@ -377,6 +465,8 @@ export function DesignPreviewFrame() {
   const inspectorEnabled = useDesignWorkspaceStore((s) => s.inspectorEnabled);
   const toggleInspector = useDesignWorkspaceStore((s) => s.toggleInspector);
   const setSelectedElement = useDesignWorkspaceStore((s) => s.setSelectedElement);
+  const toggleSelectedElement = useDesignWorkspaceStore((s) => s.toggleSelectedElement);
+  const setSelectedElements = useDesignWorkspaceStore((s) => s.setSelectedElements);
 
   // Auto-compile Tailwind components when switching or on first load
   useCompileTailwindPreview();
@@ -391,12 +481,22 @@ export function DesignPreviewFrame() {
       // Only accept messages from our own iframe, not arbitrary windows
       if (e.source !== iframeRef.current?.contentWindow) return;
       if (e.data?.type === "selene-inspector-select" && e.data.element) {
-        setSelectedElement(e.data.element as InspectedElement);
+        const element = e.data.element as InspectedElement;
+        const action = e.data.action as string | undefined;
+
+        if (action === "add") {
+          toggleSelectedElement(element);
+        } else if (action === "remove") {
+          toggleSelectedElement(element);
+        } else {
+          // replace — single selection
+          setSelectedElements([element]);
+        }
       }
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [setSelectedElement]);
+  }, [setSelectedElements, toggleSelectedElement]);
 
   // Responsive mode: iframe fills the entire container (like a real browser)
   // Fixed breakpoints: scale to fit the container with padding
@@ -469,7 +569,7 @@ export function DesignPreviewFrame() {
           <iframe
             ref={iframeRef}
             srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
-            sandbox="allow-scripts allow-same-origin"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
             className="h-full w-full border-0"
             style={{ background: "transparent" }}
             title="Design preview"
@@ -484,7 +584,6 @@ export function DesignPreviewFrame() {
             }}
           >
             <div
-              className="overflow-hidden"
               style={{
                 width: viewportW,
                 height: viewportH,
@@ -495,7 +594,7 @@ export function DesignPreviewFrame() {
               <iframe
                 ref={iframeRef}
                 srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
-                sandbox="allow-scripts allow-same-origin"
+                sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
                 className="h-full w-full border-0"
                 style={{ background: "transparent" }}
                 title="Design preview"

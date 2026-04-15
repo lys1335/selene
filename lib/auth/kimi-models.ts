@@ -14,6 +14,9 @@ export const KIMI_MODEL_IDS = [
   // Primary multimodal model (recommended)
   "kimi-k2.5",
 
+  // Latest coding model (April 2026)
+  "kimi-k2.6-code-preview",
+
   // K2 generation models
   "kimi-k2-0905-preview",
   "kimi-k2-0711-preview",
@@ -70,6 +73,7 @@ export const KIMI_CONFIG = {
 // Model display names
 const MODEL_LABELS: Record<string, string> = {
   "kimi-k2.5": "Kimi K2.5",
+  "kimi-k2.6-code-preview": "Kimi K2.6 Code Preview",
   "kimi-k2-0905-preview": "Kimi K2 (0905)",
   "kimi-k2-0711-preview": "Kimi K2 (0711)",
   "kimi-k2-turbo-preview": "Kimi K2 Turbo",

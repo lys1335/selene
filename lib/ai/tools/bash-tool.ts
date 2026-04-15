@@ -71,24 +71,62 @@ function normalizeTimeout(timeout?: number): number {
 /**
  * Detect `apply_patch <<'DELIM'\n...\nDELIM` heredoc patterns in the command
  * string and extract the patch content for stdin-based execution.
+ * Also handles commands prefixed with `cd ... &&` or other shell preambles,
+ * and PowerShell here-string syntax (`@'\n...\n'@ | apply_patch`).
  * Returns null if the command is not an apply_patch heredoc.
  */
-function extractApplyPatchHeredoc(command: string): { stdin: string; patchText: string } | null {
-  const match = command.match(/^apply_patch\s+<<\s*['"]?(\w+)['"]?\n([\s\S]*?)\n\1\s*$/);
-  if (!match) return null;
-  const body = match[2];
-  if (!body || !body.includes("*** Begin Patch")) return null;
-  const stdin = body.endsWith("\n") ? body : `${body}\n`;
-  return { stdin, patchText: body };
+function extractApplyPatchHeredoc(command: string): { stdin: string; patchText: string; cwd?: string } | null {
+  // Normalize Windows line endings
+  const normalized = command.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  // --- Strategy 1: heredoc anywhere in the command ---
+  const applyIdx = normalized.indexOf("apply_patch");
+  if (applyIdx !== -1) {
+    const prefix = normalized.slice(0, applyIdx).trim();
+    const fromApplyPatch = normalized.slice(applyIdx);
+
+    // Use greedy [\s\S]* with $ anchor for correct last-delimiter semantics
+    const match = fromApplyPatch.match(/^apply_patch\s+<<\s*['"]?(\w+)['"]?\n([\s\S]*)\n\1\s*$/);
+    if (match) {
+      const body = match[2];
+      if (!body || !body.includes("*** Begin Patch")) return null;
+
+      // Extract cd target from prefix if present (e.g. `cd /d C:\foo &&`)
+      let cwd: string | undefined;
+      const cdMatch = prefix.match(/cd\s+(?:\/d\s+)?["']?([^"'&;]+?)["']?\s*(?:&&|;)\s*$/);
+      if (cdMatch) cwd = cdMatch[1]?.trim();
+
+      const stdin = body.endsWith("\n") ? body : `${body}\n`;
+      return { stdin, patchText: body, cwd };
+    }
+  }
+
+  // --- Strategy 2: PowerShell here-string: @'\n...\n'@ | apply_patch ---
+  const psMatch = normalized.match(/^@'\n([\s\S]*)\n'@\s*\|\s*apply_patch\s*$/);
+  if (psMatch) {
+    const body = psMatch[1];
+    if (!body || !body.includes("*** Begin Patch")) return null;
+    const stdin = body.endsWith("\n") ? body : `${body}\n`;
+    return { stdin, patchText: body };
+  }
+
+  return null;
 }
 
-function wrapShellCommand(command: string): { command: string; args: string[]; stdin?: string } {
+function wrapShellCommand(command: string): { command: string; args: string[]; stdin?: string; windowsVerbatimArguments?: boolean } {
   if (process.platform === "win32") {
     const shellCommand = process.env.ComSpec || "cmd.exe";
-    const wrapped = `${command} & set "SELENE_EXIT=!ERRORLEVEL!" & echo ${CWD_MARKER}!CD! & exit /b !SELENE_EXIT!`;
+    // Wrap the entire command in outer double quotes.  With /s /c, cmd.exe
+    // strips the first and last quote characters, preserving inner quotes
+    // and special characters (|, <, >, &) that appear inside quoted
+    // arguments of the user's command.  windowsVerbatimArguments prevents
+    // Node.js from applying C-runtime escaping which would break cmd.exe's
+    // own quote handling.
+    const inner = `${command} & set "SELENE_EXIT=!ERRORLEVEL!" & echo ${CWD_MARKER}!CD! & exit /b !SELENE_EXIT!`;
     return {
       command: shellCommand,
-      args: ["/v:on", "/d", "/s", "/c", wrapped],
+      args: ["/v:on", "/d", "/s", "/c", `"${inner}"`],
+      windowsVerbatimArguments: true,
     };
   }
 
@@ -406,12 +444,13 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
       // execute apply_patch directly with stdin instead of wrapping in a shell.
       const patchHeredoc = extractApplyPatchHeredoc(command);
       if (patchHeredoc) {
+        const effectiveCwd = patchHeredoc.cwd || executionDir;
         const result = await executeCommandWithValidation(
           {
             command: "apply_patch",
             args: [],
             stdin: patchHeredoc.stdin,
-            cwd: executionDir,
+            cwd: effectiveCwd,
             timeout,
             characterId,
             toolCallId,
@@ -449,6 +488,7 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
             cwd: executionDir,
             timeout,
             characterId,
+            windowsVerbatimArguments: shellCommand.windowsVerbatimArguments,
           },
           syncedFolders
         );
@@ -479,6 +519,7 @@ export function createBashTool(options: ExecuteCommandToolOptions) {
           characterId,
           toolCallId,
           onProgress: forwardProgress,
+          windowsVerbatimArguments: shellCommand.windowsVerbatimArguments,
         },
         syncedFolders
       );

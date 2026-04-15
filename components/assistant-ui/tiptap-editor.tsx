@@ -7,13 +7,16 @@ import {
   useImperativeHandle,
 } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import type { JSONContent } from "@tiptap/core";
+import { Extension, type JSONContent } from "@tiptap/core";
 import type { Editor } from "@tiptap/react";
 import {
+  Plugin,
+  PluginKey,
   TextSelection,
   type EditorState,
   type Transaction,
 } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { padTranscriptText } from "./voice-transcript-utils";
 import StarterKit from "@tiptap/starter-kit";
@@ -59,6 +62,12 @@ export interface TiptapEditorHandle {
   hasContent: () => boolean;
   /** Insert plain-text transcript at the active selection using a history-aware transaction */
   insertVoiceTranscript: (text: string) => boolean;
+  /** Replace the latest voice transcript with its polished version using undo-aware history */
+  replaceVoiceTranscript: (oldText: string, newText: string) => boolean;
+  /** Remove any transient voice transcript styling without changing the document */
+  clearVoiceTranscriptDecoration: () => void;
+  /** Read the currently tracked voice transcript text, if any */
+  getTrackedVoiceTranscriptText: () => string | null;
   /** Clear the editor */
   clear: () => void;
   /** Focus the editor */
@@ -416,6 +425,159 @@ function serializeToContentArray(
   return serializeDocToContentArray(editor.getJSON());
 }
 
+type VoiceTranscriptDecorationPhase = "polishing" | "swap";
+
+interface VoiceTranscriptRange {
+  from: number;
+  to: number;
+  text: string;
+  phase: VoiceTranscriptDecorationPhase;
+}
+
+interface VoiceTranscriptDecorationState {
+  decorations: DecorationSet;
+  range: VoiceTranscriptRange | null;
+}
+
+type VoiceTranscriptDecorationMeta =
+  | {
+      type: "set";
+      range: VoiceTranscriptRange;
+    }
+  | {
+      type: "clear";
+      preserveRange?: boolean;
+    };
+
+const voiceTranscriptDecorationPluginKey = new PluginKey<VoiceTranscriptDecorationState>(
+  "voiceTranscriptDecoration",
+);
+
+function getVoiceTranscriptDecorationClassName(
+  phase: VoiceTranscriptDecorationPhase,
+): string {
+  if (phase === "swap") {
+    return "rounded-[3px] bg-terminal-green/14 shadow-[0_0_0_1px_hsl(var(--terminal-green)/0.18),0_0_18px_hsl(var(--terminal-green)/0.12)] transition-[background-color,box-shadow] duration-300";
+  }
+
+  return "rounded-[3px] bg-terminal-green/10 shadow-[0_0_0_1px_hsl(var(--terminal-green)/0.14),0_0_12px_hsl(var(--terminal-green)/0.08)] motion-safe:animate-pulse transition-[background-color,box-shadow] duration-200";
+}
+
+function buildVoiceTranscriptDecorations(
+  doc: EditorState["doc"],
+  range: VoiceTranscriptRange | null,
+): DecorationSet {
+  if (!range || range.from >= range.to) {
+    return DecorationSet.empty;
+  }
+
+  return DecorationSet.create(doc, [
+    Decoration.inline(range.from, range.to, {
+      class: getVoiceTranscriptDecorationClassName(range.phase),
+      "data-voice-transcript-phase": range.phase,
+    }),
+  ]);
+}
+
+const VoiceTranscriptDecorationExtension = Extension.create({
+  name: "voiceTranscriptDecoration",
+
+  addProseMirrorPlugins() {
+    return [
+      new Plugin<VoiceTranscriptDecorationState>({
+        key: voiceTranscriptDecorationPluginKey,
+        state: {
+          init: (_, state) => ({
+            decorations: DecorationSet.empty,
+            range: null,
+          }),
+          apply(tr, pluginState) {
+            const mappedRange = pluginState.range
+              ? {
+                  ...pluginState.range,
+                  from: tr.mapping.map(pluginState.range.from, -1),
+                  to: tr.mapping.map(pluginState.range.to, 1),
+                }
+              : null;
+
+            const meta = tr.getMeta(
+              voiceTranscriptDecorationPluginKey,
+            ) as VoiceTranscriptDecorationMeta | undefined;
+
+            if (meta?.type === "clear") {
+              return {
+                decorations: DecorationSet.empty,
+                range: meta.preserveRange ? mappedRange : null,
+              };
+            }
+
+            if (meta?.type === "set") {
+              return {
+                decorations: buildVoiceTranscriptDecorations(tr.doc, meta.range),
+                range: meta.range,
+              };
+            }
+
+            const nextRange =
+              mappedRange && mappedRange.from < mappedRange.to ? mappedRange : null;
+
+            return {
+              decorations: buildVoiceTranscriptDecorations(tr.doc, nextRange),
+              range: nextRange,
+            };
+          },
+        },
+        props: {
+          decorations(state) {
+            return voiceTranscriptDecorationPluginKey.getState(state)?.decorations ?? null;
+          },
+        },
+      }),
+    ];
+  },
+});
+
+function setVoiceTranscriptDecoration(
+  tr: Transaction,
+  range: VoiceTranscriptRange,
+): Transaction {
+  tr.setMeta(voiceTranscriptDecorationPluginKey, {
+    type: "set",
+    range,
+  } satisfies VoiceTranscriptDecorationMeta);
+  return tr;
+}
+
+function clearVoiceTranscriptDecoration(tr: Transaction): Transaction {
+  tr.setMeta(voiceTranscriptDecorationPluginKey, {
+    type: "clear",
+    preserveRange: true,
+  } satisfies VoiceTranscriptDecorationMeta);
+  return tr;
+}
+
+function getTrackedVoiceTranscriptRange(
+  state: EditorState,
+): VoiceTranscriptRange | null {
+  return voiceTranscriptDecorationPluginKey.getState(state)?.range ?? null;
+}
+
+function getTrackedVoiceTranscriptText(editor: Editor): string | null {
+  const trackedRange = getTrackedVoiceTranscriptRange(editor.state);
+  if (!trackedRange || trackedRange.from >= trackedRange.to) {
+    return null;
+  }
+
+  const currentText = editor.state.doc.textBetween(
+    trackedRange.from,
+    trackedRange.to,
+    "\n",
+    "\n",
+  );
+
+  return currentText || null;
+}
+
 function buildTranscriptInsertionTransaction(
   state: EditorState,
   transcriptText: string,
@@ -480,16 +642,86 @@ function buildTranscriptInsertionTransaction(
   return tr.scrollIntoView();
 }
 
-function insertTranscriptIntoEditor(
+function insertVoiceTranscriptIntoEditor(
   editor: Editor,
   transcriptText: string,
 ): boolean {
+  const { from } = editor.state.selection;
   const transaction = buildTranscriptInsertionTransaction(editor.state, transcriptText);
   if (!transaction) {
     return false;
   }
 
+  const insertedFrom = transaction.mapping.map(from, -1);
+  const insertedTo = transaction.selection.from;
+  const insertedRangeText = transaction.doc.textBetween(
+    insertedFrom,
+    insertedTo,
+    "\n",
+    "\n",
+  );
+
+  setVoiceTranscriptDecoration(transaction, {
+    from: insertedFrom,
+    to: insertedTo,
+    text: insertedRangeText || transcriptText,
+    phase: "polishing",
+  });
+
   editor.view.dispatch(transaction);
+  return true;
+}
+
+function replaceVoiceTranscriptInEditor(
+  editor: Editor,
+  oldText: string,
+  newText: string,
+): boolean {
+  const trackedRange = getTrackedVoiceTranscriptRange(editor.state);
+  if (!trackedRange) {
+    return false;
+  }
+
+  const currentText = editor.state.doc.textBetween(
+    trackedRange.from,
+    trackedRange.to,
+    "\n",
+    "\n",
+  );
+
+  if (!currentText.trim() || currentText.trim() !== oldText.trim()) {
+    return false;
+  }
+
+  const leftContext = editor.state.doc.textBetween(
+    Math.max(0, trackedRange.from - 1),
+    trackedRange.from,
+    "",
+    "",
+  );
+  const rightContext = editor.state.doc.textBetween(
+    trackedRange.to,
+    Math.min(editor.state.doc.content.size, trackedRange.to + 1),
+    "",
+    "",
+  );
+  const replacementText = padTranscriptText(newText, leftContext, rightContext);
+
+  if (!replacementText) {
+    return false;
+  }
+
+  let tr = editor.state.tr.insertText(replacementText, trackedRange.from, trackedRange.to);
+  const replacementEnd = trackedRange.from + replacementText.length;
+  tr = tr.setSelection(TextSelection.near(tr.doc.resolve(replacementEnd)));
+  tr.setMeta("addToHistory", true);
+  setVoiceTranscriptDecoration(tr, {
+    from: trackedRange.from,
+    to: replacementEnd,
+    text: newText || oldText,
+    phase: "swap",
+  });
+  editor.view.dispatch(tr.scrollIntoView());
   return true;
 }
 
@@ -518,6 +750,7 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(
         onDraftChange?.(currentEditor.isEmpty ? null : currentEditor.getJSON());
       },
       extensions: [
+        VoiceTranscriptDecorationExtension,
         StarterKit.configure({
           heading: { levels: [2, 3] },
         }),
@@ -737,7 +970,20 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(
       },
       insertVoiceTranscript: (text: string) => {
         if (!editor) return false;
-        return insertTranscriptIntoEditor(editor, text);
+        return insertVoiceTranscriptIntoEditor(editor, text);
+      },
+      replaceVoiceTranscript: (oldText: string, newText: string) => {
+        if (!editor) return false;
+        return replaceVoiceTranscriptInEditor(editor, oldText, newText);
+      },
+      clearVoiceTranscriptDecoration: () => {
+        if (!editor) return;
+        const tr = clearVoiceTranscriptDecoration(editor.state.tr);
+        editor.view.dispatch(tr);
+      },
+      getTrackedVoiceTranscriptText: () => {
+        if (!editor) return null;
+        return getTrackedVoiceTranscriptText(editor);
       },
       clear: () => {
         editor?.commands.clearContent();

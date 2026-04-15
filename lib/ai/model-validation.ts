@@ -184,7 +184,7 @@ export function validateModelForProvider(
 // Batch validation (for settings with multiple model fields)
 // ---------------------------------------------------------------------------
 
-type ModelFieldName = "chatModel" | "researchModel" | "visionModel" | "utilityModel";
+type ModelFieldName = "chatModel" | "researchModel" | "visionModel" | "utilityModel" | "transcriberModel";
 
 export interface BatchValidationResult {
   valid: boolean;
@@ -205,6 +205,7 @@ export function validateAgentModelConfig(
       researchModel: config?.researchModel,
       visionModel: config?.visionModel,
       utilityModel: config?.utilityModel,
+      transcriberModel: undefined,
     },
     effectiveProvider,
   );
@@ -220,7 +221,7 @@ export function validateAllModelsForProvider(
 ): BatchValidationResult {
   const errors: Record<string, string> = {};
   const validFields: ModelFieldName[] = [];
-  const fields: ModelFieldName[] = ["chatModel", "researchModel", "visionModel", "utilityModel"];
+  const fields: ModelFieldName[] = ["chatModel", "researchModel", "visionModel", "utilityModel", "transcriberModel"];
 
   for (const field of fields) {
     const value = models[field];

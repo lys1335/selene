@@ -6,8 +6,8 @@ export default defineConfig({
     globals: true,
     environment: "node",
     setupFiles: ["./tests/setup.ts"],
-    include: ["**/*.test.ts", "**/*.spec.ts"],
-    exclude: ["**/node_modules/**", "**/.next/**", "**/integration/**", "**/tmp-clawdbot/**"],
+    include: ["**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts"],
+    exclude: ["**/node_modules/**", "**/.next/**", "**/integration/**", "**/tmp-clawdbot/**", "**/.claude/worktrees/**"],
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],

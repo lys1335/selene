@@ -655,6 +655,10 @@
           "utility": {
             "label": "Utility model",
             "helper": "Used for background and compact helper tasks."
+          },
+          "transcriber": {
+            "label": "Transcriber model",
+            "helper": "Used for voice transcription post-processing and grammar correction."
           }
         }
       }
@@ -986,7 +990,10 @@
       "ariaStartRecording": "Start voice recording",
       "pastedTextChip": "Pasted text",
       "removePastedText": "Remove pasted text",
-      "textPasted": "Text pasted"
+      "textPasted": "Text pasted",
+      "inspectLabel": "Inspect",
+      "inspectClearAll": "Clear all",
+      "inspectRemoveElement": "Remove {element} from selection"
     },
     "queue": {
       "messagesQueued": "{count} message{count, plural, one {} other {s}} queued",

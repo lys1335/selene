@@ -20,11 +20,18 @@ import {
   SparklesIcon,
   UndoIcon,
   MicIcon,
+  CrosshairIcon,
 } from "lucide-react";
 import { resilientFetch, resilientPost } from "@/lib/utils/resilient-fetch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useDesignWorkspaceStore } from "@/lib/design/workspace";
+import {
+  buildInspectMessageContext,
+  formatInspectSelectionLabel,
+  type InspectMessageContext,
+} from "@/lib/design/workspace/inspect-context";
 import { useCharacter } from "./character-context";
 import { useOptionalDeepResearch } from "./deep-research-context";
 import { DeepResearchPanel } from "./deep-research-panel";
@@ -79,11 +86,54 @@ interface QueuedMessage {
   id: string;
   content: string;
   mode: "chat" | "deep-research";
+  inspectContext?: InspectMessageContext | null;
   // "queued-classic": waiting for run to end before replaying
   // "queued-live": currently being submitted to the live queue API
   // "injected-live": successfully delivered to the running model
   // "fallback": live injection failed, will replay after run ends
   status: "queued-classic" | "queued-live" | "injected-live" | "fallback";
+}
+
+type VoiceTranscriptPhase = "polishing" | "swap" | "stable";
+
+interface ActiveVoiceTranscript {
+  rawText: string;
+  displayText: string;
+  isEnhanced: boolean;
+  phase: VoiceTranscriptPhase;
+}
+
+interface TextareaVoiceTranscriptRange {
+  start: number;
+  end: number;
+}
+
+function buildInspectChipLabel(element: {
+  tagName: string;
+  className: string;
+  textContent: string;
+}): string {
+  return formatInspectSelectionLabel({
+    tagName: element.tagName,
+    textContent: element.textContent,
+    classes: element.className.trim().split(/\s+/).filter(Boolean).slice(0, 2),
+  });
+}
+
+function buildUserMessageMetadata(inspectContext: InspectMessageContext | null) {
+  return inspectContext ? { custom: { inspectContext } } : undefined;
+}
+
+function appendQueuedUserMessage(
+  threadRuntime: ReturnType<typeof useThreadRuntime>,
+  message: QueuedMessage,
+): void {
+  if (!threadRuntime) return;
+  threadRuntime.append({
+    role: "user",
+    content: [{ type: "text", text: message.content }],
+    metadata: buildUserMessageMetadata(message.inspectContext ?? null),
+  });
 }
 
 export const Composer: FC<{
@@ -147,15 +197,41 @@ export const Composer: FC<{
   const { chatBackground } = useTheme();
   const hasWallpaper = chatBackground.type !== "none";
   const simpleDraftAtRichModeEntryRef = useRef<string | null>(null);
+  const rawTranscriptRef = useRef<string | null>(null);
+  const textareaVoiceTranscriptRangeRef = useRef<TextareaVoiceTranscriptRange | null>(null);
+  const textareaVoiceTranscriptOverlayRef = useRef<HTMLDivElement>(null);
+  const textareaVoiceTranscriptHighlightRef = useRef<HTMLSpanElement>(null);
+  const voiceTranscriptDecorationTimeoutRef = useRef<number | null>(null);
 
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  const [activeVoiceTranscript, setActiveVoiceTranscript] = useState<ActiveVoiceTranscript | null>(null);
+
+  // Design workspace inspect state — for attaching inspect context on send
+  const inspectorEnabled = useDesignWorkspaceStore((s) => s.inspectorEnabled);
+  const selectedElements = useDesignWorkspaceStore((s) => s.selectedElements);
+  const activeComponentId = useDesignWorkspaceStore((s) => s.activeComponentId);
+  const designComponents = useDesignWorkspaceStore((s) => s.components);
+  const removeSelectedElement = useDesignWorkspaceStore((s) => s.removeSelectedElement);
+  const clearSelectedElements = useDesignWorkspaceStore((s) => s.clearSelectedElements);
+
+  const inspectContext = useMemo((): InspectMessageContext | null => {
+    if (!inspectorEnabled || selectedElements.length === 0) return null;
+    const component = activeComponentId
+      ? designComponents.find((c) => c.id === activeComponentId) ?? null
+      : null;
+    return buildInspectMessageContext({
+      selectedElements,
+      component: component ? { id: component.id, name: component.name } : null,
+      sessionId,
+    });
+  }, [inspectorEnabled, selectedElements, activeComponentId, designComponents, sessionId]);
 
   // Attempt to inject a message into the currently active run's live prompt queue.
   // The server resolves the active runId from the session index — no runId needed on the client.
   // Uses exponential backoff (200, 400, 800, 1600, 3200ms) with a max of 5 attempts.
   // Returns true if successfully queued, false if no active run or all retries failed.
   const queueLivePromptForActiveRun = useCallback(
-    async (content: string): Promise<boolean> => {
+    async (content: string, inspectCtx?: InspectMessageContext | null): Promise<boolean> => {
       const MAX_RETRIES = 5;
       const BASE_DELAY_MS = 200;
 
@@ -169,7 +245,7 @@ export const Composer: FC<{
         try {
           const { data, status } = await resilientPost<{ queued: boolean; reason?: string }>(
             `/api/sessions/${sessionId}/live-prompt-queue`,
-            { content },
+            { content, ...(inspectCtx ? { inspectContext: inspectCtx } : {}) },
             { timeout: 5_000, retries: 0 }
           );
 
@@ -339,7 +415,7 @@ export const Composer: FC<{
   }, [composerTextForReward, syncRewardSuggestion]);
 
   // Voice recording
-  const { isRecordingVoice, isTranscribingVoice, handleVoiceInput, handleVoiceStart, handleVoiceStop, analyserNode, lastTranscriptRef, wasAiEnhancedRef, lastTranscriptionFailedRef } = useVoiceRecording({
+  const { isRecordingVoice, isTranscribingVoice, isPolishingTranscript, handleVoiceInput, handleVoiceStart, handleVoiceStop, analyserNode, lastTranscriptRef, wasAiEnhancedRef, lastTranscriptionFailedRef } = useVoiceRecording({
     sttEnabled,
     voicePostProcessing,
     voiceAudioCues,
@@ -347,6 +423,18 @@ export const Composer: FC<{
     onTranscript: (payload) => {
       const textToInsert = payload.finalText;
       if (!textToInsert) return;
+
+      // Track the active voice transcript for polish phase UI indicators.
+      // When post-processing is enabled, mark as "polishing" so the
+      // decoration shows a shimmer effect while grammar cleanup runs.
+      if (voicePostProcessing && !payload.usedPostProcessing) {
+        setActiveVoiceTranscript({
+          rawText: textToInsert,
+          displayText: textToInsert,
+          isEnhanced: false,
+          phase: "polishing",
+        });
+      }
 
       // Rich text editor mode — use transaction-based insertion for proper undo/redo
       if (isEditorMode && tiptapRef.current) {
@@ -361,6 +449,8 @@ export const Composer: FC<{
       const selStart = textarea?.selectionStart ?? null;
       const selEnd = textarea?.selectionEnd ?? null;
 
+      rawTranscriptRef.current = textToInsert;
+
       setInputValue((prev) => {
         const insertion = buildTranscriptInsertion({
           currentValue: prev,
@@ -370,13 +460,25 @@ export const Composer: FC<{
         });
 
         if (insertion) {
+          // Track the character range so the overlay knows what to highlight
+          textareaVoiceTranscriptRangeRef.current = {
+            start: insertion.selectionStart,
+            end: insertion.selectionStart + insertion.replacementText.length,
+          };
           // Schedule cursor update after render
           requestAnimationFrame(() => updateCursorPosition(insertion.nextCursor));
           return insertion.nextValue;
         }
         // Fallback: append
-        if (!prev.trim()) return textToInsert;
-        return `${prev}${prev.endsWith(" ") ? "" : " "}${textToInsert}`;
+        const fallbackStart = prev.trim() ? prev.length + (prev.endsWith(" ") ? 0 : 1) : 0;
+        const fallbackValue = !prev.trim()
+          ? textToInsert
+          : `${prev}${prev.endsWith(" ") ? "" : " "}${textToInsert}`;
+        textareaVoiceTranscriptRangeRef.current = {
+          start: fallbackStart,
+          end: fallbackStart + textToInsert.length,
+        };
+        return fallbackValue;
       });
     },
     onTranscriptInserted: () => {
@@ -392,6 +494,70 @@ export const Composer: FC<{
         textarea.setSelectionRange(cursor, cursor);
         updateCursorPosition(cursor);
       });
+    },
+    onTranscriptPolished: (polishedText, rawText) => {
+      // Rich text editor — swap raw transcript with polished version via
+      // the tracked decoration range, then transition to "swap" phase.
+      if (isEditorMode && tiptapRef.current) {
+        const replaced = tiptapRef.current.replaceVoiceTranscript(rawText, polishedText);
+        if (replaced) {
+          // Update active transcript state for any UI indicators
+          setActiveVoiceTranscript((prev) =>
+            prev
+              ? { ...prev, displayText: polishedText, isEnhanced: true, phase: "swap" }
+              : { rawText, displayText: polishedText, isEnhanced: true, phase: "swap" },
+          );
+          // Clear the "swap" highlight after a brief moment
+          if (voiceTranscriptDecorationTimeoutRef.current) {
+            window.clearTimeout(voiceTranscriptDecorationTimeoutRef.current);
+          }
+          voiceTranscriptDecorationTimeoutRef.current = window.setTimeout(() => {
+            voiceTranscriptDecorationTimeoutRef.current = null;
+            tiptapRef.current?.clearVoiceTranscriptDecoration();
+            setActiveVoiceTranscript((prev) =>
+              prev ? { ...prev, phase: "stable" } : null,
+            );
+          }, 1800);
+        }
+        return;
+      }
+
+      // Simple textarea mode — find and replace raw text with polished version
+      setInputValue((prev) => {
+        const idx = prev.lastIndexOf(rawText);
+        if (idx === -1) {
+          // raw text was manually edited — clear range tracking
+          textareaVoiceTranscriptRangeRef.current = null;
+          return prev;
+        }
+        // Update the tracked range to reflect polished text length
+        textareaVoiceTranscriptRangeRef.current = {
+          start: idx,
+          end: idx + polishedText.length,
+        };
+        return prev.slice(0, idx) + polishedText + prev.slice(idx + rawText.length);
+      });
+
+      // Track the textarea range for overlay highlight
+      setActiveVoiceTranscript({
+        rawText,
+        displayText: polishedText,
+        isEnhanced: true,
+        phase: "swap",
+      });
+
+      // Clear swap state after animation
+      if (voiceTranscriptDecorationTimeoutRef.current) {
+        window.clearTimeout(voiceTranscriptDecorationTimeoutRef.current);
+      }
+      voiceTranscriptDecorationTimeoutRef.current = window.setTimeout(() => {
+        voiceTranscriptDecorationTimeoutRef.current = null;
+        rawTranscriptRef.current = null;
+        textareaVoiceTranscriptRangeRef.current = null;
+        setActiveVoiceTranscript((prev) =>
+          prev ? { ...prev, phase: "stable" } : null,
+        );
+      }, 1800);
     },
   });
 
@@ -662,11 +828,12 @@ export const Composer: FC<{
               id: msgId,
               content: expandedMessage,
               mode: "chat",
+              inspectContext,
               status: "queued-live",
             }]);
 
             // Fire injection in the background; chip lifecycle driven by result
-            void queueLivePromptForActiveRun(expandedMessage).then(injected => {
+            void queueLivePromptForActiveRun(expandedMessage, inspectContext).then(injected => {
               if (injected) {
                 // Successfully delivered — show brief confirmation then remove chip
                 setQueuedMessages(prev =>
@@ -690,6 +857,7 @@ export const Composer: FC<{
               id: msgId,
               content: expandedMessage,
               mode: isDeepResearchMode ? "deep-research" : "chat",
+              inspectContext,
               status: "queued-classic",
             }]);
           }
@@ -702,16 +870,34 @@ export const Composer: FC<{
         if (captureSession.isUnifiedSession) {
           captureSession.endSession();
         }
+        // Clear inspect selections after queuing
+        if (inspectContext) clearSelectedElements();
       } else {
-        threadRuntime.composer.setText(expandedMessage);
-        threadRuntime.composer.send();
+        if (inspectContext) {
+          // Use threadRuntime.append() to include inspect metadata (composer.send() doesn't support metadata)
+          const composerAttachments = (threadRuntime.composer.getState().attachments ?? []).filter(
+            (a): a is CompleteAttachment =>
+              a.status.type === "complete" || a.status.type === "requires-action",
+          );
+          threadRuntime.append({
+            role: "user",
+            content: [{ type: "text", text: expandedMessage }],
+            attachments: composerAttachments,
+            metadata: buildUserMessageMetadata(inspectContext),
+          });
+          if (hasAttachments) threadRuntime.composer.clearAttachments();
+          clearSelectedElements();
+        } else {
+          threadRuntime.composer.setText(expandedMessage);
+          threadRuntime.composer.send();
+          // Belt-and-suspenders: send() clears attachments internally via
+          // _emptyTextAndAttachments(), but clear explicitly to match the
+          // Tiptap path and guard against future runtime changes.
+          if (hasAttachments) threadRuntime.composer.clearAttachments();
+        }
         clearDraft();
         updateCursorPosition(0);
         clearEnhancement();
-        // Belt-and-suspenders: send() clears attachments internally via
-        // _emptyTextAndAttachments(), but clear explicitly to match the
-        // Tiptap path and guard against future runtime changes.
-        if (hasAttachments) threadRuntime.composer.clearAttachments();
         if (captureSession.isUnifiedSession) {
           captureSession.endSession();
         }
@@ -731,6 +917,8 @@ export const Composer: FC<{
       lastTranscriptRef,
       wasAiEnhancedRef,
       captureSession,
+      inspectContext,
+      clearSelectedElements,
     ]
   );
 
@@ -841,6 +1029,7 @@ export const Composer: FC<{
         role: "user",
         content: finalComposerText ? [{ type: "text", text: finalComposerText }] : [],
         attachments: [...composerAttachments, ...inlineAttachments],
+        metadata: buildUserMessageMetadata(inspectContext),
       });
 
       tiptapRef.current?.clear();
@@ -851,6 +1040,7 @@ export const Composer: FC<{
       }
       // End unified capture session after send (don't clear attachments — already sent)
       if (captureSession.isUnifiedSession) captureSession.endSession();
+      if (inspectContext) clearSelectedElements();
     },
     [
       attachmentCount,
@@ -862,6 +1052,8 @@ export const Composer: FC<{
       isQueueBlocked,
       t,
       threadRuntime,
+      inspectContext,
+      clearSelectedElements,
     ]
   );
 
@@ -1331,6 +1523,39 @@ export const Composer: FC<{
           <ComposerPrimitive.Attachments components={{ Attachment: ComposerAttachment }} />
         </div>
 
+        {/* Inspect context chips — show selected design elements */}
+        {inspectorEnabled && selectedElements.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1 px-3 py-1.5 border-b border-terminal-dark/10">
+            <CrosshairIcon className="size-3 text-blue-500 shrink-0" />
+            <span className="text-[11px] font-mono text-muted-foreground mr-1">Inspect:</span>
+            {selectedElements.map((el) => (
+              <span
+                key={el.selector}
+                className="inline-flex items-center gap-0.5 rounded bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 text-[11px] font-mono text-blue-700 dark:text-blue-300"
+              >
+                {buildInspectChipLabel(el)}
+                <button
+                  type="button"
+                  onClick={() => removeSelectedElement(el.selector)}
+                  className="ml-0.5 text-blue-400 hover:text-red-500 transition-colors"
+                  aria-label={`Remove ${el.tagName} from selection`}
+                >
+                  <XIcon className="size-3" />
+                </button>
+              </span>
+            ))}
+            {selectedElements.length > 1 && (
+              <button
+                type="button"
+                onClick={clearSelectedElements}
+                className="text-[11px] font-mono text-muted-foreground hover:text-red-500 transition-colors ml-1"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+        )}
+
 {/* Reward suggestion is shown as inline ghost text in the textarea */}
 
         {/* Unified capture overlay — replaces standalone waveform during unified sessions */}
@@ -1489,6 +1714,16 @@ export const Composer: FC<{
                     captureSession.cancelAutoSend();
                   }
                   if (enhancedContext || enhancementInfo) clearEnhancement();
+                  // User manually edited text — dismiss voice transcript overlay
+                  if (activeVoiceTranscript && activeVoiceTranscript.phase !== "stable") {
+                    rawTranscriptRef.current = null;
+                    textareaVoiceTranscriptRangeRef.current = null;
+                    setActiveVoiceTranscript(null);
+                    if (voiceTranscriptDecorationTimeoutRef.current) {
+                      window.clearTimeout(voiceTranscriptDecorationTimeoutRef.current);
+                      voiceTranscriptDecorationTimeoutRef.current = null;
+                    }
+                  }
                 }}
                 onSelect={(e) => {
                   const textarea = e.target as HTMLTextAreaElement;
@@ -1498,8 +1733,10 @@ export const Composer: FC<{
                 onPaste={handlePaste}
                 onBlur={() => syncRewardSuggestion()}
                 onScroll={() => {
-                  if (ghostScrollRef.current && inputRef.current) {
-                    ghostScrollRef.current.scrollTop = inputRef.current.scrollTop;
+                  if (inputRef.current) {
+                    const st = inputRef.current.scrollTop;
+                    if (ghostScrollRef.current) ghostScrollRef.current.scrollTop = st;
+                    if (textareaVoiceTranscriptOverlayRef.current) textareaVoiceTranscriptOverlayRef.current.scrollTop = st;
                   }
                 }}
                 autoFocus
@@ -1520,6 +1757,31 @@ export const Composer: FC<{
                   <span className="invisible">{inputValue}</span>
                   <span className="text-terminal-muted/50 select-none">{`\n${rewardGhostText}`}</span>
                   <span className="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] text-terminal-muted/40 bg-terminal-muted/8 border border-terminal-muted/15 rounded select-none font-sans align-middle">Tab ↵</span>
+                </div>
+              )}
+              {/* Voice transcript highlight overlay */}
+              {activeVoiceTranscript && activeVoiceTranscript.phase !== "stable" && !isEditorMode && textareaVoiceTranscriptRangeRef.current && (
+                <div
+                  ref={textareaVoiceTranscriptOverlayRef}
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 overflow-hidden p-4 text-sm font-mono whitespace-pre-wrap break-words"
+                  style={{ minHeight: "36px", maxHeight: "192px" }}
+                >
+                  {/* Invisible text before the transcript range — positions the highlight */}
+                  <span className="invisible">{inputValue.slice(0, textareaVoiceTranscriptRangeRef.current.start)}</span>
+                  {/* Highlighted transcript region */}
+                  <span
+                    ref={textareaVoiceTranscriptHighlightRef}
+                    className={
+                      activeVoiceTranscript.phase === "polishing"
+                        ? "rounded-sm bg-terminal-green/10 motion-safe:animate-pulse"
+                        : "rounded-sm bg-terminal-green/14 transition-colors duration-500"
+                    }
+                  >
+                    {inputValue.slice(textareaVoiceTranscriptRangeRef.current.start, textareaVoiceTranscriptRangeRef.current.end)}
+                  </span>
+                  {/* Invisible text after the transcript range */}
+                  <span className="invisible">{inputValue.slice(textareaVoiceTranscriptRangeRef.current.end)}</span>
                 </div>
               )}
             </div>

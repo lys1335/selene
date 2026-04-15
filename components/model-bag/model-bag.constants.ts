@@ -138,4 +138,10 @@ const ROLE_THEME: Record<
     iconEmoji: "",
     color: "text-yellow-400",
   },
+  transcriber: {
+    label: "Transcriber",
+    description: "Voice transcript post-processing",
+    iconEmoji: "",
+    color: "text-teal-400",
+  },
 };

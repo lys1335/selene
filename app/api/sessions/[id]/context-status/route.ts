@@ -35,33 +35,23 @@ type RouteParams = {
   params: Promise<{ id: string }>;
 };
 
-async function resolveSessionModel(
-  request: NextRequest,
-  params: Promise<{ id: string }>
-): Promise<{ sessionId: string; modelId: string; provider: LLMProvider } | NextResponse> {
-  await requireAuth(request);
-  const { id: sessionId } = await params;
-
-  const session = await getSession(sessionId);
-  if (!session) {
-    return NextResponse.json({ error: "Session not found" }, { status: 404 });
-  }
-
-  const sessionMetadata = (session.metadata as Record<string, unknown>) || {};
-  const modelId = await getSessionModelIdForSession(sessionMetadata);
-  const provider = await getSessionProviderForSession(sessionMetadata);
-
-  return { sessionId, modelId, provider };
-}
-
 export async function GET(
   request: NextRequest,
   { params }: RouteParams
 ) {
   try {
-    const resolved = await resolveSessionModel(request, params);
-    if (resolved instanceof NextResponse) return resolved;
-    const { sessionId, modelId, provider } = resolved;
+    await requireAuth(request);
+    const { id: sessionId } = await params;
+
+    const session = await getSession(sessionId);
+    if (!session) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    const sessionMetadata = (session.metadata as Record<string, unknown>) || {};
+
+    const modelId = await getSessionModelIdForSession(sessionMetadata);
+    const provider: LLMProvider = await getSessionProviderForSession(sessionMetadata);
 
     // Estimate system prompt length (approximate)
     const estimatedSystemPromptLength = 5000;
@@ -108,9 +98,18 @@ export async function POST(
   { params }: RouteParams
 ) {
   try {
-    const resolved = await resolveSessionModel(request, params);
-    if (resolved instanceof NextResponse) return resolved;
-    const { sessionId, modelId, provider } = resolved;
+    await requireAuth(request);
+    const { id: sessionId } = await params;
+
+    const session = await getSession(sessionId);
+    if (!session) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    const sessionMetadata = (session.metadata as Record<string, unknown>) || {};
+
+    const modelId = await getSessionModelIdForSession(sessionMetadata);
+    const provider: LLMProvider = await getSessionProviderForSession(sessionMetadata);
 
     // Estimate system prompt length
     const estimatedSystemPromptLength = 5000;

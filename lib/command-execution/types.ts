@@ -55,6 +55,8 @@ export interface ExecuteOptions {
   shellFallbackAttempted?: boolean;
   /** Internal use: preserve fallback reason when forcing direct execution */
   fallbackReasonForDirectExecution?: ExecuteSearchMetadata["fallbackReason"];
+  /** Internal use: pass args verbatim to child process on Windows (skip Node.js C-runtime escaping). */
+  windowsVerbatimArguments?: boolean;
   /** Tool call identifier used for live command progress projections. */
   toolCallId?: string;
   /** Live progress callback for streaming command output into the UI. */

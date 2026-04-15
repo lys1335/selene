@@ -33,14 +33,17 @@ import {
   createLivePromptQueue,
   drainLivePromptQueue,
   removeLivePromptQueue,
+  waitForQueueMessage,
 } from "@/lib/background-tasks/live-prompt-queue-registry";
 import { signalUndrainedMessages } from "@/lib/background-tasks/undrained-signal";
 import {
   buildUserInjectionContent,
   buildStopSystemMessage,
 } from "@/lib/background-tasks/live-prompt-helpers";
-import { clearDelegationCompletions } from "@/lib/ai/tools/delegation-completion-store";
-
+import {
+  addDelegationCompletion,
+  drainDelegationCompletions,
+} from "@/lib/ai/tools/delegation-completion-store";
 import { createHeartbeatStream } from "@/lib/utils/heartbeat-stream";
 import {
     classifyRecoverability,
@@ -103,7 +106,7 @@ import {
   parseInvalidToolSchemaError,
 } from "./tool-schema-recovery";
 import { tagIntermediateDelegationParts } from "./delegation-scope-tagging";
-import { shouldStopTurn, hasRunningDelegationsForSession, hasActiveAsyncWork } from "./delegation-waiting";
+import { shouldStopTurn, hasRunningDelegationsForSession, hasRunningBackgroundTasksForSession, hasActiveAsyncWork } from "./delegation-waiting";
 import { createThinkTagFilter, shouldFilterThinkTags } from "@/lib/ai/streaming/think-tag-filter";
 import { thinkTagMiddleware, hasThinkTags } from "@/lib/ai/utils/think-tag-stream";
 import { ollamaModelSupportsThinking } from "@/lib/ai/providers/ollama-capabilities";
@@ -130,13 +133,34 @@ const hasStylyApiKey = () => !!process.env.STYLY_AI_API_KEY;
 
 /**
  * Drain any messages that were queued for live-prompt injection but never
- * processed by prepareStep. Rather than persisting them as dangling DB
- * messages, we set a per-session signal so the frontend can convert the
- * injected-live chips to "fallback" and replay them as a new run.
+ * processed by prepareStep. Delegation completion entries are moved to the
+ * persistent completion store (so the next turn can inject them); other
+ * entries are signaled as undrained for frontend replay.
  */
 function handleUndrainedQueueMessages(runId: string, sessionId: string): void {
   const undrained = drainLivePromptQueue(runId);
-  if (undrained.length > 0) {
+  if (undrained.length === 0) return;
+
+  const delegationEntries = undrained.filter(
+    (e) => e.metadata?.kind === "delegation_completion",
+  );
+  const otherEntries = undrained.filter(
+    (e) => e.metadata?.kind !== "delegation_completion",
+  );
+
+  for (const entry of delegationEntries) {
+    addDelegationCompletion({
+      delegationId: entry.metadata?.delegationId || entry.id,
+      delegateName: entry.metadata?.delegateName || "Sub-agent",
+      sessionId: "",
+      initiatorSessionId: sessionId,
+      characterId: "",
+      completedAt: Date.now(),
+      resultContent: entry.content,
+    });
+  }
+
+  if (otherEntries.length > 0) {
     signalUndrainedMessages(sessionId);
   }
 }
@@ -147,8 +171,11 @@ export async function POST(req: Request) {
   let configuredProvider: string | undefined;
   let activeSessionId: string | undefined;
   let sessionId = "";
+  let runId = "";
   let latestUserPromptText = "";
   let sdkToolResultBridge: ReturnType<typeof createSdkToolResultBridge> | null = null;
+  let streamAbortSignal: AbortSignal = req.signal;
+  let clientDisconnected = false;
   try {
     const isScheduledRun = req.headers.get("X-Scheduled-Run") === "true";
     const isInternalAuth = req.headers.get("X-Internal-Auth") === INTERNAL_API_SECRET;
@@ -483,7 +510,7 @@ export async function POST(req: Request) {
     }
     chatTaskRegistered = true;
 
-    const runId = agentRun.id;
+    runId = agentRun.id;
 
     // ── Edit/Reload truncation cleanup ──────────────────────────────────────
     // IMPORTANT: This must run BEFORE saving the new user message. When a user
@@ -524,6 +551,7 @@ export async function POST(req: Request) {
         ...((lastMessage.metadata?.custom?.attachments ?? []).filter((attachment): attachment is NonNullable<typeof attachment> => !!attachment)),
         ...((lastMessage.experimental_attachments ?? []).filter((attachment): attachment is NonNullable<typeof attachment> => !!attachment)),
       ];
+      const persistedInspectContext = (lastMessage.metadata?.custom as Record<string, unknown> | undefined)?.inspectContext ?? null;
       const extractedContent = await extractContent(messageForDB);
       const normalizedContent: unknown[] = Array.isArray(extractedContent)
         ? extractedContent
@@ -531,18 +559,17 @@ export async function POST(req: Request) {
 
       const isValidUUID = lastMessage.id && uuidRegex.test(lastMessage.id);
       const userMessageIndex = await nextOrderingIndex(sessionId);
+      const customMetadata: Record<string, unknown> = {};
+      if (persistedAttachments.length > 0) customMetadata.attachments = persistedAttachments;
+      if (persistedInspectContext) customMetadata.inspectContext = persistedInspectContext;
       const result = await createMessage({
         ...(isValidUUID && { id: lastMessage.id }),
         sessionId,
         role: 'user',
         content: normalizedContent,
         orderingIndex: userMessageIndex,
-        metadata: persistedAttachments.length > 0
-          ? {
-              custom: {
-                attachments: persistedAttachments,
-              },
-            }
+        metadata: Object.keys(customMetadata).length > 0
+          ? { custom: customMetadata }
           : {},
       });
       let savedUserMessageId = result?.id;
@@ -665,6 +692,7 @@ export async function POST(req: Request) {
       contextWindowStatus: contextCheck.status,
       workflowPromptContext,
       devWorkspaceEnabled: appSettings.devWorkspaceEnabled ?? false,
+      provider: currentProvider,
     });
 
     // ── Build tools ────────────────────────────────────────────────────────────
@@ -927,7 +955,6 @@ export async function POST(req: Request) {
           if (activeSessionId) {
             handleUndrainedQueueMessages(agentRun.id, activeSessionId);
             removeLivePromptQueue(agentRun.id, activeSessionId);
-            clearDelegationCompletions(activeSessionId);
           }
           await completeAgentRun(agentRun.id, runStatus, shouldCancel
             ? { reason: "stream_interrupted" }
@@ -956,19 +983,33 @@ export async function POST(req: Request) {
     // connection) would abort the LLM call and cancel the run. Now only the
     // explicit user-stop controller can abort the computation. The onFinish
     // callback still fires and persists results to DB even if the client is gone.
-    const streamAbortSignal = chatAbortController.signal;
+    streamAbortSignal = chatAbortController.signal;
 
     // Track client disconnect separately for graceful transport teardown.
     // When this fires, we stop piping chunks but let the LLM call finish.
-    let clientDisconnected = false;
     const markClientDisconnected = () => {
       if (clientDisconnected) return;
       clientDisconnected = true;
-      console.log(`[CHAT API] Client disconnected (session=${sessionId}, run=${runId}) — LLM call continues, onFinish will persist results`);
+      const abortReason = (() => {
+        try {
+          return req.signal.reason instanceof Error
+            ? `${req.signal.reason.name}: ${req.signal.reason.message}`
+            : String(req.signal.reason ?? "unknown");
+        } catch {
+          return "unavailable";
+        }
+      })();
+
+      console.warn(
+        `[CHAT API] Request abort observed (session=${sessionId}, run=${runId}, req.signal.aborted=${req.signal.aborted}, streamAbortSignal.aborted=${streamAbortSignal.aborted}, reason=${abortReason}) — client disconnected, LLM call continues and onFinish will persist results`
+      );
     };
     // Check if already aborted before attaching listener (AbortSignal doesn't
     // replay past aborts to late listeners).
     if (req.signal.aborted) {
+      console.warn(
+        `[CHAT API] Request already aborted before listener attach (session=${sessionId}, run=${runId}, req.signal.aborted=${req.signal.aborted})`
+      );
       markClientDisconnected();
     } else {
       req.signal.addEventListener("abort", markClientDisconnected, { once: true });
@@ -1119,7 +1160,37 @@ export async function POST(req: Request) {
 
             // Drain any mid-run user messages from the in-memory queue.
             // drainLivePromptQueue is atomic (splice-based) — no seenIds tracking needed.
-            const pendingPrompts = drainLivePromptQueue(runId);
+            const queuedPrompts = drainLivePromptQueue(runId);
+
+            // At step 0, also drain delegation completions from the persistent
+            // store. These are results that arrived while no run was active
+            // (between turns) — e.g. after an auto-resumed continuation.
+            let pendingPrompts = queuedPrompts;
+            if (stepNumber === 0) {
+              const storeCompletions = drainDelegationCompletions(sessionId);
+              if (storeCompletions.length > 0) {
+                const completionEntries = storeCompletions.map((c) => ({
+                  id: `deleg-store-${c.delegationId}`,
+                  content: c.resultContent || [
+                    `<delegation-result delegationId="${c.delegationId}" delegate="${c.delegateName}" status="${c.error ? "failed" : "completed"}">`,
+                    c.error || "Result content not available — use observe to read full response.",
+                    `</delegation-result>`,
+                  ].join("\n"),
+                  stopIntent: false,
+                  timestamp: c.completedAt,
+                  metadata: {
+                    kind: "delegation_completion" as const,
+                    delegationId: c.delegationId,
+                    delegateName: c.delegateName,
+                  },
+                }));
+                pendingPrompts = [...completionEntries, ...queuedPrompts];
+                console.debug(
+                  `[CHAT API] Step 0: Injecting ${completionEntries.length} delegation completion(s) from store`,
+                );
+              }
+            }
+
             if (pendingPrompts.length > 0) {
               const stopRequested = pendingPrompts.some(e => e.stopIntent);
               console.debug(
@@ -1171,12 +1242,17 @@ export async function POST(req: Request) {
               for (const prompt of pendingPrompts) {
                 try {
                   const orderingIndex = await nextOrderingIndex(sessionId);
+                  const promptCustom: Record<string, unknown> = {};
+                  if (prompt.metadata?.inspectContext) promptCustom.inspectContext = prompt.metadata.inspectContext;
                   const injected = await createMessage({
                     sessionId,
                     role: "user",
                     content: [{ type: "text", text: prompt.content }],
                     orderingIndex,
-                    metadata: { livePromptInjected: true },
+                    metadata: {
+                      livePromptInjected: true,
+                      ...(Object.keys(promptCustom).length > 0 ? { custom: promptCustom } : {}),
+                    },
                   });
                 } catch (dbError) {
                   console.warn("[CHAT API] Failed to persist injected user message:", dbError);
@@ -1200,8 +1276,102 @@ export async function POST(req: Request) {
             // AI SDK loop ends — nobody observes the results.
             if (stepNumber > 0 && hasActiveAsyncWork(characterId, sessionId)) {
               const hasDelegations = hasRunningDelegationsForSession(characterId, sessionId);
+              const hasBgTasks = hasRunningBackgroundTasksForSession(characterId, sessionId);
+
+              // When only delegations are running (no background bash tasks),
+              // BLOCK here until a delegation result arrives via the live prompt
+              // queue. This keeps the SSE stream alive (UI shows "Responding...")
+              // and avoids the need for observe() calls or SSE auto-resume hacks.
+              if (hasDelegations && !hasBgTasks) {
+                console.debug(
+                  `[CHAT API] Step ${stepNumber}: Blocking prepareStep — waiting for delegation result(s)...`
+                );
+                try {
+                  await waitForQueueMessage(runId, streamAbortSignal);
+                } catch {
+                  // Aborted or queue removed — let the turn end naturally
+                  return { activeTools: currentActiveTools as string[] };
+                }
+                // Delegation result(s) arrived — drain and inject them.
+                // The queue was populated by notifyInitiatorSessionOfCompletion.
+                const delegationPrompts = drainLivePromptQueue(runId);
+                if (delegationPrompts.length > 0) {
+                  console.debug(
+                    `[CHAT API] Step ${stepNumber}: Injecting ${delegationPrompts.length} delegation result(s) after blocking wait`
+                  );
+
+                  // Split the streaming assistant message at the injection boundary
+                  if (syncStreamingMessage && streamingState) {
+                    await syncStreamingMessage(true);
+                    if (streamingState.messageId) {
+                      const preId = streamingState.messageId;
+                      void updateMessage(preId, { metadata: { livePromptInjected: true } }).catch(() => {});
+                    }
+                    streamingState.messageId = undefined;
+                    streamingState.parts = [];
+                    streamingState.toolCallParts = new Map();
+                    streamingState.loggedIncompleteToolCalls = new Set();
+                    streamingState.lastBroadcastAt = 0;
+                    streamingState.lastBroadcastSignature = "";
+                    streamingState.pendingBroadcast = false;
+                    streamingState.isCreating = false;
+                    assistantMessageId = crypto.randomUUID();
+                    streamingState.stepOffset = stepNumber;
+                  }
+
+                  // Persist each injected delegation result
+                  for (const prompt of delegationPrompts) {
+                    try {
+                      const orderingIndex = await nextOrderingIndex(sessionId);
+                      await createMessage({
+                        sessionId,
+                        role: "user",
+                        content: [{ type: "text", text: prompt.content }],
+                        orderingIndex,
+                        metadata: { livePromptInjected: true },
+                      });
+                    } catch (dbError) {
+                      console.warn("[CHAT API] Failed to persist injected delegation result:", dbError);
+                    }
+                  }
+
+                  const injectedUserMessage: UserModelMessage = {
+                    role: "user",
+                    content: buildUserInjectionContent(delegationPrompts),
+                  };
+
+                  // If more delegations are still running, force the model to
+                  // call a tool (even a no-op) so the loop continues to the next
+                  // step where prepareStep will block again waiting for the next
+                  // delegation result. Without this, the model outputs text and
+                  // the AI SDK loop ends — remaining delegations never get injected.
+                  const stillHasRunning = hasRunningDelegationsForSession(characterId, sessionId);
+                  const result: Record<string, unknown> = {
+                    activeTools: currentActiveTools as string[],
+                    messages: [...stepMessages, injectedUserMessage],
+                  };
+                  if (stillHasRunning) {
+                    result.toolChoice = "required" as const;
+                    result.system = "More delegations are still running. Acknowledge the result(s) you just received, then call any tool (e.g. delegateToSubagent action=\"observe\" or any lightweight tool) to keep the turn alive while waiting for remaining delegations.";
+                  }
+                  return result;
+                }
+                // Queue was drained by something else or empty — fall through
+                // Check if delegations are still running and need to keep blocking
+                if (hasRunningDelegationsForSession(characterId, sessionId)) {
+                  return {
+                    activeTools: currentActiveTools as string[],
+                    toolChoice: "required" as const,
+                    system: "Delegations are still running. Call delegateToSubagent action=\"observe\" or wait for results to arrive.",
+                  };
+                }
+                return { activeTools: currentActiveTools as string[] };
+              }
+
+              // Background processes (bash/executeCommand) still need forced
+              // tool calls to check their status.
               const systemMsg = hasDelegations
-                ? "You have active delegations still running. You MUST call observe() or delegateToSubagent with action='observe' to wait for and collect their results. Do NOT respond to the user until all delegations have completed and you have processed their results."
+                ? "You have active delegations and background processes still running. Check on the background processes using bash or executeCommand. Delegation results will be delivered automatically — do not call observe for them."
                 : "You have background processes still running. You MUST call bash or executeCommand with the processId to check their status, or wait for them to complete. Do NOT respond to the user until you have checked on all running processes.";
               return {
                 activeTools: currentActiveTools as string[],
@@ -1641,6 +1811,18 @@ export async function POST(req: Request) {
       stack: error instanceof Error ? error.stack?.split("\n").slice(0, 8).join("\n") : undefined,
       provider: configuredProvider,
       sessionId,
+      reqSignalAborted: req.signal.aborted,
+      reqSignalReason: (() => {
+        try {
+          return req.signal.reason instanceof Error
+            ? `${req.signal.reason.name}: ${req.signal.reason.message}`
+            : String(req.signal.reason ?? "unknown");
+        } catch {
+          return "unavailable";
+        }
+      })(),
+      streamAbortSignalAborted: streamAbortSignal?.aborted ?? false,
+      clientDisconnected,
     });
 
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -1649,6 +1831,25 @@ export async function POST(req: Request) {
     if (chatTaskRegistered && agentRun?.id) {
       try {
         const classification = classifyRecoverability({ provider: configuredProvider, error, message: errorMessage });
+        console.warn("[CHAT API] Finalizing chat error", {
+          sessionId,
+          runId,
+          reqSignalAborted: req.signal.aborted,
+          reqSignalReason: (() => {
+            try {
+              return req.signal.reason instanceof Error
+                ? `${req.signal.reason.name}: ${req.signal.reason.message}`
+                : String(req.signal.reason ?? "unknown");
+            } catch {
+              return "unavailable";
+            }
+          })(),
+          streamAbortSignalAborted: streamAbortSignal?.aborted ?? false,
+          clientDisconnected,
+          errorMessage,
+          classificationReason: classification.reason,
+          classificationRecoverable: classification.recoverable,
+        });
         const shouldCancel = shouldTreatStreamErrorAsCancellation({
           errorMessage,
           isCreditError,
@@ -1660,7 +1861,6 @@ export async function POST(req: Request) {
         removeChatAbortController(agentRun.id);
         if (activeSessionId) {
           removeLivePromptQueue(agentRun.id, activeSessionId);
-          clearDelegationCompletions(activeSessionId);
         }
         await completeAgentRun(agentRun.id, runStatus, shouldCancel
           ? { reason: "stream_interrupted" }

@@ -242,22 +242,40 @@ export function finalizeStreamingToolCalls(state: StreamingMessageState): boolea
 }
 
 /**
- * Check if a tool call is an observe action for a delegation that is still running.
- * Such tool calls should not be sealed as "dangling" since they are legitimately
- * waiting for the delegation to complete.
+ * Delegated tool calls can remain legitimately unresolved while the sub-agent is
+ * still running. Keep those pending instead of sealing them into synthetic errors.
  */
-function isObserveForRunningDelegation(part: DBToolCallPart): boolean {
+/** Max time a delegation can remain "pending" before we consider it stale (1h). */
+const DELEGATION_PENDING_TTL_MS = 60 * 60 * 1000;
+
+export function shouldKeepDelegatedToolCallPending(
+  part: Pick<DBToolCallPart, "toolName" | "args" | "active">
+): boolean {
   if (part.toolName !== "delegateToSubagent") return false;
 
-  const args = part.args as { action?: string; delegationId?: string } | undefined;
-  if (args?.action !== "observe") return false;
-
+  const args = part.args as { delegationId?: string } | undefined;
   const delegationId = args?.delegationId;
-  if (!delegationId) return false;
 
-  const delegation = activeDelegations.get(delegationId);
-  // If delegation exists and is not settled, the observe call is still valid
-  return delegation !== undefined && !delegation.settled;
+  // Check active delegation registry first — this is the source of truth.
+  if (delegationId) {
+    const delegation = activeDelegations.get(delegationId);
+    if (delegation) {
+      if (delegation.settled) return false;
+      // M7: Don't keep pending forever after crashes — apply TTL.
+      const age = Date.now() - delegation.startedAt;
+      if (age > DELEGATION_PENDING_TTL_MS) return false;
+      return true;
+    }
+  }
+
+  // Progress persistence projects unresolved delegated calls with `active: true`.
+  // This is a fallback for when the in-memory delegation registry has been
+  // cleared (e.g. server restart) but the persisted state still has the flag.
+  if (part.active === true) {
+    return true;
+  }
+
+  return false;
 }
 
 /**
@@ -294,11 +312,10 @@ export function sealDanglingToolCalls(
     if (part.type !== "tool-call") continue;
     if (!part.toolCallId || toolResultIds.has(part.toolCallId)) continue;
 
-    // Skip sealing observe calls for running delegations — they are still
-    // legitimately waiting for the delegation to complete. This prevents
-    // false "dangling" errors when parallel observe calls are in flight
-    // and one completes before the others.
-    if (isObserveForRunningDelegation(part)) {
+    // Skip sealing delegated calls that are still legitimately waiting for a
+    // sub-agent result. This prevents false "dangling" errors when one
+    // delegation settles before its siblings.
+    if (shouldKeepDelegatedToolCallPending(part)) {
       continue;
     }
 

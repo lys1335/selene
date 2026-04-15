@@ -206,6 +206,10 @@ const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>> = {
     maxTokens: 256000,
     supportsStreaming: true,
   },
+  "kimi-k2.6-code-preview": {
+    maxTokens: 256000,
+    supportsStreaming: true,
+  },
   "kimi-k2-thinking": {
     maxTokens: 128000,
     supportsStreaming: true,

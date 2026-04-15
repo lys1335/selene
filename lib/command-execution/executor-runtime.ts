@@ -7,7 +7,7 @@
 
 import { existsSync } from "fs";
 import { tmpdir } from "os";
-import { basename, isAbsolute, join } from "path";
+import { basename, dirname, isAbsolute, join } from "path";
 import {
     buildEnvironmentForTarget,
     initializeProcessEnvironment,
@@ -54,9 +54,21 @@ export function getBundledRuntimeInfo(): BundledRuntimeInfo {
     const resourcesPath = getResourcesPath();
     const nodeBinDir = resourcesPath ? join(resourcesPath, "standalone", "node_modules", ".bin") : null;
     const toolsBinDir = resourcesPath ? join(resourcesPath, "standalone", "tools", "bin") : null;
-    const ripgrepBinDir = resourcesPath
+    // In production builds, ripgrep lives inside the standalone node_modules.
+    // In dev mode (no resourcesPath), resolve it from the workspace node_modules
+    // so `rg` is available in bash/executeCommand without requiring a global install.
+    let ripgrepBinDir: string | null = resourcesPath
         ? join(resourcesPath, "standalone", "node_modules", "@vscode", "ripgrep", "bin")
         : null;
+    if (!ripgrepBinDir) {
+        try {
+            const { rgPath } = require("@vscode/ripgrep") as { rgPath: string };
+            const candidate = dirname(rgPath);
+            if (existsSync(candidate)) {
+                ripgrepBinDir = candidate;
+            }
+        } catch { /* @vscode/ripgrep not installed — skip */ }
+    }
     const bundledNodePath = nodeBinDir
         ? join(nodeBinDir, process.platform === "win32" ? "node.exe" : "node")
         : null;
@@ -254,6 +266,41 @@ export function resolveBundledNodeCommand(
             env,
             resolution: "resolved 'npx' via bundled node + npx-cli.js",
         };
+    }
+
+    // Resolve apply_patch to its Node.js script.
+    // In production builds, toolsBinDir is in PATH so apply_patch.cmd/.sh is found
+    // automatically. In dev mode, toolsBinDir is null and the bare command fails on
+    // Windows (cmd.exe can't find it). Resolve to `node scripts/bundled-tools/apply_patch.js`.
+    if (normalized === "apply_patch") {
+        // Production: check toolsBinDir first
+        if (runtime.toolsBinDir) {
+            const cmdExt = process.platform === "win32" ? ".cmd" : "";
+            const bundledPath = join(runtime.toolsBinDir, `apply_patch${cmdExt}`);
+            if (existsSync(bundledPath)) {
+                return { command: bundledPath, args, env, resolution: `resolved 'apply_patch' to bundled binary at ${runtime.toolsBinDir}` };
+            }
+        }
+        // Dev mode fallback: run via node + scripts/bundled-tools/apply_patch.js
+        // In production bundles (Electron), __dirname points to electron-dist/
+        // and the relative walk would be wrong. Only attempt this when toolsBinDir
+        // is absent (i.e. we're in a dev environment without bundled binaries).
+        if (!runtime.toolsBinDir) {
+            // Walk up from lib/command-execution/ to repo root
+            const projectRoot = join(__dirname, "..", "..");
+            const devScript = join(projectRoot, "scripts", "bundled-tools", "apply_patch.js");
+            if (existsSync(devScript)) {
+                const nodeCmd = runtime.bundledNodePath || "node";
+                return {
+                    command: nodeCmd,
+                    args: [devScript, ...args],
+                    env,
+                    resolution: `resolved 'apply_patch' via node + ${devScript}`,
+                };
+            }
+        }
+        // Last resort: return as-is and let PATH resolution attempt it
+        return { command, args, env, resolution: null };
     }
 
     // Resolve ffmpeg/ffprobe to the bundled binary from ffmpeg-static.

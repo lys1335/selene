@@ -959,6 +959,8 @@ function readWavAsFloat32(wavPath: string): Float32Array {
 
 function getFfmpegBundledRelativePaths(): string[] {
   return [
+    // ffmpeg-static package stores the real binary here (dev mode)
+    join("node_modules", "ffmpeg-static", platform() === "win32" ? "ffmpeg.exe" : "ffmpeg"),
     // Bundled by electron-prepare.js from ffmpeg-static (validated by isJavaScriptShim)
     join("node_modules", ".bin", platform() === "win32" ? "ffmpeg.exe" : "ffmpeg"),
   ];

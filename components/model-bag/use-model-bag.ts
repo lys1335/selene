@@ -39,6 +39,7 @@ interface SettingsData {
   researchModel?: string;
   visionModel?: string;
   utilityModel?: string;
+  transcriberModel?: string;
 }
 
 const ALL_PROVIDERS: LLMProvider[] = [
@@ -60,7 +61,7 @@ export function useModelBag() {
     models: [],
     providers: [],
     activeProvider: "anthropic",
-    roleAssignments: { chat: "", research: "", vision: "", utility: "" },
+    roleAssignments: { chat: "", research: "", vision: "", utility: "", transcriber: "" },
     filterProvider: "all",
     searchQuery: "",
     hoveredModel: null,
@@ -169,6 +170,7 @@ export function useModelBag() {
         research: data.researchModel || "",
         vision: data.visionModel || "",
         utility: data.utilityModel || "",
+        transcriber: data.transcriberModel || "",
       },
       isLoading: false,
     }));

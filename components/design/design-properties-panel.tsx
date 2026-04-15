@@ -9,9 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Code,
-  Download,
-  Image as ImageIcon,
-  Film,
   Trash2,
   Save,
   Loader2,
@@ -20,33 +17,25 @@ import {
   Copy,
   Crosshair,
   ChevronDown,
-  Settings2,
-  History,
   LayoutGrid,
+  Settings2,
   PanelRightClose,
   PanelRightOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   requestDesignWorkspaceSettings,
-  requestExport,
-  requestSaveToGallery,
+  requestSaveDesign,
   requestUpdateDesignWorkspaceSettings,
-  type ExportFormat,
 } from "./design-api-client";
-import { VersionsContent } from "./design-versions-content";
 import { GalleryContent } from "./design-gallery-content";
 
-type RightPanelTab = "properties" | "versions" | "gallery";
-
-// ─── Helpers ──────────────────────────────────────────────────
+type RightPanelTab = "designs" | "details";
 
 function formatTime(iso: string): string {
   const date = new Date(iso);
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
-
-// ─── Derived selector hook ──────────────────────────────────
 
 function useActiveComponent() {
   const components = useDesignWorkspaceStore((s) => s.components);
@@ -56,8 +45,6 @@ function useActiveComponent() {
     [components, activeComponentId],
   );
 }
-
-// ─── Component Selector (with ARIA + keyboard) ─────────────
 
 function ComponentSelector() {
   const components = useDesignWorkspaceStore((s) => s.components);
@@ -69,7 +56,6 @@ function ComponentSelector() {
 
   const active = useActiveComponent();
 
-  // Reset focused index when dropdown opens
   useEffect(() => {
     if (open) {
       const idx = components.findIndex((c) => c.id === activeComponentId);
@@ -118,7 +104,6 @@ function ComponentSelector() {
     }
   }
 
-  // Scroll focused item into view
   useEffect(() => {
     if (open && listRef.current && focusedIndex >= 0) {
       const items = listRef.current.querySelectorAll("[role='option']");
@@ -129,7 +114,7 @@ function ComponentSelector() {
   if (components.length === 0) {
     return (
       <div className="px-3 py-2.5 text-xs text-muted-foreground">
-        No components yet
+        No open designs yet
       </div>
     );
   }
@@ -142,12 +127,12 @@ function ComponentSelector() {
         role="combobox"
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-label="Select component"
+        aria-label="Select design"
         className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/50"
       >
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">
-            {active?.name || "Select component"}
+            {active?.name || "Select design"}
           </div>
           {active && (
             <div className="mt-0.5 flex items-center gap-1.5">
@@ -178,14 +163,11 @@ function ComponentSelector() {
 
       {open && (
         <>
-          {/* Backdrop */}
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-
-          {/* Dropdown */}
           <div
             ref={listRef}
             role="listbox"
-            aria-label="Components"
+            aria-label="Open designs"
             className="absolute left-0 right-0 top-full z-20 max-h-60 overflow-auto border-b border-border bg-background shadow-lg"
             onKeyDown={handleKeyDown}
           >
@@ -219,22 +201,24 @@ function ComponentSelector() {
   );
 }
 
-// ─── Properties Tab Content ──────────────────────────────────
-
-function PropertiesContent() {
+function DetailsContent() {
   const {
     updateComponent,
     removeComponent,
     showCode,
     toggleCode,
     selectedElement,
+    selectedElements,
     setSelectedElement,
+    removeSelectedElement,
+    clearSelectedElements,
     config,
     updateConfig,
     lastValidation,
     lastCompileReport,
     history: workspaceHistory,
     setConfig,
+    sessionId,
   } = useDesignWorkspaceStore(
     useShallow((s) => ({
       updateComponent: s.updateComponent,
@@ -242,27 +226,23 @@ function PropertiesContent() {
       showCode: s.showCode,
       toggleCode: s.toggleCode,
       selectedElement: s.selectedElement,
+      selectedElements: s.selectedElements,
       setSelectedElement: s.setSelectedElement,
+      removeSelectedElement: s.removeSelectedElement,
+      clearSelectedElements: s.clearSelectedElements,
       config: s.config,
       updateConfig: s.updateConfig,
       lastValidation: s.lastValidation,
       lastCompileReport: s.lastCompileReport,
       history: s.history,
       setConfig: s.setConfig,
+      sessionId: s.sessionId,
     })),
   );
 
   const component = useActiveComponent();
 
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
-  const [exportResult, setExportResult] = useState<{
-    format: ExportFormat;
-    url?: string;
-    code?: string;
-    fileName?: string;
-    error?: string;
-  } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
@@ -285,23 +265,18 @@ function PropertiesContent() {
     };
   }, [setConfig]);
 
-  // Sync local name input with component name
   useEffect(() => {
     if (component) setNameValue(component.name);
   }, [component?.id, component?.name]);
 
-  // Reset state when component changes
   useEffect(() => {
-    setExportResult(null);
     setSaved(false);
     setCopySuccess(false);
     setConfirmDelete(false);
-    setExportingFormat(null);
     for (const id of timeoutIds.current) clearTimeout(id);
     timeoutIds.current = [];
   }, [component?.id]);
 
-  // Cleanup
   useEffect(() => {
     return () => {
       for (const id of timeoutIds.current) clearTimeout(id);
@@ -310,49 +285,18 @@ function PropertiesContent() {
     };
   }, []);
 
-  const handleExport = useCallback(
-    async (format: ExportFormat) => {
-      if (!component || exportingFormat) return;
-      setExportingFormat(format);
-      setExportResult(null);
-      try {
-        const result = await requestExport(component.code, format, component.name);
-        if (result.success && result.data) {
-          setExportResult({
-            format,
-            url: result.data.url,
-            code: result.data.code,
-            fileName: result.data.fileName,
-          });
-        } else {
-          setExportResult({ format, error: result.error || "Export failed" });
-        }
-      } catch (err) {
-        setExportResult({
-          format,
-          error:
-            err instanceof Error && err.name === "AbortError"
-              ? "Export timed out. Try a simpler component or use HTML format."
-              : "Export failed. Check if Puppeteer is available.",
-        });
-      } finally {
-        setExportingFormat(null);
-      }
-    },
-    [component, exportingFormat],
-  );
-
-  const handleSaveToGallery = useCallback(async () => {
+  const handleSaveDesign = useCallback(async () => {
     if (!component || saving) return;
     setSaving(true);
     setSaved(false);
     try {
-      const result = await requestSaveToGallery({
+      const result = await requestSaveDesign({
         name: component.name,
         code: component.code,
         mode: component.mode,
         style: component.style,
         prompt: component.prompt,
+        sessionId: sessionId || undefined,
       });
       if (result.success) {
         setSaved(true);
@@ -360,24 +304,23 @@ function PropertiesContent() {
         timeoutIds.current.push(id);
       }
     } catch (err) {
-      console.warn("[design-properties] Save to gallery failed:", err);
+      console.warn("[design-properties] Save design failed:", err);
     } finally {
       setSaving(false);
     }
-  }, [component, saving]);
+  }, [component, saving, sessionId]);
 
   const handleCopyCode = useCallback(async () => {
     if (!component) return;
     try {
-      const textToCopy = exportResult?.code || component.code;
-      await navigator.clipboard.writeText(textToCopy);
+      await navigator.clipboard.writeText(component.code);
       setCopySuccess(true);
       const id = setTimeout(() => setCopySuccess(false), 1500);
       timeoutIds.current.push(id);
     } catch {
-      // Clipboard API may be unavailable
+      // Clipboard API may be unavailable.
     }
-  }, [component, exportResult]);
+  }, [component]);
 
   const handleWorkspaceSettingChange = useCallback(async <K extends keyof typeof config>(key: K, value: (typeof config)[K]) => {
     updateConfig({ [key]: value });
@@ -392,12 +335,11 @@ function PropertiesContent() {
   if (!component) {
     return (
       <div className="flex h-full items-center justify-center px-4 text-xs text-muted-foreground">
-        Select a component to view properties
+        Select a design to inspect details
       </div>
     );
   }
 
-  // Debounced name change — 300ms delay
   function handleNameChange(value: string) {
     setNameValue(value);
     clearTimeout(nameDebounceRef.current);
@@ -406,7 +348,6 @@ function PropertiesContent() {
     }, 300);
   }
 
-  // Timed delete confirm — auto-resets after 3s (keyboard-safe, no onBlur)
   function handleDelete() {
     if (!confirmDelete) {
       setConfirmDelete(true);
@@ -414,97 +355,80 @@ function PropertiesContent() {
       deleteTimerRef.current = setTimeout(() => setConfirmDelete(false), 3000);
       return;
     }
-    if (component) removeComponent(component.id);
+    if (component) {
+      removeComponent(component.id);
+    }
     setConfirmDelete(false);
   }
 
   return (
     <ScrollArea className="h-full">
       <div className="space-y-4 p-3">
-        {/* Inspector */}
-        {selectedElement && (
+        {selectedElements.length > 0 && (
           <div className="space-y-2 rounded-md border border-border bg-muted/40 p-2.5">
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
                 <Crosshair className="h-3 w-3" />
-                Selected Element
+                {selectedElements.length === 1 ? "Selected Element" : `Selected Elements (${selectedElements.length})`}
               </label>
               <Button
                 variant="ghost"
                 size="sm"
                 className="h-5 px-1.5 text-[11px]"
-                onClick={() => setSelectedElement(null)}
-                aria-label="Deselect element"
+                onClick={clearSelectedElements}
+                aria-label="Deselect all elements"
               >
                 <X className="h-3 w-3" />
               </Button>
             </div>
-            <div className="space-y-1 text-[11px]">
-              <div className="flex items-baseline gap-1">
-                <span className="font-medium">&lt;{selectedElement.tagName}&gt;</span>
-                {selectedElement.id && (
-                  <span className="text-blue-600 dark:text-blue-400">#{selectedElement.id}</span>
+            {selectedElements.map((el) => (
+              <div key={el.selector} className="space-y-1 rounded border border-border/50 bg-background/50 p-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-baseline gap-1 text-[11px]">
+                    <span className="font-medium">&lt;{el.tagName}&gt;</span>
+                    {el.id && (
+                      <span className="text-blue-600 dark:text-blue-400">#{el.id}</span>
+                    )}
+                  </div>
+                  {selectedElements.length > 1 && (
+                    <button
+                      onClick={() => removeSelectedElement(el.selector)}
+                      className="text-muted-foreground hover:text-red-500 transition-colors"
+                      aria-label={`Remove ${el.tagName} from selection`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                {el.className && (
+                  <div className="flex flex-wrap gap-0.5">
+                    {el.className
+                      .trim()
+                      .split(/\s+/)
+                      .slice(0, 6)
+                      .map((cls, i) => (
+                        <Badge key={i} variant="secondary" className="px-1 py-0 text-[11px]">
+                          .{cls}
+                        </Badge>
+                      ))}
+                  </div>
                 )}
-              </div>
-              {selectedElement.className && (
-                <div className="flex flex-wrap gap-0.5">
-                  {selectedElement.className
-                    .trim()
-                    .split(/\s+/)
-                    .slice(0, 6)
-                    .map((cls, i) => (
-                      <Badge key={i} variant="secondary" className="px-1 py-0 text-[11px]">
-                        .{cls}
-                      </Badge>
-                    ))}
+                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
+                  {(["width", "height", "padding", "margin"] as const).map((prop) => (
+                    <div key={prop} className="flex justify-between">
+                      <span className="text-muted-foreground capitalize">{prop}</span>
+                      <span className="font-mono">{el.computedStyles[prop]}</span>
+                    </div>
+                  ))}
                 </div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
-              {(["width", "height", "padding", "margin"] as const).map((prop) => (
-                <div key={prop} className="flex justify-between">
-                  <span className="text-muted-foreground capitalize">{prop}</span>
-                  <span className="font-mono">{selectedElement.computedStyles[prop]}</span>
-                </div>
-              ))}
-            </div>
-            <div className="space-y-0.5 border-t border-border pt-1.5 text-[11px]">
-              {(["display", "position", "fontSize"] as const).map((prop) => (
-                <div key={prop} className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    {prop.replace(/([A-Z])/g, " $1").trim()}
-                  </span>
-                  <span className="font-mono">{selectedElement.computedStyles[prop]}</span>
-                </div>
-              ))}
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Color</span>
-                <span className="flex items-center gap-1 font-mono">
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-sm border border-border"
-                    style={{ backgroundColor: selectedElement.computedStyles.color }}
-                  />
-                  {selectedElement.computedStyles.color}
-                </span>
+                <pre className="overflow-auto rounded bg-muted p-1 font-mono text-[11px] text-foreground">
+                  {el.selector}
+                </pre>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">BG</span>
-                <span className="flex items-center gap-1 font-mono">
-                  <span
-                    className="inline-block h-2.5 w-2.5 rounded-sm border border-border"
-                    style={{ backgroundColor: selectedElement.computedStyles.backgroundColor }}
-                  />
-                  {selectedElement.computedStyles.backgroundColor}
-                </span>
-              </div>
-            </div>
-            <pre className="overflow-auto rounded bg-muted p-1 font-mono text-[11px] text-foreground">
-              {selectedElement.selector}
-            </pre>
+            ))}
           </div>
         )}
 
-        {/* Name (debounced) */}
         <div className="space-y-1">
           <label
             htmlFor="component-name"
@@ -520,7 +444,6 @@ function PropertiesContent() {
           />
         </div>
 
-        {/* Style badges */}
         <div className="flex items-center gap-1.5">
           <Badge variant="secondary" className="px-1.5 py-0 text-[11px]">
             Tailwind
@@ -530,7 +453,6 @@ function PropertiesContent() {
           </Badge>
         </div>
 
-        {/* Prompt (collapsed) */}
         <div className="space-y-1">
           <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Prompt
@@ -540,7 +462,6 @@ function PropertiesContent() {
           </p>
         </div>
 
-        {/* Code */}
         <div className="space-y-1">
           <div className="flex gap-1">
             <Button
@@ -573,7 +494,34 @@ function PropertiesContent() {
           )}
         </div>
 
-        {/* Workspace settings */}
+        <div className="flex gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 flex-1 gap-1.5 text-xs"
+            onClick={handleSaveDesign}
+            disabled={saving}
+          >
+            {saving ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : saved ? (
+              <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <Save className="h-3 w-3" />
+            )}
+            {saved ? "Saved" : "Save"}
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-7 gap-1.5 px-2.5 text-xs"
+            onClick={handleDelete}
+          >
+            <Trash2 className="h-3 w-3" />
+            {confirmDelete ? "Confirm" : "Delete"}
+          </Button>
+        </div>
+
         <div className="space-y-2 rounded-md border border-border bg-muted/30 p-2.5">
           <div className="flex items-center justify-between">
             <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -658,129 +606,20 @@ function PropertiesContent() {
             ) : null}
           </div>
         )}
-
-        {/* Export */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Export
-          </label>
-          <div className="grid grid-cols-4 gap-1">
-            {([
-              { fmt: "html" as const, icon: Download, label: "HTML" },
-              { fmt: "react" as const, icon: Download, label: "React" },
-              { fmt: "png" as const, icon: ImageIcon, label: "PNG" },
-              { fmt: "video" as const, icon: Film, label: "MP4" },
-            ] as const).map(({ fmt, icon: Icon, label }) => (
-              <Button
-                key={fmt}
-                variant="outline"
-                size="sm"
-                className="h-7 gap-1 px-1.5 text-[11px]"
-                disabled={exportingFormat !== null}
-                onClick={() => handleExport(fmt)}
-              >
-                {exportingFormat === fmt ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Icon className="h-3 w-3" />
-                )}
-                {label}
-              </Button>
-            ))}
-          </div>
-
-          {exportResult && !exportResult.error && (
-            <div className="rounded bg-emerald-50 p-1.5 text-[11px] dark:bg-emerald-950/30">
-              <div className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
-                <Check className="h-3 w-3" />
-                {exportResult.fileName || exportResult.format}
-              </div>
-              {exportResult.code && (
-                <button
-                  onClick={() => {
-                    const blob = new Blob([exportResult.code!], { type: "text/plain" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = exportResult.fileName || `design.${exportResult.format}`;
-                    a.click();
-                    setTimeout(() => URL.revokeObjectURL(url), 100);
-                  }}
-                  className="mt-0.5 truncate text-emerald-600 underline dark:text-emerald-400"
-                >
-                  Download
-                </button>
-              )}
-              {exportResult.url && !exportResult.code && (
-                <a
-                  href={exportResult.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-0.5 block truncate text-emerald-600 underline dark:text-emerald-400"
-                >
-                  Open file
-                </a>
-              )}
-            </div>
-          )}
-          {exportResult?.error && (
-            <div className="rounded bg-destructive/10 p-1.5 text-[11px]">
-              <div className="flex items-center gap-1 text-destructive">
-                <X className="h-3 w-3" />
-                {exportResult.error}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Actions row */}
-        <div className="flex gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 flex-1 gap-1.5 text-xs"
-            onClick={handleSaveToGallery}
-            disabled={saving}
-          >
-            {saving ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : saved ? (
-              <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
-            ) : (
-              <Save className="h-3 w-3" />
-            )}
-            {saved ? "Saved" : "Gallery"}
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            className="h-7 gap-1.5 px-2.5 text-xs"
-            onClick={handleDelete}
-          >
-            <Trash2 className="h-3 w-3" />
-            {confirmDelete ? "Confirm" : "Delete"}
-          </Button>
-        </div>
       </div>
     </ScrollArea>
   );
 }
 
-// ─── Tab definitions ────────────────────────────────────────
-
-const TABS: { id: RightPanelTab; icon: typeof Settings2; label: string }[] = [
-  { id: "properties", icon: Settings2, label: "Properties" },
-  { id: "versions", icon: History, label: "Versions" },
-  { id: "gallery", icon: LayoutGrid, label: "Gallery" },
+const TABS: { id: RightPanelTab; icon: typeof LayoutGrid; label: string }[] = [
+  { id: "designs", icon: LayoutGrid, label: "Designs" },
+  { id: "details", icon: Settings2, label: "Details" },
 ];
 
-// ─── Main Panel ─────────────────────────────────────────────
-
 export function DesignPropertiesPanel() {
-  const [activeTab, setActiveTab] = useState<RightPanelTab>("properties");
+  const [activeTab, setActiveTab] = useState<RightPanelTab>("designs");
   const [collapsed, setCollapsed] = useState(false);
 
-  // Keyboard navigation for tabs
   function handleTabKeyDown(e: React.KeyboardEvent, index: number) {
     let nextIndex = index;
     if (e.key === "ArrowRight") {
@@ -799,7 +638,6 @@ export function DesignPropertiesPanel() {
       return;
     }
     setActiveTab(TABS[nextIndex].id);
-    // Focus the next tab button
     const tablist = (e.currentTarget as HTMLElement).parentElement;
     const buttons = tablist?.querySelectorAll<HTMLButtonElement>("[role='tab']");
     buttons?.[nextIndex]?.focus();
@@ -823,7 +661,6 @@ export function DesignPropertiesPanel() {
 
   return (
     <div className="flex h-full w-80 flex-col border-l border-border">
-      {/* Header: collapse toggle + component selector */}
       <div className="flex items-center border-b border-border">
         <div className="flex-1">
           <ComponentSelector />
@@ -839,7 +676,6 @@ export function DesignPropertiesPanel() {
         </Button>
       </div>
 
-      {/* Tab bar (ARIA tablist) */}
       <div className="flex border-b border-border" role="tablist" aria-label="Panel sections">
         {TABS.map(({ id, icon: Icon, label }, index) => (
           <button
@@ -864,16 +700,14 @@ export function DesignPropertiesPanel() {
         ))}
       </div>
 
-      {/* Tab content */}
       <div
         className="flex-1 overflow-hidden"
         role="tabpanel"
         id={`panel-tabpanel-${activeTab}`}
         aria-labelledby={`panel-tab-${activeTab}`}
       >
-        {activeTab === "properties" && <PropertiesContent />}
-        {activeTab === "versions" && <VersionsContent />}
-        {activeTab === "gallery" && <GalleryContent />}
+        {activeTab === "designs" && <GalleryContent />}
+        {activeTab === "details" && <DetailsContent />}
       </div>
     </div>
   );

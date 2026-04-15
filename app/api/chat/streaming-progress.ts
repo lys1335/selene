@@ -66,7 +66,17 @@ function emitDroppedToolCallTelemetry(
  */
 const INTERACTIVE_TOOL_NAMES = INTERACTIVE_TOOL_NAME_SET;
 
-function buildPendingToolCallProjection(part: DBToolCallPart): DBToolCallPart | null {
+function buildPendingToolCallProjection(
+  part: DBToolCallPart,
+  persistedToolResultIds: Set<string>,
+): DBToolCallPart | null {
+  // Guard: if a result already exists for this tool call, it is resolved —
+  // never project it as pending/active. This prevents rehydration from
+  // marking completed calls as active after stream persistence.
+  if (persistedToolResultIds.has(part.toolCallId)) {
+    return null;
+  }
+
   const isFinalizedInputState = part.state === undefined || part.state === "input-available";
   if (!isFinalizedInputState) {
     return null;
@@ -142,7 +152,7 @@ export function filterStreamingPartsForPersistence(
     }
 
     if (!persistedToolResultIds.has(part.toolCallId)) {
-      const pendingProjection = buildPendingToolCallProjection(part);
+      const pendingProjection = buildPendingToolCallProjection(part, persistedToolResultIds);
       if (pendingProjection) {
         filteredParts.push(pendingProjection);
         continue;
@@ -176,7 +186,9 @@ function buildProgressContentSnapshot(
 
     const isResolved = persistedToolResultIds.has(part.toolCallId);
     if (isResolved) {
-      return part;
+      // Explicitly mark resolved calls as inactive so downstream consumers
+      // (converter, tool UIs) never treat them as pending after rehydration.
+      return { ...part, active: false };
     }
 
     const progressPart: DBToolCallPart = {

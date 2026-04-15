@@ -20,6 +20,7 @@ export function invertAssignments(
     researchModel: "research",
     visionModel: "vision",
     utilityModel: "utility",
+    transcriberModel: "transcriber",
   };
   const result: Record<string, ModelRole[]> = {};
   for (const [key, modelId] of Object.entries(assignments)) {

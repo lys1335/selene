@@ -140,5 +140,16 @@ export async function* editCard(opts: EditOpts): AsyncGenerator<StreamEvent> {
 
 function stripMarkdownFences(text: string): string {
   const fenceMatch = text.match(/```(?:jsx|tsx|html|typescript)?\n?([\s\S]*?)```/);
-  return fenceMatch ? fenceMatch[1].trim() : text.trim();
+  if (fenceMatch) return fenceMatch[1].trim();
+
+  // No fences found — the model may have prepended prose before code.
+  // Find the first line that looks like an import/export/comment/"use ... and
+  // discard everything before it (prose like "I have the full source...").
+  const codeStartPattern = /^(import\s|export\s|\/\/|\/\*|"use |'use )/m;
+  const match = text.match(codeStartPattern);
+  if (match && match.index != null && match.index > 0) {
+    return text.slice(match.index).trim();
+  }
+
+  return text.trim();
 }

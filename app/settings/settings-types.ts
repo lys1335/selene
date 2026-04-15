@@ -203,6 +203,7 @@ export interface FormState {
   sttProvider: VoiceSettingsFields["sttProvider"];
   sttLocalModel: VoiceSettingsFields["sttLocalModel"];
   voicePostProcessing: VoiceSettingsFields["voicePostProcessing"];
+  transcriberModel: VoiceSettingsFields["transcriberModel"];
   voiceAgentName: VoiceSettingsFields["voiceAgentName"];
   voiceAudioCues: VoiceSettingsFields["voiceAudioCues"];
   voiceAutoLearn: VoiceSettingsFields["voiceAutoLearn"];
@@ -334,6 +335,7 @@ export const DEFAULT_FORM_STATE: FormState = {
   sttProvider: "local",
   sttLocalModel: DEFAULT_WHISPER_MODEL,
   voicePostProcessing: true,
+  transcriberModel: "",
   voiceAgentName: "Selene",
   voiceAudioCues: true,
   voiceAutoLearn: true,
@@ -465,6 +467,7 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     sttProvider: data.sttProvider ?? "local",
     sttLocalModel: data.sttLocalModel ?? DEFAULT_WHISPER_MODEL,
     voicePostProcessing: data.voicePostProcessing ?? true,
+    transcriberModel: data.transcriberModel ?? "",
     voiceAgentName: data.voiceAgentName ?? "Selene",
     voiceAudioCues: data.voiceAudioCues ?? true,
     voiceAutoLearn: data.voiceAutoLearn ?? true,

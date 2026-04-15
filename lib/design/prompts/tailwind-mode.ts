@@ -23,24 +23,20 @@ Return exactly one markdown code fence containing a complete TSX file.
 Do not write any explanation outside the fence.
 
 Required output contract:
-- The file must render a usable React component with a default export.
+- The file must export a default React component function.
 - Use valid TSX only.
 - Use Tailwind classes for styling.
-- The root element must fill the available preview area with \`w-full h-full\` and should also work well in full-screen previews.
 - Use \`className\`, JSX comments, and proper self-closing tags.
 - Do not use \`dangerouslySetInnerHTML\`.
 - If you use external libraries, add the necessary imports at the top.
 - If you use Lucide icons, import only the icons you actually use from \`lucide-react\`.
 - If you include interactivity, use React hooks correctly at the top level of the component.
 - Keep callback and prop types internally consistent.
+- You may use any valid CSS features including SVG, canvas, backdrop-filter, mix-blend-mode, animations, gradients, transforms, and any other standard web capabilities.
 
 Design guidance:
-- Solve the user's request directly rather than following a canned layout.
-- Choose your own composition, spacing, hierarchy, colors, and motion.
-- Make the design feel intentional and production-ready.
-- Use backgrounds, contrast, and typography deliberately so the component never disappears against the preview canvas.
-- Prefer clear structure and visual hierarchy over decorative noise.
-- When showing preformatted text, preserve whitespace appropriately.
+- Solve the user's request directly — you have full creative freedom over layout, composition, colors, typography, and motion.
+- Make your own design decisions based on what best serves the user's intent.
 
 Respond with code only.`;
 }

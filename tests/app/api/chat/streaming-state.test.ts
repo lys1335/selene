@@ -16,6 +16,7 @@ vi.mock("@/lib/ai/tools/delegate-to-subagent-types", () => {
 
 import {
   sealDanglingToolCalls,
+  shouldKeepDelegatedToolCallPending,
   type StreamingMessageState,
 } from "@/app/api/chat/streaming-state";
 import type { DBContentPart } from "@/lib/messages/converter";
@@ -171,8 +172,7 @@ describe("sealDanglingToolCalls", () => {
     expect(state.parts).toHaveLength(2);
   });
 
-  it("does not seal start calls even for running delegations (they return immediately)", () => {
-    // Set up a running delegation
+  it("does not seal active delegated start calls while the delegation is still running", () => {
     mockActiveDelegations.set("del-123", {
       id: "del-123",
       settled: false,
@@ -184,16 +184,75 @@ describe("sealDanglingToolCalls", () => {
         type: "tool-call",
         toolCallId: "call-start-1",
         toolName: "delegateToSubagent",
-        args: { action: "start", agentId: "agent-1", task: "do something" },
+        args: {
+          action: "start",
+          delegationId: "del-123",
+          agentId: "agent-1",
+          task: "do something",
+        },
+        state: "input-available",
+        active: true,
+      },
+    ]);
+
+    const changed = sealDanglingToolCalls(state);
+
+    expect(changed).toBe(false);
+    expect(state.parts).toHaveLength(1);
+    expect(state.parts[0]).toMatchObject({
+      type: "tool-call",
+      toolCallId: "call-start-1",
+      state: "input-available",
+      active: true,
+    });
+  });
+
+  it("seals inactive delegated start calls once they are no longer tracked as pending", () => {
+    const state = makeState([
+      {
+        type: "tool-call",
+        toolCallId: "call-start-inactive",
+        toolName: "delegateToSubagent",
+        args: { action: "start", delegationId: "del-unknown", task: "do something" },
         state: "input-available",
       },
     ]);
 
     const changed = sealDanglingToolCalls(state);
 
-    // Should seal because "start" returns immediately and should have a result
     expect(changed).toBe(true);
     expect(state.parts).toHaveLength(2);
+    expect(state.parts[1]).toMatchObject({
+      type: "tool-result",
+      toolCallId: "call-start-inactive",
+      status: "error",
+      state: "output-error",
+    });
+  });
+
+
+  it("does not seal delegated observe calls flagged active even if the registry entry has been cleaned up", () => {
+    const state = makeState([
+      {
+        type: "tool-call",
+        toolCallId: "call-observe-active",
+        toolName: "delegateToSubagent",
+        args: { action: "observe", delegationId: "del-cleaned-up" },
+        state: "input-available",
+        active: true,
+      },
+    ]);
+
+    const changed = sealDanglingToolCalls(state);
+
+    expect(changed).toBe(false);
+    expect(state.parts).toHaveLength(1);
+    expect(state.parts[0]).toMatchObject({
+      type: "tool-call",
+      toolCallId: "call-observe-active",
+      active: true,
+      state: "input-available",
+    });
   });
 
   it("handles mixed tool calls correctly - only seals non-observe dangling calls", () => {
@@ -258,5 +317,95 @@ describe("sealDanglingToolCalls", () => {
       (p) => p.type === "tool-result" && p.toolCallId === "call-observe-settled"
     );
     expect(observeSettledResult).toBeDefined();
+  });
+
+  it("does not seal delegated tool calls projected as active while siblings settle", () => {
+    mockActiveDelegations.set("del-running", {
+      id: "del-running",
+      settled: false,
+      sessionId: "sess-1",
+    });
+
+    const state = makeState([
+      {
+        type: "tool-call",
+        toolCallId: "call-delegate-running",
+        toolName: "delegateToSubagent",
+        args: { action: "start", delegationId: "del-running", agentId: "agent-1" },
+        state: "input-available",
+        active: true,
+      },
+      {
+        type: "tool-call",
+        toolCallId: "call-delegate-complete",
+        toolName: "delegateToSubagent",
+        args: { action: "observe", delegationId: "del-done" },
+        state: "input-available",
+      },
+      {
+        type: "tool-result",
+        toolCallId: "call-delegate-complete",
+        toolName: "delegateToSubagent",
+        result: { completed: true, running: false },
+        status: "success",
+        state: "output-available",
+        timestamp: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+
+    const changed = sealDanglingToolCalls(state);
+
+    expect(changed).toBe(false);
+    expect(
+      state.parts.find(
+        (part) => part.type === "tool-result" && part.toolCallId === "call-delegate-running"
+      )
+    ).toBeUndefined();
+  });
+});
+
+describe("shouldKeepDelegatedToolCallPending", () => {
+  beforeEach(() => {
+    mockActiveDelegations.clear();
+  });
+
+  it("keeps delegated tool calls pending when projected active", () => {
+    expect(
+      shouldKeepDelegatedToolCallPending({
+        toolName: "delegateToSubagent",
+        args: { action: "start" },
+        active: true,
+      })
+    ).toBe(true);
+  });
+
+  it("keeps delegated tool calls pending when registry says delegation is unsettled", () => {
+    mockActiveDelegations.set("del-running", {
+      id: "del-running",
+      settled: false,
+      sessionId: "sess-1",
+    });
+
+    expect(
+      shouldKeepDelegatedToolCallPending({
+        toolName: "delegateToSubagent",
+        args: { action: "observe", delegationId: "del-running" },
+      })
+    ).toBe(true);
+  });
+
+  it("does not keep delegated tool calls pending once the delegation settles", () => {
+    mockActiveDelegations.set("del-done", {
+      id: "del-done",
+      settled: true,
+      sessionId: "sess-2",
+    });
+
+    expect(
+      shouldKeepDelegatedToolCallPending({
+        toolName: "delegateToSubagent",
+        args: { action: "observe", delegationId: "del-done" },
+      })
+    ).toBe(false);
   });
 });

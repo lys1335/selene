@@ -32,6 +32,7 @@ interface UseVoiceRecordingOptions {
   sttEnabled: boolean;
   onTranscript: (payload: VoiceTranscriptPayload) => void;
   onTranscriptInserted?: () => void;
+  onTranscriptPolished?: (polishedText: string, rawText: string) => void;
   voicePostProcessing?: boolean;
   voiceAudioCues?: boolean;
   voiceActivationMode?: "tap" | "push";
@@ -40,6 +41,7 @@ interface UseVoiceRecordingOptions {
 interface UseVoiceRecordingReturn {
   isRecordingVoice: boolean;
   isTranscribingVoice: boolean;
+  isPolishingTranscript: boolean;
   handleVoiceInput: () => Promise<void>;
   /** Push mode: start recording only (never stops). Use with onMouseDown/onTouchStart. */
   handleVoiceStart: () => Promise<void>;
@@ -55,13 +57,19 @@ interface UseVoiceRecordingReturn {
 }
 
 export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRecordingReturn {
-  const { sttEnabled, onTranscript, onTranscriptInserted } = options;
+  const {
+    sttEnabled,
+    onTranscript,
+    onTranscriptInserted,
+    onTranscriptPolished,
+  } = options;
   const voiceAudioCues = options.voiceAudioCues ?? true;
   const voicePostProcessing = options.voicePostProcessing ?? false;
 
   const t = useTranslations("assistantUi");
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [isTranscribingVoice, setIsTranscribingVoice] = useState(false);
+  const [isPolishingTranscript, setIsPolishingTranscript] = useState(false);
   const [analyserNode, setAnalyserNode] = useState<AnalyserNode | null>(null);
   const isRecordingRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -129,7 +137,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
 
   // Shared helper: start a new recording session (mic access, MediaRecorder setup, etc.)
   const startRecording = useCallback(async () => {
-    if (!sttEnabled || isTranscribingVoice) {
+    if (!sttEnabled || isTranscribingVoice || isPolishingTranscript) {
       return;
     }
 
@@ -180,6 +188,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
         isRecordingRef.current = false;
         setIsRecordingVoice(false);
         setIsTranscribingVoice(false);
+        setIsPolishingTranscript(false);
         mediaRecorderRef.current = null;
         recordingChunksRef.current = [];
         stopRecordingStream();
@@ -221,6 +230,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
         }
 
         setIsTranscribingVoice(true);
+        setIsPolishingTranscript(false);
         try {
           const result = await transcribeRecordedSpeech({
             audioBlob,
@@ -228,30 +238,45 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
             postProcessingEnabled: voicePostProcessing,
             transcriptionFailedMessage: t("toast.transcriptionFailed"),
             noSpeechDetectedMessage: t("toast.noSpeechDetected"),
+            onRawTranscript: (rawText) => {
+              lastTranscriptRef.current = rawText;
+              wasAiEnhancedRef.current = false;
+              lastTranscriptionFailedRef.current = false;
+
+              onTranscript({
+                transcript: rawText,
+                finalText: rawText,
+                fallbackText: rawText,
+                usedPostProcessing: false,
+              });
+              onTranscriptInserted?.();
+
+              setIsTranscribingVoice(false);
+              setIsPolishingTranscript(voicePostProcessing);
+            },
+            onPolishedTranscript: (polishedText, rawText) => {
+              wasAiEnhancedRef.current = true;
+              onTranscriptPolished?.(polishedText, rawText);
+            },
             onPostProcessingFallback: () => {
               toast.info("Grammar cleanup unavailable. Using raw transcription.");
             },
           });
 
-          // Store raw transcript for auto-learn comparison when user sends
+          // Preserve the raw transcript for auto-learn and restore, even when
+          // post-processing updates the visible composer text.
           lastTranscriptRef.current = result.transcript;
           wasAiEnhancedRef.current = result.usedPostProcessing;
           lastTranscriptionFailedRef.current = false;
-
-          onTranscript({
-            transcript: result.transcript,
-            finalText: result.finalText,
-            fallbackText: result.fallbackText,
-            usedPostProcessing: result.usedPostProcessing,
-          });
-          onTranscriptInserted?.();
         } catch (error) {
           lastTranscriptionFailedRef.current = true;
+          wasAiEnhancedRef.current = false;
           const errorMessage =
             error instanceof Error ? error.message : t("toast.transcriptionFailed");
           toast.error(errorMessage);
         } finally {
           setIsTranscribingVoice(false);
+          setIsPolishingTranscript(false);
         }
       };
 
@@ -286,11 +311,23 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
       isRecordingRef.current = false;
       setIsRecordingVoice(false);
       setIsTranscribingVoice(false);
+      setIsPolishingTranscript(false);
       mediaRecorderRef.current = null;
       recordingChunksRef.current = [];
       stopRecordingStream();
     }
-  }, [isTranscribingVoice, sttEnabled, stopRecordingStream, onTranscript, onTranscriptInserted, playTone, voicePostProcessing, t]);
+  }, [
+    isPolishingTranscript,
+    isTranscribingVoice,
+    sttEnabled,
+    stopRecordingStream,
+    onTranscript,
+    onTranscriptInserted,
+    onTranscriptPolished,
+    playTone,
+    voicePostProcessing,
+    t,
+  ]);
 
   // Shared helper: stop an active recording
   const stopRecording = useCallback(() => {
@@ -302,7 +339,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
 
   // Tap mode: toggle recording on/off
   const handleVoiceInput = useCallback(async () => {
-    if (!sttEnabled || isTranscribingVoice) {
+    if (!sttEnabled || isTranscribingVoice || isPolishingTranscript) {
       return;
     }
 
@@ -313,7 +350,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
     }
 
     await startRecording();
-  }, [isRecordingVoice, isTranscribingVoice, sttEnabled, startRecording]);
+  }, [isPolishingTranscript, isRecordingVoice, isTranscribingVoice, sttEnabled, startRecording]);
 
   // Push mode: start recording only (never stops)
   const handleVoiceStart = useCallback(async () => {
@@ -325,7 +362,18 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
     stopRecording();
   }, [stopRecording]);
 
-  return { isRecordingVoice, isTranscribingVoice, handleVoiceInput, handleVoiceStart, handleVoiceStop, analyserNode, lastTranscriptRef, wasAiEnhancedRef, lastTranscriptionFailedRef };
+  return {
+    isRecordingVoice,
+    isTranscribingVoice,
+    isPolishingTranscript,
+    handleVoiceInput,
+    handleVoiceStart,
+    handleVoiceStop,
+    analyserNode,
+    lastTranscriptRef,
+    wasAiEnhancedRef,
+    lastTranscriptionFailedRef,
+  };
 }
 
 // ---------------------------------------------------------------------------

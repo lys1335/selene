@@ -1,4 +1,4 @@
-import { execFile } from "child_process";
+import { execFile, type ExecFileOptions } from "child_process";
 import fs from "fs/promises";
 import { existsSync } from "fs";
 import { join } from "path";
@@ -17,6 +17,7 @@ import { getProjectRoot } from "../../utils/project-root";
 
 const execFileAsync = promisify(execFile);
 const PROJECT_ROOT = getProjectRoot();
+const IS_WINDOWS = process.platform === "win32";
 
 export interface DependencyValidationResult {
   manifestPackages: string[];
@@ -37,8 +38,20 @@ export interface DependencyInstallResult {
 
 let installLock: Promise<void> | null = null;
 
-function getNpmCommand(): string {
-  return process.platform === "win32" ? "npm.cmd" : "npm";
+/**
+ * Resolve the npm command and exec options for the current platform.
+ *
+ * On Windows, `npm.cmd` is a batch script that requires a shell to execute.
+ * Using `execFile` without `shell: true` causes "spawn EINVAL" errors.
+ * We use `shell: true` on Windows so `npm.cmd` runs through cmd.exe, which
+ * matches the resolution strategy used by the main executor-runtime for
+ * environments where a bundled Node/npm-cli.js is unavailable.
+ */
+function getNpmExecConfig(): { command: string; options: ExecFileOptions } {
+  return {
+    command: IS_WINDOWS ? "npm.cmd" : "npm",
+    options: IS_WINDOWS ? { shell: true } : {},
+  };
 }
 
 function uniqueStrings(values: Iterable<string>): string[] {
@@ -206,13 +219,15 @@ export async function installSandboxPackages(
 
   const doInstall = async () => {
     await ensureSandboxDir();
+    const { command, options: platformOptions } = getNpmExecConfig();
     await execFileAsync(
-      getNpmCommand(),
+      command,
       ["install", "--save", "--ignore-scripts", ...specs],
       {
         cwd: SANDBOX_DIR,
         timeout: 120_000,
         env: { ...process.env, NODE_ENV: "development" },
+        ...platformOptions,
       },
     );
   };

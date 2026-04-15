@@ -137,6 +137,7 @@ const TOOL_BY_NAME_MAP = mcpAwareToolMap({
   promptLibrary: PromptLibraryToolUI,
   // Claude Code native tools
   Edit: ClaudeEditToolUI,
+  bash: ClaudeBashToolUI,
   Bash: ClaudeBashToolUI,
   Read: ClaudeReadToolUI,
   Write: ClaudeWriteToolUI,
@@ -154,6 +155,10 @@ const TOOL_BY_NAME_MAP = mcpAwareToolMap({
   TaskStop: ClaudeTaskStopToolUI,
   delegateToSubagent: DelegationToolUI,
 });
+
+export function getToolComponentByName(toolName: string) {
+  return TOOL_BY_NAME_MAP[toolName];
+}
 
 export function getAttachmentImageUrl(attachment: {
   contentType?: string;
@@ -640,7 +645,7 @@ export const AssistantMessage: FC<{ ttsEnabled?: boolean }> = ({ ttsEnabled = fa
         {/* Token usage display */}
         {(tokenUsage?.inputTokens || tokenUsage?.outputTokens) && (
           <div className="text-[10px] text-terminal-muted/60 font-mono">
-            {tokenUsage.inputTokens?.toLocaleString() || 0}↓ {tokenUsage.outputTokens?.toLocaleString() || 0}↑
+            {tokenUsage.inputTokens ?? 0}↓ {tokenUsage.outputTokens ?? 0}↑
           </div>
         )}
 

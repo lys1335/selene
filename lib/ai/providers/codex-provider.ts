@@ -522,7 +522,7 @@ function createCodexFetch(): typeof fetch {
         // For non-streaming callers (e.g. generateText), convert SSE → JSON
         if (!originalStream) {
           const responseHeaders = ensureContentType(wsResult.response.headers);
-          return await convertSseToJson(wsResult.response, responseHeaders);
+          return await convertSseToJson(wsResult.response, responseHeaders, init?.signal ?? undefined);
         }
         return wsResult.response;
       } catch (wsError) {
@@ -631,7 +631,7 @@ function createCodexFetch(): typeof fetch {
 
       if (!originalStream) {
         const responseHeaders = ensureContentType(effectiveResponse.headers);
-        return await convertSseToJson(effectiveResponse, responseHeaders);
+        return await convertSseToJson(effectiveResponse, responseHeaders, init?.signal ?? undefined);
       }
 
       // Buffer early SSE events to detect server_error before content starts.

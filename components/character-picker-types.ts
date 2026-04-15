@@ -9,6 +9,7 @@ export interface AgentModelConfigDraft {
   researchModel: string;
   visionModel: string;
   utilityModel: string;
+  transcriberModel: string;
 }
 
 export interface IdentityEditorFormState {

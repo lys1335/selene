@@ -21,7 +21,7 @@ import { removeChatAbortController } from "@/lib/background-tasks/chat-abort-reg
 import { removeLivePromptQueue, drainLivePromptQueue } from "@/lib/background-tasks/live-prompt-queue-registry";
 import { signalUndrainedMessages } from "@/lib/background-tasks/undrained-signal";
 import { nextOrderingIndex } from "@/lib/session/message-ordering";
-import { clearDelegationCompletions } from "@/lib/ai/tools/delegation-completion-store";
+import { addDelegationCompletion } from "@/lib/ai/tools/delegation-completion-store";
 import { runStopHooks } from "@/lib/plugins/hook-integration";
 import { buildInterruptionMessage, buildInterruptionMetadata } from "@/lib/messages/interruption";
 import type { DBContentPart } from "@/lib/messages/converter";
@@ -44,13 +44,41 @@ import type { ContextInjectionTrackingMetadata } from "./context-injection";
 /**
  * Drain any messages that were queued for live-prompt injection but never
  * processed by prepareStep (e.g. run ended before a second step was reached).
- * Rather than persisting them to DB (which creates dangling messages with no
- * response), we set a per-session signal so the frontend can convert the
- * injected-live chips to "fallback" and replay them as a new run.
+ *
+ * Delegation completion entries are moved to the persistent completion store
+ * so the next turn's prepareStep can inject them. This enables the auto-resume
+ * flow: delegation completes → result stored → frontend notified → new turn
+ * drains the store and injects results.
+ *
+ * Non-delegation entries are signaled as undrained so the frontend can convert
+ * the injected-live chips to "fallback" and replay them as a new run.
  */
 function handleUndrainedQueueMessages(runId: string, sessionId: string): void {
   const undrained = drainLivePromptQueue(runId);
-  if (undrained.length > 0) {
+  if (undrained.length === 0) return;
+
+  const delegationEntries = undrained.filter(
+    (e) => e.metadata?.kind === "delegation_completion",
+  );
+  const otherEntries = undrained.filter(
+    (e) => e.metadata?.kind !== "delegation_completion",
+  );
+
+  // Move delegation results to the persistent completion store so the next
+  // turn can pick them up via prepareStep, and signal the frontend to auto-resume.
+  for (const entry of delegationEntries) {
+    addDelegationCompletion({
+      delegationId: entry.metadata?.delegationId || entry.id,
+      delegateName: entry.metadata?.delegateName || "Sub-agent",
+      sessionId: "",
+      initiatorSessionId: sessionId,
+      characterId: "",
+      completedAt: Date.now(),
+      resultContent: entry.content,
+    });
+  }
+
+  if (otherEntries.length > 0) {
     signalUndrainedMessages(sessionId);
   }
 }
@@ -129,7 +157,8 @@ export function createOnFinishCallback(ctx: StreamCallbackContext) {
       removeChatAbortController(ctx.agentRun.id);
       removeLivePromptQueue(ctx.agentRun.id, ctx.sessionId);
     }
-    clearDelegationCompletions(ctx.sessionId);
+    // NOTE: Do NOT clear delegation completions here. They persist between
+    // turns so the next auto-resumed turn's prepareStep can inject them.
 
     // Finalize any tool calls that were streamed via deltas (OpenAI format)
     if (ctx.streamingState) {
@@ -450,7 +479,8 @@ export function createOnAbortCallback(ctx: StreamCallbackContext) {
       removeChatAbortController(ctx.agentRun.id);
       removeLivePromptQueue(ctx.agentRun.id, ctx.sessionId);
     }
-    clearDelegationCompletions(ctx.sessionId);
+    // NOTE: Do NOT clear delegation completions here. They persist between
+    // turns so the next auto-resumed turn's prepareStep can inject them.
 
     try {
       const interruptionTimestamp = new Date();

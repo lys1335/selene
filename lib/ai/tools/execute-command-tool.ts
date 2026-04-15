@@ -96,7 +96,7 @@ function prepareCommandInput(
     };
 }
 
-interface ParsedPatchFile {
+export interface ParsedPatchFile {
     filePath: string;
     operation: "add" | "modify" | "delete";
 }
@@ -107,7 +107,7 @@ interface ParsedPatchFile {
  * *** Modify File: src/bar.tsx  (or *** Update File: ...)
  * *** Delete File: src/baz.ts
  */
-function parsePatchFileHeaders(patchText: string): ParsedPatchFile[] {
+export function parsePatchFileHeaders(patchText: string): ParsedPatchFile[] {
     const files: ParsedPatchFile[] = [];
     const headerRegex = /^\*\*\*\s+(Add|Modify|Update|Delete)\s+File:\s+(.+)$/gm;
     let match;
@@ -124,7 +124,7 @@ function parsePatchFileHeaders(patchText: string): ParsedPatchFile[] {
  * unified diffs against the git-tracked version (before state).
  * Falls back to raw patch text if diff computation fails.
  */
-async function computeInlineDiffs(
+export async function computeInlineDiffs(
     patchText: string,
     cwd: string,
 ): Promise<InlineDiffPayload> {

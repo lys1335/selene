@@ -1,3 +1,5 @@
+import type { InspectMessageContext } from "@/lib/design/workspace/inspect-context";
+
 export interface LivePromptEntry {
   id: string;
   content: string;
@@ -7,6 +9,7 @@ export interface LivePromptEntry {
     kind?: "generic" | "delegation_completion";
     delegationId?: string;
     delegateName?: string;
+    inspectContext?: InspectMessageContext | null;
   };
 }
 

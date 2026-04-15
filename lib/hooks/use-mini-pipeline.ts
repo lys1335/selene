@@ -313,7 +313,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
 
         setPhase("transcribing");
 
-        // --- Transcribe ---
+        // --- Transcribe (immediate insertion + deferred polish) ---
         transcribeAbortRef.current = new AbortController();
         let rawTranscript = "";
         let finalTranscript = "";
@@ -325,6 +325,19 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
             signal: transcribeAbortRef.current.signal,
             transcriptionFailedMessage: "Transcription failed",
             noSpeechDetectedMessage: "No speech detected",
+            onRawTranscript: (text) => {
+              // Show raw transcript immediately — don't wait for polish
+              rawTranscript = text;
+              if (!cancelledRef.current) {
+                setTranscript(text);
+              }
+            },
+            onPolishedTranscript: (polishedText) => {
+              // Swap in polished text when ready
+              if (!cancelledRef.current) {
+                setTranscript(polishedText);
+              }
+            },
           });
           rawTranscript = result.transcript;
           finalTranscript = result.finalText;

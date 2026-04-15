@@ -479,11 +479,39 @@ export async function enhancePromptWithLLM(
       };
     }
 
+    console.log(`[PromptEnhancementV2] LLM enhancement complete (${llmResult.text.length} chars)`);
+
+    // Handle empty response from the model (e.g., Codex returned response.done with no output)
+    if (!llmResult.text || llmResult.text.trim().length === 0) {
+      console.warn("[PromptEnhancementV2] LLM returned empty text — model produced no output", {
+        model: options.sessionMetadata?.utilityModel ?? "default",
+        provider: options.sessionMetadata?.provider ?? "unknown",
+        finishReason: llmResult.finishReason,
+        usage: llmResult.usage,
+      });
+
+      // Fall back to heuristic enhancement if we have search results
+      if (searchResults && searchResults.hits.length > 0) {
+        return {
+          enhanced: true,
+          prompt: buildFallbackPrompt(originalQuery, searchResults.hits),
+          originalQuery,
+          filesFound: searchResults.filesFound,
+          chunksRetrieved: searchResults.hits.length,
+          usedLLM: false,
+          error: "Model returned empty response, using simplified results",
+        };
+      }
+      return {
+        ...baseResult,
+        skipReason: "Model returned empty response",
+        error: "Enhancement model returned empty response — try a different model or provider",
+      };
+    }
+
     // Store messages in session for continuity
     addSessionMessage(sessionKey, { role: "user", content: enhancementRequest });
     addSessionMessage(sessionKey, { role: "assistant", content: llmResult.text });
-
-    console.log(`[PromptEnhancementV2] LLM enhancement complete (${llmResult.text.length} chars)`);
 
     return {
       enhanced: true,
@@ -494,11 +522,24 @@ export async function enhancePromptWithLLM(
       usedLLM: true,
     };
   } catch (error) {
-    console.error("[PromptEnhancementV2] Error:", error);
+    // Unwrap nested errors to surface the actual provider error message
+    const rootError = error instanceof Error && error.cause instanceof Error ? error.cause : error;
+    const errorMessage = rootError instanceof Error ? rootError.message : String(rootError);
+    const errorName = rootError instanceof Error ? rootError.name : "Error";
+
+    console.error("[PromptEnhancementV2] Enhancement LLM call failed:", {
+      message: errorMessage,
+      name: errorName,
+      model: options.sessionMetadata?.utilityModel ?? "default",
+      provider: options.sessionMetadata?.provider ?? "unknown",
+      // Include cause chain for debugging
+      ...(error instanceof Error && error.cause ? { cause: String(error.cause) } : {}),
+    });
+
     return {
       ...baseResult,
-      skipReason: `Enhancement failed: ${error instanceof Error ? error.message : "Unknown error"}`,
-      error: error instanceof Error ? error.message : "Unknown error",
+      skipReason: `Enhancement failed: ${errorMessage}`,
+      error: errorMessage,
     };
   }
 }

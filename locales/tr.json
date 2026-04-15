@@ -655,6 +655,10 @@
           "utility": {
             "label": "Yardımcı model",
             "helper": "Arka plan ve yardımcı görevlerde kullanılır."
+          },
+          "transcriber": {
+            "label": "Transkripsiyon modeli",
+            "helper": "Sesli giriş sonrası metin işleme ve dilbilgisi düzeltmede kullanılır."
           }
         }
       }
@@ -1011,6 +1015,9 @@
       "pastedTextChip": "Yapıştırılan metin #{n} · {lines} satır",
       "removePastedText": "Yapıştırılan metni kaldır",
       "textPasted": "Büyük metin alındı ({lines} satır)",
+      "inspectLabel": "İncele",
+      "inspectClearAll": "Tümünü temizle",
+      "inspectRemoveElement": "{element} seçimden kaldır",
       "editorEnable": "Zengin editor",
       "editorDisable": "Basit mod",
       "rewardSuggestion": "Tamamlandığında: +{amount} · {reason}",

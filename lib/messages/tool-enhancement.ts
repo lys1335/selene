@@ -44,6 +44,20 @@ export interface FrontendMessage {
     size?: number;
     kind?: string;
   }>;
+  metadata?: {
+    custom?: {
+      attachments?: Array<{
+        name?: string;
+        contentType?: string;
+        url?: string;
+        localPath?: string;
+        filePath?: string;
+        size?: number;
+        kind?: string;
+      }>;
+      inspectContext?: unknown;
+    };
+  };
 }
 
 interface ToolResultEnhancementOptions {

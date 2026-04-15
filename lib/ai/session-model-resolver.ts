@@ -446,12 +446,51 @@ export function resolveSessionUtilityModel(
   return getLanguageModelForProvider(scope.effectiveConfig.provider, scope.effectiveConfig.utilityModel);
 }
 
+export function resolveTranscriberModel(
+  settings: AppSettings,
+  provider?: LLMProvider,
+): LanguageModel {
+  const scope = resolveSessionModelScope(null, provider ? {
+    settings,
+    agentModelConfig: { provider },
+  } : { settings });
+  const model =
+    resolveModelForProvider(
+      settings.transcriberModel,
+      scope.effectiveConfig.provider,
+      scope.effectiveConfig.utilityModel,
+      "transcriberModel",
+    ) ?? scope.effectiveConfig.utilityModel;
+
+  return getLanguageModelForProvider(scope.effectiveConfig.provider, model);
+}
+
 export async function resolveSessionUtilityModelForSession(
   sessionMetadata: Record<string, unknown> | null | undefined,
   options: SessionResolverOptions = {},
 ): Promise<LanguageModel> {
   const scope = await resolveSessionModelScopeForSession(sessionMetadata, options);
   return getLanguageModelForProvider(scope.effectiveConfig.provider, scope.effectiveConfig.utilityModel);
+}
+
+export async function resolveTranscriberModelForSession(
+  sessionMetadata: Record<string, unknown> | null | undefined,
+  options: SessionResolverOptions = {},
+): Promise<LanguageModel> {
+  const settings = options.settings ?? loadSettings();
+  const scope = await resolveSessionModelScopeForSession(sessionMetadata, {
+    ...options,
+    settings,
+  });
+  const model =
+    resolveModelForProvider(
+      settings.transcriberModel,
+      scope.effectiveConfig.provider,
+      scope.effectiveConfig.utilityModel,
+      "transcriberModel",
+    ) ?? scope.effectiveConfig.utilityModel;
+
+  return getLanguageModelForProvider(scope.effectiveConfig.provider, model);
 }
 
 export function buildSessionModelMetadata(
@@ -514,7 +553,8 @@ export function getSessionProviderTemperature(
   options: SessionResolverOptions = {},
 ): number {
   const provider = getSessionProvider(sessionMetadata, options);
-  return provider === "kimi" ? 1 : requestedTemp;
+  // Kimi non-thinking mode requires temperature=0.6 (enforced by kimi-client fetch wrapper)
+  return provider === "kimi" ? 0.6 : requestedTemp;
 }
 
 export async function getSessionProviderTemperatureForSession(
@@ -523,7 +563,8 @@ export async function getSessionProviderTemperatureForSession(
   options: SessionResolverOptions = {},
 ): Promise<number> {
   const provider = (await resolveSessionModelScopeForSession(sessionMetadata, options)).effectiveConfig.provider;
-  return provider === "kimi" ? 1 : requestedTemp;
+  // Kimi non-thinking mode requires temperature=0.6 (enforced by kimi-client fetch wrapper)
+  return provider === "kimi" ? 0.6 : requestedTemp;
 }
 
 function getAgentModelConfigFromMetadata(

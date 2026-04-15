@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { resilientFetch } from "@/lib/utils/resilient-fetch";
-import { deduplicate } from "@/lib/utils/in-flight-cache";
 
 /**
  * Context window status as returned by the API.
@@ -98,13 +97,14 @@ export function useContextStatus({
     setIsLoading(true);
     setError(null);
 
-    const { data, error: fetchError } = await deduplicate(
-      "context-status",
-      sessionId,
-      () => resilientFetch<ContextStatusInfo>(
-        `/api/sessions/${sessionId}/context-status`,
-        { signal: controller.signal, retries: 0 }
-      )
+    // NOTE: Do NOT wrap this in `deduplicate()`. The abort controller already
+    // prevents concurrent request piling. `deduplicate` re-uses the same
+    // promise across React StrictMode mount/unmount cycles, which means the
+    // second mount can receive the first mount's "Aborted" error result and
+    // permanently leave `status` as null (model badge never appears).
+    const { data, error: fetchError } = await resilientFetch<ContextStatusInfo>(
+      `/api/sessions/${sessionId}/context-status`,
+      { signal: controller.signal, retries: 0 }
     );
 
     // Request was aborted (e.g., component unmounted or new request started)

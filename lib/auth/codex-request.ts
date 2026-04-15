@@ -151,7 +151,9 @@ export async function transformCodexRequest(
   if (Array.isArray(body.input)) {
     const filtered = filterCodexInput(body.input as CodexInputItem[]) || [];
     const normalized = normalizeOrphanedToolOutputs(filtered);
-    body.input = truncateCodexInput(normalized);
+    body.input = process.env.CODEX_TRUNCATE_PAYLOAD === "true"
+      ? truncateCodexInput(normalized)
+      : normalized;
     const inputSummary = body.input.map((item: CodexInputItem) => {
       const content = item.content;
       return {

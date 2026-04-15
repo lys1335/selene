@@ -23,6 +23,11 @@ const cwdStateMocks = vi.hoisted(() => ({
   setPersistedCommandCwd: vi.fn(),
 }));
 
+const validatorMocks = vi.hoisted(() => ({
+  validateExecutionDirectory: vi.fn(),
+  validateShellCommand: vi.fn(),
+}));
+
 const delegationWaitingMocks = vi.hoisted(() => ({
   registerBackgroundTask: vi.fn(),
 }));
@@ -50,11 +55,18 @@ vi.mock("@/lib/command-execution/cwd-state", () => ({
   setPersistedCommandCwd: cwdStateMocks.setPersistedCommandCwd,
 }));
 
+vi.mock("@/lib/command-execution/validator", () => ({
+  validateExecutionDirectory: validatorMocks.validateExecutionDirectory,
+  validateShellCommand: validatorMocks.validateShellCommand,
+}));
+
 vi.mock("@/app/api/chat/delegation-waiting", () => ({
   registerBackgroundTask: delegationWaitingMocks.registerBackgroundTask,
 }));
 
 import { createBashTool } from "@/lib/ai/tools/bash-tool";
+
+const isWindows = process.platform === "win32";
 
 function createToolContext() {
   return {
@@ -75,6 +87,8 @@ describe("bash-tool", () => {
     filesystemMocks.isOtherWorktreePath.mockReturnValue(false);
     cwdStateMocks.getPersistedCommandCwd.mockResolvedValue(null);
     cwdStateMocks.setPersistedCommandCwd.mockResolvedValue(undefined);
+    validatorMocks.validateExecutionDirectory.mockResolvedValue({ valid: true, resolvedPath: "/workspace" });
+    validatorMocks.validateShellCommand.mockReturnValue({ valid: true });
 
     commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
       success: true,
@@ -105,20 +119,38 @@ describe("bash-tool", () => {
       "/workspace/app"
     );
 
-    expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: "/bin/sh",
-        cwd: "/workspace",
-        characterId: "char-1",
-        args: ["-l"],
-        stdin: expect.stringContaining("git status"),
-      }),
-      ["/workspace"]
-    );
+    if (isWindows) {
+      expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: process.env.ComSpec || "cmd.exe",
+          cwd: "/workspace",
+          characterId: "char-1",
+          args: expect.arrayContaining(["/v:on", "/d", "/s", "/c"]),
+          windowsVerbatimArguments: true,
+        }),
+        ["/workspace"]
+      );
+      // Verify the command string is inside the args (last element)
+      const callArgs = commandExecutionMocks.executeCommandWithValidation.mock.calls[0][0];
+      const cmdArg = callArgs.args[callArgs.args.length - 1];
+      expect(cmdArg).toContain("git status");
+    } else {
+      expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "/bin/sh",
+          cwd: "/workspace",
+          characterId: "char-1",
+          args: ["-l"],
+          stdin: expect.stringContaining("git status"),
+        }),
+        ["/workspace"]
+      );
+    }
   });
 
   it("reuses persisted cwd when available", async () => {
     cwdStateMocks.getPersistedCommandCwd.mockResolvedValue("/workspace/app");
+    validatorMocks.validateExecutionDirectory.mockResolvedValue({ valid: true, resolvedPath: "/workspace/app" });
 
     const tool = createBashTool({
       sessionId: "sess-1",
@@ -137,6 +169,11 @@ describe("bash-tool", () => {
   });
 
   it("blocks dangerous shell removal commands", async () => {
+    validatorMocks.validateShellCommand.mockReturnValue({
+      valid: false,
+      error: "Shell contains a removal command (rm). Use confirmRemoval to proceed.",
+    });
+
     const tool = createBashTool({
       sessionId: "sess-1",
       characterId: "char-1",
@@ -169,7 +206,7 @@ describe("bash-tool", () => {
     expect(commandExecutionMocks.executeCommandWithValidation).not.toHaveBeenCalled();
   });
 
-  it("rejects mixing command execution with background status actions", async () => {
+  it("ignores action/processId when command is present (model hallucination tolerance)", async () => {
     const tool = createBashTool({
       sessionId: "sess-1",
       characterId: "char-1",
@@ -180,9 +217,9 @@ describe("bash-tool", () => {
       createToolContext()
     );
 
-    expect(result.status).toBe("error");
-    expect(result.error).toBe('bash action "status" cannot be combined with command or run_in_background.');
-    expect(commandExecutionMocks.executeCommandWithValidation).not.toHaveBeenCalled();
+    // When command is provided, action/processId are ignored — command execution wins
+    expect(result.status).toBe("success");
+    expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalled();
   });
 
   it("moves apply_patch heredoc payloads into stdin automatically", async () => {
@@ -225,6 +262,115 @@ describe("bash-tool", () => {
     expect(result.inlineDiff).toContain("*** Begin Patch");
   });
 
+  it("extracts apply_patch heredoc with cd prefix (Windows pattern)", async () => {
+    commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
+      success: true,
+      stdout: "patched",
+      stderr: "",
+      exitCode: 0,
+      signal: null,
+      executionTime: 5,
+    });
+
+    const tool = createBashTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      {
+        command: [
+          "cd /d C:\\Users\\test\\project && apply_patch <<'PATCH'",
+          "*** Begin Patch",
+          "*** Update File: src/index.ts",
+          "@@",
+          "+console.log('hello');",
+          "*** End Patch",
+          "PATCH",
+        ].join("\n"),
+      },
+      createToolContext()
+    );
+
+    expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "apply_patch",
+        args: [],
+        stdin: "*** Begin Patch\n*** Update File: src/index.ts\n@@\n+console.log('hello');\n*** End Patch\n",
+        cwd: "C:\\Users\\test\\project",
+      }),
+      ["/workspace"]
+    );
+    expect(result.status).toBe("success");
+    expect(result.inlineDiff).toContain("*** Begin Patch");
+  });
+
+  it("extracts apply_patch from PowerShell here-string syntax", async () => {
+    commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
+      success: true,
+      stdout: "patched",
+      stderr: "",
+      exitCode: 0,
+      signal: null,
+      executionTime: 2,
+    });
+
+    const tool = createBashTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      {
+        command: "@'\n*** Begin Patch\n*** Add File: foo.txt\n+bar\n*** End Patch\n'@ | apply_patch",
+      },
+      createToolContext()
+    );
+
+    expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "apply_patch",
+        args: [],
+        stdin: "*** Begin Patch\n*** Add File: foo.txt\n+bar\n*** End Patch\n",
+      }),
+      ["/workspace"]
+    );
+    expect(result.status).toBe("success");
+  });
+
+  it("handles \\r\\n line endings in apply_patch heredoc", async () => {
+    commandExecutionMocks.executeCommandWithValidation.mockResolvedValue({
+      success: true,
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+      signal: null,
+      executionTime: 1,
+    });
+
+    const tool = createBashTool({
+      sessionId: "sess-1",
+      characterId: "char-1",
+    });
+
+    const result = await tool.execute(
+      {
+        command: "apply_patch <<'PATCH'\r\n*** Begin Patch\r\n*** Add File: test.txt\r\n+hello\r\n*** End Patch\r\nPATCH",
+      },
+      createToolContext()
+    );
+
+    expect(commandExecutionMocks.executeCommandWithValidation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "apply_patch",
+        args: [],
+        stdin: "*** Begin Patch\n*** Add File: test.txt\n+hello\n*** End Patch\n",
+      }),
+      ["/workspace"]
+    );
+    expect(result.status).toBe("success");
+  });
+
   it("starts background shell commands", async () => {
     commandExecutionMocks.startBackgroundProcess.mockResolvedValue({
       processId: "bg-123",
@@ -242,14 +388,71 @@ describe("bash-tool", () => {
 
     expect(result.status).toBe("background_started");
     expect(result.processId).toBe("bg-123");
-    expect(commandExecutionMocks.startBackgroundProcess).toHaveBeenCalledWith(
-      expect.objectContaining({
-        command: "/bin/sh",
-        cwd: "/workspace",
-        args: ["-l"],
-        stdin: expect.stringContaining("npm run dev"),
-      }),
-      ["/workspace"]
-    );
+    if (isWindows) {
+      expect(commandExecutionMocks.startBackgroundProcess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: process.env.ComSpec || "cmd.exe",
+          cwd: "/workspace",
+          args: expect.arrayContaining(["/v:on", "/d", "/s", "/c"]),
+          windowsVerbatimArguments: true,
+        }),
+        ["/workspace"]
+      );
+      const callArgs = commandExecutionMocks.startBackgroundProcess.mock.calls[0][0];
+      const cmdArg = callArgs.args[callArgs.args.length - 1];
+      expect(cmdArg).toContain("npm run dev");
+    } else {
+      expect(commandExecutionMocks.startBackgroundProcess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          command: "/bin/sh",
+          cwd: "/workspace",
+          args: ["-l"],
+          stdin: expect.stringContaining("npm run dev"),
+        }),
+        ["/workspace"]
+      );
+    }
   });
+
+  if (isWindows) {
+    it("preserves inner quotes in Windows cmd.exe wrapping for rg patterns with spaces", async () => {
+      const tool = createBashTool({
+        sessionId: "sess-1",
+        characterId: "char-1",
+      });
+
+      await tool.execute(
+        { command: 'rg -n "design workspace|Component not found" "C:/project"' },
+        createToolContext()
+      );
+
+      const callArgs = commandExecutionMocks.executeCommandWithValidation.mock.calls[0][0];
+      // The entire command should be wrapped in outer quotes for cmd.exe /s /c
+      const cmdArg = callArgs.args[callArgs.args.length - 1];
+      expect(cmdArg).toMatch(/^"/); // starts with quote
+      expect(cmdArg).toMatch(/"$/); // ends with quote
+      expect(cmdArg).toContain("design workspace|Component not found");
+      expect(cmdArg).toContain("C:/project");
+      expect(callArgs.windowsVerbatimArguments).toBe(true);
+    });
+
+    it("sets windowsVerbatimArguments on background processes for Windows", async () => {
+      commandExecutionMocks.startBackgroundProcess.mockResolvedValue({
+        processId: "bg-456",
+      });
+
+      const tool = createBashTool({
+        sessionId: "sess-1",
+        characterId: "char-1",
+      });
+
+      await tool.execute(
+        { command: 'echo "hello world"', run_in_background: true },
+        createToolContext()
+      );
+
+      const callArgs = commandExecutionMocks.startBackgroundProcess.mock.calls[0][0];
+      expect(callArgs.windowsVerbatimArguments).toBe(true);
+    });
+  }
 });

@@ -44,9 +44,10 @@ const MODEL_ROLE_KEYS: Record<ModelRole, keyof AgentModelConfigDraft> = {
   research: "researchModel",
   vision: "visionModel",
   utility: "utilityModel",
+  transcriber: "transcriberModel",
 };
 
-const MODEL_ROLE_ORDER: ModelRole[] = ["chat", "research", "vision", "utility"];
+const MODEL_ROLE_ORDER: ModelRole[] = ["chat", "research", "vision", "utility", "transcriber"];
 
 const Plug = PhosphorPlug;
 const Trash2 = Trash;
@@ -238,6 +239,7 @@ export function IdentityEditorDialog({
       researchModel: "",
       visionModel: "",
       utilityModel: "",
+      transcriberModel: "",
     });
   };
 

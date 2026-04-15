@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { requireAuth } from "@/lib/auth/local-auth";
 import { getSessionWithMessages, updateMessage, getOrCreateLocalUser } from "@/lib/db/queries";
+import type { DBToolCallPart } from "@/lib/messages/converter";
 import { loadSettings } from "@/lib/settings/settings-manager";
 import { listAgentRunsBySession } from "@/lib/observability/queries";
 import { isStale } from "@/lib/utils/timestamp";
+import { shouldKeepDelegatedToolCallPending } from "@/app/api/chat/streaming-state";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-function sealDanglingToolCallsInContent(
+export function sealDanglingToolCallsInContent(
   content: unknown
 ): { content: unknown; changed: boolean } {
   if (!Array.isArray(content) || content.length === 0) {
@@ -35,6 +37,8 @@ function sealDanglingToolCallsInContent(
 
     const state = typeof part.state === "string" ? part.state : undefined;
     if (state !== "input-available" && state !== "input-streaming") continue;
+
+    if (shouldKeepDelegatedToolCallPending(part as unknown as DBToolCallPart)) continue;
 
     part.state = "output-error";
     if (part.args === undefined) {

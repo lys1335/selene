@@ -113,7 +113,8 @@ export const TOOL_DISCOVERY_MINIMAL = `## Tool Discovery & Codebase Search
 - To search project files: use \`localGrep\` (exact match) or \`vectorSearch\` (semantic). Default localGrep to literal mode.
 - To discover AI capabilities: use \`searchTools\` (queries tool registry, NOT files).
 - Most tools are deferred-loaded. Use searchTools to discover capabilities you don't see.
-- Never reject a request for missing capability without checking searchTools first.`;
+- Never reject a request for missing capability without checking searchTools first.
+- The "skill" tool is for platform skills and workflows only (e.g., simplify, update-config). Do NOT use "skill" for file operations — use searchTools to load editFile, readFile, writeFile instead.`;
 
 /**
  * Tool Discovery Instructions (Always-Include Mode)

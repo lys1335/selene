@@ -65,6 +65,7 @@ function extractSessionState(store: DesignWorkspaceState): DesignWorkspaceSessio
     error: store.error,
     inspectorEnabled: store.inspectorEnabled,
     selectedElement: store.selectedElement,
+    selectedElements: store.selectedElements,
     config: store.config,
     lastValidation: store.lastValidation,
     lastCompileReport: store.lastCompileReport,
@@ -84,6 +85,7 @@ const initialSessionState: DesignWorkspaceSessionState = {
   error: null,
   inspectorEnabled: false,
   selectedElement: null,
+  selectedElements: [],
   config: { ...DEFAULT_DESIGN_WORKSPACE_CONFIG },
   lastValidation: null,
   lastCompileReport: null,
@@ -116,12 +118,15 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     // and update its data to keep store and preview in sync
     const existingIndex = current.components.findIndex((c) => c.id === component.id);
     if (existingIndex !== -1) {
+      // If this component is already active, don't overwrite compiled previewHtml
+      // with a placeholder — that causes "stuck on compiling" on double-click
+      const isAlreadyActive = current.activeComponentId === component.id;
       const nextComponents = [...current.components];
       nextComponents[existingIndex] = { ...nextComponents[existingIndex], ...component };
       set({
         components: nextComponents,
         activeComponentId: component.id,
-        previewHtml: buildPreviewMarkup(component),
+        ...(isAlreadyActive ? {} : { previewHtml: buildPreviewMarkup(component) }),
       });
       return;
     }
@@ -175,6 +180,8 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     set({
       activeComponentId: component ? id : null,
       previewHtml: component ? buildPreviewMarkup(component) : "",
+      selectedElement: null,
+      selectedElements: [],
     });
   },
 
@@ -192,11 +199,50 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
 
   toggleInspector: () => {
     const next = !get().inspectorEnabled;
-    set({ inspectorEnabled: next, selectedElement: next ? get().selectedElement : null });
+    set({
+      inspectorEnabled: next,
+      selectedElement: next ? get().selectedElement : null,
+      selectedElements: next ? get().selectedElements : [],
+    });
   },
 
   setSelectedElement: (el: InspectedElement | null) => {
-    set({ selectedElement: el });
+    set({ selectedElement: el, selectedElements: el ? [el] : [] });
+  },
+
+  setSelectedElements: (elements: InspectedElement[]) => {
+    const normalized = elements.filter((element, index, source) => {
+      const key = element.selector;
+      return key ? source.findIndex((candidate) => candidate.selector === key) === index : index === 0;
+    });
+    set({
+      selectedElements: normalized,
+      selectedElement: normalized[0] ?? null,
+    });
+  },
+
+  toggleSelectedElement: (el: InspectedElement) => {
+    const current = get().selectedElements;
+    const exists = current.some((candidate) => candidate.selector === el.selector);
+    const next = exists
+      ? current.filter((candidate) => candidate.selector !== el.selector)
+      : [...current, el];
+    set({
+      selectedElements: next,
+      selectedElement: next[0] ?? null,
+    });
+  },
+
+  removeSelectedElement: (selector: string) => {
+    const next = get().selectedElements.filter((element) => element.selector !== selector);
+    set({
+      selectedElements: next,
+      selectedElement: next[0] ?? null,
+    });
+  },
+
+  clearSelectedElements: () => {
+    set({ selectedElements: [], selectedElement: null });
   },
 
   takeSnapshot: (label?: string, id?: string) => {

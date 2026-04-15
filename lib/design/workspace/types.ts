@@ -74,6 +74,7 @@ export interface DesignWorkspaceSessionState {
   error: string | null;
   inspectorEnabled: boolean;
   selectedElement: InspectedElement | null;
+  selectedElements: InspectedElement[];
   config: DesignWorkspaceConfig;
   lastValidation: DesignWorkspaceValidationResult | null;
   lastCompileReport: DesignWorkspaceCompileReport | null;
@@ -94,6 +95,10 @@ export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
   toggleCode: () => void;
   toggleInspector: () => void;
   setSelectedElement: (el: InspectedElement | null) => void;
+  setSelectedElements: (elements: InspectedElement[]) => void;
+  toggleSelectedElement: (el: InspectedElement) => void;
+  removeSelectedElement: (selector: string) => void;
+  clearSelectedElements: () => void;
   takeSnapshot: (label?: string, id?: string) => void;
   restoreSnapshot: (snapshotId: string) => void;
   clearError: () => void;

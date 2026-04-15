@@ -48,6 +48,8 @@ interface SystemPromptBuildArgs {
   devWorkspaceEnabled: boolean;
   /** When true, skip the channel formatting block so code blocks render freely. */
   rawMode?: boolean;
+  /** LLM provider name for provider-specific prompt adjustments. */
+  provider?: string;
 }
 
 interface SystemPromptBuildResult {
@@ -212,7 +214,7 @@ export async function buildSystemPromptForRequest(
     const completionLines = completedDelegations.map((completion) => {
       const ageSeconds = Math.max(0, Math.floor((Date.now() - completion.completedAt) / 1000));
       const suffix = completion.error ? ` with error: ${completion.error}` : "";
-      return `- ${completion.delegationId}: "${completion.delegateName}" completed ${ageSeconds}s ago${suffix}. Use delegateToSubagent action="observe" delegationId="${completion.delegationId}" to read the results.`;
+      return `- ${completion.delegationId}: "${completion.delegateName}" completed ${ageSeconds}s ago${suffix}. Results will be delivered automatically as inline messages.`;
     });
 
     systemPromptValue = appendBlock(
@@ -271,6 +273,20 @@ export async function buildSystemPromptForRequest(
         `Use: workspace({ action: "create", branch: "feature/...", repoPath: "/path/to/repo" })`;
     }
     systemPromptValue = appendBlock(systemPromptValue, workspaceBlock);
+  }
+
+  // Provider-specific tool disambiguation for models that confuse Skill with searchTools
+  if (args.provider === "kimi") {
+    systemPromptValue = appendBlock(
+      systemPromptValue,
+      `\n\n## CRITICAL: Tool Disambiguation\n` +
+        `The "skill" tool is ONLY for platform skills and workflows (e.g., simplify, update-config, claude-api). It is NOT for file operations.\n\n` +
+        `When you need to edit, read, or write files:\n` +
+        `1. Use "searchTools" with query "select:editFile" (or readFile, writeFile, etc.) to load the tool schema\n` +
+        `2. Then call the loaded tool directly\n\n` +
+        `NEVER use the "skill" tool for: editing files, reading files, writing files, running grep, or any file system operation.\n` +
+        `ALWAYS use "searchTools" first to discover and load file operation tools.`,
+    );
   }
 
   return {
