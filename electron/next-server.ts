@@ -1,5 +1,6 @@
 import * as path from "path";
 import * as fs from "fs";
+import * as nodeNet from "node:net";
 import { utilityProcess, dialog, net } from "electron";
 import { debugLog, debugError, debugVerbose } from "./debug-logger";
 
@@ -12,8 +13,11 @@ export const PROD_SERVER_PORT = 3456;
 /** Port the Next.js standalone server actually listens on (internal, HTTP/1.1). */
 export const NEXT_INTERNAL_PORT = 3457;
 const WATCHER_RESOURCE_ERROR_REGEX = /(EMFILE|ENOSPC|EBADF|EAGAIN|too many open files|System limit for number of file watchers reached)/i;
+const PORT_IN_USE_ERROR_REGEX = /\bEADDRINUSE\b|address already in use/i;
 const MAX_SERVER_RESTARTS = 3;
 const RESTART_RESET_INTERVAL = 5 * 60 * 1000;
+const DEFAULT_PORT_WAIT_TIMEOUT_MS = 15_000;
+const DEFAULT_PORT_WAIT_POLL_MS = 250;
 
 
 let nextServer: Electron.UtilityProcess | null = null;
@@ -83,6 +87,69 @@ function verifyStandalonePaths(): void {
   logDirectoryContents(resourcesPath, "", 0, 3);
 
   debugLog("=== END PATH VERIFICATION ===\n");
+}
+
+async function canBindLoopbackPort(port: number): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const server = nodeNet.createServer();
+
+    server.once("error", (error: NodeJS.ErrnoException) => {
+      server.removeAllListeners();
+      if (error.code === "EADDRINUSE") {
+        resolve(false);
+        return;
+      }
+      reject(error);
+    });
+
+    server.once("listening", () => {
+      server.close((closeError) => {
+        if (closeError) {
+          reject(closeError);
+          return;
+        }
+        resolve(true);
+      });
+    });
+
+    server.listen(port, "127.0.0.1");
+  });
+}
+
+export async function waitForLoopbackPortToBeAvailable(
+  port: number,
+  options: {
+    label?: string;
+    timeoutMs?: number;
+    pollIntervalMs?: number;
+  } = {}
+): Promise<void> {
+  const {
+    label = `port ${port}`,
+    timeoutMs = DEFAULT_PORT_WAIT_TIMEOUT_MS,
+    pollIntervalMs = DEFAULT_PORT_WAIT_POLL_MS,
+  } = options;
+
+  const startTime = Date.now();
+  let loggedWait = false;
+
+  while (Date.now() - startTime < timeoutMs) {
+    if (await canBindLoopbackPort(port)) {
+      if (loggedWait) {
+        debugLog(`[PortCheck] ${label} became available after ${Date.now() - startTime}ms`);
+      }
+      return;
+    }
+
+    if (!loggedWait) {
+      loggedWait = true;
+      debugLog(`[PortCheck] Waiting for ${label} on 127.0.0.1:${port} to become available`);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  throw new Error(`${label} is already in use on 127.0.0.1:${port}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -246,11 +313,20 @@ export async function startNextServer(opts: StartNextServerOptions): Promise<voi
           "(.venv, __pycache__, site-packages, node_modules, image/font assets) or sync a smaller folder."
         );
       }
+
+      if (PORT_IN_USE_ERROR_REGEX.test(output)) {
+        settleReject(new Error(`Embedded Next.js server could not bind to 127.0.0.1:${NEXT_INTERNAL_PORT}`));
+      }
     });
 
     nextServer.on("exit", (code) => {
       debugLog("[Next.js] Process exited with code:", code);
       nextServer = null;
+
+      if (!isSettled) {
+        settleReject(new Error(lastServerError || `Embedded Next.js server exited during startup (code: ${code ?? "unknown"})`));
+        return;
+      }
 
       // Don't auto-restart on intentional shutdown or when no window exists.
       if (opts.isAppQuitting() || !opts.getMainWindow()) {
@@ -298,6 +374,9 @@ export async function startNextServer(opts: StartNextServerOptions): Promise<voi
 
     // Timeout fallback - proceed in degraded mode to avoid blocking app startup
     setTimeout(() => {
+      if (isSettled) {
+        return;
+      }
       debugError("[Next.js] Timeout reached (5s), continuing in degraded startup mode while server may still be initializing");
       settleResolve();
     }, 5000);

@@ -8,8 +8,8 @@
 
 import type { LLMProvider } from "@/lib/ai/provider-types";
 
-/** The 4 model roles that map to settings-manager.ts fields */
-export type ModelRole = "chat" | "research" | "vision" | "utility";
+/** The 5 model roles that map to settings-manager.ts fields */
+export type ModelRole = "chat" | "research" | "vision" | "utility" | "transcriber";
 export type ModelConfigSource = "session" | "agent" | "global" | "provider-default";
 
 export interface ModelConfig {
@@ -18,6 +18,7 @@ export interface ModelConfig {
   researchModel?: string;
   visionModel?: string;
   utilityModel?: string;
+  transcriberModel?: string;
 }
 
 export interface AgentModelConfig extends ModelConfig {}
@@ -28,6 +29,7 @@ export const ROLE_TO_SETTINGS_KEY: Record<ModelRole, keyof ModelConfig> = {
   research: "researchModel",
   vision: "visionModel",
   utility: "utilityModel",
+  transcriber: "transcriberModel",
 };
 
 /** Enriched model metadata for the bag UI */

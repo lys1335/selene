@@ -84,6 +84,8 @@ interface DesignWorkspaceInput {
   activeComponentCode?: string;
   activeComponentId?: string;
 
+  /** Short, descriptive name for the component (e.g. "Pricing Card", "Login Form"). */
+  name?: string;
   code?: string;
   assets?: Array<{ url: string; description?: string }>;
 
@@ -646,6 +648,10 @@ export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = 
           type: "string",
           description: 'Text description of the component to generate. Required for "generate" unless "code" is provided.',
         },
+        name: {
+          type: "string",
+          description: 'Short, descriptive name for the component (e.g. "Pricing Card", "Login Form", "Hero Section"). Required for "generate". Used as the display name in the design workspace.',
+        },
         code: {
           type: "string",
           description: 'Direct TSX/React component code. If provided for "generate", skips AI generation and renders this code directly. The code should be a complete React component with `export default`.',
@@ -853,7 +859,7 @@ async function handleGenerate(
   }
 
   const componentId = generateId();
-  const name = input.code?.trim() ? "Direct Component" : "Generated Component";
+  const name = input.name?.trim() || (input.code?.trim() ? "Direct Component" : "Generated Component");
 
   let persisted: DesignGalleryItem;
   try {
@@ -1105,12 +1111,24 @@ async function handleEdit(
  */
 export function findUnclosedJsxTag(code: string): string | null {
   // Strip string literals and comments to avoid false positives
-  const stripped = code
+  let stripped = code
     .replace(/\/\/.*$/gm, "")
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/"(?:[^"\\]|\\.)*"/g, '""')
     .replace(/'(?:[^'\\]|\\.)*'/g, "''")
     .replace(/`(?:[^`\\]|\\.)*`/g, "``");
+
+  // Strip TypeScript generics that look like JSX tags (e.g., useState<SceneState>(...))
+  // Pattern: identifier followed by <UppercaseName> then ( or , or > (generic context, not JSX)
+  stripped = stripped.replace(
+    /\b\w+<([A-Z][A-Za-z0-9.,\s|&\[\]<>]*)>(?=\s*[(\],;:=&|)])/g,
+    (match) => " ".repeat(match.length),
+  );
+  // Also strip standalone type annotations like `: Type<Generic>` and `as Type<Generic>`
+  stripped = stripped.replace(
+    /(?::\s*|as\s+)([A-Z][A-Za-z0-9.]*(?:<[^>]*>)?)/g,
+    (match) => " ".repeat(match.length),
+  );
 
   // Match JSX tags: <Tag, </Tag, or self-closing />
   const tagPattern = /<\/?([A-Z][A-Za-z0-9.]*)[^>]*?\/?>/g;

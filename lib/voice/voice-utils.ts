@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { loadSettings } from "@/lib/settings/settings-manager";
 import {
   getSessionProviderTemperatureForSession,
-  resolveSessionUtilityModelForSession,
+  resolveTranscriberModelForSession,
 } from "@/lib/ai/session-model-resolver";
 
 export const VOICE_ACTIONS = ["fix-grammar", "professional", "summarize", "translate"] as const;
@@ -382,7 +382,7 @@ export async function runVoiceAction(request: VoiceActionRequest): Promise<{ tex
 
   const startedAt = Date.now();
   const completion = await generateText({
-    model: await resolveSessionUtilityModelForSession(sessionMetadata),
+    model: await resolveTranscriberModelForSession(sessionMetadata),
     temperature: await getSessionProviderTemperatureForSession(sessionMetadata, 0.2),
     maxOutputTokens: 1200,
     system,

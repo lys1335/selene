@@ -16,6 +16,7 @@ const EMPTY_AGENT_MODEL_CONFIG: AgentModelConfigDraft = {
   researchModel: "",
   visionModel: "",
   utilityModel: "",
+  transcriberModel: "",
 };
 
 function sortAssignablePlugins<T extends { enabledForAgent: boolean; name: string }>(plugins: T[]): T[] {
@@ -109,6 +110,7 @@ export function useCharacterActions(
         researchModel: metadata?.modelConfig?.researchModel || "",
         visionModel: metadata?.modelConfig?.visionModel || "",
         utilityModel: metadata?.modelConfig?.utilityModel || "",
+        transcriberModel: metadata?.modelConfig?.transcriberModel || "",
       },
     });
 
@@ -131,6 +133,7 @@ export function useCharacterActions(
         researchModel: identityForm.modelConfig.researchModel || undefined,
         visionModel: identityForm.modelConfig.visionModel || undefined,
         utilityModel: identityForm.modelConfig.utilityModel || undefined,
+        transcriberModel: identityForm.modelConfig.transcriberModel || undefined,
       };
       const hasModelConfig = Object.values(modelConfig).some(Boolean);
 

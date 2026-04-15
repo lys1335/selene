@@ -197,7 +197,7 @@ export function GalleryContent() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-1.5 p-2.5" role="listbox" aria-label="Workspace designs">
+          <div className="flex flex-col gap-0.5 p-1.5" role="listbox" aria-label="Workspace designs">
             {components.map((component) => (
               <button
                 key={component.id}
@@ -206,46 +206,24 @@ export function GalleryContent() {
                 aria-selected={selectedId === component.id}
                 onClick={() => setSelectedId(selectedId === component.id ? null : component.id)}
                 className={cn(
-                  "group relative flex flex-col overflow-hidden rounded-lg border text-left transition-colors",
+                  "group flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
                   selectedId === component.id
                     ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/30",
+                    : "border-transparent hover:border-primary/30 hover:bg-muted/50",
                 )}
               >
-                <div className="relative aspect-[4/3] w-full overflow-hidden bg-muted">
-                  {component.previewUrl ? (
-                    <img
-                      src={component.previewUrl}
-                      alt={component.name}
-                      className="h-full w-full object-cover object-top"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center">
-                      <Code className="h-5 w-5 text-muted-foreground/40" />
-                    </div>
-                  )}
+                <Code className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                <p className="min-w-0 flex-1 truncate text-[11px] font-medium">{component.name}</p>
+                <div className="flex shrink-0 items-center gap-1">
                   {component.isFavorite && (
-                    <div className="absolute right-1 top-1">
-                      <Heart className="h-3 w-3 fill-red-500 text-red-500" />
-                    </div>
+                    <Heart className="h-3 w-3 fill-red-500 text-red-500" />
                   )}
-                </div>
-                <div className="space-y-1 p-1.5">
-                  <p className="truncate text-[11px] font-medium">{component.name}</p>
-                  <div className="flex items-center gap-1">
-                    <Badge variant="outline" className="h-3.5 px-1 text-[11px]">
-                      {component.mode}
-                    </Badge>
-                    {component.sessionId === sessionId ? (
-                      <Badge variant="secondary" className="h-3.5 px-1 text-[11px]">
-                        Current
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="h-3.5 px-1 text-[11px]">
-                        Saved
-                      </Badge>
-                    )}
-                  </div>
+                  <Badge variant="outline" className="h-3.5 px-1 text-[9px]">
+                    {component.mode}
+                  </Badge>
+                  <Badge variant="secondary" className="h-3.5 px-1 text-[9px]">
+                    {component.sessionId === sessionId ? "Current" : "Saved"}
+                  </Badge>
                 </div>
               </button>
             ))}

@@ -94,6 +94,20 @@ interface QueuedMessage {
   status: "queued-classic" | "queued-live" | "injected-live" | "fallback";
 }
 
+type VoiceTranscriptPhase = "polishing" | "swap" | "stable";
+
+interface ActiveVoiceTranscript {
+  rawText: string;
+  displayText: string;
+  isEnhanced: boolean;
+  phase: VoiceTranscriptPhase;
+}
+
+interface TextareaVoiceTranscriptRange {
+  start: number;
+  end: number;
+}
+
 function buildInspectChipLabel(element: {
   tagName: string;
   className: string;
@@ -183,8 +197,14 @@ export const Composer: FC<{
   const { chatBackground } = useTheme();
   const hasWallpaper = chatBackground.type !== "none";
   const simpleDraftAtRichModeEntryRef = useRef<string | null>(null);
+  const rawTranscriptRef = useRef<string | null>(null);
+  const textareaVoiceTranscriptRangeRef = useRef<TextareaVoiceTranscriptRange | null>(null);
+  const textareaVoiceTranscriptOverlayRef = useRef<HTMLDivElement>(null);
+  const textareaVoiceTranscriptHighlightRef = useRef<HTMLSpanElement>(null);
+  const voiceTranscriptDecorationTimeoutRef = useRef<number | null>(null);
 
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
+  const [activeVoiceTranscript, setActiveVoiceTranscript] = useState<ActiveVoiceTranscript | null>(null);
 
   // Design workspace inspect state — for attaching inspect context on send
   const inspectorEnabled = useDesignWorkspaceStore((s) => s.inspectorEnabled);
@@ -395,7 +415,7 @@ export const Composer: FC<{
   }, [composerTextForReward, syncRewardSuggestion]);
 
   // Voice recording
-  const { isRecordingVoice, isTranscribingVoice, handleVoiceInput, handleVoiceStart, handleVoiceStop, analyserNode, lastTranscriptRef, wasAiEnhancedRef, lastTranscriptionFailedRef } = useVoiceRecording({
+  const { isRecordingVoice, isTranscribingVoice, isPolishingTranscript, handleVoiceInput, handleVoiceStart, handleVoiceStop, analyserNode, lastTranscriptRef, wasAiEnhancedRef, lastTranscriptionFailedRef } = useVoiceRecording({
     sttEnabled,
     voicePostProcessing,
     voiceAudioCues,
@@ -403,6 +423,18 @@ export const Composer: FC<{
     onTranscript: (payload) => {
       const textToInsert = payload.finalText;
       if (!textToInsert) return;
+
+      // Track the active voice transcript for polish phase UI indicators.
+      // When post-processing is enabled, mark as "polishing" so the
+      // decoration shows a shimmer effect while grammar cleanup runs.
+      if (voicePostProcessing && !payload.usedPostProcessing) {
+        setActiveVoiceTranscript({
+          rawText: textToInsert,
+          displayText: textToInsert,
+          isEnhanced: false,
+          phase: "polishing",
+        });
+      }
 
       // Rich text editor mode — use transaction-based insertion for proper undo/redo
       if (isEditorMode && tiptapRef.current) {
@@ -417,6 +449,8 @@ export const Composer: FC<{
       const selStart = textarea?.selectionStart ?? null;
       const selEnd = textarea?.selectionEnd ?? null;
 
+      rawTranscriptRef.current = textToInsert;
+
       setInputValue((prev) => {
         const insertion = buildTranscriptInsertion({
           currentValue: prev,
@@ -426,13 +460,25 @@ export const Composer: FC<{
         });
 
         if (insertion) {
+          // Track the character range so the overlay knows what to highlight
+          textareaVoiceTranscriptRangeRef.current = {
+            start: insertion.selectionStart,
+            end: insertion.selectionStart + insertion.replacementText.length,
+          };
           // Schedule cursor update after render
           requestAnimationFrame(() => updateCursorPosition(insertion.nextCursor));
           return insertion.nextValue;
         }
         // Fallback: append
-        if (!prev.trim()) return textToInsert;
-        return `${prev}${prev.endsWith(" ") ? "" : " "}${textToInsert}`;
+        const fallbackStart = prev.trim() ? prev.length + (prev.endsWith(" ") ? 0 : 1) : 0;
+        const fallbackValue = !prev.trim()
+          ? textToInsert
+          : `${prev}${prev.endsWith(" ") ? "" : " "}${textToInsert}`;
+        textareaVoiceTranscriptRangeRef.current = {
+          start: fallbackStart,
+          end: fallbackStart + textToInsert.length,
+        };
+        return fallbackValue;
       });
     },
     onTranscriptInserted: () => {
@@ -448,6 +494,70 @@ export const Composer: FC<{
         textarea.setSelectionRange(cursor, cursor);
         updateCursorPosition(cursor);
       });
+    },
+    onTranscriptPolished: (polishedText, rawText) => {
+      // Rich text editor — swap raw transcript with polished version via
+      // the tracked decoration range, then transition to "swap" phase.
+      if (isEditorMode && tiptapRef.current) {
+        const replaced = tiptapRef.current.replaceVoiceTranscript(rawText, polishedText);
+        if (replaced) {
+          // Update active transcript state for any UI indicators
+          setActiveVoiceTranscript((prev) =>
+            prev
+              ? { ...prev, displayText: polishedText, isEnhanced: true, phase: "swap" }
+              : { rawText, displayText: polishedText, isEnhanced: true, phase: "swap" },
+          );
+          // Clear the "swap" highlight after a brief moment
+          if (voiceTranscriptDecorationTimeoutRef.current) {
+            window.clearTimeout(voiceTranscriptDecorationTimeoutRef.current);
+          }
+          voiceTranscriptDecorationTimeoutRef.current = window.setTimeout(() => {
+            voiceTranscriptDecorationTimeoutRef.current = null;
+            tiptapRef.current?.clearVoiceTranscriptDecoration();
+            setActiveVoiceTranscript((prev) =>
+              prev ? { ...prev, phase: "stable" } : null,
+            );
+          }, 1800);
+        }
+        return;
+      }
+
+      // Simple textarea mode — find and replace raw text with polished version
+      setInputValue((prev) => {
+        const idx = prev.lastIndexOf(rawText);
+        if (idx === -1) {
+          // raw text was manually edited — clear range tracking
+          textareaVoiceTranscriptRangeRef.current = null;
+          return prev;
+        }
+        // Update the tracked range to reflect polished text length
+        textareaVoiceTranscriptRangeRef.current = {
+          start: idx,
+          end: idx + polishedText.length,
+        };
+        return prev.slice(0, idx) + polishedText + prev.slice(idx + rawText.length);
+      });
+
+      // Track the textarea range for overlay highlight
+      setActiveVoiceTranscript({
+        rawText,
+        displayText: polishedText,
+        isEnhanced: true,
+        phase: "swap",
+      });
+
+      // Clear swap state after animation
+      if (voiceTranscriptDecorationTimeoutRef.current) {
+        window.clearTimeout(voiceTranscriptDecorationTimeoutRef.current);
+      }
+      voiceTranscriptDecorationTimeoutRef.current = window.setTimeout(() => {
+        voiceTranscriptDecorationTimeoutRef.current = null;
+        rawTranscriptRef.current = null;
+        textareaVoiceTranscriptRangeRef.current = null;
+        setActiveVoiceTranscript((prev) =>
+          prev ? { ...prev, phase: "stable" } : null,
+        );
+      }, 1800);
     },
   });
 
@@ -1604,6 +1714,16 @@ export const Composer: FC<{
                     captureSession.cancelAutoSend();
                   }
                   if (enhancedContext || enhancementInfo) clearEnhancement();
+                  // User manually edited text — dismiss voice transcript overlay
+                  if (activeVoiceTranscript && activeVoiceTranscript.phase !== "stable") {
+                    rawTranscriptRef.current = null;
+                    textareaVoiceTranscriptRangeRef.current = null;
+                    setActiveVoiceTranscript(null);
+                    if (voiceTranscriptDecorationTimeoutRef.current) {
+                      window.clearTimeout(voiceTranscriptDecorationTimeoutRef.current);
+                      voiceTranscriptDecorationTimeoutRef.current = null;
+                    }
+                  }
                 }}
                 onSelect={(e) => {
                   const textarea = e.target as HTMLTextAreaElement;
@@ -1613,8 +1733,10 @@ export const Composer: FC<{
                 onPaste={handlePaste}
                 onBlur={() => syncRewardSuggestion()}
                 onScroll={() => {
-                  if (ghostScrollRef.current && inputRef.current) {
-                    ghostScrollRef.current.scrollTop = inputRef.current.scrollTop;
+                  if (inputRef.current) {
+                    const st = inputRef.current.scrollTop;
+                    if (ghostScrollRef.current) ghostScrollRef.current.scrollTop = st;
+                    if (textareaVoiceTranscriptOverlayRef.current) textareaVoiceTranscriptOverlayRef.current.scrollTop = st;
                   }
                 }}
                 autoFocus
@@ -1635,6 +1757,31 @@ export const Composer: FC<{
                   <span className="invisible">{inputValue}</span>
                   <span className="text-terminal-muted/50 select-none">{`\n${rewardGhostText}`}</span>
                   <span className="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] text-terminal-muted/40 bg-terminal-muted/8 border border-terminal-muted/15 rounded select-none font-sans align-middle">Tab ↵</span>
+                </div>
+              )}
+              {/* Voice transcript highlight overlay */}
+              {activeVoiceTranscript && activeVoiceTranscript.phase !== "stable" && !isEditorMode && textareaVoiceTranscriptRangeRef.current && (
+                <div
+                  ref={textareaVoiceTranscriptOverlayRef}
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 overflow-hidden p-4 text-sm font-mono whitespace-pre-wrap break-words"
+                  style={{ minHeight: "36px", maxHeight: "192px" }}
+                >
+                  {/* Invisible text before the transcript range — positions the highlight */}
+                  <span className="invisible">{inputValue.slice(0, textareaVoiceTranscriptRangeRef.current.start)}</span>
+                  {/* Highlighted transcript region */}
+                  <span
+                    ref={textareaVoiceTranscriptHighlightRef}
+                    className={
+                      activeVoiceTranscript.phase === "polishing"
+                        ? "rounded-sm bg-terminal-green/10 motion-safe:animate-pulse"
+                        : "rounded-sm bg-terminal-green/14 transition-colors duration-500"
+                    }
+                  >
+                    {inputValue.slice(textareaVoiceTranscriptRangeRef.current.start, textareaVoiceTranscriptRangeRef.current.end)}
+                  </span>
+                  {/* Invisible text after the transcript range */}
+                  <span className="invisible">{inputValue.slice(textareaVoiceTranscriptRangeRef.current.end)}</span>
                 </div>
               )}
             </div>

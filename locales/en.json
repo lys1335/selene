@@ -655,6 +655,10 @@
           "utility": {
             "label": "Utility model",
             "helper": "Used for background and compact helper tasks."
+          },
+          "transcriber": {
+            "label": "Transcriber model",
+            "helper": "Used for voice transcription post-processing and grammar correction."
           }
         }
       }

@@ -33,6 +33,8 @@ interface TranscribeRecordedSpeechOptions {
   signal?: AbortSignal;
   transcriptionFailedMessage: string;
   noSpeechDetectedMessage: string;
+  onRawTranscript?: (text: string) => void;
+  onPolishedTranscript?: (polishedText: string, rawText: string) => void;
   onPostProcessingFallback?: () => void;
 }
 
@@ -53,6 +55,8 @@ export async function transcribeRecordedSpeech({
   signal,
   transcriptionFailedMessage,
   noSpeechDetectedMessage,
+  onRawTranscript,
+  onPolishedTranscript,
   onPostProcessingFallback,
 }: TranscribeRecordedSpeechOptions): Promise<BrowserVoiceTranscriptionResult> {
   const formData = new FormData();
@@ -86,12 +90,18 @@ export async function transcribeRecordedSpeech({
     throw new Error(noSpeechDetectedMessage);
   }
 
+  onRawTranscript?.(transcript);
+
   const refined = await refineTranscript({
     rawTranscript: transcript,
     postProcessingEnabled,
     signal,
     onFailure: onPostProcessingFallback,
   });
+
+  if (refined.wasEnhanced && refined.finalText !== refined.rawText) {
+    onPolishedTranscript?.(refined.finalText, refined.rawText);
+  }
 
   return {
     transcript: refined.rawText,

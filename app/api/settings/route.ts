@@ -71,6 +71,7 @@ export async function PUT(request: NextRequest) {
       researchModel: body.researchModel !== undefined ? body.researchModel : (providerIsChanging ? "" : currentSettings.researchModel),
       visionModel: body.visionModel !== undefined ? body.visionModel : (providerIsChanging ? "" : currentSettings.visionModel),
       utilityModel: body.utilityModel !== undefined ? body.utilityModel : (providerIsChanging ? "" : currentSettings.utilityModel),
+      transcriberModel: body.transcriberModel !== undefined ? body.transcriberModel : (providerIsChanging ? "" : currentSettings.transcriberModel),
       openrouterArgs: body.openrouterArgs !== undefined ? body.openrouterArgs : currentSettings.openrouterArgs,
       embeddingReindexRequired: body.embeddingReindexRequired !== undefined
         ? body.embeddingReindexRequired

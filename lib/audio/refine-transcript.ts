@@ -50,11 +50,18 @@ export async function refineTranscript(
 
   let enhancedText: string | null = null;
   try {
+    // Combine caller signal with a 60s timeout so a slow model never blocks
+    // the UI indefinitely — the raw transcript is already in the composer.
+    const timeout = AbortSignal.timeout(60_000);
+    const combinedSignal = signal
+      ? AbortSignal.any([signal, timeout])
+      : timeout;
+
     const res = await fetch("/api/voice/actions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text: normalized, action: "fix-grammar" }),
-      signal,
+      signal: combinedSignal,
     });
     const data = (await res.json()) as {
       success?: boolean;

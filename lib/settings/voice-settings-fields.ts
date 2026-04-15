@@ -21,6 +21,7 @@ export interface VoiceSettingsFields {
   sttProvider: "openai" | "local" | "parakeet";
   sttLocalModel: string;
   voicePostProcessing: boolean;
+  transcriberModel: string;
   voiceAgentName: string;
   voiceAudioCues: boolean;
   voiceAutoLearn: boolean;

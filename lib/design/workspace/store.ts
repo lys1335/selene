@@ -118,12 +118,15 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     // and update its data to keep store and preview in sync
     const existingIndex = current.components.findIndex((c) => c.id === component.id);
     if (existingIndex !== -1) {
+      // If this component is already active, don't overwrite compiled previewHtml
+      // with a placeholder — that causes "stuck on compiling" on double-click
+      const isAlreadyActive = current.activeComponentId === component.id;
       const nextComponents = [...current.components];
       nextComponents[existingIndex] = { ...nextComponents[existingIndex], ...component };
       set({
         components: nextComponents,
         activeComponentId: component.id,
-        previewHtml: buildPreviewMarkup(component),
+        ...(isAlreadyActive ? {} : { previewHtml: buildPreviewMarkup(component) }),
       });
       return;
     }

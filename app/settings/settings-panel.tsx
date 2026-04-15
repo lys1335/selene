@@ -1,9 +1,9 @@
 "use client";
 
 import React from "react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { KeyIcon } from "lucide-react";
+import { BrainIcon, KeyIcon, SparklesIcon } from "lucide-react";
 import { CustomWorkflowsManager } from "@/components/comfyui";
 import { AdvancedVectorSettings } from "@/components/settings/advanced-vector-settings";
 import { MCPSettings } from "@/components/settings/mcp-settings";
@@ -17,6 +17,8 @@ import {
   settingsInputClassName,
   settingsSectionShellClassName,
 } from "@/components/settings/settings-form-layout";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { LLMProvider } from "@/lib/ai/provider-types";
 import type { FormState, SettingsSection } from "./settings-types";
 import { WhisperModelSelector } from "./whisper-model-selector";
 import { ParakeetModelSelector } from "./parakeet-model-selector";
@@ -28,7 +30,45 @@ import { ModelsSection } from "./models-section";
 import { GhostOsSection } from "./ghost-os-section";
 import { LocalEmbeddingModelSelector } from "./embedding-model-selector";
 import { ShortcutRecorder } from "@/components/settings/shortcut-recorder";
+import { buildModelCatalog } from "@/lib/config/model-catalog";
 import { getElectronAPI, type PermissionCheckResult } from "@/lib/electron/types";
+import { cn } from "@/lib/utils";
+
+const TRANSCRIBER_AUTO_OPTION = "__auto__";
+
+const EMPTY_PROVIDER_AUTH_STATUS: Record<LLMProvider, boolean> = {
+  anthropic: false,
+  openrouter: false,
+  antigravity: false,
+  codex: false,
+  kimi: false,
+  ollama: false,
+  claudecode: false,
+  minimax: false,
+  blackboxai: false,
+  vllm: false,
+};
+
+function dedupeModelOptions(models: Array<{ id: string; name: string }>) {
+  const seen = new Set<string>();
+
+  return models.filter((model) => {
+    if (seen.has(model.id)) return false;
+    seen.add(model.id);
+    return true;
+  });
+}
+
+function withCurrentModelOption(
+  models: Array<{ id: string; name: string }>,
+  currentModel: string,
+) {
+  if (!currentModel || models.some((model) => model.id === currentModel)) {
+    return models;
+  }
+
+  return [{ id: currentModel, name: `${currentModel} (current)` }, ...models];
+}
 
 interface SettingsPanelProps {
   section: SettingsSection;
@@ -202,6 +242,84 @@ export function SettingsPanel({
   const updateField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
     setFormState((prev) => ({ ...prev, [key]: value }));
   };
+  const [ollamaTranscriberModels, setOllamaTranscriberModels] = useState<Array<{ id: string; name: string }>>([]);
+  const [vllmTranscriberModels, setVllmTranscriberModels] = useState<Array<{ id: string; name: string }>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadProviderModels = async () => {
+      try {
+        if (formState.llmProvider === "ollama" && ollamaTranscriberModels.length === 0) {
+          const response = await fetch("/api/ollama/tags");
+          if (!response.ok) return;
+          const data = await response.json() as { models?: Array<{ name: string }> };
+          if (!cancelled) {
+            setOllamaTranscriberModels(
+              dedupeModelOptions((data.models ?? []).map((model) => ({ id: model.name, name: model.name }))),
+            );
+          }
+          return;
+        }
+
+        if (formState.llmProvider === "vllm" && vllmTranscriberModels.length === 0) {
+          const response = await fetch("/api/vllm/models");
+          if (!response.ok) return;
+          const data = await response.json() as { models?: string[] };
+          if (!cancelled) {
+            setVllmTranscriberModels(
+              dedupeModelOptions((data.models ?? []).map((modelId) => ({ id: modelId, name: modelId }))),
+            );
+          }
+        }
+      } catch {
+        // Keep the selector usable with the auto fallback even if probing fails.
+      }
+    };
+
+    void loadProviderModels();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [formState.llmProvider, ollamaTranscriberModels.length, vllmTranscriberModels.length]);
+
+  const transcriberModelOptions = useMemo(() => {
+    let options: Array<{ id: string; name: string }>;
+
+    if (formState.llmProvider === "ollama") {
+      options = ollamaTranscriberModels;
+    } else if (formState.llmProvider === "vllm") {
+      options = vllmTranscriberModels;
+    } else {
+      const catalog = buildModelCatalog(
+        formState.llmProvider,
+        EMPTY_PROVIDER_AUTH_STATUS,
+        {
+          chatModel: formState.chatModel,
+          researchModel: formState.researchModel,
+          visionModel: formState.visionModel,
+          utilityModel: formState.utilityModel,
+          transcriberModel: formState.transcriberModel,
+        },
+      );
+
+      options = catalog
+        .filter((model) => model.provider === formState.llmProvider)
+        .map((model) => ({ id: model.id, name: model.name }));
+    }
+
+    return withCurrentModelOption(dedupeModelOptions(options), formState.transcriberModel);
+  }, [
+    formState.chatModel,
+    formState.llmProvider,
+    formState.researchModel,
+    formState.transcriberModel,
+    formState.utilityModel,
+    formState.visionModel,
+    ollamaTranscriberModels,
+    vllmTranscriberModels,
+  ]);
 
   if (section === "api-keys") {
     return (
@@ -729,6 +847,80 @@ export function SettingsPanel({
                 {isParakeetProvider && (
                   <ParakeetModelSelector formState={formState} updateField={updateField} />
                 )}
+
+                <SettingsOptionGroup
+                  title="Text Processing"
+                  description="Optional cleanup that runs after speech-to-text finishes."
+                >
+                  <div className="space-y-3 rounded-xl border border-terminal-border/55 bg-terminal-bg/5 p-4 dark:border-terminal-border/90 dark:bg-terminal-cream-dark/45">
+                    <div className="flex items-center gap-2 font-mono text-sm font-semibold text-terminal-dark">
+                      <SparklesIcon className="size-4 text-terminal-green" />
+                      Text Processing
+                    </div>
+
+                    <SettingsToggleRow
+                      id="voicePostProcessing"
+                      label="Fix grammatical errors"
+                      description="Automatically fix punctuation, capitalization, and grammar in transcribed text"
+                      checked={formState.voicePostProcessing}
+                      onChange={(checked) => updateField("voicePostProcessing", checked)}
+                    />
+
+                    {!formState.voicePostProcessing && (
+                      <p className="font-mono text-xs leading-relaxed text-terminal-muted">
+                        Raw transcription is used as-is without any AI processing.
+                      </p>
+                    )}
+
+                    <div
+                      className={cn(
+                        "space-y-3 rounded-xl border border-terminal-border/55 bg-terminal-cream/40 p-3.5 transition-opacity dark:border-terminal-border/90 dark:bg-terminal-cream-dark/55",
+                        !formState.voicePostProcessing && "opacity-50",
+                      )}
+                    >
+                      <div className="flex items-center gap-2 font-mono text-sm font-semibold text-terminal-dark">
+                        <BrainIcon className="size-4 text-terminal-green" />
+                        Transcriber Model
+                      </div>
+
+                      <p className="font-mono text-xs leading-relaxed text-terminal-muted">
+                        Model used for voice text processing. Defaults to utility model.
+                      </p>
+
+                      <Select
+                        value={formState.transcriberModel || TRANSCRIBER_AUTO_OPTION}
+                        onValueChange={(value) => updateField("transcriberModel", value === TRANSCRIBER_AUTO_OPTION ? "" : value)}
+                        disabled={!formState.voicePostProcessing}
+                      >
+                        <SelectTrigger
+                          id="transcriberModel"
+                          aria-describedby="transcriberModel-help"
+                          className={cn(
+                            settingsInputClassName,
+                            "h-10 font-mono text-sm",
+                            !formState.voicePostProcessing && "pointer-events-none",
+                          )}
+                        >
+                          <SelectValue placeholder="Auto (use utility model)" />
+                        </SelectTrigger>
+                        <SelectContent className="font-mono text-sm">
+                          <SelectItem value={TRANSCRIBER_AUTO_OPTION} className="font-mono text-sm">
+                            Auto (use utility model)
+                          </SelectItem>
+                          {transcriberModelOptions.map((model) => (
+                            <SelectItem key={model.id} value={model.id} className="font-mono text-sm">
+                              {model.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+
+                      <p id="transcriberModel-help" className="font-mono text-xs leading-relaxed text-terminal-muted">
+                        Uses the active {formState.llmProvider} model list for transcript cleanup.
+                      </p>
+                    </div>
+                  </div>
+                </SettingsOptionGroup>
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-terminal-border/60 bg-terminal-bg/5 px-3 py-2.5 font-mono text-xs text-terminal-muted dark:border-terminal-border/80 dark:bg-terminal-cream/5">

@@ -6,7 +6,7 @@
 // this is only the right thing to do it will be funny.
 // — with love, Selene (https://github.com/tercumantanumut/selene)
 
-import { app, globalShortcut, session } from "electron";
+import { app, dialog, globalShortcut, session } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import Module from "module";
@@ -192,6 +192,7 @@ import {
   stopNextServer,
   clearServerRestartTimer,
   waitForServerReady,
+  waitForLoopbackPortToBeAvailable,
   PROD_SERVER_PORT,
   NEXT_INTERNAL_PORT,
 } from "./next-server";
@@ -246,6 +247,18 @@ setupEmbeddingModelPaths({ userModelsDir, resourcesModelsDir, dataDir });
 
 let isAppQuitting = false;
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", async () => {
+    debugLog("[App] Second instance detected, focusing existing window");
+    const { showAndFocusMainWindow } = await import("./window-manager");
+    await showAndFocusMainWindow();
+  });
+}
+
 
 // ---------------------------------------------------------------------------
 // App lifecycle
@@ -259,6 +272,10 @@ let isAppQuitting = false;
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(async () => {
+  if (!gotSingleInstanceLock) {
+    return;
+  }
+
   debugLog("\n========== APP READY ==========");
   debugLog("[App] Electron app is ready, starting initialization...");
 
@@ -303,6 +320,13 @@ app.whenReady().then(async () => {
   if (!isDev) {
     debugLog("[App] Production mode - starting Next.js server...");
     try {
+      await waitForLoopbackPortToBeAvailable(NEXT_INTERNAL_PORT, {
+        label: "embedded Next.js server port",
+      });
+      await waitForLoopbackPortToBeAvailable(PROD_SERVER_PORT, {
+        label: "embedded HTTP/2 proxy port",
+      });
+
       await startNextServer({
         userDataPath,
         isAppQuitting: () => isAppQuitting,
@@ -314,6 +338,12 @@ app.whenReady().then(async () => {
       debugLog("[App] Next.js server started successfully");
     } catch (error) {
       debugError("[App] Failed to start Next.js server:", error);
+      dialog.showErrorBox(
+        "Selene Could Not Start",
+        `Selene could not claim its local startup ports (${PROD_SERVER_PORT}/${NEXT_INTERNAL_PORT}). This usually means another Selene instance is still running or shutting down. Close the other instance and try again.`
+      );
+      app.quit();
+      return;
     }
 
     // Start HTTP/2 proxy in front of Next.js

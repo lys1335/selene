@@ -655,6 +655,10 @@
           "utility": {
             "label": "Yardımcı model",
             "helper": "Arka plan ve yardımcı görevlerde kullanılır."
+          },
+          "transcriber": {
+            "label": "Transkripsiyon modeli",
+            "helper": "Sesli giriş sonrası metin işleme ve dilbilgisi düzeltmede kullanılır."
           }
         }
       }

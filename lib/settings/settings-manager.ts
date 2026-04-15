@@ -139,6 +139,7 @@ export interface AppSettings {
     researchModel?: string;   // Model for Deep Research mode
     visionModel?: string;     // Model for image analysis/description (must support vision)
     utilityModel?: string;    // Fast/cheap model for background tasks
+    transcriberModel?: string; // Model for voice transcript post-processing (falls back to utilityModel)
     embeddingReindexRequired?: boolean; // Flag to trigger reindex when embeddings change
 
     // OpenRouter advanced options (JSON string)
@@ -392,6 +393,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     sttProvider: "local",
     sttLocalModel: "ggml-tiny.en",
     voicePostProcessing: true,
+    transcriberModel: "",
     voiceAgentName: "Selene",
     voiceAudioCues: true,
     voiceAutoLearn: true,
@@ -463,7 +465,7 @@ function getSettingsPath(): string {
  * Returns the validation result so callers can surface errors to the user.
  */
 export function validateSettingsModels(
-  settings: Pick<AppSettings, "llmProvider" | "chatModel" | "researchModel" | "visionModel" | "utilityModel">,
+  settings: Pick<AppSettings, "llmProvider" | "chatModel" | "researchModel" | "visionModel" | "utilityModel" | "transcriberModel">,
 ): BatchValidationResult {
   return validateAllModelsForProvider(
     {
@@ -471,6 +473,7 @@ export function validateSettingsModels(
       researchModel: settings.researchModel,
       visionModel: settings.visionModel,
       utilityModel: settings.utilityModel,
+      transcriberModel: settings.transcriberModel,
     },
     settings.llmProvider,
   );
@@ -673,6 +676,11 @@ function updateEnvFromSettings(settings: AppSettings): void {
     }
     if (settings.utilityModel) {
         process.env.UTILITY_MODEL = settings.utilityModel;
+    }
+    if (settings.transcriberModel) {
+        process.env.TRANSCRIBER_MODEL = settings.transcriberModel;
+    } else {
+        delete process.env.TRANSCRIBER_MODEL;
     }
 
     if (settings.vectorSearchHybridEnabled !== undefined) {
