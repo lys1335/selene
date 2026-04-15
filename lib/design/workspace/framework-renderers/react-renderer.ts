@@ -313,13 +313,18 @@ function createNextShimPlugin(): esbuild.Plugin {
 // HTML builder
 // ---------------------------------------------------------------------------
 
-function buildPreviewHtml(compiledJs: string, tailwindCss: string, title: string): string {
+function buildPreviewHtml(
+  compiledJs: string,
+  tailwindCss: string,
+  title: string,
+  themeClass = "dark",
+): string {
   const safeJs = escapeInlineScript(compiledJs);
   const safeCss = escapeInlineStyle(tailwindCss);
 
   return [
     "<!DOCTYPE html>",
-    '<html lang="en" class="dark">',
+    `<html lang="en" class="${themeClass}">`,
     "<head>",
     '  <script>window.process=window.process||{env:{NODE_ENV:"development"}};</script>',
     '  <meta charset="utf-8" />',
@@ -367,7 +372,7 @@ function buildPreviewHtml(compiledJs: string, tailwindCss: string, title: string
 // ---------------------------------------------------------------------------
 
 export class ReactRenderer implements FrameworkRenderer {
-  readonly frameworks: FrameworkType[] = ["react", "nextjs"];
+  readonly frameworks: FrameworkType[] = ["react"];
   readonly tier: RendererTier = "compile";
 
   private ctx: RendererContext | null = null;

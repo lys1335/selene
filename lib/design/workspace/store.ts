@@ -12,6 +12,8 @@ import {
   type InspectedElement,
   type ProjectContext,
   type ProjectStructure,
+  type ApplyCastResultInput,
+  type CastMode,
 } from "./types";
 import {
   DEFAULT_DESIGN_WORKSPACE_CONFIG,
@@ -22,6 +24,23 @@ import {
 } from "./config";
 import type { DesignWorkspaceHistory } from "./edit-history";
 import { buildDesignPreviewHtml } from "./preview";
+
+/** Returns true when the store has a project-level preview (dev-server iframe). */
+function hasProjectPreview(rendererInfo: ProjectContext["rendererInfo"] | null | undefined): boolean {
+  return Boolean(rendererInfo?.previewUrl || rendererInfo?.baseUrl);
+}
+
+/** Upsert a component by ID (update if exists, append if new). */
+function upsertComponent(
+  components: DesignComponent[],
+  component: DesignComponent,
+): DesignComponent[] {
+  const index = components.findIndex((c) => c.id === component.id);
+  if (index === -1) return [...components, component];
+  const next = [...components];
+  next[index] = { ...next[index], ...component };
+  return next;
+}
 
 function buildPreviewMarkup(component: Pick<DesignComponent, "code" | "mode" | "name">): string {
   try {
@@ -118,23 +137,12 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
 
   addComponent: (component: DesignComponent) => {
     const current = get();
-    // Deduplicate: if a component with the same ID already exists, select it
-    // and update its data to keep store and preview in sync
-    const existingIndex = current.components.findIndex((c) => c.id === component.id);
-    if (existingIndex !== -1) {
-      const nextComponents = [...current.components];
-      nextComponents[existingIndex] = { ...nextComponents[existingIndex], ...component };
-      set({
-        components: nextComponents,
-        activeComponentId: component.id,
-        previewHtml: buildPreviewMarkup(component),
-      });
-      return;
-    }
+    const projectPreview = hasProjectPreview(current.projectContext?.rendererInfo);
+    const nextComponents = upsertComponent(current.components, component);
     set({
-      components: [...current.components, component],
+      components: nextComponents,
       activeComponentId: component.id,
-      previewHtml: buildPreviewMarkup(component),
+      previewHtml: projectPreview ? current.previewHtml : buildPreviewMarkup(component),
     });
   },
 
@@ -146,7 +154,7 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     );
     const nextState: Partial<DesignWorkspaceState> = { components: nextComponents };
 
-    if (current.activeComponentId === id) {
+    if (current.activeComponentId === id && !hasProjectPreview(current.projectContext?.rendererInfo)) {
       const updatedComponent = nextComponents.find((component) => component.id === id);
       if (updatedComponent) {
         nextState.previewHtml = buildPreviewMarkup(updatedComponent);
@@ -176,11 +184,11 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
 
   setActiveComponent: (id: string | null) => {
     const current = get();
-    // Normalize invalid IDs to null to prevent impossible state
     const component = id ? current.components.find((c) => c.id === id) : null;
+    const projectPreview = hasProjectPreview(current.projectContext?.rendererInfo);
     set({
       activeComponentId: component ? id : null,
-      previewHtml: component ? buildPreviewMarkup(component) : "",
+      previewHtml: projectPreview ? current.previewHtml : (component ? buildPreviewMarkup(component) : ""),
       selectedElement: null,
       selectedElements: [],
     });
@@ -297,7 +305,7 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     );
     const nextState: Partial<DesignWorkspaceState> = { components: nextComponents, error: null };
 
-    if (current.activeComponentId === snapshot.componentId) {
+    if (current.activeComponentId === snapshot.componentId && !hasProjectPreview(current.projectContext?.rendererInfo)) {
       const updatedComponent = nextComponents.find((component) => component.id === snapshot.componentId);
       nextState.previewHtml = updatedComponent ? buildPreviewMarkup(updatedComponent) : "";
     }
@@ -402,7 +410,37 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     set({ projectContext: merged });
   },
 
-  setCastFile: (file: string | null, mode: "page" | "component" | "route" | null) => {
+  applyCastResult: ({ component, previewHtml, castFile, castMode, rendererInfo }: ApplyCastResultInput) => {
+    set((state) => {
+      const nextComponents = upsertComponent(state.components, component);
+
+      const nextProjectContext = state.projectContext
+        ? {
+            ...state.projectContext,
+            ...(castFile !== undefined ? { castFile } : {}),
+            ...(castMode !== undefined ? { castMode } : {}),
+            ...(rendererInfo !== undefined ? { rendererInfo } : {}),
+          }
+        : state.projectContext;
+
+      const effectiveRendererInfo = nextProjectContext?.rendererInfo ?? null;
+
+      return {
+        components: nextComponents,
+        activeComponentId: component.id,
+        error: null,
+        previewHtml:
+          previewHtml !== undefined
+            ? previewHtml
+            : hasProjectPreview(effectiveRendererInfo)
+              ? state.previewHtml
+              : buildPreviewMarkup(component),
+        ...(nextProjectContext ? { projectContext: nextProjectContext } : {}),
+      };
+    });
+  },
+
+  setCastFile: (file: string | null, mode: CastMode | null) => {
     const current = get().projectContext;
     if (!current) return;
     set({ projectContext: { ...current, castFile: file, castMode: mode } });

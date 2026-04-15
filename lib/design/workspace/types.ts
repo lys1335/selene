@@ -68,6 +68,17 @@ export const DESIGN_BREAKPOINTS: DesignBreakpoint[] = [
   { name: "desktop", width: 1440, height: 900 },
 ];
 
+export type CastMode = "page" | "component" | "route";
+
+/** Atomic input for applying a cast result to the store in one Zustand set(). */
+export interface ApplyCastResultInput {
+  component: DesignComponent;
+  previewHtml?: string;
+  castFile?: string | null;
+  castMode?: CastMode | null;
+  rendererInfo?: RendererInfo | null;
+}
+
 export type DesignWorkspaceStatus = "idle" | "generating" | "editing" | "exporting";
 
 /** Element info captured by the in-iframe inspector and sent via postMessage. */
@@ -143,7 +154,8 @@ export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
   setActiveSession: (sessionId: string) => void;
   setProjectContext: (ctx: ProjectContext | null) => void;
   updateProjectContext: (partial: Partial<ProjectContext>) => void;
-  setCastFile: (file: string | null, mode: "page" | "component" | "route" | null) => void;
+  applyCastResult: (input: ApplyCastResultInput) => void;
+  setCastFile: (file: string | null, mode: CastMode | null) => void;
   setProjectStructure: (structure: ProjectStructure) => void;
   clearProjectContext: () => void;
   reset: () => void;

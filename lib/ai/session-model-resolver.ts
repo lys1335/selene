@@ -514,7 +514,8 @@ export function getSessionProviderTemperature(
   options: SessionResolverOptions = {},
 ): number {
   const provider = getSessionProvider(sessionMetadata, options);
-  return provider === "kimi" ? 1 : requestedTemp;
+  // Kimi non-thinking mode requires temperature=0.6 (enforced by kimi-client fetch wrapper)
+  return provider === "kimi" ? 0.6 : requestedTemp;
 }
 
 export async function getSessionProviderTemperatureForSession(
@@ -523,7 +524,8 @@ export async function getSessionProviderTemperatureForSession(
   options: SessionResolverOptions = {},
 ): Promise<number> {
   const provider = (await resolveSessionModelScopeForSession(sessionMetadata, options)).effectiveConfig.provider;
-  return provider === "kimi" ? 1 : requestedTemp;
+  // Kimi non-thinking mode requires temperature=0.6 (enforced by kimi-client fetch wrapper)
+  return provider === "kimi" ? 0.6 : requestedTemp;
 }
 
 function getAgentModelConfigFromMetadata(

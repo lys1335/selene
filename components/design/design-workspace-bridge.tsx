@@ -183,36 +183,45 @@ function applyDesignToolResultToStore(detail: DesignToolEvent): void {
       break;
     }
 
-    case "cast":
-      if (data?.componentId && data.code) {
-        const now = new Date().toISOString();
-        store.addComponent({
-          id: data.componentId,
-          name: data.name ?? "Project Component",
-          code: data.code,
+    case "cast": {
+      // Atomic store update — rendererInfo, castFile, and component are set
+      // in a single Zustand set() call, eliminating the race condition where
+      // React re-renders from addComponent trigger the compile hook before
+      // rendererInfo is set.
+      const now = new Date().toISOString();
+      const castFile = data?.castFile ?? null;
+      const castMode = data?.castMode ?? null;
+      const componentName = data?.name ?? castFile ?? "Project Component";
+      // Deterministic ID: same file re-cast updates the existing component
+      const componentId = data?.componentId ?? `design-cast-${castFile?.replace(/[^a-zA-Z0-9._-]+/g, "-") ?? "component"}`;
+
+      store.applyCastResult({
+        component: {
+          id: componentId,
+          name: componentName,
+          code: data?.code ?? "",
           mode: "tailwind",
           style: "default",
           prompt: "",
           createdAt: now,
           updatedAt: now,
-        });
-      }
-      if (data?.previewHtml) {
-        store.setPreviewHtml(data.previewHtml);
-      }
-      // Update castFile and rendererInfo in project context
-      if (store.projectContext) {
-        if (data?.castFile || data?.componentId) {
-          const castFile = data?.castFile ?? null;
-          const castMode = data?.castMode ?? null;
-          store.setCastFile(castFile, castMode);
-        }
-        if (data?.rendererInfo) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          store.updateProjectContext({ rendererInfo: data.rendererInfo as any });
-        }
-      }
+        },
+        ...(Object.prototype.hasOwnProperty.call(data ?? {}, "previewHtml")
+          ? { previewHtml: data?.previewHtml ?? "" }
+          : {}),
+        ...(store.projectContext
+          ? {
+              castFile,
+              castMode,
+              ...(data?.rendererInfo
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                ? { rendererInfo: data.rendererInfo as any }
+                : {}),
+            }
+          : {}),
+      });
       break;
+    }
 
     case "sync-back":
       // Sync-back is a finalization action — no preview update
@@ -325,26 +334,23 @@ export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps)
       }
     }
 
+    const processed = new WeakSet<DesignToolEvent>();
+
     function processEvent(detail: DesignToolEvent) {
       // Session isolation: if bridge has a session, require event to match.
-      // Events without sessionId (legacy tool results) are dropped when the
-      // bridge is session-aware — this prevents cross-session pollution from
-      // old chat history re-renders.
       if (sessionId && detail.sessionId !== sessionId) {
         return;
       }
 
+      // Effect-scoped dedup by object identity
+      if (processed.has(detail)) return;
+      processed.add(detail);
+
       applyDesignToolResultToStore(detail);
     }
 
-    // Track which events have been processed to deduplicate queue drain vs live dispatch.
-    // Uses a WeakSet on the event detail object reference — cheap and automatic GC.
-    const processed = new WeakSet<DesignToolEvent>();
-
     function handleToolResult(e: Event) {
       const detail = (e as CustomEvent<DesignToolEvent>).detail;
-      if (processed.has(detail)) return;
-      processed.add(detail);
       processEvent(detail);
     }
 
@@ -355,8 +361,6 @@ export function DesignWorkspaceBridge({ sessionId }: DesignWorkspaceBridgeProps)
     if (toDrain) {
       pendingEvents.delete(queueKey);
       for (const queued of toDrain) {
-        if (processed.has(queued)) continue;
-        processed.add(queued);
         processEvent(queued);
       }
     }

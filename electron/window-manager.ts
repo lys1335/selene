@@ -220,7 +220,7 @@ export async function createWindow(opts: CreateWindowOptions): Promise<void> {
           "media-src 'self' data: blob: https://*.amazonaws.com https://*.cloudfront.net https://assets.mixkit.co https://*.mixkit.co http://localhost:* https://localhost:* http://127.0.0.1:* https://127.0.0.1:*; " +
           "connect-src 'self' blob: https://api.anthropic.com https://openrouter.ai ws://localhost:* wss://localhost:* http://localhost:* https://localhost:* ws://127.0.0.1:* wss://127.0.0.1:* http://127.0.0.1:* https://127.0.0.1:*; " +
           "worker-src 'self' blob:; " +
-          "frame-src 'self' https://www.youtube-nocookie.com https://www.youtube.com;",
+          "frame-src 'self' http://localhost:* http://127.0.0.1:* https://www.youtube-nocookie.com https://www.youtube.com;",
         ],
       },
     });

@@ -363,6 +363,10 @@ function buildUIPartsFromDBContent(
           hasFinalOutput && inferredState === "output-error" && toolResult?.result !== undefined
             ? "output-available"
             : inferredState;
+        // Guard: a tool call with a matching result in ANY message is resolved —
+        // never mark it active. This prevents rehydrated/replayed tool calls from
+        // re-triggering dispatch in tool UIs after stream persistence.
+        const isGloballyResolved = toolResults.has(part.toolCallId);
         parts.push({
           type: `tool-${part.toolName}` as `tool-${string}`,
           toolCallId: part.toolCallId,
@@ -371,7 +375,7 @@ function buildUIPartsFromDBContent(
           output: hasFinalOutput ? toolResult?.result ?? null : undefined,
           errorText: toolResult?.errorText,
           preliminary: toolResult?.preliminary,
-          active: part.active === true && !hasFinalOutput,
+          active: part.active === true && !hasFinalOutput && !isGloballyResolved,
         });
         renderedToolCallIds.add(part.toolCallId);
       } else {

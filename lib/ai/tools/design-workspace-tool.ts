@@ -55,7 +55,7 @@ import {
 } from "../../design/workspace/inspect-context";
 import { detectFramework, buildProjectStructure, validateProjectPath } from "@/lib/design/workspace/project-detection";
 import type { FrameworkType } from "@/lib/design/workspace/project-detection";
-import { createDesignWorktree, getActiveWorktree, cleanupDesignWorktree, getWorktreeDiff, type WorktreeInfo } from "@/lib/design/workspace/worktree-manager";
+import { createDirectDesignWorktree, getActiveWorktree, cleanupDesignWorktree, type WorktreeInfo } from "@/lib/design/workspace/worktree-manager";
 import { castProjectFile, recastAfterEdit, applyEditToWorktree, readWorktreeFile, syncBackChanges } from "@/lib/design/workspace/component-casting";
 import { initializeRenderers } from "@/lib/design/workspace/framework-renderers/init";
 import { rendererRegistry } from "@/lib/design/workspace/framework-renderers/registry";
@@ -987,21 +987,27 @@ async function handleCast(
   }
 
   try {
-    // Ensure worktree exists — if not, need to detect + create first
+    // Ensure worktree exists — if not, create a direct-mode worktree that
+    // points at the real project source.  This avoids duplicating the
+    // directory and lets the dev server use the existing node_modules.
     let worktree = getActiveWorktree(sessionId);
     if (!worktree && input.projectSourcePath) {
       const authResult = await authorizeProjectPath(input.projectSourcePath, characterId ?? "", sessionId);
       if (!authResult.ok) {
         return { success: false, action: "cast", error: authResult.error };
       }
-      worktree = await createDesignWorktree(authResult.resolvedPath, sessionId);
+      worktree = await createDirectDesignWorktree(authResult.resolvedPath, sessionId);
     }
     if (!worktree) {
       return { success: false, action: "cast", error: "No active worktree. Provide projectSourcePath or run 'detect' first." };
     }
 
-    // Detect framework
-    const framework = input.frameworkOverride ?? (await detectFramework(worktree.worktreePath)).type;
+    // Detect framework — pass the full DetectedFramework object so renderers
+    // get buildTool, cssFramework, packageManager etc. instead of just the type.
+    const detected = await detectFramework(worktree.worktreePath);
+    const framework = input.frameworkOverride
+      ? { ...detected, type: input.frameworkOverride }
+      : detected;
 
     const result = await castProjectFile(sessionId, targetFile, castMode, framework, config);
 
@@ -1039,7 +1045,7 @@ async function handleCast(
       castMode,
       sourceCode: result.sourceCode,
       previewHtml: result.previewHtml,
-      framework: typeof framework === 'string' ? framework : 'unknown',
+      framework: framework.type,
       lastCastAt: Date.now(),
     });
 
@@ -1048,7 +1054,7 @@ async function handleCast(
       componentId: result.componentId,
       durationMs: Date.now() - startedAt,
       success: true,
-      metadata: { subAction: "cast", targetFile, castMode, framework },
+      metadata: { subAction: "cast", targetFile, castMode, framework: framework.type },
     });
 
     return {
@@ -1059,7 +1065,7 @@ async function handleCast(
         code: result.sourceCode,
         previewHtml: result.previewHtml,
         compileReport: result.compileReport,
-        message: `Cast ${targetFile} as ${castMode} (${framework}).`,
+        message: `Cast ${targetFile} as ${castMode} (${framework.type}).`,
         castFile: targetFile,
         castMode,
         rendererInfo,
@@ -1100,6 +1106,23 @@ async function handleSyncBack(
     const sourceRoot = input.projectSourcePath;
     if (!sourceRoot) {
       return { success: false, action: "sync-back", error: "projectSourcePath is required for sync-back." };
+    }
+
+    // In direct mode changes are already in the source — sync-back is a no-op.
+    if (worktree.isDirect) {
+      recordDesignHistory(sessionId, {
+        action: "close",
+        durationMs: Date.now() - startedAt,
+        success: true,
+        metadata: { subAction: "sync-back", strategy, directMode: true },
+      });
+      return {
+        success: true,
+        action: "sync-back",
+        data: {
+          message: "Direct mode — all changes are already in the source project. No sync needed.",
+        },
+      };
     }
 
     const result = await syncBackChanges(sessionId, sourceRoot, strategy, input.syncFiles);
@@ -1157,7 +1180,9 @@ async function handleOpen(options: DesignWorkspaceToolOptions, input?: DesignWor
         if (validation.valid) {
           const framework = await detectFramework(safePath);
           const structure = await buildProjectStructure(safePath, framework.type);
-          const worktree = await createDesignWorktree(safePath, sessionId);
+          // Direct mode: point at the real project source so the dev
+          // server finds existing node_modules.  No directory copy.
+          const worktree = await createDirectDesignWorktree(safePath, sessionId);
 
           // Include project info in the response
           metadata = {
@@ -2126,7 +2151,10 @@ async function handleEditProjectMode(
   // Write edited code to worktree and re-cast for preview
   try {
     const config = getWorkspaceConfig();
-    const framework = input.frameworkOverride ?? (await detectFramework(worktree.worktreePath)).type;
+    const detected = await detectFramework(worktree.worktreePath);
+    const framework = input.frameworkOverride
+      ? { ...detected, type: input.frameworkOverride }
+      : detected;
     const castResult = await recastAfterEdit(sessionId, targetFile, finalCode.trim(), framework, config);
 
     recordHistory(sessionId, "edit", startedAt, true, {
@@ -2252,7 +2280,10 @@ async function handlePatchProjectMode(
   // Write patched code to worktree and re-cast
   try {
     const config = getWorkspaceConfig();
-    const framework = input.frameworkOverride ?? (await detectFramework(worktree.worktreePath)).type;
+    const detected = await detectFramework(worktree.worktreePath);
+    const framework = input.frameworkOverride
+      ? { ...detected, type: input.frameworkOverride }
+      : detected;
     const castResult = await recastAfterEdit(sessionId, targetFile, patchedCode, framework, config);
 
     const linesChanged = countChangedLines(currentCode, patchedCode);

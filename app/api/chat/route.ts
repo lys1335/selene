@@ -692,6 +692,7 @@ export async function POST(req: Request) {
       contextWindowStatus: contextCheck.status,
       workflowPromptContext,
       devWorkspaceEnabled: appSettings.devWorkspaceEnabled ?? false,
+      provider: currentProvider,
     });
 
     // ── Build tools ────────────────────────────────────────────────────────────

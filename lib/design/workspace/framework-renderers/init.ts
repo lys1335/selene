@@ -7,6 +7,7 @@
 
 import { rendererRegistry } from "./registry";
 import { ReactRenderer } from "./react-renderer";
+import { NextjsRenderer } from "./nextjs-renderer";
 import { StaticRenderer } from "./static-renderer";
 import { ViteRenderer } from "./vite-renderer";
 import { PHPRenderer } from "./php-renderer";
@@ -18,6 +19,7 @@ export function initializeRenderers(): void {
   if (initialized) return;
 
   rendererRegistry.register(new ReactRenderer());
+  rendererRegistry.register(new NextjsRenderer());
   rendererRegistry.register(new StaticRenderer());
   rendererRegistry.register(new ViteRenderer());
   rendererRegistry.register(new PHPRenderer());

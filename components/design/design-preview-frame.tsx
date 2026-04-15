@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useDesignWorkspaceStore, DESIGN_BREAKPOINTS } from "@/lib/design/workspace";
+import { useTheme } from "@/components/theme/theme-provider";
 import { Button } from "@/components/ui/button";
 import { Monitor, Tablet, Smartphone, Crosshair, Maximize } from "lucide-react";
 import type { InspectedElement } from "@/lib/design/workspace/types";
@@ -14,32 +15,80 @@ const BREAKPOINT_ICONS: Record<string, ReactNode> = {
   desktop: <Monitor className="h-4 w-4" />,
 };
 
-/** Simple fast hash for cache invalidation (djb2). */
-function hashCode(str: string): number {
-  let hash = 5381;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) + hash + str.charCodeAt(i)) | 0;
-  }
-  return hash;
-}
-
-/** Check if the preview HTML is a loading placeholder (not compiled content). */
-function isPlaceholderHtml(html: string): boolean {
-  return !html.trim() || html.includes('data-selene-placeholder="true"');
-}
-
-/** Escape text for safe inline HTML rendering. */
-function escapeForHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 // ---------------------------------------------------------------------------
 // Inspector script — uses shared module. Starts active for srcDoc injection.
 // ---------------------------------------------------------------------------
 const INSPECTOR_SCRIPT = getInspectorScript("active");
+
+// ---------------------------------------------------------------------------
+// Theme injection for preview iframes.
+//
+// The theme provider only mutates the main document. Preview iframes have
+// their own document, so without explicit injection they get hardcoded
+// class="dark" and ember-only CSS variables — causing blank/wrong renders
+// when the user is on a different theme or preset.
+// ---------------------------------------------------------------------------
+
+/**
+ * Read current computed CSS custom properties from the app document and
+ * return them as a CSS :root{} block. This captures whatever preset the
+ * user has active without hardcoding any specific preset's variables.
+ */
+function captureThemeCssVars(): string {
+  if (typeof document === "undefined") return "";
+  const root = document.documentElement;
+  const computed = getComputedStyle(root);
+
+  // Capture all --variable declarations from the root
+  const vars: string[] = [];
+  // Iterate over all CSS properties — getComputedStyle includes custom properties
+  for (let i = 0; i < computed.length; i++) {
+    const prop = computed[i];
+    if (prop.startsWith("--")) {
+      vars.push(`  ${prop}: ${computed.getPropertyValue(prop).trim()};`);
+    }
+  }
+
+  if (vars.length === 0) return "";
+  return `:root {\n${vars.join("\n")}\n}`;
+}
+
+/**
+ * Apply theme class, data-theme-preset attribute, and CSS variables to
+ * srcDoc HTML. Replaces the hardcoded class="dark" with the current theme.
+ */
+function applyThemeToHtml(
+  html: string,
+  themeClass: string,
+  themePreset: string,
+): string {
+  // Replace hardcoded class="dark" or class="light" on <html>
+  let result = html.replace(
+    /(<html[^>]*)\bclass="[^"]*"/,
+    `$1class="${themeClass}"`,
+  );
+
+  // Add data-theme-preset attribute
+  result = result.replace(
+    /(<html[^>]*)(>)/,
+    `$1 data-theme-preset="${themePreset}"$2`,
+  );
+
+  // Inject computed CSS variables before </head> so they override any
+  // hardcoded preset CSS (e.g. the ember-only PREVIEW_THEME_CSS).
+  const themeCssVars = captureThemeCssVars();
+  if (themeCssVars) {
+    const styleBlock = `<style data-selene-theme-sync>\n${themeCssVars}\n</style>`;
+    if (result.includes("</head>")) {
+      result = result.replace("</head>", `${styleBlock}\n</head>`);
+    } else {
+      // Fallback: prepend before body
+      result = styleBlock + result;
+    }
+  }
+
+  return result;
+}
 
 /**
  * Inject inspector script into preview HTML when inspector mode is enabled.
@@ -48,7 +97,6 @@ const INSPECTOR_SCRIPT = getInspectorScript("active");
 function injectInspectorScript(html: string, enabled: boolean): string {
   if (!enabled) return html;
   const scriptTag = `<script>${INSPECTOR_SCRIPT}<\/script>`;
-  // Insert before </body> if present, else before </html>, else append
   if (html.includes("</body>")) {
     return html.replace("</body>", `${scriptTag}</body>`);
   }
@@ -56,107 +104,6 @@ function injectInspectorScript(html: string, enabled: boolean): string {
     return html.replace("</html>", `${scriptTag}</html>`);
   }
   return html + scriptTag;
-}
-
-/**
- * When the active component is Tailwind mode and the current previewHtml
- * is just the placeholder, trigger server-side compilation via the API.
- *
- * This handles two cases:
- * 1. Component switching — the store rebuilds the placeholder, and this hook
- *    triggers compilation for the newly active Tailwind component.
- * 2. Fallback — if the tool handler's server-side compilation failed, the
- *    bridge sets the placeholder and this hook retries via the API.
- *
- * The generate/edit flow normally provides compiled HTML directly via the
- * tool result bridge, so this hook is a safety net, not the primary path.
- */
-function useCompileTailwindPreview() {
-  const components = useDesignWorkspaceStore((s) => s.components);
-  const activeComponentId = useDesignWorkspaceStore((s) => s.activeComponentId);
-  const setPreviewHtml = useDesignWorkspaceStore((s) => s.setPreviewHtml);
-  const projectCtx = useDesignWorkspaceStore((s) => s.projectContext);
-
-  // Track which component+code hash we last compiled to avoid redundant API calls.
-  const lastCompiledRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!activeComponentId) return;
-
-    // In project mode with a running dev-server renderer, the preview is
-    // served via the renderer's baseUrl — skip client-side compilation to
-    // avoid overwriting server-produced previews.
-    if (projectCtx?.rendererInfo?.baseUrl) return;
-
-    const component = components.find((c) => c.id === activeComponentId);
-    if (!component) return;
-
-    // Build a content-based cache key using component ID + code hash
-    const cacheKey = `${activeComponentId}:${hashCode(component.code)}`;
-
-    // Don't re-request the same content we already compiled
-    if (lastCompiledRef.current === cacheKey) return;
-
-    // Capture the component ID at request time for stale-response detection.
-    const requestComponentId = activeComponentId;
-    const requestCode = component.code;
-    const controller = new AbortController();
-
-    fetch("/api/design/compile-preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: requestCode, name: component.name }),
-      signal: controller.signal,
-    })
-      .then(async (res) => {
-        const data = (await res.json().catch(() => ({}))) as {
-          html?: string;
-          error?: string;
-          details?: Array<{ text?: string }>;
-        };
-
-        if (!res.ok) {
-          const detailText = Array.isArray(data.details)
-            ? data.details.map((detail) => detail.text).filter(Boolean).join("\n")
-            : "";
-          const message = [data.error || `Compile API returned ${res.status}`, detailText]
-            .filter(Boolean)
-            .join("\n\n");
-          throw new Error(message);
-        }
-
-        return data;
-      })
-      .then((data: { html?: string; error?: string }) => {
-        const currentId = useDesignWorkspaceStore.getState().activeComponentId;
-        if (currentId !== requestComponentId) return;
-
-        if (data.html) {
-          lastCompiledRef.current = cacheKey;
-          setPreviewHtml(data.html);
-        } else if (data.error) {
-          const safeError = escapeForHtml(data.error);
-          setPreviewHtml(
-            `<!DOCTYPE html><html><body style="margin:0;padding:16px;font-family:ui-monospace,monospace;background:#111827;color:#f9fafb;"><pre style="white-space:pre-wrap;color:#ef4444;">Compilation Error:\n${safeError}</pre></body></html>`
-          );
-        }
-      })
-      .catch((err: unknown) => {
-        if (err instanceof DOMException && err.name === "AbortError") return;
-        console.error("[design-preview] compilation failed:", err);
-        const currentId = useDesignWorkspaceStore.getState().activeComponentId;
-        if (currentId !== requestComponentId) return;
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        const safeMsg = escapeForHtml(msg);
-        setPreviewHtml(
-          `<!DOCTYPE html><html><body style="margin:0;padding:16px;font-family:ui-monospace,monospace;background:#111827;color:#f9fafb;"><pre style="white-space:pre-wrap;color:#ef4444;">Compilation Failed:\n${safeMsg}</pre></body></html>`
-        );
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [activeComponentId, components, setPreviewHtml, projectCtx]);
 }
 
 /**
@@ -195,33 +142,46 @@ export function DesignPreviewFrame() {
   const setBreakpoint = useDesignWorkspaceStore((s) => s.setBreakpoint);
   const inspectorEnabled = useDesignWorkspaceStore((s) => s.inspectorEnabled);
   const toggleInspector = useDesignWorkspaceStore((s) => s.toggleInspector);
-  const setSelectedElement = useDesignWorkspaceStore((s) => s.setSelectedElement);
   const toggleSelectedElement = useDesignWorkspaceStore((s) => s.toggleSelectedElement);
   const setSelectedElements = useDesignWorkspaceStore((s) => s.setSelectedElements);
   const projectContext = useDesignWorkspaceStore((s) => s.projectContext);
 
-  // Auto-compile Tailwind components when switching or on first load
-  useCompileTailwindPreview();
+  // Theme context — used to inject the correct theme into the iframe document
+  const { resolvedTheme, themePreset } = useTheme();
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const available = useContainerSize(containerRef);
 
-  // Listen for inspector postMessage from the iframe — validate source
+  // ---------------------------------------------------------------------------
+  // Derive preview source — single source of truth
+  // ---------------------------------------------------------------------------
+  const previewUrl = projectContext?.rendererInfo?.previewUrl
+    ?? projectContext?.rendererInfo?.baseUrl
+    ?? null;
+
+  const previewOrigin = useMemo(() => {
+    if (!previewUrl) return null;
+    try {
+      return new URL(previewUrl).origin;
+    } catch {
+      return null;
+    }
+  }, [previewUrl]);
+
+  // ---------------------------------------------------------------------------
+  // Inspector message listener
+  // ---------------------------------------------------------------------------
   useEffect(() => {
     function handleMessage(e: MessageEvent) {
-      // Only accept messages from our own iframe, not arbitrary windows
       if (e.source !== iframeRef.current?.contentWindow) return;
       if (e.data?.type === "selene-inspector-select" && e.data.element) {
         const element = e.data.element as InspectedElement;
         const action = e.data.action as string | undefined;
 
-        if (action === "add") {
-          toggleSelectedElement(element);
-        } else if (action === "remove") {
+        if (action === "add" || action === "remove") {
           toggleSelectedElement(element);
         } else {
-          // replace — single selection
           setSelectedElements([element]);
         }
       }
@@ -230,37 +190,59 @@ export function DesignPreviewFrame() {
     return () => window.removeEventListener("message", handleMessage);
   }, [setSelectedElements, toggleSelectedElement]);
 
-  // For proxy-backed iframes (dev-server renderers), the inspector script is
-  // injected by the InspectorProxy in "toggle" mode (starts inactive). Send a
-  // postMessage to activate/deactivate whenever inspectorEnabled changes.
-  // Also resend on iframe load (H2 — handles first load and HMR reloads).
+  // ---------------------------------------------------------------------------
+  // Inspector toggle for dev-server iframes (InspectorProxy "toggle" mode)
+  // ---------------------------------------------------------------------------
   const sendInspectorToggle = useCallback(() => {
-    if (!projectContext?.rendererInfo?.baseUrl) return;
+    if (!previewUrl) return;
     const win = iframeRef.current?.contentWindow;
     if (!win) return;
-    const origin = projectContext.rendererInfo.baseUrl;
+    const payload = { type: "selene-inspector-toggle", enabled: inspectorEnabled };
     try {
-      win.postMessage({ type: "selene-inspector-toggle", enabled: inspectorEnabled }, origin);
+      win.postMessage(payload, previewOrigin ?? "*");
     } catch {
-      // Cross-origin fallback — proxy is same-origin but just in case
-      win.postMessage({ type: "selene-inspector-toggle", enabled: inspectorEnabled }, "*");
+      win.postMessage(payload, "*");
     }
-  }, [inspectorEnabled, projectContext?.rendererInfo?.baseUrl]);
+  }, [inspectorEnabled, previewUrl, previewOrigin]);
 
   useEffect(() => {
     sendInspectorToggle();
   }, [sendInspectorToggle]);
 
-  // Responsive mode: iframe fills the entire container (like a real browser)
-  // Fixed breakpoints: scale to fit the container with padding
+  // ---------------------------------------------------------------------------
+  // Theme sync for previewUrl iframes — send postMessage on theme change
+  // ---------------------------------------------------------------------------
+  const sendThemeSync = useCallback(() => {
+    if (!previewUrl) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    const themeCssVars = captureThemeCssVars();
+    const payload = {
+      type: "selene-theme-sync",
+      themeClass: resolvedTheme,
+      themePreset,
+      themeCssVars,
+    };
+    try {
+      win.postMessage(payload, previewOrigin ?? "*");
+    } catch {
+      win.postMessage(payload, "*");
+    }
+  }, [resolvedTheme, themePreset, previewUrl, previewOrigin]);
+
+  useEffect(() => {
+    sendThemeSync();
+  }, [sendThemeSync]);
+
+  // ---------------------------------------------------------------------------
+  // Layout
+  // ---------------------------------------------------------------------------
   const isResponsive = selectedBreakpoint.width === 0;
   const PADDING = 24;
   const viewportW = isResponsive ? available.width : selectedBreakpoint.width;
   const viewportH = isResponsive ? available.height : selectedBreakpoint.height;
 
-  // Compute scale so the true-size iframe fits in the available space.
-  // Never upscale (cap at 1). In responsive mode, scale is always 1.
-  const computeScale = useCallback(() => {
+  const scale = useMemo(() => {
     if (isResponsive) return 1;
     if (available.width === 0 || available.height === 0) return 1;
     const usableW = available.width - PADDING * 2;
@@ -268,13 +250,55 @@ export function DesignPreviewFrame() {
     return Math.min(usableW / viewportW, usableH / viewportH, 1);
   }, [isResponsive, available.width, available.height, viewportW, viewportH]);
 
-  const scale = computeScale();
+  // ---------------------------------------------------------------------------
+  // Iframe rendering — two modes only:
+  //   1. previewUrl → <iframe src={previewUrl}> (dev-server / proxy)
+  //   2. previewHtml → <iframe srcDoc={...}> (compile / sandbox)
+  //
+  // Both modes now inject the current theme so the preview matches the app.
+  // ---------------------------------------------------------------------------
 
+  /** Build themed srcDoc HTML — applies theme class, preset attr, and CSS vars. */
+  const themedSrcDoc = useMemo(() => {
+    const withInspector = injectInspectorScript(previewHtml, inspectorEnabled);
+    return applyThemeToHtml(withInspector, resolvedTheme, themePreset);
+  }, [previewHtml, inspectorEnabled, resolvedTheme, themePreset]);
+
+  // --- Early return AFTER all hooks ---
   if (!activeComponentId) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
         Select or create a component to preview
       </div>
+    );
+  }
+
+  function renderIframe(ref: React.RefObject<HTMLIFrameElement | null>) {
+    if (previewUrl) {
+      return (
+        <iframe
+          ref={ref}
+          src={previewUrl}
+          sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
+          className="h-full w-full border-0"
+          style={{ background: "transparent" }}
+          title="Design preview"
+          onLoad={() => {
+            sendInspectorToggle();
+            sendThemeSync();
+          }}
+        />
+      );
+    }
+    return (
+      <iframe
+        ref={ref}
+        srcDoc={themedSrcDoc}
+        sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
+        className="h-full w-full border-0"
+        style={{ background: "transparent" }}
+        title="Design preview"
+      />
     );
   }
 
@@ -312,35 +336,14 @@ export function DesignPreviewFrame() {
         </Button>
       </div>
 
-      {/* Preview area — measured container */}
+      {/* Preview area */}
       <div
         ref={containerRef}
         className={`flex flex-1 overflow-auto bg-muted/30 ${isResponsive ? "" : "items-center justify-center"}`}
       >
         {isResponsive ? (
-          /* Responsive mode: iframe fills container directly — like a real browser */
-          projectContext?.rendererInfo?.baseUrl ? (
-            <iframe
-              ref={iframeRef}
-              src={projectContext.rendererInfo.previewUrl ?? `${projectContext.rendererInfo.baseUrl}/${projectContext.castFile ?? ""}`}
-              sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
-              className="h-full w-full border-0"
-              style={{ background: "transparent" }}
-              title="Design preview"
-              onLoad={sendInspectorToggle}
-            />
-          ) : (
-            <iframe
-              ref={iframeRef}
-              srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
-              sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
-              className="h-full w-full border-0"
-              style={{ background: "transparent" }}
-              title="Design preview"
-            />
-          )
+          renderIframe(iframeRef)
         ) : (
-          /* Fixed breakpoint: scale to fit with padding */
           <div
             style={{
               width: viewportW * scale,
@@ -356,25 +359,7 @@ export function DesignPreviewFrame() {
                 transformOrigin: "top left",
               }}
             >
-              {projectContext?.rendererInfo?.baseUrl ? (
-                <iframe
-                  ref={iframeRef}
-                  src={`${projectContext.rendererInfo.baseUrl}/${projectContext.castFile ?? ""}`}
-                  sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
-                  className="h-full w-full border-0"
-                  style={{ background: "transparent" }}
-                  title="Design preview"
-                />
-              ) : (
-                <iframe
-                  ref={iframeRef}
-                  srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
-                  sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
-                  className="h-full w-full border-0"
-                  style={{ background: "transparent" }}
-                  title="Design preview"
-                />
-              )}
+              {renderIframe(iframeRef)}
             </div>
           </div>
         )}

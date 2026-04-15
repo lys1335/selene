@@ -645,7 +645,7 @@ export const AssistantMessage: FC<{ ttsEnabled?: boolean }> = ({ ttsEnabled = fa
         {/* Token usage display */}
         {(tokenUsage?.inputTokens || tokenUsage?.outputTokens) && (
           <div className="text-[10px] text-terminal-muted/60 font-mono">
-            {tokenUsage.inputTokens?.toLocaleString() || 0}↓ {tokenUsage.outputTokens?.toLocaleString() || 0}↑
+            {tokenUsage.inputTokens ?? 0}↓ {tokenUsage.outputTokens ?? 0}↑
           </div>
         )}
 

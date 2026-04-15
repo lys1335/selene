@@ -49,7 +49,9 @@ async function kimiCustomFetch(
       // Disable thinking mode — reasoning outputs should not persist in history
       body.thinking = { type: "disabled" };
       // Non-thinking mode requires these fixed values per Kimi K2.5 docs
-      body.temperature = 0.6;
+      // Use lower temperature when tools are present for more deterministic tool selection
+      const hasTools = Array.isArray(body.tools) && body.tools.length > 0;
+      body.temperature = hasTools ? 0.4 : 0.6;
       body.top_p = 0.95;
       body.n = 1;
       body.presence_penalty = 0.0;

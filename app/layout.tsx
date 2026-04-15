@@ -205,12 +205,8 @@ export default async function RootLayout({
     >
       <head />
       <body className="min-h-dvh antialiased font-sans">
-        <Script id="theme-script" strategy="beforeInteractive">
-          {themeScript}
-        </Script>
-        <Script id="renderer-recovery" strategy="afterInteractive">
-          {rendererRecoveryScript}
-        </Script>
+        <Script id="theme-script" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <Script id="renderer-recovery" strategy="afterInteractive" dangerouslySetInnerHTML={{ __html: rendererRecoveryScript }} />
         <div id="app-root">
           <ThemeProvider initialTheme={initialTheme} initialChatWorkspaceMode={initialChatWorkspaceMode}>
             <NextIntlClientProvider locale={locale} messages={messages}>
