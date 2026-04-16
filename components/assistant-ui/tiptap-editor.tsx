@@ -61,13 +61,13 @@ export interface TiptapEditorHandle {
   /** Check if the editor has any meaningful content */
   hasContent: () => boolean;
   /** Insert plain-text transcript at the active selection using a history-aware transaction */
-  insertVoiceTranscript: (text: string) => boolean;
+  insertVoiceTranscript: (text: string, sessionId?: string, insertAt?: number) => boolean;
   /** Replace the latest voice transcript with its polished version using undo-aware history */
-  replaceVoiceTranscript: (oldText: string, newText: string) => boolean;
+  replaceVoiceTranscript: (oldText: string, newText: string, sessionId?: string) => boolean;
   /** Remove any transient voice transcript styling without changing the document */
-  clearVoiceTranscriptDecoration: () => void;
+  clearVoiceTranscriptDecoration: (sessionId?: string) => void;
   /** Read the currently tracked voice transcript text, if any */
-  getTrackedVoiceTranscriptText: () => string | null;
+  getTrackedVoiceTranscriptText: (sessionId?: string) => string | null;
   /** Clear the editor */
   clear: () => void;
   /** Focus the editor */
@@ -432,11 +432,12 @@ interface VoiceTranscriptRange {
   to: number;
   text: string;
   phase: VoiceTranscriptDecorationPhase;
+  sessionId: string;
 }
 
 interface VoiceTranscriptDecorationState {
   decorations: DecorationSet;
-  range: VoiceTranscriptRange | null;
+  ranges: Map<string, VoiceTranscriptRange>;
 }
 
 type VoiceTranscriptDecorationMeta =
@@ -446,6 +447,7 @@ type VoiceTranscriptDecorationMeta =
     }
   | {
       type: "clear";
+      sessionId?: string;
       preserveRange?: boolean;
     };
 
@@ -457,26 +459,29 @@ function getVoiceTranscriptDecorationClassName(
   phase: VoiceTranscriptDecorationPhase,
 ): string {
   if (phase === "swap") {
-    return "rounded-[3px] bg-terminal-green/14 shadow-[0_0_0_1px_hsl(var(--terminal-green)/0.18),0_0_18px_hsl(var(--terminal-green)/0.12)] transition-[background-color,box-shadow] duration-300";
+    return "rounded-[3px] bg-terminal-green/18 dark:bg-terminal-green/24 shadow-[0_0_0_1px_hsl(var(--terminal-green)/0.22),0_0_18px_hsl(var(--terminal-green)/0.16)] transition-[background-color,box-shadow] duration-300";
   }
 
-  return "rounded-[3px] bg-terminal-green/10 shadow-[0_0_0_1px_hsl(var(--terminal-green)/0.14),0_0_12px_hsl(var(--terminal-green)/0.08)] motion-safe:animate-pulse transition-[background-color,box-shadow] duration-200";
+  return "rounded-[3px] bg-terminal-green/14 dark:bg-terminal-green/20 shadow-[0_0_0_1px_hsl(var(--terminal-green)/0.18),0_0_12px_hsl(var(--terminal-green)/0.12)] motion-safe:animate-pulse transition-[background-color,box-shadow] duration-200";
 }
 
 function buildVoiceTranscriptDecorations(
   doc: EditorState["doc"],
-  range: VoiceTranscriptRange | null,
+  ranges: Map<string, VoiceTranscriptRange>,
 ): DecorationSet {
-  if (!range || range.from >= range.to) {
-    return DecorationSet.empty;
+  const decos: Decoration[] = [];
+  for (const range of Array.from(ranges.values())) {
+    if (range.from < range.to) {
+      decos.push(
+        Decoration.inline(range.from, range.to, {
+          class: getVoiceTranscriptDecorationClassName(range.phase),
+          "data-voice-transcript-phase": range.phase,
+          "data-voice-session-id": range.sessionId,
+        }),
+      );
+    }
   }
-
-  return DecorationSet.create(doc, [
-    Decoration.inline(range.from, range.to, {
-      class: getVoiceTranscriptDecorationClassName(range.phase),
-      "data-voice-transcript-phase": range.phase,
-    }),
-  ]);
+  return decos.length > 0 ? DecorationSet.create(doc, decos) : DecorationSet.empty;
 }
 
 const VoiceTranscriptDecorationExtension = Extension.create({
@@ -487,43 +492,54 @@ const VoiceTranscriptDecorationExtension = Extension.create({
       new Plugin<VoiceTranscriptDecorationState>({
         key: voiceTranscriptDecorationPluginKey,
         state: {
-          init: (_, state) => ({
+          init: () => ({
             decorations: DecorationSet.empty,
-            range: null,
+            ranges: new Map(),
           }),
           apply(tr, pluginState) {
-            const mappedRange = pluginState.range
-              ? {
-                  ...pluginState.range,
-                  from: tr.mapping.map(pluginState.range.from, -1),
-                  to: tr.mapping.map(pluginState.range.to, 1),
-                }
-              : null;
+            // Map all existing ranges through the transaction mapping
+            const mappedRanges = new Map<string, VoiceTranscriptRange>();
+            for (const [id, range] of Array.from(pluginState.ranges.entries())) {
+              const newFrom = tr.mapping.map(range.from, -1);
+              const newTo = tr.mapping.map(range.to, 1);
+              if (newFrom < newTo) {
+                mappedRanges.set(id, { ...range, from: newFrom, to: newTo });
+              }
+            }
 
             const meta = tr.getMeta(
               voiceTranscriptDecorationPluginKey,
             ) as VoiceTranscriptDecorationMeta | undefined;
 
             if (meta?.type === "clear") {
+              if (meta.sessionId) {
+                // Clear a specific session
+                if (!meta.preserveRange) {
+                  mappedRanges.delete(meta.sessionId);
+                }
+              } else {
+                // Clear all sessions
+                if (!meta.preserveRange) {
+                  mappedRanges.clear();
+                }
+              }
               return {
-                decorations: DecorationSet.empty,
-                range: meta.preserveRange ? mappedRange : null,
+                decorations: buildVoiceTranscriptDecorations(tr.doc, mappedRanges),
+                ranges: mappedRanges,
               };
             }
 
             if (meta?.type === "set") {
+              mappedRanges.set(meta.range.sessionId, meta.range);
               return {
-                decorations: buildVoiceTranscriptDecorations(tr.doc, meta.range),
-                range: meta.range,
+                decorations: buildVoiceTranscriptDecorations(tr.doc, mappedRanges),
+                ranges: mappedRanges,
               };
             }
 
-            const nextRange =
-              mappedRange && mappedRange.from < mappedRange.to ? mappedRange : null;
-
             return {
-              decorations: buildVoiceTranscriptDecorations(tr.doc, nextRange),
-              range: nextRange,
+              decorations: buildVoiceTranscriptDecorations(tr.doc, mappedRanges),
+              ranges: mappedRanges,
             };
           },
         },
@@ -548,22 +564,38 @@ function setVoiceTranscriptDecoration(
   return tr;
 }
 
-function clearVoiceTranscriptDecoration(tr: Transaction): Transaction {
+function clearVoiceTranscriptDecoration(tr: Transaction, sessionId?: string): Transaction {
   tr.setMeta(voiceTranscriptDecorationPluginKey, {
     type: "clear",
-    preserveRange: true,
+    sessionId,
+    preserveRange: !sessionId,
   } satisfies VoiceTranscriptDecorationMeta);
   return tr;
 }
 
+/** Default session ID used when callers don't provide one (backwards compat). */
+const DEFAULT_VOICE_SESSION_ID = "__default__";
+
 function getTrackedVoiceTranscriptRange(
   state: EditorState,
+  sessionId?: string,
 ): VoiceTranscriptRange | null {
-  return voiceTranscriptDecorationPluginKey.getState(state)?.range ?? null;
+  const ranges = voiceTranscriptDecorationPluginKey.getState(state)?.ranges;
+  if (!ranges || ranges.size === 0) return null;
+
+  if (sessionId) {
+    return ranges.get(sessionId) ?? null;
+  }
+
+  // Backwards compat: return the first (or default) range
+  const defaultRange = ranges.get(DEFAULT_VOICE_SESSION_ID);
+  if (defaultRange) return defaultRange;
+  const allRanges = Array.from(ranges.values());
+  return allRanges.length > 0 ? allRanges[0] : null;
 }
 
-function getTrackedVoiceTranscriptText(editor: Editor): string | null {
-  const trackedRange = getTrackedVoiceTranscriptRange(editor.state);
+function getTrackedVoiceTranscriptText(editor: Editor, sessionId?: string): string | null {
+  const trackedRange = getTrackedVoiceTranscriptRange(editor.state, sessionId);
   if (!trackedRange || trackedRange.from >= trackedRange.to) {
     return null;
   }
@@ -645,7 +677,17 @@ function buildTranscriptInsertionTransaction(
 function insertVoiceTranscriptIntoEditor(
   editor: Editor,
   transcriptText: string,
+  sessionId: string = DEFAULT_VOICE_SESSION_ID,
+  insertAt?: number,
 ): boolean {
+  // If insertAt specified, move selection there first
+  if (insertAt !== undefined) {
+    const pos = Math.min(insertAt, editor.state.doc.content.size);
+    editor.view.dispatch(
+      editor.state.tr.setSelection(TextSelection.near(editor.state.doc.resolve(pos))),
+    );
+  }
+
   const { from } = editor.state.selection;
   const transaction = buildTranscriptInsertionTransaction(editor.state, transcriptText);
   if (!transaction) {
@@ -666,6 +708,7 @@ function insertVoiceTranscriptIntoEditor(
     to: insertedTo,
     text: insertedRangeText || transcriptText,
     phase: "polishing",
+    sessionId,
   });
 
   editor.view.dispatch(transaction);
@@ -676,8 +719,9 @@ function replaceVoiceTranscriptInEditor(
   editor: Editor,
   oldText: string,
   newText: string,
+  sessionId: string = DEFAULT_VOICE_SESSION_ID,
 ): boolean {
-  const trackedRange = getTrackedVoiceTranscriptRange(editor.state);
+  const trackedRange = getTrackedVoiceTranscriptRange(editor.state, sessionId);
   if (!trackedRange) {
     return false;
   }
@@ -720,6 +764,7 @@ function replaceVoiceTranscriptInEditor(
     to: replacementEnd,
     text: newText || oldText,
     phase: "swap",
+    sessionId,
   });
   editor.view.dispatch(tr.scrollIntoView());
   return true;
@@ -968,22 +1013,22 @@ export const TiptapEditor = forwardRef<TiptapEditorHandle, TiptapEditorProps>(
         if (!editor) return false;
         return !editor.isEmpty;
       },
-      insertVoiceTranscript: (text: string) => {
+      insertVoiceTranscript: (text: string, sessionId?: string, insertAt?: number) => {
         if (!editor) return false;
-        return insertVoiceTranscriptIntoEditor(editor, text);
+        return insertVoiceTranscriptIntoEditor(editor, text, sessionId, insertAt);
       },
-      replaceVoiceTranscript: (oldText: string, newText: string) => {
+      replaceVoiceTranscript: (oldText: string, newText: string, sessionId?: string) => {
         if (!editor) return false;
-        return replaceVoiceTranscriptInEditor(editor, oldText, newText);
+        return replaceVoiceTranscriptInEditor(editor, oldText, newText, sessionId);
       },
-      clearVoiceTranscriptDecoration: () => {
+      clearVoiceTranscriptDecoration: (sessionId?: string) => {
         if (!editor) return;
-        const tr = clearVoiceTranscriptDecoration(editor.state.tr);
+        const tr = clearVoiceTranscriptDecoration(editor.state.tr, sessionId);
         editor.view.dispatch(tr);
       },
-      getTrackedVoiceTranscriptText: () => {
+      getTrackedVoiceTranscriptText: (sessionId?: string) => {
         if (!editor) return null;
-        return getTrackedVoiceTranscriptText(editor);
+        return getTrackedVoiceTranscriptText(editor, sessionId);
       },
       clear: () => {
         editor?.commands.clearContent();

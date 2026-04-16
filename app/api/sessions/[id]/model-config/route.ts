@@ -66,6 +66,7 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         researchModel: settings.researchModel || "",
         visionModel: settings.visionModel || "",
         utilityModel: settings.utilityModel || "",
+        transcriberModel: settings.transcriberModel || "",
       },
       effective: resolved.effectiveConfig,
       sources: resolved.sources,

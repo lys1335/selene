@@ -32,6 +32,7 @@ const SESSION_MODEL_KEYS = {
   research: "sessionResearchModel",
   vision: "sessionVisionModel",
   utility: "sessionUtilityModel",
+  transcriber: "sessionTranscriberModel",
 } as const;
 
 const PROVIDER_NAMES: Record<string, string> = {
@@ -47,7 +48,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   vllm: "vLLM",
 };
 
-const ROLE_FIELDS = ["chatModel", "researchModel", "visionModel", "utilityModel"] as const;
+const ROLE_FIELDS = ["chatModel", "researchModel", "visionModel", "utilityModel", "transcriberModel"] as const;
 type RoleField = (typeof ROLE_FIELDS)[number];
 
 interface ResolvedSessionModelScope {
@@ -76,6 +77,7 @@ function getGlobalModelConfig(settings: AppSettings): ModelConfig {
     researchModel: settings.researchModel || undefined,
     visionModel: settings.visionModel || undefined,
     utilityModel: settings.utilityModel || undefined,
+    transcriberModel: settings.transcriberModel || undefined,
   };
 }
 
@@ -263,6 +265,24 @@ function resolveEffectiveModelConfig(input: {
     UTILITY_MODELS[provider],
   );
 
+  const transcriberResolution = pickCompatibleModel(
+    "transcriberModel",
+    provider,
+    [
+      sessionConfig?.sessionTranscriberModel
+        ? { model: sessionConfig.sessionTranscriberModel, source: "session" }
+        : null,
+      agentConfig?.transcriberModel
+        ? { model: agentConfig.transcriberModel, source: "agent" }
+        : null,
+      globalConfig.transcriberModel
+        ? { model: globalConfig.transcriberModel, source: "global" }
+        : null,
+      { model: utilityResolution.model, source: utilityResolution.source },
+    ].filter((value): value is CandidateValue => value !== null),
+    utilityResolution.model,
+  );
+
   return {
     effectiveConfig: {
       provider,
@@ -270,6 +290,7 @@ function resolveEffectiveModelConfig(input: {
       researchModel: researchResolution.model,
       visionModel: visionResolution.model,
       utilityModel: utilityResolution.model,
+      transcriberModel: transcriberResolution.model,
     },
     sources: {
       provider: providerResolution.source,
@@ -277,6 +298,7 @@ function resolveEffectiveModelConfig(input: {
       researchModel: researchResolution.source,
       visionModel: visionResolution.source,
       utilityModel: utilityResolution.source,
+      transcriberModel: transcriberResolution.source,
     },
     sessionConfig,
     agentConfig,
@@ -310,6 +332,10 @@ export function extractSessionModelConfig(
   }
   if (typeof metadata[SESSION_MODEL_KEYS.utility] === "string" && metadata[SESSION_MODEL_KEYS.utility]) {
     config.sessionUtilityModel = metadata[SESSION_MODEL_KEYS.utility] as string;
+    hasOverride = true;
+  }
+  if (typeof metadata[SESSION_MODEL_KEYS.transcriber] === "string" && metadata[SESSION_MODEL_KEYS.transcriber]) {
+    config.sessionTranscriberModel = metadata[SESSION_MODEL_KEYS.transcriber] as string;
     hasOverride = true;
   }
 
@@ -454,15 +480,10 @@ export function resolveTranscriberModel(
     settings,
     agentModelConfig: { provider },
   } : { settings });
-  const model =
-    resolveModelForProvider(
-      settings.transcriberModel,
-      scope.effectiveConfig.provider,
-      scope.effectiveConfig.utilityModel,
-      "transcriberModel",
-    ) ?? scope.effectiveConfig.utilityModel;
-
-  return getLanguageModelForProvider(scope.effectiveConfig.provider, model);
+  return getLanguageModelForProvider(
+    scope.effectiveConfig.provider,
+    scope.effectiveConfig.transcriberModel,
+  );
 }
 
 export async function resolveSessionUtilityModelForSession(
@@ -477,20 +498,13 @@ export async function resolveTranscriberModelForSession(
   sessionMetadata: Record<string, unknown> | null | undefined,
   options: SessionResolverOptions = {},
 ): Promise<LanguageModel> {
-  const settings = options.settings ?? loadSettings();
   const scope = await resolveSessionModelScopeForSession(sessionMetadata, {
     ...options,
-    settings,
   });
-  const model =
-    resolveModelForProvider(
-      settings.transcriberModel,
-      scope.effectiveConfig.provider,
-      scope.effectiveConfig.utilityModel,
-      "transcriberModel",
-    ) ?? scope.effectiveConfig.utilityModel;
-
-  return getLanguageModelForProvider(scope.effectiveConfig.provider, model);
+  return getLanguageModelForProvider(
+    scope.effectiveConfig.provider,
+    scope.effectiveConfig.transcriberModel,
+  );
 }
 
 export function buildSessionModelMetadata(
@@ -502,6 +516,7 @@ export function buildSessionModelMetadata(
   if (config.sessionResearchModel) result[SESSION_MODEL_KEYS.research] = config.sessionResearchModel;
   if (config.sessionVisionModel) result[SESSION_MODEL_KEYS.vision] = config.sessionVisionModel;
   if (config.sessionUtilityModel) result[SESSION_MODEL_KEYS.utility] = config.sessionUtilityModel;
+  if (config.sessionTranscriberModel) result[SESSION_MODEL_KEYS.transcriber] = config.sessionTranscriberModel;
   return result;
 }
 

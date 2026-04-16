@@ -205,7 +205,7 @@ export function validateAgentModelConfig(
       researchModel: config?.researchModel,
       visionModel: config?.visionModel,
       utilityModel: config?.utilityModel,
-      transcriberModel: undefined,
+      transcriberModel: config?.transcriberModel,
     },
     effectiveProvider,
   );
@@ -261,6 +261,7 @@ export function validateSessionModelConfig(
     sessionResearchModel?: string;
     sessionVisionModel?: string;
     sessionUtilityModel?: string;
+    sessionTranscriberModel?: string;
   },
   fallbackProvider: LLMProvider,
 ): BatchValidationResult {
@@ -272,6 +273,7 @@ export function validateSessionModelConfig(
       researchModel: config.sessionResearchModel,
       visionModel: config.sessionVisionModel,
       utilityModel: config.sessionUtilityModel,
+      transcriberModel: config.sessionTranscriberModel,
     },
     effectiveProvider,
   );
