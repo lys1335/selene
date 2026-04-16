@@ -41,10 +41,14 @@ export const DEFAULT_PATH_CONFIG: PathConfigState = {
     sttProvider: "local",
     ttsProvider: "edge",
     edgeTtsVoice: DEFAULT_EDGE_TTS_VOICE,
-    avatar3dEnabled: true,
+    // Invisible-side-effect guard: these two toggles apply globally via
+    // /api/onboarding regardless of which path the user picked, so they must
+    // default to OFF — otherwise Dev-path users (who never see the Fun panel)
+    // silently end up with avatar3dEnabled=true and ttsAutoMode="always".
+    avatar3dEnabled: false,
     emotionDetectionEnabled: false,
     telegramBotToken: "",
-    ttsAutoReply: true,
+    ttsAutoReply: false,
 };
 
 interface PathSelectorProps {
