@@ -60,6 +60,12 @@ Full notes: [`RELEASE_NOTES_v0.3.4.md`](./RELEASE_NOTES_v0.3.4.md) · [All relea
 - **Edit-in-place.** Ask for tweaks and the agent applies targeted patches instead of regenerating from scratch.
 - **Responsive previews.** Mobile / tablet / desktop viewport toggles, plus Light / Dark / System.
 
+### Chromium Workspace
+- **Real browser, agent-driven.** Embedded Chromium controlled through Playwright — navigate, click, type, extract, evaluate JS.
+- **Parallel isolation.** Each agent gets its own BrowserContext; sub-agents can drive separate tabs concurrently without stepping on each other.
+- **Accessibility-tree observation.** Token-efficient snapshots instead of screenshots — deterministic, cheap, no vision model needed.
+- **Full action replay.** Every session is recorded with inputs, outputs, and DOM snapshots; replay with retry and output verification.
+
 ### [Ghost OS](https://github.com/ghostwright/ghost-os)
 - **Screen awareness.** Agents see what's on your display through a vision sidecar.
 - **MCP-native.** `ghost_parse_screen` and `ghost_annotate` are exposed as tools the main agent can pick up.
@@ -87,6 +93,7 @@ Voice notes are transcribed automatically. Pair with the scheduler for cron-base
 | **Images** | Local or cloud generation, reference images, ComfyUI workflows as agent tools |
 | **Video** | Images → MP4 with transitions and overlays |
 | **Design Workspace** | Generate UI components with AI, live sandbox preview, edit-in-place via patches |
+| **Chromium Workspace** | Agent-driven embedded browser (Playwright), parallel session isolation, accessibility-tree snapshots, full action replay |
 | **[Ghost OS](https://github.com/ghostwright/ghost-os)** | Agents can see your screen via a vision sidecar |
 | **Folder Sync** | Sync folders directly to agents; native FSEvents on macOS; replaces the old Knowledge Base |
 | **Deep Research** | Multi-pass web search with cited writeups |
