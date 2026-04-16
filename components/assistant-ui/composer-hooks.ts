@@ -26,13 +26,16 @@ interface VoiceTranscriptPayload {
   finalText: string;
   fallbackText: string;
   usedPostProcessing: boolean;
+  voiceSessionId?: string;
 }
 
 interface UseVoiceRecordingOptions {
   sttEnabled: boolean;
   onTranscript: (payload: VoiceTranscriptPayload) => void;
   onTranscriptInserted?: () => void;
-  onTranscriptPolished?: (polishedText: string, rawText: string) => void;
+  onTranscriptPolished?: (polishedText: string, rawText: string, voiceSessionId: string) => void;
+  /** Fired at the very start of a new recording session, before mic access. */
+  onRecordingStart?: (voiceSessionId: string) => void;
   voicePostProcessing?: boolean;
   voiceAudioCues?: boolean;
   voiceActivationMode?: "tap" | "push";
@@ -62,6 +65,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
     onTranscript,
     onTranscriptInserted,
     onTranscriptPolished,
+    onRecordingStart,
   } = options;
   const voiceAudioCues = options.voiceAudioCues ?? true;
   const voicePostProcessing = options.voicePostProcessing ?? false;
@@ -79,6 +83,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
   const lastTranscriptRef = useRef<string | null>(null);
   const wasAiEnhancedRef = useRef(false);
   const lastTranscriptionFailedRef = useRef(false);
+  const currentVoiceSessionIdRef = useRef<string | null>(null);
 
   const stopRecordingStream = useCallback(() => {
     if (recordingStreamRef.current) {
@@ -137,7 +142,14 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
 
   // Shared helper: start a new recording session (mic access, MediaRecorder setup, etc.)
   const startRecording = useCallback(async () => {
-    if (!sttEnabled || isTranscribingVoice || isPolishingTranscript) {
+    const voiceSessionId = crypto.randomUUID();
+    currentVoiceSessionIdRef.current = voiceSessionId;
+
+    // Fire onRecordingStart BEFORE any async work so the caller can snapshot
+    // cursor position while it's still at the user's intended location.
+    onRecordingStart?.(voiceSessionId);
+
+    if (!sttEnabled || isTranscribingVoice) {
       return;
     }
 
@@ -201,6 +213,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
       };
 
       recorder.onstop = async () => {
+        const sessionId = currentVoiceSessionIdRef.current ?? voiceSessionId;
         isRecordingRef.current = false;
         setIsRecordingVoice(false);
         playTone(440, 0.15);
@@ -248,6 +261,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
                 finalText: rawText,
                 fallbackText: rawText,
                 usedPostProcessing: false,
+                voiceSessionId: sessionId,
               });
               onTranscriptInserted?.();
 
@@ -256,7 +270,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
             },
             onPolishedTranscript: (polishedText, rawText) => {
               wasAiEnhancedRef.current = true;
-              onTranscriptPolished?.(polishedText, rawText);
+              onTranscriptPolished?.(polishedText, rawText, sessionId);
             },
             onPostProcessingFallback: () => {
               toast.info("Grammar cleanup unavailable. Using raw transcription.");
@@ -317,10 +331,10 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
       stopRecordingStream();
     }
   }, [
-    isPolishingTranscript,
     isTranscribingVoice,
     sttEnabled,
     stopRecordingStream,
+    onRecordingStart,
     onTranscript,
     onTranscriptInserted,
     onTranscriptPolished,
@@ -339,7 +353,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
 
   // Tap mode: toggle recording on/off
   const handleVoiceInput = useCallback(async () => {
-    if (!sttEnabled || isTranscribingVoice || isPolishingTranscript) {
+    if (!sttEnabled || isTranscribingVoice) {
       return;
     }
 
@@ -350,7 +364,7 @@ export function useVoiceRecording(options: UseVoiceRecordingOptions): UseVoiceRe
     }
 
     await startRecording();
-  }, [isPolishingTranscript, isRecordingVoice, isTranscribingVoice, sttEnabled, startRecording]);
+  }, [isRecordingVoice, isTranscribingVoice, sttEnabled, startRecording]);
 
   // Push mode: start recording only (never stops)
   const handleVoiceStart = useCallback(async () => {

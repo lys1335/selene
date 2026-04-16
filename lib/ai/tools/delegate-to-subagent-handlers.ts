@@ -401,13 +401,20 @@ async function notifyInitiatorSessionOfCompletion(delegation: ActiveDelegation):
   if (delegation.error) {
     resultContent = `<error>${delegation.error}</error>`;
   } else {
-    const finalResponse = await extractFinalResponse(delegation.sessionId);
-    // Cap to 4000 chars to avoid context blowup with many concurrent agents
-    const MAX_INLINE_RESULT_CHARS = 4000;
-    if (finalResponse && finalResponse.length > MAX_INLINE_RESULT_CHARS) {
-      resultContent = finalResponse.slice(0, MAX_INLINE_RESULT_CHARS) + "\n... [result truncated — use observe to read full response]";
-    } else {
-      resultContent = finalResponse || "No response captured.";
+    try {
+      const finalResponse = await extractFinalResponse(delegation.sessionId);
+      // Cap to 4000 chars to avoid context blowup with many concurrent agents
+      const MAX_INLINE_RESULT_CHARS = 4000;
+      if (finalResponse && finalResponse.length > MAX_INLINE_RESULT_CHARS) {
+        resultContent = finalResponse.slice(0, MAX_INLINE_RESULT_CHARS) + "\n... [result truncated — use observe to read full response]";
+      } else {
+        resultContent = finalResponse || "No response captured.";
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[Delegation] Failed to read final response for ${delegation.id}:`, error);
+      delegation.error = delegation.error ?? `Failed to read subagent response: ${message}`;
+      resultContent = `<error>${delegation.error}</error>`;
     }
   }
 
@@ -479,7 +486,7 @@ export function startBackgroundExecution(
       delegation.settledAt = Date.now();
       await notifyInitiatorSessionOfCompletion(delegation);
     })
-    .catch((err) => {
+    .catch(async (err) => {
       if (delegation.executionId !== executionId) return;
       delegation.settled = true;
       delegation.settledAt = Date.now();
@@ -489,13 +496,13 @@ export function startBackgroundExecution(
         (err instanceof Error && err.name === "AbortError");
 
       if (isAbortError) {
-        notifyInitiatorSessionOfCompletion(delegation);
+        await notifyInitiatorSessionOfCompletion(delegation);
         return;
       }
 
       delegation.error = err instanceof Error ? err.message : String(err);
       console.error(`[Delegation] ${delegation.id} failed:`, delegation.error);
-      notifyInitiatorSessionOfCompletion(delegation);
+      await notifyInitiatorSessionOfCompletion(delegation);
     });
 
   delegation.streamPromise = streamPromise;

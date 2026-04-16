@@ -17,6 +17,7 @@ vi.mock("@/lib/ai/tools/delegate-to-subagent-types", () => {
 import {
   sealDanglingToolCalls,
   shouldKeepDelegatedToolCallPending,
+  MAX_ARGS_TEXT_BYTES,
   type StreamingMessageState,
 } from "@/app/api/chat/streaming-state";
 import type { DBContentPart } from "@/lib/messages/converter";
@@ -192,6 +193,7 @@ describe("sealDanglingToolCalls", () => {
         },
         state: "input-available",
         active: true,
+        timestamp: new Date().toISOString(),
       },
     ]);
 
@@ -240,6 +242,7 @@ describe("sealDanglingToolCalls", () => {
         args: { action: "observe", delegationId: "del-cleaned-up" },
         state: "input-available",
         active: true,
+        timestamp: new Date().toISOString(),
       },
     ]);
 
@@ -375,8 +378,32 @@ describe("shouldKeepDelegatedToolCallPending", () => {
         toolName: "delegateToSubagent",
         args: { action: "start" },
         active: true,
+        timestamp: new Date().toISOString(),
       })
     ).toBe(true);
+  });
+
+  it("does not keep projected delegated calls pending once the active hint is stale", () => {
+    const staleTimestamp = new Date(Date.now() - (61 * 60 * 1000)).toISOString();
+
+    expect(
+      shouldKeepDelegatedToolCallPending({
+        toolName: "delegateToSubagent",
+        args: { action: "start" },
+        active: true,
+        timestamp: staleTimestamp,
+      })
+    ).toBe(false);
+  });
+
+  it("does not trust projected delegated calls without a timestamp", () => {
+    expect(
+      shouldKeepDelegatedToolCallPending({
+        toolName: "delegateToSubagent",
+        args: { action: "start" },
+        active: true,
+      })
+    ).toBe(false);
   });
 
   it("keeps delegated tool calls pending when registry says delegation is unsettled", () => {

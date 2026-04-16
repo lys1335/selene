@@ -47,13 +47,30 @@ interface DesignToolEvent {
   error?: string;
 }
 
+/**
+ * Event dispatched after a tool result mutates persisted design state.
+ * The design gallery listens for this and refetches its API-backed "Saved"
+ * list so it stays in sync with the Zustand store (which only holds the
+ * "Open in Workspace" slice). Fires on generate / edit / patch only —
+ * not on open/close/list/status/etc. that don't change persisted records.
+ */
+const GALLERY_REFRESH_EVENT = "design-gallery-refresh";
+
+function signalGalleryRefresh(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(GALLERY_REFRESH_EVENT));
+}
+
 function applyDesignToolResultToStore(detail: DesignToolEvent): void {
   const store = useDesignWorkspaceStore.getState();
   const { action, success, data, error } = detail;
 
   if (!success) {
     if (error) store.setError(error);
-    return;
+    // Don't return — fall through to process any data included in the result.
+    // Compile failures and downgraded validation warnings still carry
+    // componentId, code, and previewHtml that the store needs to display
+    // the component in the sidebar and preview pane.
   }
 
   switch (action) {
@@ -82,6 +99,7 @@ function applyDesignToolResultToStore(detail: DesignToolEvent): void {
           store.setPreviewHtml(data.previewHtml);
         }
         if (!store.isOpen) store.open();
+        signalGalleryRefresh();
       }
       break;
 
@@ -94,6 +112,7 @@ function applyDesignToolResultToStore(detail: DesignToolEvent): void {
           if (data.previewHtml) {
             store.setPreviewHtml(data.previewHtml);
           }
+          signalGalleryRefresh();
         } else {
           store.setError(`${action === "patch" ? "Patch" : "Edit"} could not be applied: no active component.`);
         }

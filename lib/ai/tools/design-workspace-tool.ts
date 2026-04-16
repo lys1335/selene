@@ -53,6 +53,11 @@ import {
   buildInspectPromptText,
   type InspectMessageContext,
 } from "../../design/workspace/inspect-context";
+import {
+  applyPatches as applyDesignPatches,
+  findUnclosedJsxTag,
+  type PatchOp,
+} from "../../design/workspace/patch-logic";
 
 interface DesignWorkspaceToolOptions {
   sessionId?: string;
@@ -1102,62 +1107,9 @@ async function handleEdit(
   };
 }
 
-/**
- * Lightweight JSX tag-balance check. Counts self-closing and open/close tags
- * and returns the first unclosed tag name if the tree is unbalanced.
- * This is intentionally approximate — it catches the most common wrapping
- * mistake (inserting an opening tag without its closing counterpart) without
- * requiring a full parser.
- */
-export function findUnclosedJsxTag(code: string): string | null {
-  // Strip string literals and comments to avoid false positives
-  let stripped = code
-    .replace(/\/\/.*$/gm, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
-    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
-    .replace(/`(?:[^`\\]|\\.)*`/g, "``");
-
-  // Strip TypeScript generics that look like JSX tags (e.g., useState<SceneState>(...))
-  // Pattern: identifier followed by <UppercaseName> then ( or , or > (generic context, not JSX)
-  stripped = stripped.replace(
-    /\b\w+<([A-Z][A-Za-z0-9.,\s|&\[\]<>]*)>(?=\s*[(\],;:=&|)])/g,
-    (match) => " ".repeat(match.length),
-  );
-  // Also strip standalone type annotations like `: Type<Generic>` and `as Type<Generic>`
-  stripped = stripped.replace(
-    /(?::\s*|as\s+)([A-Z][A-Za-z0-9.]*(?:<[^>]*>)?)/g,
-    (match) => " ".repeat(match.length),
-  );
-
-  // Match JSX tags: <Tag, </Tag, or self-closing />
-  const tagPattern = /<\/?([A-Z][A-Za-z0-9.]*)[^>]*?\/?>/g;
-  const stack: string[] = [];
-  let match: RegExpExecArray | null;
-
-  while ((match = tagPattern.exec(stripped)) !== null) {
-    const fullMatch = match[0];
-    const tagName = match[1];
-
-    if (fullMatch.endsWith("/>")) {
-      // Self-closing — no effect on balance
-      continue;
-    }
-
-    if (fullMatch.startsWith("</")) {
-      // Closing tag
-      if (stack.length > 0 && stack[stack.length - 1] === tagName) {
-        stack.pop();
-      }
-      // Mismatched close — don't error, just skip (could be fragment)
-    } else {
-      // Opening tag
-      stack.push(tagName);
-    }
-  }
-
-  return stack.length > 0 ? stack[stack.length - 1] : null;
-}
+// findUnclosedJsxTag is now imported from ../../design/workspace/patch-logic
+// Re-export for backwards compatibility with any external consumers
+export { findUnclosedJsxTag } from "../../design/workspace/patch-logic";
 
 async function handlePatch(
   options: DesignWorkspaceToolOptions,
@@ -1176,7 +1128,6 @@ async function handlePatch(
   }
 
   // Build the list of patch operations — either from `patches` array or single oldString/newString
-  type PatchOp = { oldString: string; newString: string; replaceAll?: boolean };
   let patchOps: PatchOp[];
 
   if (patches && Array.isArray(patches) && patches.length > 0) {
@@ -1224,47 +1175,35 @@ async function handlePatch(
     };
   }
 
-  // Apply patches sequentially
-  let patchedCode = resolved.code;
-  let totalReplacements = 0;
+  // Apply patches using fuzzy match & patch algorithm
+  const patchResult = applyDesignPatches(resolved.code, patchOps);
 
-  for (let i = 0; i < patchOps.length; i++) {
-    const op = patchOps[i];
-    const occurrences = patchedCode.split(op.oldString).length - 1;
-
-    if (occurrences === 0) {
-      const patchLabel = patchOps.length > 1 ? ` (patches[${i}])` : "";
-      return {
-        success: false,
-        action: "patch",
-        error: `"oldString" not found in design source${patchLabel}. The text to replace must match exactly (including whitespace and indentation).${i > 0 ? ` Note: ${i} prior patch(es) were already applied — use "readSource" to see the current state.` : ""}`,
-      };
+  if (!patchResult.success) {
+    const errorParts = [patchResult.error || "Patch failed."];
+    if (patchResult.hint) {
+      errorParts.push(patchResult.hint);
     }
-
-    if (occurrences > 1 && !op.replaceAll) {
-      const patchLabel = patchOps.length > 1 ? ` (patches[${i}])` : "";
-      return {
-        success: false,
-        action: "patch",
-        error: `"oldString" found ${occurrences} times${patchLabel}. Set "replaceAll: true" to replace all, or provide a longer/more unique "oldString".`,
-      };
-    }
-
-    patchedCode = op.replaceAll
-      ? patchedCode.split(op.oldString).join(op.newString)
-      : patchedCode.replace(op.oldString, op.newString);
-    totalReplacements += op.replaceAll ? occurrences : 1;
-  }
-
-  // JSX balance check — catch wrapping mistakes before persisting
-  const unclosedTag = findUnclosedJsxTag(patchedCode);
-  if (unclosedTag) {
+    recordHistory(sessionId, "patch", startedAt, false, {
+      componentId: activeComponentId,
+      error: errorParts[0],
+    });
     return {
       success: false,
       action: "patch",
-      error: `Patch produced unbalanced JSX: <${unclosedTag}> appears to be unclosed. For wrapping operations, include the full block being wrapped in "oldString" and the complete wrapped version (with both opening and closing tags) in "newString". Alternatively, use "patches" array to apply opening and closing tag insertions as separate sequential patches, or use the "edit" action for AI-driven full-file rewriting.`,
+      error: errorParts.join("\n"),
     };
   }
+
+  const patchedCode = patchResult.code;
+
+  // JSX balance check — heuristic warning for potential wrapping mistakes.
+  // Downgraded from a blocking error: the regex-based parser can false-positive
+  // on complex nested JSX and conditional rendering patterns. The warning is
+  // included in the result message so the AI can self-correct if needed.
+  const unclosedTag = findUnclosedJsxTag(patchedCode);
+  const jsxWarning = unclosedTag
+    ? `Warning: <${unclosedTag}> may be unclosed (heuristic check — may be a false positive). For wrapping operations, include the full block being wrapped in "oldString" and the complete wrapped version in "newString". Verify the output visually.`
+    : null;
 
   let persisted: DesignGalleryItem;
   try {
@@ -1319,9 +1258,15 @@ async function handlePatch(
 
   const linesChanged = countChangedLines(resolved.code, patchedCode);
   const validationMessage = buildValidationMessage(validation);
+  const fuzzyNote = patchResult.fuzzyMatched?.length
+    ? ` (fuzzy-matched ${patchResult.fuzzyMatched.length > 1 ? `patches ${patchResult.fuzzyMatched.join(", ")}` : `patch ${patchResult.fuzzyMatched[0]}`})`
+    : "";
   recordHistory(sessionId, "patch", startedAt, true, {
     componentId: persisted.id,
     validation,
+    metadata: {
+      fuzzyMatched: patchResult.fuzzyMatched,
+    },
   });
 
   return {
@@ -1329,7 +1274,10 @@ async function handlePatch(
     action: "patch",
     data: {
       ...baseData,
-      message: validationMessage || `Patch applied: ${totalReplacements} replacement${totalReplacements > 1 ? "s" : ""}${patchOps.length > 1 ? ` across ${patchOps.length} patches` : ""}, ~${linesChanged} line${linesChanged !== 1 ? "s" : ""} changed.`,
+      message: [
+        validationMessage || `Patch applied: ${patchResult.totalReplacements} replacement${patchResult.totalReplacements > 1 ? "s" : ""}${patchOps.length > 1 ? ` across ${patchOps.length} patches` : ""}${fuzzyNote}, ~${linesChanged} line${linesChanged !== 1 ? "s" : ""} changed.`,
+        jsxWarning,
+      ].filter(Boolean).join(" "),
       previewHtml: previewResult.previewHtml,
       compileReport: previewResult.compileReport,
       postEditValidation: validation,

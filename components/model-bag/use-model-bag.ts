@@ -107,6 +107,7 @@ export function useModelBag() {
       researchModel: data.researchModel || "",
       visionModel: data.visionModel || "",
       utilityModel: data.utilityModel || "",
+      transcriberModel: data.transcriberModel || "",
     };
 
     const catalog = buildModelCatalog(

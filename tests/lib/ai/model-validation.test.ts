@@ -259,6 +259,17 @@ describe("validateSessionModelConfig", () => {
     expect(result.valid).toBe(true);
   });
 
+  it("validates session transcriber model against session provider override", () => {
+    const result = validateSessionModelConfig(
+      {
+        sessionProvider: "codex",
+        sessionTranscriberModel: "gpt-5.3-codex-medium",
+      },
+      "anthropic",
+    );
+    expect(result.valid).toBe(true);
+  });
+
   it("rejects utility model incompatible with effective provider", () => {
     const result = validateSessionModelConfig(
       {
@@ -269,6 +280,18 @@ describe("validateSessionModelConfig", () => {
     );
     expect(result.valid).toBe(false);
     expect(result.errors).toHaveProperty("utilityModel");
+  });
+
+  it("rejects transcriber model incompatible with effective provider", () => {
+    const result = validateSessionModelConfig(
+      {
+        sessionProvider: "anthropic",
+        sessionTranscriberModel: "gpt-5.1-codex",
+      },
+      "anthropic",
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors).toHaveProperty("transcriberModel");
   });
 });
 

@@ -16,7 +16,6 @@ import {
   X,
   Copy,
   Crosshair,
-  ChevronDown,
   LayoutGrid,
   Settings2,
   PanelRightClose,
@@ -46,72 +45,11 @@ function useActiveComponent() {
   );
 }
 
-function ComponentSelector() {
-  const components = useDesignWorkspaceStore((s) => s.components);
-  const activeComponentId = useDesignWorkspaceStore((s) => s.activeComponentId);
-  const setActiveComponent = useDesignWorkspaceStore((s) => s.setActiveComponent);
-  const [open, setOpen] = useState(false);
-  const [focusedIndex, setFocusedIndex] = useState(-1);
-  const listRef = useRef<HTMLDivElement>(null);
-
+function ActiveDesignLabel() {
   const active = useActiveComponent();
+  const componentCount = useDesignWorkspaceStore((s) => s.components.length);
 
-  useEffect(() => {
-    if (open) {
-      const idx = components.findIndex((c) => c.id === activeComponentId);
-      setFocusedIndex(idx >= 0 ? idx : 0);
-    }
-  }, [open, components, activeComponentId]);
-
-  function handleKeyDown(e: React.KeyboardEvent) {
-    if (!open) {
-      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
-        e.preventDefault();
-        setOpen(true);
-      }
-      return;
-    }
-
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        setFocusedIndex((i) => Math.min(i + 1, components.length - 1));
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        setFocusedIndex((i) => Math.max(i - 1, 0));
-        break;
-      case "Enter":
-      case " ":
-        e.preventDefault();
-        if (focusedIndex >= 0 && focusedIndex < components.length) {
-          setActiveComponent(components[focusedIndex].id);
-          setOpen(false);
-        }
-        break;
-      case "Escape":
-        e.preventDefault();
-        setOpen(false);
-        break;
-      case "Home":
-        e.preventDefault();
-        setFocusedIndex(0);
-        break;
-      case "End":
-        e.preventDefault();
-        setFocusedIndex(components.length - 1);
-        break;
-    }
-  }
-
-  useEffect(() => {
-    if (open && listRef.current && focusedIndex >= 0) {
-      const items = listRef.current.querySelectorAll("[role='option']");
-      items[focusedIndex]?.scrollIntoView({ block: "nearest" });
-    }
-  }, [open, focusedIndex]);
-
-  if (components.length === 0) {
+  if (!active) {
     return (
       <div className="px-3 py-2.5 text-xs text-muted-foreground">
         No open designs yet
@@ -120,82 +58,25 @@ function ComponentSelector() {
   }
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen(!open)}
-        onKeyDown={handleKeyDown}
-        role="combobox"
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-label="Select design"
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition-colors hover:bg-muted/50"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium">
-            {active?.name || "Select design"}
-          </div>
-          {active && (
-            <div className="mt-0.5 flex items-center gap-1.5">
-              <Badge variant="secondary" className="px-1 py-0 text-[11px]">
-                {active.mode}
-              </Badge>
-              <Badge variant="outline" className="px-1 py-0 text-[11px]">
-                {active.style}
-              </Badge>
-              <span className="text-[11px] text-muted-foreground">
-                {formatTime(active.createdAt)}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-            {components.length}
+    <div className="flex w-full items-center gap-2 px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{active.name}</div>
+        <div className="mt-0.5 flex items-center gap-1.5">
+          <Badge variant="secondary" className="px-1 py-0 text-[11px]">
+            {active.mode}
+          </Badge>
+          <Badge variant="outline" className="px-1 py-0 text-[11px]">
+            {active.style}
+          </Badge>
+          <span className="text-[11px] text-muted-foreground">
+            {formatTime(active.createdAt)}
           </span>
-          <ChevronDown
-            className={cn(
-              "h-3.5 w-3.5 text-muted-foreground transition-transform",
-              open && "rotate-180",
-            )}
-          />
         </div>
-      </button>
-
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div
-            ref={listRef}
-            role="listbox"
-            aria-label="Open designs"
-            className="absolute left-0 right-0 top-full z-20 max-h-60 overflow-auto border-b border-border bg-background shadow-lg"
-            onKeyDown={handleKeyDown}
-          >
-            {components.map((component, index) => (
-              <button
-                key={component.id}
-                role="option"
-                aria-selected={activeComponentId === component.id}
-                onClick={() => {
-                  setActiveComponent(component.id);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between px-3 py-1.5 text-left text-sm transition-colors",
-                  activeComponentId === component.id
-                    ? "bg-accent text-accent-foreground"
-                    : "hover:bg-muted/50",
-                  focusedIndex === index && "ring-2 ring-inset ring-primary",
-                )}
-              >
-                <span className="truncate font-medium">{component.name}</span>
-                <span className="ml-2 shrink-0 text-[11px] text-muted-foreground">
-                  {formatTime(component.createdAt)}
-                </span>
-              </button>
-            ))}
-          </div>
-        </>
+      </div>
+      {componentCount > 1 && (
+        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+          {componentCount}
+        </span>
       )}
     </div>
   );
@@ -663,7 +544,7 @@ export function DesignPropertiesPanel() {
     <div className="flex h-full w-80 flex-col border-l border-border">
       <div className="flex items-center border-b border-border">
         <div className="flex-1">
-          <ComponentSelector />
+          <ActiveDesignLabel />
         </div>
         <Button
           variant="ghost"

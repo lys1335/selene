@@ -89,6 +89,7 @@ export interface SessionModelConfig {
   sessionResearchModel?: string;
   sessionVisionModel?: string;
   sessionUtilityModel?: string;
+  sessionTranscriberModel?: string;
 }
 
 export interface ResolvedModelConfig {
@@ -97,6 +98,7 @@ export interface ResolvedModelConfig {
   researchModel: string;
   visionModel: string;
   utilityModel: string;
+  transcriberModel: string;
 }
 
 export interface ResolvedModelSources {
@@ -105,4 +107,5 @@ export interface ResolvedModelSources {
   researchModel: ModelConfigSource;
   visionModel: ModelConfigSource;
   utilityModel: ModelConfigSource;
+  transcriberModel: ModelConfigSource;
 }

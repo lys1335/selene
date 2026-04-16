@@ -39,6 +39,8 @@ export const DESIGN_BREAKPOINTS: DesignBreakpoint[] = [
 
 export type DesignWorkspaceStatus = "idle" | "generating" | "editing" | "exporting";
 
+export type DesignPreviewTheme = "light" | "dark" | "system";
+
 /** Element info captured by the in-iframe inspector and sent via postMessage. */
 export interface InspectedElement {
   tagName: string;
@@ -75,6 +77,7 @@ export interface DesignWorkspaceSessionState {
   inspectorEnabled: boolean;
   selectedElement: InspectedElement | null;
   selectedElements: InspectedElement[];
+  previewTheme: DesignPreviewTheme;
   config: DesignWorkspaceConfig;
   lastValidation: DesignWorkspaceValidationResult | null;
   lastCompileReport: DesignWorkspaceCompileReport | null;
@@ -92,6 +95,7 @@ export interface DesignWorkspaceState extends DesignWorkspaceSessionState {
   setActiveComponent: (id: string | null) => void;
   setPreviewHtml: (html: string) => void;
   setBreakpoint: (breakpoint: DesignBreakpoint) => void;
+  setPreviewTheme: (theme: DesignPreviewTheme) => void;
   toggleCode: () => void;
   toggleInspector: () => void;
   setSelectedElement: (el: InspectedElement | null) => void;

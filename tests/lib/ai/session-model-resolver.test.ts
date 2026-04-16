@@ -58,6 +58,7 @@ const settingsMocks = vi.hoisted(() => ({
     researchModel: "claude-global-research",
     visionModel: "claude-global-vision",
     utilityModel: "claude-global-utility",
+    transcriberModel: "claude-global-transcriber",
   })),
 }));
 
@@ -72,6 +73,7 @@ import {
   resolveSessionModelScope,
   resolveSessionResearchModel,
   resolveSessionUtilityModel,
+  resolveTranscriberModelForSession,
 } from "@/lib/ai/session-model-resolver";
 
 describe("session-model-resolver", () => {
@@ -83,6 +85,7 @@ describe("session-model-resolver", () => {
       researchModel: "claude-global-research",
       visionModel: "claude-global-vision",
       utilityModel: "claude-global-utility",
+      transcriberModel: "claude-global-transcriber",
     });
     providerMocks.isProviderOperational.mockImplementation((provider: string) => provider !== "antigravity");
   });
@@ -94,6 +97,7 @@ describe("session-model-resolver", () => {
         sessionChatModel: "gpt-session-chat",
         sessionResearchModel: "gpt-session-research",
         sessionUtilityModel: "gpt-session-utility",
+        sessionTranscriberModel: "gpt-session-transcriber",
       },
       {
         agentModelConfig: {
@@ -101,6 +105,7 @@ describe("session-model-resolver", () => {
           chatModel: "kimi-agent-chat",
           researchModel: "kimi-agent-research",
           utilityModel: "kimi-agent-utility",
+          transcriberModel: "kimi-agent-transcriber",
         },
       },
     );
@@ -111,6 +116,7 @@ describe("session-model-resolver", () => {
       researchModel: "gpt-session-research",
       visionModel: "gpt-session-chat",
       utilityModel: "gpt-session-utility",
+      transcriberModel: "gpt-session-transcriber",
     });
     expect(scope.sources).toEqual({
       provider: "session",
@@ -118,6 +124,7 @@ describe("session-model-resolver", () => {
       researchModel: "session",
       visionModel: "session",
       utilityModel: "session",
+      transcriberModel: "session",
     });
   });
 
@@ -139,6 +146,7 @@ describe("session-model-resolver", () => {
       researchModel: "gpt-agent-research",
       visionModel: "gpt-agent-chat",
       utilityModel: "gpt-utility-default",
+      transcriberModel: "gpt-utility-default",
     });
     expect(scope.sources).toEqual({
       provider: "agent",
@@ -146,6 +154,7 @@ describe("session-model-resolver", () => {
       researchModel: "agent",
       visionModel: "agent",
       utilityModel: "provider-default",
+      transcriberModel: "provider-default",
     });
   });
 
@@ -167,6 +176,7 @@ describe("session-model-resolver", () => {
       sessionChatModel: "claude-bad-chat",
       sessionResearchModel: "claude-bad-research",
       sessionUtilityModel: "claude-bad-utility",
+      sessionTranscriberModel: "claude-bad-transcriber",
     });
 
     expect(scope.effectiveConfig).toEqual({
@@ -175,6 +185,7 @@ describe("session-model-resolver", () => {
       researchModel: "gpt-default",
       visionModel: "gpt-default",
       utilityModel: "gpt-utility-default",
+      transcriberModel: "gpt-utility-default",
     });
     expect(scope.sources).toEqual({
       provider: "session",
@@ -182,6 +193,7 @@ describe("session-model-resolver", () => {
       researchModel: "provider-default",
       visionModel: "provider-default",
       utilityModel: "provider-default",
+      transcriberModel: "provider-default",
     });
   });
 
@@ -256,7 +268,23 @@ describe("session-model-resolver", () => {
       { agentModelConfig: { provider: "kimi", chatModel: "kimi-agent-chat" } },
     );
 
-    expect(temperature).toBe(1);
+    expect(temperature).toBe(0.6);
+  });
+
+  it("prefers agent transcriber defaults over global settings", async () => {
+    const model = await resolveTranscriberModelForSession(
+      {},
+      {
+        agentModelConfig: {
+          provider: "codex",
+          utilityModel: "gpt-agent-utility",
+          transcriberModel: "gpt-agent-transcriber",
+        },
+      },
+    );
+
+    expect(model).toEqual({ provider: "codex", model: "gpt-agent-transcriber" });
+    expect(providerMocks.getLanguageModelForProvider).toHaveBeenCalledWith("codex", "gpt-agent-transcriber");
   });
 
   it("uses requested temperature when the resolved provider is not kimi", () => {
@@ -275,6 +303,7 @@ describe("session-model-resolver", () => {
       sessionResearchModel: "gpt-5.1-codex-mini",
       sessionVisionModel: "gpt-5.1-codex-vision",
       sessionUtilityModel: "gpt-5.3-codex-medium",
+      sessionTranscriberModel: "gpt-5.3-codex-transcriber",
     });
 
     expect(config).toEqual({
@@ -283,6 +312,7 @@ describe("session-model-resolver", () => {
       sessionResearchModel: "gpt-5.1-codex-mini",
       sessionVisionModel: "gpt-5.1-codex-vision",
       sessionUtilityModel: "gpt-5.3-codex-medium",
+      sessionTranscriberModel: "gpt-5.3-codex-transcriber",
     });
   });
 
@@ -290,11 +320,13 @@ describe("session-model-resolver", () => {
     const metadata = buildSessionModelMetadata({
       sessionProvider: "codex",
       sessionUtilityModel: "gpt-5.3-codex-medium",
+      sessionTranscriberModel: "gpt-5.3-codex-transcriber",
     });
 
     expect(metadata).toEqual({
       sessionProvider: "codex",
       sessionUtilityModel: "gpt-5.3-codex-medium",
+      sessionTranscriberModel: "gpt-5.3-codex-transcriber",
     });
 
     const cleared = clearSessionModelMetadata({

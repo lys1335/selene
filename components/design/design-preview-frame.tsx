@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useDesignWorkspaceStore, DESIGN_BREAKPOINTS } from "@/lib/design/workspace";
 import { Button } from "@/components/ui/button";
-import { Monitor, Tablet, Smartphone, Crosshair, Maximize } from "lucide-react";
+import { Monitor, Tablet, Smartphone, Crosshair, Maximize, Sun, Moon, SunMoon } from "lucide-react";
+import type { DesignPreviewTheme } from "@/lib/design/workspace/types";
 import type { InspectedElement } from "@/lib/design/workspace/types";
 
 const BREAKPOINT_ICONS: Record<string, ReactNode> = {
@@ -12,6 +13,41 @@ const BREAKPOINT_ICONS: Record<string, ReactNode> = {
   tablet: <Tablet className="h-4 w-4" />,
   desktop: <Monitor className="h-4 w-4" />,
 };
+
+const PREVIEW_THEME_OPTIONS: { value: DesignPreviewTheme; icon: ReactNode; label: string }[] = [
+  { value: "light", icon: <Sun className="h-4 w-4" />, label: "Light" },
+  { value: "dark", icon: <Moon className="h-4 w-4" />, label: "Dark" },
+  { value: "system", icon: <SunMoon className="h-4 w-4" />, label: "System" },
+];
+
+/**
+ * Apply the selected preview theme to compiled HTML.
+ *
+ * The compiler outputs `<html lang="en" class="dark">` by default. This
+ * function patches the `<html>` tag so that:
+ * - "light" removes the `dark` class
+ * - "dark" ensures the `dark` class is present
+ * - "system" removes the static class and injects a tiny script that reacts
+ *   to `prefers-color-scheme` at runtime
+ */
+function applyPreviewTheme(html: string, theme: DesignPreviewTheme): string {
+  if (theme === "light") {
+    // Remove the dark class from <html>
+    return html.replace(/<html([^>]*)\s+class="dark"/, "<html$1");
+  }
+  if (theme === "dark") {
+    // Ensure dark class is present (it already is by default, but handle edge cases)
+    if (/<html[^>]*class="dark"/.test(html)) return html;
+    return html.replace(/<html([^>]*)>/, '<html$1 class="dark">');
+  }
+  // "system" — remove static class, inject media-query script
+  const withoutDark = html.replace(/<html([^>]*)\s+class="dark"/, "<html$1");
+  const systemScript = `<script>(function(){var h=document.documentElement;function u(){h.classList.toggle('dark',window.matchMedia('(prefers-color-scheme:dark)').matches)}u();window.matchMedia('(prefers-color-scheme:dark)').addEventListener('change',u)})()</script>`;
+  if (withoutDark.includes("</head>")) {
+    return withoutDark.replace("</head>", systemScript + "</head>");
+  }
+  return withoutDark.replace(/<body/, systemScript + "<body");
+}
 
 /** Simple fast hash for cache invalidation (djb2). */
 function hashCode(str: string): number {
@@ -464,6 +500,8 @@ export function DesignPreviewFrame() {
   const setBreakpoint = useDesignWorkspaceStore((s) => s.setBreakpoint);
   const inspectorEnabled = useDesignWorkspaceStore((s) => s.inspectorEnabled);
   const toggleInspector = useDesignWorkspaceStore((s) => s.toggleInspector);
+  const previewTheme = useDesignWorkspaceStore((s) => s.previewTheme);
+  const setPreviewTheme = useDesignWorkspaceStore((s) => s.setPreviewTheme);
   const setSelectedElement = useDesignWorkspaceStore((s) => s.setSelectedElement);
   const toggleSelectedElement = useDesignWorkspaceStore((s) => s.toggleSelectedElement);
   const setSelectedElements = useDesignWorkspaceStore((s) => s.setSelectedElements);
@@ -497,6 +535,9 @@ export function DesignPreviewFrame() {
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
   }, [setSelectedElements, toggleSelectedElement]);
+
+  // Apply selected theme to the preview HTML
+  const themedPreviewHtml = applyPreviewTheme(previewHtml, previewTheme);
 
   // Responsive mode: iframe fills the entire container (like a real browser)
   // Fixed breakpoints: scale to fit the container with padding
@@ -557,6 +598,21 @@ export function DesignPreviewFrame() {
           <Crosshair className="h-4 w-4" />
           <span>Inspect</span>
         </Button>
+        <div className="mx-1 h-5 w-px bg-border" />
+        {PREVIEW_THEME_OPTIONS.map((option) => (
+          <Button
+            key={option.value}
+            variant={previewTheme === option.value ? "default" : "ghost"}
+            size="sm"
+            aria-label={`${option.label} preview theme`}
+            aria-pressed={previewTheme === option.value}
+            onClick={() => setPreviewTheme(option.value)}
+            className="gap-1.5"
+          >
+            {option.icon}
+            <span>{option.label}</span>
+          </Button>
+        ))}
       </div>
 
       {/* Preview area — measured container */}
@@ -568,7 +624,7 @@ export function DesignPreviewFrame() {
           /* Responsive mode: iframe fills container directly — like a real browser */
           <iframe
             ref={iframeRef}
-            srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
+            srcDoc={injectInspectorScript(themedPreviewHtml, inspectorEnabled)}
             sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
             className="h-full w-full border-0"
             style={{ background: "transparent" }}
@@ -593,7 +649,7 @@ export function DesignPreviewFrame() {
             >
               <iframe
                 ref={iframeRef}
-                srcDoc={injectInspectorScript(previewHtml, inspectorEnabled)}
+                srcDoc={injectInspectorScript(themedPreviewHtml, inspectorEnabled)}
                 sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
                 className="h-full w-full border-0"
                 style={{ background: "transparent" }}

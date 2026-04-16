@@ -202,6 +202,7 @@ export const Composer: FC<{
   const textareaVoiceTranscriptOverlayRef = useRef<HTMLDivElement>(null);
   const textareaVoiceTranscriptHighlightRef = useRef<HTMLSpanElement>(null);
   const voiceTranscriptDecorationTimeoutRef = useRef<number | null>(null);
+  const voiceCursorPositionsRef = useRef<Map<string, number>>(new Map());
 
   const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
   const [activeVoiceTranscript, setActiveVoiceTranscript] = useState<ActiveVoiceTranscript | null>(null);
@@ -420,9 +421,24 @@ export const Composer: FC<{
     voicePostProcessing,
     voiceAudioCues,
     voiceActivationMode,
+    onRecordingStart: (voiceSessionId: string) => {
+      // Snapshot cursor position at the moment recording starts so that when
+      // the transcript arrives (possibly seconds later) we insert at the
+      // original location even if the user moved the cursor in between.
+      if (isEditorMode && tiptapRef.current) {
+        // Store -1 as sentinel meaning "use current selection at recording time".
+        // The tiptap handle's insertVoiceTranscript accepts insertAt for explicit positioning.
+        voiceCursorPositionsRef.current.set(voiceSessionId, -1);
+      } else {
+        voiceCursorPositionsRef.current.set(voiceSessionId, cursorPosition);
+      }
+    },
     onTranscript: (payload) => {
       const textToInsert = payload.finalText;
       if (!textToInsert) return;
+
+      const voiceSessionId = payload.voiceSessionId || crypto.randomUUID();
+      const insertAt = voiceCursorPositionsRef.current.get(voiceSessionId);
 
       // Track the active voice transcript for polish phase UI indicators.
       // When post-processing is enabled, mark as "polishing" so the
@@ -438,7 +454,21 @@ export const Composer: FC<{
 
       // Rich text editor mode — use transaction-based insertion for proper undo/redo
       if (isEditorMode && tiptapRef.current) {
-        tiptapRef.current.insertVoiceTranscript(textToInsert);
+        tiptapRef.current.insertVoiceTranscript(
+          textToInsert,
+          voiceSessionId,
+          insertAt !== undefined && insertAt !== -1 ? insertAt : undefined,
+        );
+
+        // When post-processing is disabled the decoration would never be
+        // cleared because onTranscriptPolished never fires.  Clear it after
+        // a brief flash so the user still sees a visual confirmation.
+        if (!voicePostProcessing) {
+          setTimeout(() => {
+            tiptapRef.current?.clearVoiceTranscriptDecoration(voiceSessionId);
+            voiceCursorPositionsRef.current.delete(voiceSessionId);
+          }, 400);
+        }
         return;
       }
 
@@ -495,11 +525,11 @@ export const Composer: FC<{
         updateCursorPosition(cursor);
       });
     },
-    onTranscriptPolished: (polishedText, rawText) => {
+    onTranscriptPolished: (polishedText, rawText, voiceSessionId) => {
       // Rich text editor — swap raw transcript with polished version via
       // the tracked decoration range, then transition to "swap" phase.
       if (isEditorMode && tiptapRef.current) {
-        const replaced = tiptapRef.current.replaceVoiceTranscript(rawText, polishedText);
+        const replaced = tiptapRef.current.replaceVoiceTranscript(rawText, polishedText, voiceSessionId);
         if (replaced) {
           // Update active transcript state for any UI indicators
           setActiveVoiceTranscript((prev) =>
@@ -513,7 +543,8 @@ export const Composer: FC<{
           }
           voiceTranscriptDecorationTimeoutRef.current = window.setTimeout(() => {
             voiceTranscriptDecorationTimeoutRef.current = null;
-            tiptapRef.current?.clearVoiceTranscriptDecoration();
+            tiptapRef.current?.clearVoiceTranscriptDecoration(voiceSessionId);
+            voiceCursorPositionsRef.current.delete(voiceSessionId);
             setActiveVoiceTranscript((prev) =>
               prev ? { ...prev, phase: "stable" } : null,
             );
@@ -554,12 +585,35 @@ export const Composer: FC<{
         voiceTranscriptDecorationTimeoutRef.current = null;
         rawTranscriptRef.current = null;
         textareaVoiceTranscriptRangeRef.current = null;
+        voiceCursorPositionsRef.current.delete(voiceSessionId);
         setActiveVoiceTranscript((prev) =>
           prev ? { ...prev, phase: "stable" } : null,
         );
       }, 1800);
     },
   });
+
+  // Clear stale voice transcript decorations when polish completes or fails
+  // without triggering onTranscriptPolished (e.g. timeout, error).
+  useEffect(() => {
+    if (!isPolishingTranscript && activeVoiceTranscript?.phase === "polishing") {
+      // Polish ended but decoration is still in "polishing" phase — it was never
+      // swapped, meaning polish failed or timed out. Clear ALL remaining decorations.
+      const timeoutId = window.setTimeout(() => {
+        if (isEditorMode && tiptapRef.current) {
+          // No sessionId = clear all decorations across all sessions
+          tiptapRef.current.clearVoiceTranscriptDecoration();
+        }
+        rawTranscriptRef.current = null;
+        textareaVoiceTranscriptRangeRef.current = null;
+        voiceCursorPositionsRef.current.clear();
+        setActiveVoiceTranscript((prev) =>
+          prev?.phase === "polishing" ? { ...prev, phase: "stable" } : prev,
+        );
+      }, 300);
+      return () => window.clearTimeout(timeoutId);
+    }
+  }, [isPolishingTranscript, activeVoiceTranscript?.phase, isEditorMode]);
 
   // Global voice hotkey (Electron global shortcut + browser fallback)
   useGlobalVoiceHotkey({
@@ -1774,8 +1828,8 @@ export const Composer: FC<{
                     ref={textareaVoiceTranscriptHighlightRef}
                     className={
                       activeVoiceTranscript.phase === "polishing"
-                        ? "rounded-sm bg-terminal-green/10 motion-safe:animate-pulse"
-                        : "rounded-sm bg-terminal-green/14 transition-colors duration-500"
+                        ? "rounded-sm bg-terminal-green/14 dark:bg-terminal-green/20 motion-safe:animate-pulse"
+                        : "rounded-sm bg-terminal-green/18 dark:bg-terminal-green/24 transition-colors duration-500"
                     }
                   >
                     {inputValue.slice(textareaVoiceTranscriptRangeRef.current.start, textareaVoiceTranscriptRangeRef.current.end)}

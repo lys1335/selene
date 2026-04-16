@@ -39,7 +39,11 @@ const MODEL_METADATA: Record<
   Partial<Pick<ModelItem, "tier"> & { capabilities: Partial<ModelCapabilities> }>
 > = {
   // Anthropic direct
-  // --- 4.6 / 4.5 Series ---
+  // --- 4.7 / 4.6 / 4.5 Series ---
+  "claude-opus-4-7": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "standard" },
+  },
   "claude-opus-4-6": {
     tier: "flagship",
     capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "standard" },
@@ -361,7 +365,8 @@ export function buildModelCatalog(
 
   // Anthropic (expanded to include full roster)
   const anthropicModels = [
-    // 4.6 / 4.5 Series
+    // 4.7 / 4.6 / 4.5 Series
+    { id: "claude-opus-4-7", name: "Claude Opus 4.7" },
     { id: "claude-opus-4-6", name: "Claude Opus 4.6" },
     { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6" },
     { id: "claude-sonnet-4-5-20250929", name: "Claude Sonnet 4.5" },

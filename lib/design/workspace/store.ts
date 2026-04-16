@@ -9,6 +9,7 @@ import {
   type DesignComponent,
   type DesignBreakpoint,
   type DesignSnapshot,
+  type DesignPreviewTheme,
   type InspectedElement,
 } from "./types";
 import {
@@ -66,6 +67,7 @@ function extractSessionState(store: DesignWorkspaceState): DesignWorkspaceSessio
     inspectorEnabled: store.inspectorEnabled,
     selectedElement: store.selectedElement,
     selectedElements: store.selectedElements,
+    previewTheme: store.previewTheme,
     config: store.config,
     lastValidation: store.lastValidation,
     lastCompileReport: store.lastCompileReport,
@@ -86,6 +88,7 @@ const initialSessionState: DesignWorkspaceSessionState = {
   inspectorEnabled: false,
   selectedElement: null,
   selectedElements: [],
+  previewTheme: "light" as DesignPreviewTheme,
   config: { ...DEFAULT_DESIGN_WORKSPACE_CONFIG },
   lastValidation: null,
   lastCompileReport: null,
@@ -191,6 +194,10 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
 
   setBreakpoint: (breakpoint: DesignBreakpoint) => {
     set({ selectedBreakpoint: breakpoint });
+  },
+
+  setPreviewTheme: (theme: DesignPreviewTheme) => {
+    set({ previewTheme: theme });
   },
 
   toggleCode: () => {
