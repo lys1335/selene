@@ -1,9 +1,0 @@
-{
-  "name": "selene-design-workspace-sandbox",
-  "private": true,
-  "description": "Isolated npm packages for the Selene design workspace",
-  "dependencies": {
-    "@react-three/fiber": "^9.6.0",
-    "three": "^0.183.2"
-  }
-}
