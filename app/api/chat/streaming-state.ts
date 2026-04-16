@@ -249,7 +249,7 @@ export function finalizeStreamingToolCalls(state: StreamingMessageState): boolea
 const DELEGATION_PENDING_TTL_MS = 60 * 60 * 1000;
 
 export function shouldKeepDelegatedToolCallPending(
-  part: Pick<DBToolCallPart, "toolName" | "args" | "active">
+  part: Pick<DBToolCallPart, "toolName" | "args" | "active" | "timestamp">
 ): boolean {
   if (part.toolName !== "delegateToSubagent") return false;
 
@@ -272,7 +272,13 @@ export function shouldKeepDelegatedToolCallPending(
   // This is a fallback for when the in-memory delegation registry has been
   // cleared (e.g. server restart) but the persisted state still has the flag.
   if (part.active === true) {
-    return true;
+    const projectedAt = typeof part.timestamp === "string"
+      ? Date.parse(part.timestamp)
+      : Number.NaN;
+    if (!Number.isFinite(projectedAt)) {
+      return false;
+    }
+    return Date.now() - projectedAt <= DELEGATION_PENDING_TTL_MS;
   }
 
   return false;

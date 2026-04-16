@@ -52,6 +52,7 @@ describe("sealDanglingToolCallsInContent", () => {
         args: { action: "start", delegationId: "del-running", agentId: "agent-1" },
         state: "input-available",
         active: true,
+        timestamp: new Date().toISOString(),
       },
       {
         type: "tool-call",
@@ -130,6 +131,7 @@ describe("GET /api/sessions/[id]/messages", () => {
               args: { action: "start", delegationId: "del-running", agentId: "agent-1" },
               state: "input-available",
               active: true,
+              timestamp: new Date().toISOString(),
             },
             {
               type: "tool-call",
@@ -165,5 +167,48 @@ describe("GET /api/sessions/[id]/messages", () => {
       content.find((part) => part.type === "tool-result" && part.toolCallId === "delegate-running")
     ).toBeUndefined();
     expect(dbMocks.updateMessage).not.toHaveBeenCalled();
+  });
+
+  it("repairs stale delegated projections during refresh", async () => {
+    dbMocks.getSessionWithMessages.mockResolvedValue({
+      session: { id: "session-1", userId: "db-user-1" },
+      messages: [
+        {
+          id: "assistant-stale",
+          role: "assistant",
+          metadata: {},
+          content: [
+            {
+              type: "tool-call",
+              toolCallId: "delegate-stale",
+              toolName: "delegateToSubagent",
+              args: { action: "start", delegationId: "del-stale", agentId: "agent-1" },
+              state: "input-available",
+              active: true,
+              timestamp: new Date(Date.now() - (61 * 60 * 1000)).toISOString(),
+            },
+          ],
+        },
+      ],
+    });
+
+    const response = await GET(
+      new Request("http://localhost/api/sessions/session-1/messages") as any,
+      { params: Promise.resolve({ id: "session-1" }) }
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    const content = body.messages[0].content as Array<Record<string, unknown>>;
+
+    expect(
+      content.find((part) => part.type === "tool-result" && part.toolCallId === "delegate-stale")
+    ).toMatchObject({
+      type: "tool-result",
+      toolCallId: "delegate-stale",
+      status: "error",
+      state: "output-error",
+    });
+    expect(dbMocks.updateMessage).toHaveBeenCalledOnce();
   });
 });

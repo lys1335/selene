@@ -87,6 +87,7 @@ function buildPendingToolCallProjection(
       ...part,
       state: part.state ?? "input-available",
       active: true,
+      timestamp: part.timestamp ?? new Date().toISOString(),
     };
   }
 
@@ -100,6 +101,7 @@ function buildPendingToolCallProjection(
       args: JSON.parse(part.argsText),
       state: "input-available",
       active: true,
+      timestamp: part.timestamp ?? new Date().toISOString(),
     };
   } catch {
     return null;
@@ -194,6 +196,7 @@ function buildProgressContentSnapshot(
     const progressPart: DBToolCallPart = {
       ...part,
       active: true,
+      timestamp: part.timestamp ?? new Date().toISOString(),
     };
 
     return progressPart;

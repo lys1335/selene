@@ -36,6 +36,8 @@ export interface DBToolCallPart extends ContextProvenance {
   state?: ToolInvocationState;
   /** Pending hint for unresolved persisted calls and live progress projections. */
   active?: boolean;
+  /** Timestamp for pending projections so stale delegated calls can expire. */
+  timestamp?: string;
 }
 
 export interface DBToolResultPart extends ContextProvenance {
