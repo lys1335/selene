@@ -119,7 +119,14 @@ const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>> = {
     supportsStreaming: true,
   },
 
-  // Claude Code — Opus 4.6 has 1M context via Agent SDK
+  // Claude Code — Opus 4.7 / 4.6 have 1M context via Agent SDK
+  "claude-opus-4-7": {
+    maxTokens: 1000000,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
   "claude-opus-4-6": {
     maxTokens: 1000000,
     supportsStreaming: true,
