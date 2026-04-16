@@ -69,7 +69,16 @@ interface UseMiniPipelineOptions {
   screenshotUrls?: string[];
   autoStart?: boolean;
   mode?: "direct" | "compose";
-  voicePostProcessing?: boolean;
+  /**
+   * When true, the raw transcript is sent to the grammar-cleanup endpoint and
+   * the polished text replaces it. When false, the raw transcript is the
+   * final text and no LLM call is made. The caller MUST pass this explicitly
+   * — there is no silent default here because that would override the user's
+   * "do not correct grammatical issues" setting.
+   */
+  voicePostProcessing: boolean;
+  /** Play start/stop tones on record begin/end. Matches main composer behavior. */
+  voiceAudioCues?: boolean;
   ttsReadCodeBlocks?: boolean;
   onError?: (error: string) => void;
   onComposeReady?: (payload: { transcript: string; screenshotUrl?: string; screenshotUrls?: string[]; characterId?: string; sessionId?: string }) => void;
@@ -99,7 +108,8 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
     screenshotUrls,
     autoStart,
     mode = "direct",
-    voicePostProcessing = true,
+    voicePostProcessing,
+    voiceAudioCues = true,
     ttsReadCodeBlocks = false,
     onError,
     onComposeReady,
@@ -136,6 +146,35 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
   useEffect(() => { sessionIdRef.current = sessionId; }, [sessionId]);
   const screenshotUrlsRef = useRef(screenshotUrls);
   useEffect(() => { screenshotUrlsRef.current = screenshotUrls; }, [screenshotUrls]);
+  // Voice-related settings are held in refs so the recorder.onstop closure —
+  // which is attached at startRecording time and may run seconds later —
+  // always respects the CURRENT user setting, not whatever value was in scope
+  // when autoStart first fired (which can happen before the server settings
+  // fetch resolves).
+  const voicePostProcessingRef = useRef(voicePostProcessing);
+  useEffect(() => { voicePostProcessingRef.current = voicePostProcessing; }, [voicePostProcessing]);
+  const voiceAudioCuesRef = useRef(voiceAudioCues);
+  useEffect(() => { voiceAudioCuesRef.current = voiceAudioCues; }, [voiceAudioCues]);
+
+  const playTone = useCallback((frequency: number, duration: number, type: OscillatorType = "sine") => {
+    if (!voiceAudioCuesRef.current) return;
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.value = frequency;
+      gain.gain.value = 0.08;
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + duration);
+      osc.onended = () => { try { ctx.close(); } catch {} };
+    } catch {
+      // Audio cue failed — non-critical
+    }
+  }, []);
 
   const stopAllStreams = useCallback(() => {
     // Stop media stream tracks
@@ -278,6 +317,9 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       recorder.onstop = async () => {
         if (cancelledRef.current) return;
 
+        // Audio cue: stop tone (matches main composer's 440 Hz / 0.15 s)
+        playTone(440, 0.15);
+
         // Returns true when the pipeline should abort (either cancelled or error set).
         const failPipeline = (err: unknown): boolean => {
           if (cancelledRef.current) return true;
@@ -314,6 +356,11 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
         setPhase("transcribing");
 
         // --- Transcribe (immediate insertion + deferred polish) ---
+        // Resolve the post-processing setting at the moment transcription
+        // begins (via ref) so that toggling the setting *during* a recording
+        // still produces the correct behavior. When false, refineTranscript
+        // short-circuits and no LLM call is made, matching the main composer.
+        const postProcessingForThisRun = voicePostProcessingRef.current;
         transcribeAbortRef.current = new AbortController();
         let rawTranscript = "";
         let finalTranscript = "";
@@ -321,7 +368,7 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
           const result = await transcribeRecordedSpeech({
             audioBlob: blob,
             mimeType,
-            postProcessingEnabled: voicePostProcessing,
+            postProcessingEnabled: postProcessingForThisRun,
             signal: transcribeAbortRef.current.signal,
             transcriptionFailedMessage: "Transcription failed",
             noSpeechDetectedMessage: "No speech detected",
@@ -333,7 +380,9 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
               }
             },
             onPolishedTranscript: (polishedText) => {
-              // Swap in polished text when ready
+              // Swap in polished text when ready. onPolishedTranscript is
+              // only invoked when postProcessingEnabled was true, so we don't
+              // need an extra gate here.
               if (!cancelledRef.current) {
                 setTranscript(polishedText);
               }
@@ -571,6 +620,8 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       // Using timeslice causes Chromium's WebM muxer to produce invalid
       // headers on second recordings within the same session (Whisper 400).
       recorder.start();
+      // Audio cue: start tone (matches main composer's 880 Hz / 0.12 s)
+      playTone(880, 0.12);
       setPhase("recording");
     } catch (err: unknown) {
       if (cancelledRef.current) return;
@@ -579,7 +630,11 @@ export function useMiniPipeline(options: UseMiniPipelineOptions): UseMiniPipelin
       setPhase("error");
       onError?.(msg);
     }
-  }, [screenshotUrl, ttsReadCodeBlocks, voicePostProcessing, onError]);
+    // voicePostProcessing is intentionally NOT in the dep list — it's read
+    // via voicePostProcessingRef inside recorder.onstop so that the current
+    // user setting always wins, even if it changed between startRecording
+    // being memoized and the recording actually stopping.
+  }, [screenshotUrl, ttsReadCodeBlocks, playTone, onError]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {

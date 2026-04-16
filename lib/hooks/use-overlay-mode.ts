@@ -8,6 +8,7 @@ type OverlayMode = "direct" | "compose";
 interface OverlaySettings {
   miniOverlayDefaultMode?: "direct" | "compose";
   voicePostProcessing?: boolean;
+  voiceAudioCues?: boolean;
   miniOverlayAutoCloseAfterSpeak?: boolean;
   miniOverlayShowScreenPreview?: boolean;
   ttsReadCodeBlocks?: boolean;
@@ -37,6 +38,7 @@ export function useOverlayMode() {
       const fetched: OverlaySettings = {
         miniOverlayDefaultMode: data.miniOverlayDefaultMode as OverlaySettings["miniOverlayDefaultMode"],
         voicePostProcessing: data.voicePostProcessing as boolean | undefined,
+        voiceAudioCues: data.voiceAudioCues as boolean | undefined,
         miniOverlayAutoCloseAfterSpeak: data.miniOverlayAutoCloseAfterSpeak as boolean | undefined,
         miniOverlayShowScreenPreview: data.miniOverlayShowScreenPreview as boolean | undefined,
         ttsReadCodeBlocks: data.ttsReadCodeBlocks as boolean | undefined,
@@ -67,6 +69,8 @@ export function useOverlayMode() {
     setMode,
     /** Voice post-processing enabled (from settings, default true). */
     voicePostProcessing: settings.voicePostProcessing ?? true,
+    /** Audio cues (start/stop tones) enabled (from settings, default true). */
+    voiceAudioCues: settings.voiceAudioCues ?? true,
     /** Auto-close overlay after TTS finishes in direct mode. */
     autoCloseAfterSpeak: settings.miniOverlayAutoCloseAfterSpeak ?? false,
     /** Show screenshot thumbnail preview. */

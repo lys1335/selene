@@ -17,12 +17,27 @@ function MiniOverlayContent() {
   const screenshotUrl = searchParams.get("screenshotUrl") ?? undefined;
 
   const { agents, selectedAgent, selectAgent, loading: agentLoading } = useOverlayAgentPicker();
-  const { mode, setMode, voicePostProcessing, autoCloseAfterSpeak, showScreenPreview, ttsReadCodeBlocks } = useOverlayMode();
+  const {
+    mode,
+    setMode,
+    voicePostProcessing,
+    voiceAudioCues,
+    autoCloseAfterSpeak,
+    showScreenPreview,
+    ttsReadCodeBlocks,
+    settingsLoaded,
+  } = useOverlayMode();
 
   // Resolve the effective characterId and sessionId from the picker or URL params
   const characterId = selectedAgent?.id ?? characterIdParam;
   const sessionId = selectedAgent?.lastSessionId ?? sessionIdParam;
-  const hasResolvedTarget = Boolean(characterId) && (!agentLoading || Boolean(characterIdParam));
+  // We require settings to have loaded before auto-starting so that the first
+  // recording respects the user's voicePostProcessing choice instead of the
+  // optimistic default. Without this guard the recorder.onstop closure would
+  // capture the pre-load default (true) and run grammar cleanup even when the
+  // user has "do not correct grammatical issues" toggled on.
+  const hasResolvedTarget =
+    Boolean(characterId) && (!agentLoading || Boolean(characterIdParam)) && settingsLoaded;
 
   // ---------------------------------------------------------------------------
   // Additional screenshots added via Cmd+Shift+S while overlay is active
@@ -46,7 +61,9 @@ function MiniOverlayContent() {
   );
 
   // ---------------------------------------------------------------------------
-  // Pipeline — voicePostProcessing enabled by default
+  // Pipeline — voice settings are read from the user's settings (falling back
+  // to thread-composer defaults inside useOverlayMode) and passed through
+  // explicitly. voicePostProcessing=false MUST fully skip grammar cleanup.
   // ---------------------------------------------------------------------------
   const pipeline = useMiniPipeline({
     sessionId,
@@ -56,6 +73,7 @@ function MiniOverlayContent() {
     autoStart: hasResolvedTarget,
     mode,
     voicePostProcessing,
+    voiceAudioCues,
     ttsReadCodeBlocks,
     onComposeReady: handleComposeReady,
   });
