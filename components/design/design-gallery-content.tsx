@@ -17,6 +17,7 @@ import {
   Heart,
   Loader2,
   FolderOpen,
+  Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { fetchWorkspaceDesignApi, type WorkspaceDesignRecord } from "./design-api-client";
@@ -32,6 +33,9 @@ type DesignFilter = (typeof FILTERS)[number]["id"];
 export function GalleryContent() {
   const addComponent = useDesignWorkspaceStore((s) => s.addComponent);
   const sessionId = useDesignWorkspaceStore((s) => s.sessionId);
+  const workspaceComponents = useDesignWorkspaceStore((s) => s.components);
+  const activeComponentId = useDesignWorkspaceStore((s) => s.activeComponentId);
+  const setActiveComponent = useDesignWorkspaceStore((s) => s.setActiveComponent);
   const [components, setComponents] = useState<WorkspaceDesignRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +45,7 @@ export function GalleryContent() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const deleteTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const refreshTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const abortRef = useRef<AbortController | null>(null);
 
   const loadComponents = useCallback(
@@ -85,12 +90,29 @@ export function GalleryContent() {
     return () => {
       clearTimeout(searchTimeout.current);
       clearTimeout(deleteTimerRef.current);
+      clearTimeout(refreshTimeout.current);
       abortRef.current?.abort();
     };
   }, []);
 
   useEffect(() => {
     void loadComponents(query, filter);
+  }, [filter, loadComponents, query]);
+
+  // Refetch the API-backed "Saved" list when the bridge signals that a tool
+  // result mutated persisted design state. Debounced 300ms so burst mutations
+  // (e.g. multiple tool calls in one turn) collapse into a single refetch.
+  useEffect(() => {
+    function handleRefresh() {
+      clearTimeout(refreshTimeout.current);
+      refreshTimeout.current = setTimeout(() => {
+        void loadComponents(query, filter);
+      }, 300);
+    }
+    window.addEventListener("design-gallery-refresh", handleRefresh);
+    return () => {
+      window.removeEventListener("design-gallery-refresh", handleRefresh);
+    };
   }, [filter, loadComponents, query]);
 
   function handleSearchChange(value: string) {
@@ -142,6 +164,23 @@ export function GalleryContent() {
 
   const selected = components.find((c) => c.id === selectedId);
 
+  // IDs of designs already open in the workspace — used to deduplicate
+  const openIds = new Set(workspaceComponents.map((c) => c.id));
+
+  // Filter workspace components by search query (if any)
+  const filteredWorkspace = query
+    ? workspaceComponents.filter((c) =>
+        c.name.toLowerCase().includes(query.toLowerCase()),
+      )
+    : workspaceComponents;
+
+  // Deduplicate API results: exclude items already open in workspace
+  const deduplicatedApiComponents = components.filter((c) => !openIds.has(c.id));
+
+  const hasWorkspaceDesigns = filteredWorkspace.length > 0;
+  const hasApiDesigns = deduplicatedApiComponents.length > 0;
+  const isEmpty = !hasWorkspaceDesigns && !hasApiDesigns && !loading;
+
   return (
     <div className="flex h-full flex-col">
       <div className="space-y-1.5 border-b border-border p-2.5">
@@ -173,6 +212,52 @@ export function GalleryContent() {
       </div>
 
       <ScrollArea className="flex-1">
+        {/* ---- Open in Workspace section ---- */}
+        {hasWorkspaceDesigns && (
+          <div className="border-b border-border p-1.5">
+            <div className="flex items-center gap-1.5 px-2 pb-1 pt-0.5">
+              <Layers className="h-3 w-3 text-muted-foreground" />
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Open
+              </span>
+              <span className="rounded-full bg-muted px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
+                {filteredWorkspace.length}
+              </span>
+            </div>
+            <div className="flex flex-col gap-0.5" role="listbox" aria-label="Open workspace designs">
+              {filteredWorkspace.map((component) => (
+                <button
+                  key={component.id}
+                  type="button"
+                  role="option"
+                  aria-selected={activeComponentId === component.id}
+                  onClick={() => setActiveComponent(component.id)}
+                  className={cn(
+                    "group flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
+                    activeComponentId === component.id
+                      ? "border-primary bg-primary/5"
+                      : "border-transparent hover:border-primary/30 hover:bg-muted/50",
+                  )}
+                >
+                  <Code className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                  <p className="min-w-0 flex-1 truncate text-[11px] font-medium">{component.name}</p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Badge variant="outline" className="h-3.5 px-1 text-[9px]">
+                      {component.mode}
+                    </Badge>
+                    {activeComponentId === component.id && (
+                      <Badge variant="secondary" className="h-3.5 px-1 text-[9px]">
+                        Active
+                      </Badge>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ---- Saved / API-fetched designs section ---- */}
         {loading ? (
           <div className="flex items-center justify-center p-6">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -189,46 +274,59 @@ export function GalleryContent() {
               Retry
             </Button>
           </div>
-        ) : components.length === 0 ? (
+        ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center gap-1.5 p-6 text-center">
             <FolderOpen className="h-6 w-6 text-muted-foreground/50" />
             <p className="text-[11px] text-muted-foreground">
               {query ? "No matches" : "No designs yet"}
             </p>
           </div>
-        ) : (
-          <div className="flex flex-col gap-0.5 p-1.5" role="listbox" aria-label="Workspace designs">
-            {components.map((component) => (
-              <button
-                key={component.id}
-                type="button"
-                role="option"
-                aria-selected={selectedId === component.id}
-                onClick={() => setSelectedId(selectedId === component.id ? null : component.id)}
-                className={cn(
-                  "group flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
-                  selectedId === component.id
-                    ? "border-primary bg-primary/5"
-                    : "border-transparent hover:border-primary/30 hover:bg-muted/50",
-                )}
-              >
-                <Code className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
-                <p className="min-w-0 flex-1 truncate text-[11px] font-medium">{component.name}</p>
-                <div className="flex shrink-0 items-center gap-1">
-                  {component.isFavorite && (
-                    <Heart className="h-3 w-3 fill-red-500 text-red-500" />
+        ) : hasApiDesigns ? (
+          <div className="p-1.5">
+            {hasWorkspaceDesigns && (
+              <div className="flex items-center gap-1.5 px-2 pb-1 pt-0.5">
+                <Archive className="h-3 w-3 text-muted-foreground" />
+                <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Saved
+                </span>
+                <span className="rounded-full bg-muted px-1.5 py-0 text-[10px] font-medium text-muted-foreground">
+                  {deduplicatedApiComponents.length}
+                </span>
+              </div>
+            )}
+            <div className="flex flex-col gap-0.5" role="listbox" aria-label="Saved designs">
+              {deduplicatedApiComponents.map((component) => (
+                <button
+                  key={component.id}
+                  type="button"
+                  role="option"
+                  aria-selected={selectedId === component.id}
+                  onClick={() => setSelectedId(selectedId === component.id ? null : component.id)}
+                  className={cn(
+                    "group flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
+                    selectedId === component.id
+                      ? "border-primary bg-primary/5"
+                      : "border-transparent hover:border-primary/30 hover:bg-muted/50",
                   )}
-                  <Badge variant="outline" className="h-3.5 px-1 text-[9px]">
-                    {component.mode}
-                  </Badge>
-                  <Badge variant="secondary" className="h-3.5 px-1 text-[9px]">
-                    {component.sessionId === sessionId ? "Current" : "Saved"}
-                  </Badge>
-                </div>
-              </button>
-            ))}
+                >
+                  <Code className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+                  <p className="min-w-0 flex-1 truncate text-[11px] font-medium">{component.name}</p>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {component.isFavorite && (
+                      <Heart className="h-3 w-3 fill-red-500 text-red-500" />
+                    )}
+                    <Badge variant="outline" className="h-3.5 px-1 text-[9px]">
+                      {component.mode}
+                    </Badge>
+                    <Badge variant="secondary" className="h-3.5 px-1 text-[9px]">
+                      {component.sessionId === sessionId ? "Current" : "Saved"}
+                    </Badge>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+        ) : null}
       </ScrollArea>
 
       {selected && (
