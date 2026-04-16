@@ -72,8 +72,8 @@
     "electron:prepare": "node scripts/electron-prepare.js",
     "electron:verify-package": "node scripts/verify-package.js",
     "electron:recover-mac-dmg": "node scripts/recover-mac-dmg.js",
-    "electron:rebuild-native": "electron-rebuild -f -o better-sqlite3,onnxruntime-node -v 39.2.4",
-    "electron:rebuild-standalone": "electron-rebuild -f -m .next/standalone -o better-sqlite3,onnxruntime-node -v 39.2.4",
+    "electron:rebuild-native": "electron-rebuild -f -o better-sqlite3,onnxruntime-node -v 41.2.1",
+    "electron:rebuild-standalone": "electron-rebuild -f -m .next/standalone -o better-sqlite3,onnxruntime-node -v 41.2.1",
     "electron:pack": "npm run electron:build && electron-builder --dir && npm run electron:verify-package",
     "electron:dist": "rimraf dist-electron && npm run electron:build && electron-builder && npm run electron:recover-mac-dmg && npm run electron:verify-package",
     "electron:dist:mac": "npm run typecheck && rimraf dist-electron && npm run electron:build && electron-builder --mac && npm run electron:recover-mac-dmg && npm run electron:verify-package",
@@ -88,7 +88,7 @@
     "electron:dist:win32:nosign": "npm run typecheck && rimraf dist-electron && npm run electron:build && cross-env WIN_CSC_LINK= WIN_CSC_KEY_PASSWORD= electron-builder --win --ia32 -c.win.signAndEditExecutable=false -c.forceCodeSigning=false && npm run electron:verify-package",
     "embedding:test": "node scripts/embedding-test.mjs",
     "embedding:pipeline-test": "tsx scripts/embedding-pipeline-test.ts",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-rebuild -f -o better-sqlite3,@parcel/watcher,sharp"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.2",
@@ -192,13 +192,12 @@
     "typescript": "^5.7.2",
     "winston": "^3.17.0",
     "ws": "^8.17.1",
-    "zlib-sync": "^0.1.10",
     "zod": "^3.24.1",
     "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
-    "@electron/rebuild": "^4.0.2",
+    "@electron/rebuild": "^4.0.3",
     "@types/animejs": "^3.1.13",
     "@types/better-sqlite3": "^7.6.13",
     "@types/canvas-confetti": "^1.9.0",
@@ -214,8 +213,8 @@
     "cross-env": "^10.1.0",
     "dotenv": "^17.4.0",
     "drizzle-kit": "^0.31.9",
-    "electron": "^39.8.6",
-    "electron-builder": "^26.0.12",
+    "electron": "^41.2.1",
+    "electron-builder": "^26.8.1",
     "esbuild": "^0.25.12",
     "eslint": "^9.16.0",
     "postcss": "^8.4.49",
@@ -224,5 +223,8 @@
     "tsx": "^4.21.0",
     "vitest": "^4.0.17",
     "wait-on": "^9.0.4"
+  },
+  "optionalDependencies": {
+    "zlib-sync": "^0.1.10"
   }
 }
