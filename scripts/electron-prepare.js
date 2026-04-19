@@ -52,6 +52,49 @@ function ensureExecutable(filePath) {
 
 
 /**
+ * Node.js version bundled with the Electron app for MCP subprocess spawning.
+ *
+ * Pinned deliberately — NOT derived from `process.versions.node` — so the runtime
+ * shipped to users is independent of whatever Node the build machine happens to run.
+ * This guarantees deterministic, reproducible builds across contributors.
+ *
+ * Override at build time (rarely needed):
+ *   BUNDLED_NODE_VERSION=24.14.1 npm run electron:prepare
+ *
+ * When bumping: update this constant, run a full bundle locally to verify
+ * `otool -L` still reports zero non-system dylib dependencies, and note the
+ * change in the release notes.
+ */
+const BUNDLED_NODE_VERSION = '24.14.1';
+
+/**
+ * Resolve the exact Node.js version to bundle.
+ *
+ * @returns {string} e.g. "24.14.1"
+ */
+function resolveBundledNodeVersion() {
+    const explicit = process.env.BUNDLED_NODE_VERSION;
+    if (explicit) {
+        const cleaned = explicit.replace(/^v/, '').trim();
+        // Accept full SemVer 2.0.0 — the prerelease/build-metadata grammar
+        // matters because Node ships ad-hoc tags like `24.0.0-nightly20240501`
+        // and `24.14.1+rc1` for early-adopter testing, and rejecting those
+        // would have forced anyone on a nightly to manually patch this script.
+        // Grammar: MAJOR.MINOR.PATCH(-PRERELEASE)?(+BUILD)?
+        //   PRERELEASE = dot-sep identifiers of [0-9A-Za-z-]
+        //   BUILD      = dot-sep identifiers of [0-9A-Za-z-]
+        const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
+        if (!SEMVER_RE.test(cleaned)) {
+            console.warn(`  Warning: BUNDLED_NODE_VERSION="${explicit}" is not a valid semver; using pinned ${BUNDLED_NODE_VERSION}`);
+            return BUNDLED_NODE_VERSION;
+        }
+        console.log(`  Using BUNDLED_NODE_VERSION=${cleaned} (env override of pinned ${BUNDLED_NODE_VERSION})`);
+        return cleaned;
+    }
+    return BUNDLED_NODE_VERSION;
+}
+
+/**
  * Download the official Node.js binary from nodejs.org.
  *
  * Official binaries are fully statically linked (openssl, icu, libuv, etc.)
@@ -59,7 +102,7 @@ function ensureExecutable(filePath) {
  * This is critical because Homebrew/nvm Node binaries dynamically link against
  * ~10 Homebrew dylibs that do NOT exist on end users' machines.
  *
- * @param {string} nodeVersion - e.g. "22.17.1"
+ * @param {string} nodeVersion - e.g. "24.15.0"
  * @param {string} destPath - absolute path where the binary should be written
  * @returns {boolean} true if download succeeded
  */
@@ -553,8 +596,10 @@ if (process.platform === 'win32' || process.platform === 'darwin') {
     const platformName = process.platform === 'win32' ? 'Windows' : 'macOS';
     console.log(`Bundling official Node.js binary for ${platformName}...`);
 
-    // Match the major version of the build machine's Node for compatibility
-    const nodeVersion = process.versions.node; // e.g. "22.17.1"
+    // Use the version pinned in this script — NOT the build machine's Node version.
+    // process.versions.node reflects the local dev install (nvm/brew/etc.) which
+    // may lag behind the version we want to ship. See resolveBundledNodeVersion().
+    const nodeVersion = resolveBundledNodeVersion(); // e.g. "24.14.1"
     const nodeBinDir = path.join(standaloneDir, 'node_modules', '.bin');
     const nodeExeName = process.platform === 'win32' ? 'node.exe' : 'node';
     const nodeExeDest = path.join(nodeBinDir, nodeExeName);

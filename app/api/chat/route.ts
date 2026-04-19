@@ -34,14 +34,16 @@ import {
   drainLivePromptQueue,
   removeLivePromptQueue,
   waitForQueueMessage,
+  reserveLivePromptQueueBySession,
+  promoteLivePromptQueueToRunId,
+  clearLivePromptQueueBySession,
+  getLivePromptQueueKeyBySession,
 } from "@/lib/background-tasks/live-prompt-queue-registry";
-import { signalUndrainedMessages } from "@/lib/background-tasks/undrained-signal";
 import {
   buildUserInjectionContent,
   buildStopSystemMessage,
 } from "@/lib/background-tasks/live-prompt-helpers";
 import {
-  addDelegationCompletion,
   drainDelegationCompletions,
 } from "@/lib/ai/tools/delegation-completion-store";
 import { createHeartbeatStream } from "@/lib/utils/heartbeat-stream";
@@ -69,6 +71,17 @@ import { getEnabledPluginsForAgent, getInstalledPlugins, loadPluginHooks } from 
 import { getWorkflowByAgentId } from "@/lib/agents/workflows";
 import { getWorkflowResources } from "@/lib/agents/workflow-resource-context";
 import { INTERNAL_API_SECRET } from "@/lib/config/internal-api-secret";
+import {
+  handleInjectedPromptsCC,
+  handleInjectedPromptsNonCC,
+  type InjectionStreamingState,
+} from "@/lib/ai/streaming/injection-handler";
+import type { InjectionStreamWriter } from "@/lib/ai/streaming/injection-stream-emitter";
+import { generateNextAssistantMessageId } from "@/lib/ai/streaming/injection-stream-emitter";
+import {
+  findOrphanToolCalls,
+  buildSyntheticModelToolResults,
+} from "@/lib/ai/providers/message-shaping";
 
 // ── Extracted utility modules ─────────────────────────────────────────────────
 import {
@@ -96,7 +109,7 @@ import {
 } from "./canonical-content";
 import { buildToolsForRequest } from "./tools-builder";
 import { prepareMessagesForRequest } from "./message-prep";
-import { createOnFinishCallback, createOnAbortCallback } from "./stream-callbacks";
+import { createOnFinishCallback, createOnAbortCallback, handleUndrainedQueueMessages } from "./stream-callbacks";
 import { createSyncStreamingMessage } from "./streaming-progress";
 import { buildSystemPromptForRequest } from "./system-prompt-builder";
 import { mcpContextStore, type SeleneMcpContext } from "@/lib/ai/providers/mcp-context-store";
@@ -130,40 +143,6 @@ registerAllTools();
 
 // Check if Styly AI API is configured (for tool discovery instructions)
 const hasStylyApiKey = () => !!process.env.STYLY_AI_API_KEY;
-
-/**
- * Drain any messages that were queued for live-prompt injection but never
- * processed by prepareStep. Delegation completion entries are moved to the
- * persistent completion store (so the next turn can inject them); other
- * entries are signaled as undrained for frontend replay.
- */
-function handleUndrainedQueueMessages(runId: string, sessionId: string): void {
-  const undrained = drainLivePromptQueue(runId);
-  if (undrained.length === 0) return;
-
-  const delegationEntries = undrained.filter(
-    (e) => e.metadata?.kind === "delegation_completion",
-  );
-  const otherEntries = undrained.filter(
-    (e) => e.metadata?.kind !== "delegation_completion",
-  );
-
-  for (const entry of delegationEntries) {
-    addDelegationCompletion({
-      delegationId: entry.metadata?.delegationId || entry.id,
-      delegateName: entry.metadata?.delegateName || "Sub-agent",
-      sessionId: "",
-      initiatorSessionId: sessionId,
-      characterId: "",
-      completedAt: Date.now(),
-      resultContent: entry.content,
-    });
-  }
-
-  if (otherEntries.length > 0) {
-    signalUndrainedMessages(sessionId);
-  }
-}
 
 export async function POST(req: Request) {
   let agentRun: { id: string } | null = null;
@@ -343,6 +322,15 @@ export async function POST(req: Request) {
       }
     }
 
+    // Reserve the live-prompt queue as early as possible — before the slow
+    // awaits (preflight check, createAgentRun) run. Injections POSTed to
+    // /api/sessions/[id]/live-prompt-queue during the warmup window would
+    // otherwise land before the queue is registered and come back as 409
+    // `no_active_run`. The reservation is rekeyed to the real agentRun.id
+    // below via `promoteLivePromptQueueToRunId`.
+    activeSessionId = sessionId;
+    reserveLivePromptQueueBySession(sessionId);
+
     // Keep session timezone fresh so tools in this same request can rely on it.
     if (isValidIanaTimezone(userTimezoneHeader) && sessionMetadata.userTimezone !== userTimezoneHeader) {
       sessionMetadata = { ...sessionMetadata, userTimezone: userTimezoneHeader };
@@ -447,6 +435,9 @@ export async function POST(req: Request) {
 
     if (!contextCheck.canProceed) {
       console.error(`[CHAT API] Context window check failed: ${contextCheck.error}`, contextCheck.status);
+      // Release the reservation — no agentRun will be created, so the normal
+      // onFinish/onAbort cleanup paths won't run.
+      clearLivePromptQueueBySession(sessionId);
       return new Response(
         JSON.stringify({
           error: "Context window limit exceeded",
@@ -480,7 +471,10 @@ export async function POST(req: Request) {
     });
     const chatAbortController = new AbortController();
     registerChatAbortController(agentRun.id, chatAbortController);
-    createLivePromptQueue(agentRun.id, sessionId);
+    // Promote the earlier reservation (or create afresh if the reservation
+    // path was somehow bypassed). Any injections that raced to the queue
+    // during warmup are preserved and carried into the real runId key.
+    promoteLivePromptQueueToRunId(sessionId, agentRun.id);
 
     const isDelegation = sessionMetadata?.isDelegation === true;
     const chatTask: ChatTask = {
@@ -498,7 +492,13 @@ export async function POST(req: Request) {
         ? {
             ...(isScheduledRun ? { scheduledRunId: scheduledRunId ?? undefined, scheduledTaskId: scheduledTaskId ?? undefined } : {}),
             ...(isChannelSource ? { suppressFromUI: true, taskSource: "channel" } : {}),
-            ...(isDelegation ? { isDelegation: true, parentAgentId: sessionMetadata.parentAgentId, workflowId: sessionMetadata.workflowId, characterName: sessionMetadata.characterName } : {}),
+            ...(isDelegation ? {
+              isDelegation: true,
+              parentAgentId: sessionMetadata.parentAgentId,
+              workflowId: sessionMetadata.workflowId,
+              characterName: sessionMetadata.characterName,
+              delegationTask: sessionMetadata.delegationTask,
+            } : {}),
           }
         : undefined,
     };
@@ -766,6 +766,18 @@ export async function POST(req: Request) {
     // This preserves real tool output in streaming + DB instead of placeholder stubs.
     sdkToolResultBridge = createSdkToolResultBridge();
 
+    // Mutable ref wiring mid-stream injection (fired from `prepareStep` on
+    // the non-CC path and `onQueueMessages` on the Claude Code path) to the
+    // outer UIMessageChunk controller, which is created later inside the
+    // ReadableStream `start()` closure. By the time either injection site
+    // actually fires, the pump has set this ref to a live writer backed by
+    // `emitChunk`. This is what lets both paths push a
+    // `data-injected-user-message` chunk onto the wire without restructuring
+    // the entire buffering/retry/disconnect pipeline.
+    const injectionWriterRef: { current: InjectionStreamWriter | null } = {
+      current: null,
+    };
+
     const mcpCtx: SeleneMcpContext = {
       userId: dbUser.id,
       sessionId,
@@ -805,39 +817,44 @@ export async function POST(req: Request) {
         return async (entries) => {
           if (entries.length === 0) return;
 
-          if (_state && _sync) {
-            await _sync(true);
-            if (_state.messageId) {
-              const preId = _state.messageId;
-              void updateMessage(preId, { metadata: { livePromptInjected: true } }).catch(() => {});
-            }
-            _state.messageId = undefined;
-            _state.parts = [];
-            _state.toolCallParts = new Map();
-            _state.loggedIncompleteToolCalls = new Set();
-            _state.lastBroadcastAt = 0;
-            _state.lastBroadcastSignature = "";
-            _state.pendingBroadcast = false;
-            _state.isCreating = false;
-            assistantMessageId = crypto.randomUUID();
-            // Claude Code runs entirely inside streamText step 0, so any injected
-            // follow-up content must ignore canonical step reconciliation.
-            _state.stepOffset = 1;
-          }
+          // Capture orphan tool-calls before seal (handler wipes state.parts).
+          const orphanToolCalls = _state
+            ? findOrphanToolCalls(
+                _state.parts as unknown as Array<{
+                  type?: string;
+                  toolCallId?: string;
+                  toolName?: string;
+                }>,
+              )
+            : [];
 
-          for (const entry of entries) {
-            try {
-              const orderingIndex = await nextOrderingIndex(sessionId);
-              await createMessage({
-                sessionId,
-                role: "user",
-                content: [{ type: "text", text: entry.content }],
-                orderingIndex,
-                metadata: { livePromptInjected: true },
-              });
-            } catch (dbError) {
-              console.warn("[CHAT API] Failed to persist injected Claude Code user message:", dbError);
-            }
+          // Pre-generate the post-injection assistant id so the client splice
+          // rotates to the matching id. See the non-CC primary injection
+          // branch for the full branch-picker-fix rationale — same shape here.
+          const nextAssistantMessageId = generateNextAssistantMessageId();
+
+          // Shared seal + persist + emit-frame path. `handleInjectedPromptsCC`
+          // writes one `data-injected-user-message` chunk per entry onto the
+          // active UIMessageStream writer (via injectionWriterRef), so the
+          // client can render the user turn mid-stream instead of waiting
+          // for a full reload-on-finish.
+          await handleInjectedPromptsCC({
+            sessionId,
+            prompts: entries,
+            streamingState:
+              _state as unknown as InjectionStreamingState | null,
+            syncStreamingMessage: _sync ?? null,
+            writer: injectionWriterRef.current,
+            orphanToolCalls,
+            nextAssistantMessageId,
+          });
+
+          if (_state && _sync) {
+            assistantMessageId = nextAssistantMessageId;
+            // Claude Code runs entirely inside streamText step 0, so any
+            // injected follow-up content must ignore canonical step
+            // reconciliation.
+            _state.stepOffset = 1;
           }
         };
       })(),
@@ -953,7 +970,7 @@ export async function POST(req: Request) {
           const runStatus = shouldCancel ? "cancelled" : "failed";
           removeChatAbortController(agentRun.id);
           if (activeSessionId) {
-            handleUndrainedQueueMessages(agentRun.id, activeSessionId);
+            await handleUndrainedQueueMessages(agentRun.id, activeSessionId);
             removeLivePromptQueue(agentRun.id, activeSessionId);
           }
           await completeAgentRun(agentRun.id, runStatus, shouldCancel
@@ -1197,66 +1214,63 @@ export async function POST(req: Request) {
                 `[CHAT API] Step ${stepNumber}: Injecting ${pendingPrompts.length} live prompt(s) (stopIntent=${stopRequested})`
               );
 
-              if (stopRequested) {
-                // Graceful stop: disable tools + inject system-level stop instruction.
-                // We don't hard-abort here — this lets the model acknowledge the stop request
-                // before the run ends naturally at the next step boundary.
+              // Compute orphan tool-calls BEFORE sealing — sealPreInjectionAssistant
+              // wipes state.parts, so we must capture them first so the metadata
+              // tag and the synthetic shim have the right ids.
+              const orphanToolCalls = streamingState
+                ? findOrphanToolCalls(streamingState.parts as unknown as Array<{ type?: string; toolCallId?: string; toolName?: string }>)
+                : [];
+
+              // Pre-generate the post-injection assistant id BEFORE emitting
+              // the wire frame so we can ship it to the client on the same
+              // frame. The client splice (`computeInjectionSplice`) then
+              // rotates `activeState.message.id` to this value — matching the
+              // id the streaming→DB sync will use for the post-injection row.
+              //
+              // Branch-picker fix: without this, client and server rotate to
+              // independent random UUIDs, and reloadSessionMessages on
+              // stream-finish replaces chat.messages with DB-id rows,
+              // producing a duplicate sibling under the injected user message
+              // in MessageRepository (→ `← 2 / 2 →`).
+              const nextAssistantMessageId = generateNextAssistantMessageId();
+
+              // Seal + persist + emit data-injected-user-message chunks via the
+              // shared handler. It tags the sealed assistant row with
+              // livePromptInjected (and orphanToolCalls, when any), allocates
+              // fresh ordering indices after the seal (edit/reload truncation
+              // invariant), and writes one wire frame per persisted row so the
+              // client can splice the user message into the thread mid-stream.
+              const injectionResult = await handleInjectedPromptsNonCC({
+                sessionId,
+                prompts: pendingPrompts,
+                streamingState: streamingState as unknown as InjectionStreamingState | null,
+                syncStreamingMessage: syncStreamingMessage ?? null,
+                writer: injectionWriterRef.current,
+                orphanToolCalls,
+                nextAssistantMessageId,
+              });
+
+              // Rotate assistant UUID + set stepOffset only if the handler
+              // actually resealed state (background mode might have pre-split
+              // the row; reusing the same id would collapse the continuation).
+              // MUST match the id we shipped on the wire frame above so the
+              // server-persisted post-injection DB row id equals the id the
+              // client rotated `activeState.message` to.
+              if (syncStreamingMessage && streamingState) {
+                assistantMessageId = nextAssistantMessageId;
+                streamingState.stepOffset = stepNumber;
+              }
+
+              if (stopRequested || injectionResult.abort) {
+                // Graceful stop: disable tools + inject system-level stop instruction
+                // so the model acknowledges the user's abort request before the
+                // turn ends naturally. Persistence + wire-frame emit already
+                // happened above via the handler, so the injected user message
+                // will render in the UI regardless of this graceful-stop path.
                 return {
                   activeTools: [] as string[],
                   system: buildStopSystemMessage(pendingPrompts),
                 };
-              }
-
-              // Split the streaming assistant message at the injection boundary so the
-              // user's message is stored between the pre-injection and post-injection
-              // assistant content rather than after the entire run.
-              if (syncStreamingMessage && streamingState) {
-                // Flush current assistant content to DB before splitting.
-                await syncStreamingMessage(true);
-                // Tag the pre-injection assistant message so deleteMessagesNotIn
-                // protects it on the next request (it was created server-side and
-                // is unknown to the frontend).
-                if (streamingState.messageId) {
-                  const preId = streamingState.messageId;
-                  void updateMessage(preId, { metadata: { livePromptInjected: true } }).catch(() => {});
-                }
-                // Reset streaming state so post-injection content starts a new DB record.
-                streamingState.messageId = undefined;
-                streamingState.parts = [];
-                streamingState.toolCallParts = new Map();
-                streamingState.loggedIncompleteToolCalls = new Set();
-                streamingState.lastBroadcastAt = 0;
-                streamingState.lastBroadcastSignature = "";
-                streamingState.pendingBroadcast = false;
-                streamingState.isCreating = false;
-                // Rotate the assistant UUID so the post-injection segment does not
-                // collide with the already-persisted pre-injection assistant row.
-                // Background mode persists the pre-split row mid-run, so reusing
-                // the same ID would collapse the continuation segment.
-                assistantMessageId = crypto.randomUUID();
-                streamingState.stepOffset = stepNumber;
-              }
-
-              // Persist each injected user message with the correct ordering index
-              // (allocated after the now-sealed pre-injection assistant message).
-              for (const prompt of pendingPrompts) {
-                try {
-                  const orderingIndex = await nextOrderingIndex(sessionId);
-                  const promptCustom: Record<string, unknown> = {};
-                  if (prompt.metadata?.inspectContext) promptCustom.inspectContext = prompt.metadata.inspectContext;
-                  const injected = await createMessage({
-                    sessionId,
-                    role: "user",
-                    content: [{ type: "text", text: prompt.content }],
-                    orderingIndex,
-                    metadata: {
-                      livePromptInjected: true,
-                      ...(Object.keys(promptCustom).length > 0 ? { custom: promptCustom } : {}),
-                    },
-                  });
-                } catch (dbError) {
-                  console.warn("[CHAT API] Failed to persist injected user message:", dbError);
-                }
               }
 
               // Inject as real user messages — correct conversation semantics vs system hacks.
@@ -1265,9 +1279,39 @@ export async function POST(req: Request) {
                 role: "user",
                 content: buildUserInjectionContent(pendingPrompts),
               };
+
+              // When the sealed pre-injection assistant row left orphan tool_use
+              // ids behind, prepend synthetic tool_result parts so the provider
+              // doesn't 400 on "tool_use without tool_result". The shape mirrors
+              // what `splitToolResultsFromAssistantMessages` synthesizes on later
+              // DB rehydration, so replay stays stable across edit/reload.
+              //
+              // i18n note: this string is the model-facing content of a synthetic
+              // tool-result, NOT a user-rendered label. The model reads it to
+              // understand why the prior tool call has no real result, and then
+              // narrates back to the user in the user's own language. Threading
+              // the request locale through `prepareStep` here would mean
+              // resolving session locale at every hop in the streaming pipeline
+              // for zero user-visible benefit, so we keep this English (matching
+              // every other model-facing system/replay string in this file —
+              // see `canonical-content.ts#makeEphemeralStubResult` for the same
+              // rationale).
+              const syntheticShim: ModelMessage[] =
+                orphanToolCalls.length > 0
+                  ? [
+                      {
+                        role: "tool",
+                        content: buildSyntheticModelToolResults(
+                          orphanToolCalls,
+                          "Cancelled — user interjected with a new message",
+                        ),
+                      } as unknown as ModelMessage,
+                    ]
+                  : [];
+
               return {
                 activeTools: currentActiveTools as string[],
-                messages: [...stepMessages, injectedUserMessage],
+                messages: [...stepMessages, ...syntheticShim, injectedUserMessage],
               };
             }
 
@@ -1300,45 +1344,51 @@ export async function POST(req: Request) {
                     `[CHAT API] Step ${stepNumber}: Injecting ${delegationPrompts.length} delegation result(s) after blocking wait`
                   );
 
-                  // Split the streaming assistant message at the injection boundary
-                  if (syncStreamingMessage && streamingState) {
-                    await syncStreamingMessage(true);
-                    if (streamingState.messageId) {
-                      const preId = streamingState.messageId;
-                      void updateMessage(preId, { metadata: { livePromptInjected: true } }).catch(() => {});
-                    }
-                    streamingState.messageId = undefined;
-                    streamingState.parts = [];
-                    streamingState.toolCallParts = new Map();
-                    streamingState.loggedIncompleteToolCalls = new Set();
-                    streamingState.lastBroadcastAt = 0;
-                    streamingState.lastBroadcastSignature = "";
-                    streamingState.pendingBroadcast = false;
-                    streamingState.isCreating = false;
-                    assistantMessageId = crypto.randomUUID();
-                    streamingState.stepOffset = stepNumber;
-                  }
+                  // Same seal-and-split flow as the primary injection branch —
+                  // delegation results are modeled as injected user messages so
+                  // they share the mid-stream wire protocol.
+                  const orphanToolCalls = streamingState
+                    ? findOrphanToolCalls(streamingState.parts as unknown as Array<{ type?: string; toolCallId?: string; toolName?: string }>)
+                    : [];
 
-                  // Persist each injected delegation result
-                  for (const prompt of delegationPrompts) {
-                    try {
-                      const orderingIndex = await nextOrderingIndex(sessionId);
-                      await createMessage({
-                        sessionId,
-                        role: "user",
-                        content: [{ type: "text", text: prompt.content }],
-                        orderingIndex,
-                        metadata: { livePromptInjected: true },
-                      });
-                    } catch (dbError) {
-                      console.warn("[CHAT API] Failed to persist injected delegation result:", dbError);
-                    }
+                  // Pre-generate the post-injection assistant id and ship it
+                  // on the wire frame so the client splice rotates to the
+                  // matching id. See the primary injection branch above for
+                  // the full branch-picker-fix rationale.
+                  const nextAssistantMessageId = generateNextAssistantMessageId();
+
+                  await handleInjectedPromptsNonCC({
+                    sessionId,
+                    prompts: delegationPrompts,
+                    streamingState: streamingState as unknown as InjectionStreamingState | null,
+                    syncStreamingMessage: syncStreamingMessage ?? null,
+                    writer: injectionWriterRef.current,
+                    orphanToolCalls,
+                    nextAssistantMessageId,
+                  });
+
+                  if (syncStreamingMessage && streamingState) {
+                    assistantMessageId = nextAssistantMessageId;
+                    streamingState.stepOffset = stepNumber;
                   }
 
                   const injectedUserMessage: UserModelMessage = {
                     role: "user",
                     content: buildUserInjectionContent(delegationPrompts),
                   };
+
+                  const syntheticShim: ModelMessage[] =
+                    orphanToolCalls.length > 0
+                      ? [
+                          {
+                            role: "tool",
+                            content: buildSyntheticModelToolResults(
+                              orphanToolCalls,
+                              "Cancelled — delegation result arrived while tool call was in flight",
+                            ),
+                          } as unknown as ModelMessage,
+                        ]
+                      : [];
 
                   // If more delegations are still running, force the model to
                   // call a tool (even a no-op) so the loop continues to the next
@@ -1348,7 +1398,7 @@ export async function POST(req: Request) {
                   const stillHasRunning = hasRunningDelegationsForSession(characterId, sessionId);
                   const result: Record<string, unknown> = {
                     activeTools: currentActiveTools as string[],
-                    messages: [...stepMessages, injectedUserMessage],
+                    messages: [...stepMessages, ...syntheticShim, injectedUserMessage],
                   };
                   if (stillHasRunning) {
                     result.toolChoice = "required" as const;
@@ -1658,6 +1708,22 @@ export async function POST(req: Request) {
           }
         };
 
+        // Bind the injection writer ref to the outer controller. `prepareStep`
+        // (scheduled inside streamText) uses this ref to emit
+        // `data-injected-user-message` chunks onto the wire mid-stream. By the
+        // time prepareStep fires, the pump has already started reading, so the
+        // ref is always populated when needed.
+        injectionWriterRef.current = {
+          write(chunk: unknown) {
+            // Buffer alongside normal chunks — if the client hasn't committed
+            // to the UI stream yet, the main pump already handles buffering
+            // via `bufferedChunks`; for injection frames we bypass that because
+            // the data-* chunk is idempotent (id = DB row id) and the client
+            // transport dedupes on re-delivery.
+            emitChunk(chunk as UIMessageChunk);
+          },
+        };
+
         const closeStream = () => {
           if (closed) return;
           closed = true;
@@ -1828,6 +1894,44 @@ export async function POST(req: Request) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     const isCreditError = detectCreditError(errorMessage);
 
+    // Unified live-prompt queue cleanup on the error path.
+    //
+    // This must run regardless of whether `agentRun.id` was assigned or
+    // `chatTaskRegistered` has flipped — otherwise injections that landed on
+    // the reservation during warmup (or mid-flight, before the stream
+    // settled) are silently dropped.
+    //
+    //   agentRun.id present → drain into persistence, then release by runId.
+    //   reservation only    → resolve the placeholder key, drain, then clear
+    //                         by session.
+    //
+    // Both branches end in the same invariant: no queue entry for this
+    // session survives into the next request.
+    let livePromptQueueCleanedUp = false;
+    if (activeSessionId) {
+      try {
+        if (agentRun?.id) {
+          await handleUndrainedQueueMessages(agentRun.id, activeSessionId);
+          removeLivePromptQueue(agentRun.id, activeSessionId);
+        } else {
+          const pendingKey = getLivePromptQueueKeyBySession(activeSessionId);
+          if (pendingKey) {
+            // handleUndrainedQueueMessages only uses its first arg as a map
+            // lookup key — passing the pending placeholder key is safe and
+            // drains any entries that raced in during reservation warmup.
+            await handleUndrainedQueueMessages(pendingKey, activeSessionId);
+          }
+          clearLivePromptQueueBySession(activeSessionId);
+        }
+        livePromptQueueCleanedUp = true;
+      } catch (cleanupErr) {
+        console.error(
+          "[CHAT API] Failed to drain/clear live-prompt queue on error:",
+          cleanupErr,
+        );
+      }
+    }
+
     if (chatTaskRegistered && agentRun?.id) {
       try {
         const classification = classifyRecoverability({ provider: configuredProvider, error, message: errorMessage });
@@ -1859,7 +1963,11 @@ export async function POST(req: Request) {
         });
         const runStatus = shouldCancel ? "cancelled" : "failed";
         removeChatAbortController(agentRun.id);
-        if (activeSessionId) {
+        // Live-prompt queue removal is handled by the unified
+        // drain-before-remove block at the top of this catch handler
+        // (`livePromptQueueCleanedUp`). Only fall back here if that block
+        // itself threw — otherwise we'd double-remove.
+        if (activeSessionId && !livePromptQueueCleanedUp) {
           removeLivePromptQueue(agentRun.id, activeSessionId);
         }
         await completeAgentRun(agentRun.id, runStatus, shouldCancel

@@ -29,6 +29,28 @@ describe("hasStopIntent", () => {
     expect(hasStopIntent("search the docs")).toBe(false);
     expect(hasStopIntent("what is the time?")).toBe(false);
   });
+
+  it("treats redirect messages as pivot, not stop", () => {
+    // Starts with a stop-word but the user is redirecting the task —
+    // the agent should drop the old task and pick up the new one,
+    // NOT emit a graceful stop.
+    expect(
+      hasStopIntent(
+        "nevermind, lets check how vector piepline works instead of auth",
+      ),
+    ).toBe(false);
+    expect(hasStopIntent("nevermind, let's do X instead")).toBe(false);
+    expect(hasStopIntent("wait, use the other tool instead")).toBe(false);
+    expect(hasStopIntent("stop, rather search the docs")).toBe(false);
+    expect(hasStopIntent("cancel, switch to vector search")).toBe(false);
+    expect(hasStopIntent("nevermind, actually do the other thing")).toBe(false);
+  });
+
+  it("still classifies pure stop requests that happen to be wordy", () => {
+    expect(hasStopIntent("stop and wait")).toBe(true);
+    expect(hasStopIntent("cancel this task")).toBe(true);
+    expect(hasStopIntent("nevermind forget it")).toBe(true);
+  });
 });
 
 describe("sanitizeLivePromptContent", () => {
@@ -57,7 +79,7 @@ describe("buildUserInjectionContent", () => {
     expect(result).toContain("[Mid-run instruction");
   });
 
-  it("formats delegation completion entries as an observe-and-integrate instruction", () => {
+  it("formats delegation completion entries as an auto-delivered integrate instruction", () => {
     const result = buildUserInjectionContent([
       {
         id: "deleg-complete-del-1",
@@ -72,13 +94,14 @@ describe("buildUserInjectionContent", () => {
       },
     ]);
 
-    expect(result).toContain("Delegation completion notice");
-    expect(result).toContain('Immediately call delegateToSubagent action="observe" delegationId="del-1"');
-    expect(result).toContain("integrate the sub-agent's actual result");
+    expect(result).toContain("[Delegation result delivered — integrate this into your response]");
+    expect(result).toContain('[Delegation Complete] del-1 ("Explore") has finished.');
+    expect(result).toContain("synthesize a final response");
+    expect(result).not.toContain('Immediately call delegateToSubagent action="observe"');
     expect(result).not.toContain("Please acknowledge and incorporate");
   });
 
-  it("preserves structured delegation instructions for multiple simultaneous completions", () => {
+  it("preserves auto-delivered integrate instructions for multiple simultaneous completions", () => {
     const result = buildUserInjectionContent([
       {
         id: "deleg-complete-del-1",
@@ -104,10 +127,13 @@ describe("buildUserInjectionContent", () => {
       },
     ]);
 
-    expect(result).toContain('Immediately call delegateToSubagent action="observe" delegationId="del-1"');
-    expect(result).toContain('Immediately call delegateToSubagent action="observe" delegationId="del-2"');
+    expect(result).toContain('[Delegation Complete] del-1 ("Explore") has finished.');
+    expect(result).toContain('[Delegation Complete] del-2 ("Reviewer") has finished.');
+    expect(result).not.toContain('Immediately call delegateToSubagent action="observe"');
     expect(result).not.toContain("Please acknowledge and incorporate");
-    expect(result).toContain("Delegation completion notice");
+    // Each entry carries its own "delivered" header
+    const deliveredCount = (result.match(/Delegation result delivered/g) ?? []).length;
+    expect(deliveredCount).toBe(2);
   });
 });
 

@@ -10,7 +10,7 @@
  * which packages are actually installed.
  *
  * Runtime-installed packages are stored in an isolated sandbox directory
- * (.selene-workspace/) with its own package.json and node_modules, so they
+ * (selene-workspace/) with its own package.json and node_modules, so they
  * never mutate the main app's dependency graph.
  */
 
@@ -233,8 +233,27 @@ export const DESIGN_LIBRARIES: DesignLibrary[] = [
 // Sandbox directory
 // ---------------------------------------------------------------------------
 
+/**
+ * Resolve the parent directory for the design workspace sandbox.
+ *
+ * In packaged Electron builds the project root lives inside the read-only
+ * app bundle (`…/Selene.app/Contents/Resources/standalone/`), so creating
+ * `selene-workspace/` there fails with ENOENT/EROFS. Electron's main
+ * process sets `LOCAL_DATA_PATH` to a user-writable directory
+ * (e.g. `~/Library/Application Support/selene/data`) — use that when
+ * available. Otherwise (Next dev, tests, headless server runs) fall back
+ * to the project root, which is writable in those contexts.
+ */
+function resolveSandboxRoot(): string {
+  const electronDataPath = process.env.LOCAL_DATA_PATH;
+  if (electronDataPath && electronDataPath.trim().length > 0) {
+    return electronDataPath;
+  }
+  return getProjectRoot();
+}
+
 /** Isolated sandbox directory for design workspace npm installs. */
-export const SANDBOX_DIR = resolve(getProjectRoot(), ".selene-workspace");
+export const SANDBOX_DIR = resolve(resolveSandboxRoot(), "selene-workspace");
 export const SANDBOX_NODE_MODULES = resolve(SANDBOX_DIR, "node_modules");
 export const SANDBOX_PACKAGE_JSON = resolve(SANDBOX_DIR, "package.json");
 
@@ -270,37 +289,19 @@ export async function ensureSandboxDir(): Promise<void> {
 /**
  * Package spec validation.
  *
- * Shell injection is impossible because we use `execFile` (no shell).
- * We reject local/remote install vectors (file:, link:, git, tarballs)
- * to prevent local filesystem reads or credential leakage via git auth.
- * Only npm registry packages (with optional semver/dist-tag) are allowed.
+ * Philosophy: validation is minimal — only empty strings are rejected.
+ * npm is the real validator: the AI reads npm's error messages if a spec
+ * resolves to a broken registry entry, a 404 tarball, a missing file:
+ * path, or an invalid git ref. Shell injection is impossible because the
+ * installer uses `execFile` (no shell interpolation), so freeform specs
+ * like `file:`, `link:`, `workspace:*`, `git+https://...`, `github:user/repo`,
+ * and remote tarball URLs all pass through to npm unchanged.
  */
 export function validatePackageSpec(spec: string): { valid: boolean; spec: string; error?: string } {
   const trimmed = spec.trim();
   if (!trimmed) {
     return { valid: false, spec: "", error: "Empty package specifier" };
   }
-
-  // Reject local/remote install vectors — only allow registry packages
-  const lower = trimmed.toLowerCase();
-  if (
-    lower.startsWith("file:") ||
-    lower.startsWith("link:") ||
-    lower.startsWith("workspace:") ||
-    lower.startsWith("git:") ||
-    lower.startsWith("git+") ||
-    lower.startsWith("github:") ||
-    lower.startsWith("bitbucket:") ||
-    lower.startsWith("gitlab:") ||
-    lower.startsWith("http:") ||
-    lower.startsWith("https:") ||
-    lower.endsWith(".tgz") ||
-    lower.endsWith(".tar.gz") ||
-    (lower.includes("/") && !lower.startsWith("@"))
-  ) {
-    return { valid: false, spec: trimmed, error: "Only npm registry packages are allowed" };
-  }
-
   return { valid: true, spec: trimmed };
 }
 

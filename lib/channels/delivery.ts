@@ -215,6 +215,28 @@ function extractImageUrlsFromToolResult(result: unknown): string[] {
   }
 
   const record = result as Record<string, unknown>;
+
+  // Ephemeral-stub format (canonical-content.ts#makeEphemeralStubResult):
+  // when an ephemeralResults tool is replayed from history, only `mediaRefs`
+  // survives — the original `images`/`videos`/`content` shape was dropped.
+  // Channel delivery only attaches images, so we keep refs whose `mimeType`
+  // either starts with `image/` or is missing entirely (missing-mimeType is
+  // treated optimistically as image; the downstream loader validates the
+  // actual content-type on fetch). Refs with an explicit non-image mimeType
+  // are intentionally skipped here — do not remove this guard.
+  const mediaRefs = record.mediaRefs;
+  if (Array.isArray(mediaRefs)) {
+    for (const item of mediaRefs) {
+      if (!item || typeof item !== "object") continue;
+      const refRecord = item as Record<string, unknown>;
+      const refUrl = typeof refRecord.url === "string" ? refRecord.url : undefined;
+      if (!refUrl) continue;
+      const mimeType = typeof refRecord.mimeType === "string" ? refRecord.mimeType : undefined;
+      if (mimeType && !mimeType.startsWith("image/")) continue;
+      urls.push(refUrl);
+    }
+  }
+
   const images = record.images;
   if (Array.isArray(images)) {
     for (const item of images) {

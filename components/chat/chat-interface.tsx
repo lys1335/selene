@@ -723,6 +723,43 @@ export default function ChatInterface({
         }
     }, [character.id, sm.switchSession]);
 
+    // NOTE: shares the `switchSession → setActiveSession | markUnavailable`
+    // shape with `handleTabSwitch` above — but is intentionally NOT inlined
+    // into it. Two real differences:
+    //   1) Source: tab-click hits an already-open tab, delegation-open may
+    //      need to insert the tab first via `openSession({...})`.
+    //   2) Fallback: tab-click only marks the failed tab unavailable;
+    //      delegation-open additionally `router.push(...)` the canonical URL
+    //      so the user lands on the delegation regardless of the tab strip
+    //      state. Refactoring to a shared helper would have to expose both
+    //      knobs and would obscure the per-call-site control flow.
+    const handleOpenDelegationSession = useCallback(async (targetSessionId: string, targetCharacterId: string) => {
+        if (!targetSessionId || !targetCharacterId) {
+            return;
+        }
+
+        if (workspaceRenderMode === "browser-tabs") {
+            useChatWorkspaceStore.getState().openSession({
+                sessionId: targetSessionId,
+                characterId: targetCharacterId,
+            });
+        }
+
+        const success = await sm.switchSession(targetSessionId, { characterId: targetCharacterId });
+        if (success) {
+            if (workspaceRenderMode === "browser-tabs") {
+                useChatWorkspaceStore.getState().setActiveSession(targetSessionId);
+            }
+            return;
+        }
+
+        if (workspaceRenderMode === "browser-tabs") {
+            useChatWorkspaceStore.getState().markUnavailable(targetSessionId, true);
+        }
+
+        router.push(buildChatSessionUrl(targetCharacterId, targetSessionId));
+    }, [router, sm.switchSession, workspaceRenderMode]);
+
     const handleBrowserTabDeleteSession = useCallback(
         async (sessionToDeleteId: string) => {
             useChatWorkspaceStore.getState().removeSession(sessionToDeleteId);
@@ -1035,7 +1072,7 @@ export default function ChatInterface({
                     bg.isZombieRun === false;
 
                 if (lastDetectedRunIdRef.current !== trackedRunId) {
-                    console.log(
+                    console.debug(
                         "[Background Processing] Detected active run:",
                         trackedRunId,
                         JSON.stringify({
@@ -1706,6 +1743,8 @@ export default function ChatInterface({
             sessionId={sessionId}
             activeRunId={bg.processingRunId}
             isWorkspaceContext={Boolean(currentWorkspaceInfo)}
+            workspaceMode={workspaceRenderMode}
+            onOpenDelegationSession={handleOpenDelegationSession}
             onCancelBackgroundRun={bg.handleCancelBackgroundRun}
             isCancellingBackgroundRun={bg.isCancellingBackgroundRun}
             canCancelBackgroundRun={Boolean(bg.processingRunId)}

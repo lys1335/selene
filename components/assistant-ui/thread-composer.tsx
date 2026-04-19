@@ -33,6 +33,7 @@ import {
   type InspectMessageContext,
 } from "@/lib/design/workspace/inspect-context";
 import { useCharacter } from "./character-context";
+import { useChatLifecycleStatus } from "@/components/chat-provider";
 import { useOptionalDeepResearch } from "./deep-research-context";
 import { DeepResearchPanel } from "./deep-research-panel";
 import { animate } from "animejs";
@@ -59,6 +60,7 @@ import { VoiceWaveform } from "@/components/voice/voice-waveform";
 import { VoiceActions } from "@/components/voice/voice-actions";
 import { useGlobalVoiceHotkey } from "@/lib/hooks/use-global-hotkey";
 import { getElectronAPI } from "@/lib/electron/types";
+import type { ChatWorkspaceMode } from "@/lib/chat/workspace-mode";
 import { useScreenCapture } from "@/lib/hooks/use-screen-capture";
 import { useUnifiedCapture } from "@/lib/hooks/use-unified-capture";
 import { useCaptureSession } from "@/lib/hooks/use-capture-session";
@@ -141,6 +143,8 @@ export const Composer: FC<{
   isProcessingInBackground?: boolean;
   sessionId?: string;
   activeRunId?: string | null;
+  workspaceMode?: ChatWorkspaceMode;
+  onOpenDelegationSession?: (sessionId: string, delegateAgentId: string) => void | Promise<void>;
   sttEnabled?: boolean;
   voicePostProcessing?: boolean;
   voiceActionsEnabled?: boolean;
@@ -167,6 +171,8 @@ export const Composer: FC<{
   isProcessingInBackground = false,
   sessionId,
   activeRunId,
+  workspaceMode = "sidebar",
+  onOpenDelegationSession,
   sttEnabled = false,
   voicePostProcessing = true,
   voiceActionsEnabled = true,
@@ -229,18 +235,33 @@ export const Composer: FC<{
 
   // Attempt to inject a message into the currently active run's live prompt queue.
   // The server resolves the active runId from the session index — no runId needed on the client.
-  // Uses exponential backoff (200, 400, 800, 1600, 3200ms) with a max of 5 attempts.
-  // Returns true if successfully queued, false if no active run or all retries failed.
+  //
+  // Retries on ALL transient failures (409 `no_active_run`, network errors,
+  // `queued:false` responses). 409 in particular is NOT terminal — the server
+  // registers the queue via `reserveLivePromptQueueBySession` early in
+  // /api/chat, but the HTTP request from this composer can still race that
+  // reservation in a cold-start / slow-DB edge case. Retrying covers that
+  // residual window.
+  //
+  // Backoff: base 200ms doubling, capped at 3200ms, 8 attempts
+  // → sleeps [0, 200, 400, 800, 1600, 3200, 3200, 3200] = ~12.6s total
+  // plus 8 × 5s request timeout budget. More than enough to cover any
+  // realistic /api/chat warmup even in slow environments.
+  //
+  // Returns true if successfully queued, false if all retries failed.
   const queueLivePromptForActiveRun = useCallback(
     async (content: string, inspectCtx?: InspectMessageContext | null): Promise<boolean> => {
-      const MAX_RETRIES = 5;
+      const MAX_RETRIES = 8;
       const BASE_DELAY_MS = 200;
+      const MAX_DELAY_MS = 3200;
 
       for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
         if (attempt > 0) {
-          await new Promise<void>(resolve =>
-            setTimeout(resolve, BASE_DELAY_MS * Math.pow(2, attempt - 1))
+          const delay = Math.min(
+            BASE_DELAY_MS * Math.pow(2, attempt - 1),
+            MAX_DELAY_MS
           );
+          await new Promise<void>(resolve => setTimeout(resolve, delay));
         }
 
         try {
@@ -250,16 +271,15 @@ export const Composer: FC<{
             { timeout: 5_000, retries: 0 }
           );
 
-          if (status === 409) {
-            // No active run — no point retrying
-            return false;
-          }
-
           if (data?.queued) {
             return true;
           }
+          // 409 `no_active_run` or any other non-success — fall through to
+          // the next retry attempt. With Fix A (early server-side
+          // reservation) the server should accept injections within ms of
+          // /api/chat starting; retries handle only residual races.
         } catch {
-          // Network error — retry
+          // Network error — retry.
         }
       }
 
@@ -296,6 +316,11 @@ export const Composer: FC<{
 
   const { character } = useCharacter();
   const isRunning = useThread((t) => t.isRunning);
+  // Authoritative AI SDK stream lifecycle status. Assistant-ui's `isRunning`
+  // is derived but can lag by a frame or two around abort/resume transitions;
+  // the raw AI SDK status is the source of truth for gating destructive
+  // reconciliation (e.g. force-reload after injection).
+  const chatLifecycleStatus = useChatLifecycleStatus();
   const threadRuntime = useThreadRuntime();
   const attachmentCount = useThreadComposer((c) => c.attachments.length);
   const t = useTranslations("assistantUi");
@@ -1339,6 +1364,22 @@ export const Composer: FC<{
   // are converted to "fallback" so the replayable mechanism sends them as a new run.
   useEffect(() => {
     if (isQueueBlocked) return;
+    // Defense-in-depth: the AI SDK's own status must be "ready" or "error"
+    // before we trigger a force-reload. `isRunning` (→ `isQueueBlocked`) is a
+    // derived value inside assistant-ui and can briefly be false during the
+    // transition between in-flight steps when the transport is still
+    // streaming (e.g. post-injection, before the next step emits chunks).
+    // Force-reloading in that window tears down ChatProvider and kills the
+    // SSE connection — exactly the mid-stream render regression this fix
+    // exists to prevent. The chunk-intercept in BufferedAssistantChatTransport
+    // already renders the injected row inline, so we can safely defer the
+    // reconcile to the natural post-run settle.
+    if (
+      chatLifecycleStatus === "streaming" ||
+      chatLifecycleStatus === "submitted"
+    ) {
+      return;
+    }
     const hasInjected = queuedMessages.some(m => m.status === "injected-live");
     if (hasInjected && onLivePromptInjected) {
       void Promise.resolve(onLivePromptInjected()).then((result) => {
@@ -1372,7 +1413,7 @@ export const Composer: FC<{
       return next.length === prev.length ? prev : next;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isQueueBlocked, queuedMessages, onLivePromptInjected]);
+  }, [isQueueBlocked, queuedMessages, onLivePromptInjected, chatLifecycleStatus]);
 
   // Auto-grow textarea
   const adjustTextareaHeight = useCallback(() => {
@@ -1894,7 +1935,11 @@ export const Composer: FC<{
         {sessionId && <ModelSelector sessionId={sessionId} status={contextStatus} />}
       </div>
 
-      <ActiveDelegationsIndicator characterId={character?.id ?? null} />
+      <ActiveDelegationsIndicator
+        characterId={character?.id ?? null}
+        workspaceMode={workspaceMode}
+        onOpenSession={onOpenDelegationSession}
+      />
     </div>
   );
 };
