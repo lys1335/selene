@@ -14,6 +14,14 @@ export interface DesignComponent {
   prompt: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * When true, this entry is a metadata-only placeholder — `code` has been
+   * evicted (or was never hydrated) to bound memory usage across long
+   * sessions. Consumers that need the real source must call
+   * `fetchComponentFromGallery` (via the bridge) to rehydrate it before
+   * rendering a preview or displaying the code panel.
+   */
+  codeStripped?: boolean;
 }
 
 export interface DesignSnapshot {

@@ -1,7 +1,13 @@
 import { db } from "@/lib/db/sqlite-client";
 import { designComponents } from "@/lib/db/schema/design-gallery";
 import { eq, desc, and, sql, type SQL } from "drizzle-orm";
-import type { NewDesignComponent, DesignComponentRow, GallerySearchOpts } from "./types";
+import type {
+  NewDesignComponent,
+  DesignComponentRow,
+  DesignComponentSummaryRow,
+  GallerySearchOpts,
+  ScopedDesignListOpts,
+} from "./types";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -109,6 +115,63 @@ export async function findDesignComponentForScope(opts: {
   });
 
   return row ? toRow(row) : null;
+}
+
+/**
+ * Metadata-only summary list for the workspace gallery. Drops `code`,
+ * `prompt`, `userId`, and `characterId` so the initial payload stays small
+ * even when the user has hundreds of persisted components. The `/api/design/
+ * gallery` `get` action is used to hydrate a full row when the user clicks
+ * into a component.
+ */
+export async function listDesignComponentSummariesForScope(
+  opts: ScopedDesignListOpts,
+): Promise<DesignComponentSummaryRow[]> {
+  const conditions: SQL[] = [];
+
+  if (opts.userId) {
+    conditions.push(eq(designComponents.userId, opts.userId));
+  } else if (opts.sessionId) {
+    conditions.push(eq(designComponents.sessionId, opts.sessionId));
+  } else {
+    return [];
+  }
+
+  if (opts.sessionId) {
+    conditions.push(eq(designComponents.sessionId, opts.sessionId));
+  }
+
+  const rows = await db
+    .select({
+      id: designComponents.id,
+      sessionId: designComponents.sessionId,
+      projectId: designComponents.projectId,
+      name: designComponents.name,
+      description: designComponents.description,
+      framework: designComponents.framework,
+      category: designComponents.category,
+      tags: designComponents.tags,
+      styleTags: designComponents.styleTags,
+      previewPath: designComponents.previewPath,
+      mode: designComponents.mode,
+      style: designComponents.style,
+      useCount: designComponents.useCount,
+      lastUsedAt: designComponents.lastUsedAt,
+      isFavorite: designComponents.isFavorite,
+      createdAt: designComponents.createdAt,
+      updatedAt: designComponents.updatedAt,
+    })
+    .from(designComponents)
+    .where(and(...conditions))
+    .orderBy(desc(designComponents.updatedAt))
+    .limit(opts.limit ?? 50);
+
+  return rows.map((row) => ({
+    ...row,
+    tags: safeParseTags(row.tags),
+    styleTags: safeParseTags(row.styleTags),
+    isFavorite: Boolean(row.isFavorite),
+  }));
 }
 
 /**

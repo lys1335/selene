@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo, type CSSProperties, type MutableRefObject, type FC } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useThread } from "@assistant-ui/react";
 import { Shell } from "@/components/layout/shell";
 import { Thread } from "@/components/assistant-ui/thread";
@@ -44,10 +45,17 @@ import { ChatSidebarHeader, ScheduledRunBanner } from "@/components/chat/chat-in
 import { shouldReloadSessionFromTaskProgress, useBackgroundProcessing, useSessionManager } from "@/components/chat/chat-interface-hooks";
 import { ThemeChooserModal } from "@/components/theme/theme-chooser-modal";
 import { BrowserChatWorkspace } from "@/components/chat/browser-chat-workspace";
-import { DesignWorkspace } from "@/components/design";
 import type { SessionInfo } from "@/components/chat/chat-sidebar/types";
 import { useChatWorkspaceStore } from "@/lib/stores/chat-workspace-store";
 import type { ChatWorkspaceMode } from "@/lib/chat/workspace-mode";
+
+// Lazy-load the design workspace so the preview-frame + properties-panel + gallery bundles
+// stay off the initial chat route JS. ssr: false because the workspace uses DOM-only APIs
+// (iframe refs, browser-only Zustand state) and the route is client-rendered anyway.
+const DesignWorkspace = dynamic(
+    () => import("@/components/design").then((m) => ({ default: m.DesignWorkspace })),
+    { ssr: false },
+);
 
 interface OverlaySessionUpdateDetail {
     sessionId?: string;

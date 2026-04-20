@@ -37,19 +37,117 @@ function buildPreviewMarkup(component: Pick<DesignComponent, "code" | "mode" | "
 // ---------------------------------------------------------------------------
 // Session cache (module-level, NOT in the store)
 // ---------------------------------------------------------------------------
-const MAX_CACHED_SESSIONS = 10;
+/**
+ * Number of inactive sessions retained in memory. Kept small so the app
+ * doesn't accumulate every session the user has visited — heavy fields
+ * (`code`) are further stripped on cache-out via `stripSessionCodeForCache`.
+ */
+const MAX_CACHED_SESSIONS = 3;
 const sessionCache = new Map<string, DesignWorkspaceSessionState>();
+
+/**
+ * Maximum number of components in the live store that keep their full
+ * `code` payload. When exceeded, the least recently touched non-active
+ * component has its `code` stripped and `codeStripped: true` set. A click
+ * or agent action triggers re-hydration via `fetchComponentFromGallery`.
+ */
+const MAX_HYDRATED_COMPONENTS = 3;
+
+/**
+ * Tracks the order in which components were most recently hydrated
+ * (full-code). Newest at the end. Keyed per-session: switching sessions
+ * swaps the tracker so eviction accounting doesn't bleed across sessions.
+ */
+const hydrationOrderBySession = new Map<string, string[]>();
+const NO_SESSION_HYDRATION_KEY = "__nosession__";
+
+function getHydrationOrder(sessionId: string | null): string[] {
+  const key = sessionId ?? NO_SESSION_HYDRATION_KEY;
+  let order = hydrationOrderBySession.get(key);
+  if (!order) {
+    order = [];
+    hydrationOrderBySession.set(key, order);
+  }
+  return order;
+}
+
+function touchHydration(sessionId: string | null, componentId: string): void {
+  const order = getHydrationOrder(sessionId);
+  const existingIndex = order.indexOf(componentId);
+  if (existingIndex !== -1) order.splice(existingIndex, 1);
+  order.push(componentId);
+}
+
+function untrackHydration(sessionId: string | null, componentId: string): void {
+  const order = getHydrationOrder(sessionId);
+  const idx = order.indexOf(componentId);
+  if (idx !== -1) order.splice(idx, 1);
+}
+
+/**
+ * Walks the hydration tracker and strips `code` from components beyond the
+ * `MAX_HYDRATED_COMPONENTS` limit. Never evicts the active component.
+ * Returns the updated component list.
+ */
+function applyCodeEviction(
+  components: DesignComponent[],
+  sessionId: string | null,
+  activeComponentId: string | null,
+): DesignComponent[] {
+  const order = getHydrationOrder(sessionId);
+  if (order.length <= MAX_HYDRATED_COMPONENTS) return components;
+
+  // Candidates for eviction: oldest first, never the active one.
+  const toEvict = new Set<string>();
+  let remaining = order.length - MAX_HYDRATED_COMPONENTS;
+  for (const id of order) {
+    if (remaining <= 0) break;
+    if (id === activeComponentId) continue;
+    toEvict.add(id);
+    remaining -= 1;
+  }
+
+  if (toEvict.size === 0) return components;
+
+  // Remove evicted ids from the hydration tracker.
+  for (let i = order.length - 1; i >= 0; i -= 1) {
+    if (toEvict.has(order[i])) order.splice(i, 1);
+  }
+
+  return components.map((c) =>
+    toEvict.has(c.id) ? { ...c, code: "", codeStripped: true } : c,
+  );
+}
+
+/**
+ * When caching a session's state, strip heavy `code` payloads from any
+ * non-active component. The active component retains its code so restoring
+ * the session doesn't flash a blank preview. Consumers rehydrate evicted
+ * components on-demand.
+ */
+function stripSessionCodeForCache(state: DesignWorkspaceSessionState): DesignWorkspaceSessionState {
+  const activeId = state.activeComponentId;
+  const components = state.components.map((component) => {
+    if (component.id === activeId) return component;
+    if (!component.code) return { ...component, codeStripped: true };
+    return { ...component, code: "", codeStripped: true };
+  });
+  return { ...state, components };
+}
 
 /** Basic LRU eviction: delete the oldest entry when the cache exceeds max. */
 function cacheSessionState(sessionId: string, state: DesignWorkspaceSessionState): void {
   // Re-insert to move to "newest" position (Map preserves insertion order)
   sessionCache.delete(sessionId);
-  sessionCache.set(sessionId, state);
+  sessionCache.set(sessionId, stripSessionCodeForCache(state));
 
   if (sessionCache.size > MAX_CACHED_SESSIONS) {
     // Delete the oldest (first) key
     const oldest = sessionCache.keys().next().value;
-    if (oldest !== undefined) sessionCache.delete(oldest);
+    if (oldest !== undefined) {
+      sessionCache.delete(oldest);
+      hydrationOrderBySession.delete(oldest);
+    }
   }
 }
 
@@ -117,40 +215,107 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
 
   addComponent: (component: DesignComponent) => {
     const current = get();
-    // Deduplicate: if a component with the same ID already exists, select it
-    // and update its data to keep store and preview in sync
+    // A full-code insert has a non-empty `code` and is not flagged as a stub.
+    // Summary-only inserts (used for replays from historical tool results and
+    // for gallery browse entries) leave the existing code intact and skip
+    // activation / preview rebuild.
+    const hasFullCode = Boolean(component.code) && !component.codeStripped;
     const existingIndex = current.components.findIndex((c) => c.id === component.id);
+
     if (existingIndex !== -1) {
-      // If this component is already active, don't overwrite compiled previewHtml
-      // with a placeholder — that causes "stuck on compiling" on double-click
-      const isAlreadyActive = current.activeComponentId === component.id;
+      const existing = current.components[existingIndex];
+      const merged: DesignComponent = hasFullCode
+        ? { ...existing, ...component, codeStripped: false }
+        : {
+            ...existing,
+            ...component,
+            // Preserve any previously-hydrated code when a summary arrives.
+            code: existing.code,
+            codeStripped: existing.codeStripped ?? !existing.code,
+          };
+
       const nextComponents = [...current.components];
-      nextComponents[existingIndex] = { ...nextComponents[existingIndex], ...component };
-      set({
-        components: nextComponents,
-        activeComponentId: component.id,
-        ...(isAlreadyActive ? {} : { previewHtml: buildPreviewMarkup(component) }),
-      });
+      nextComponents[existingIndex] = merged;
+
+      if (hasFullCode) touchHydration(current.sessionId, component.id);
+
+      const shouldActivate = hasFullCode;
+      const activeAfter = shouldActivate ? component.id : current.activeComponentId;
+      const evicted = applyCodeEviction(nextComponents, current.sessionId, activeAfter);
+
+      const nextState: Partial<DesignWorkspaceState> = { components: evicted };
+
+      if (shouldActivate) {
+        const isAlreadyActive = current.activeComponentId === component.id;
+        nextState.activeComponentId = component.id;
+        // Only rebuild the placeholder preview when it would otherwise be
+        // missing (activation transition or no existing preview). The
+        // placeholder is intentionally code-independent; the real preview
+        // is compiled async by `useCompileTailwindPreview`, which observes
+        // `code` changes directly and re-fetches `/api/design/compile-preview`.
+        // Rebuilding here on code change would just flash the loader.
+        if (!isAlreadyActive || !current.previewHtml) {
+          const activeComponent = evicted.find((c) => c.id === component.id);
+          if (activeComponent && activeComponent.code) {
+            nextState.previewHtml = buildPreviewMarkup(activeComponent);
+          }
+        }
+      }
+
+      set(nextState);
       return;
     }
-    set({
-      components: [...current.components, component],
-      activeComponentId: component.id,
-      previewHtml: buildPreviewMarkup(component),
-    });
+
+    // Net-new insertion.
+    const normalised: DesignComponent = hasFullCode
+      ? { ...component, codeStripped: false }
+      : { ...component, code: component.code ?? "", codeStripped: true };
+
+    if (hasFullCode) touchHydration(current.sessionId, component.id);
+
+    const shouldActivate = hasFullCode;
+    const activeAfter = shouldActivate ? component.id : current.activeComponentId;
+    const evicted = applyCodeEviction(
+      [...current.components, normalised],
+      current.sessionId,
+      activeAfter,
+    );
+
+    const nextState: Partial<DesignWorkspaceState> = { components: evicted };
+
+    if (shouldActivate) {
+      nextState.activeComponentId = component.id;
+      const activeComponent = evicted.find((c) => c.id === component.id);
+      if (activeComponent && activeComponent.code) {
+        nextState.previewHtml = buildPreviewMarkup(activeComponent);
+      }
+    }
+
+    set(nextState);
   },
 
   updateComponent: (id: string, updates: Partial<DesignComponent>) => {
     const current = get();
     const now = new Date().toISOString();
-    const nextComponents = current.components.map((c) =>
-      c.id === id ? { ...c, ...updates, updatedAt: now } : c,
-    );
-    const nextState: Partial<DesignWorkspaceState> = { components: nextComponents };
+    const nextComponents = current.components.map((c) => {
+      if (c.id !== id) return c;
+      const merged: DesignComponent = { ...c, ...updates, updatedAt: now };
+      if (updates.code && !updates.codeStripped) {
+        merged.codeStripped = false;
+      }
+      return merged;
+    });
+
+    if (updates.code && !updates.codeStripped) {
+      touchHydration(current.sessionId, id);
+    }
+
+    const evicted = applyCodeEviction(nextComponents, current.sessionId, current.activeComponentId);
+    const nextState: Partial<DesignWorkspaceState> = { components: evicted };
 
     if (current.activeComponentId === id) {
-      const updatedComponent = nextComponents.find((component) => component.id === id);
-      if (updatedComponent) {
+      const updatedComponent = evicted.find((component) => component.id === id);
+      if (updatedComponent && updatedComponent.code) {
         nextState.previewHtml = buildPreviewMarkup(updatedComponent);
       }
     }
@@ -162,6 +327,7 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     const current = get();
     const nextComponents = current.components.filter((c) => c.id !== id);
     const nextSnapshots = current.snapshots.filter((s) => s.componentId !== id);
+    untrackHydration(current.sessionId, id);
     const nextState: Partial<DesignWorkspaceState> = {
       components: nextComponents,
       snapshots: nextSnapshots,
@@ -170,7 +336,7 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     if (current.activeComponentId === id) {
       const fallback = nextComponents[0] ?? null;
       nextState.activeComponentId = fallback?.id ?? null;
-      nextState.previewHtml = fallback ? buildPreviewMarkup(fallback) : "";
+      nextState.previewHtml = fallback && fallback.code ? buildPreviewMarkup(fallback) : "";
     }
 
     set(nextState);
@@ -180,9 +346,16 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
     const current = get();
     // Normalize invalid IDs to null to prevent impossible state
     const component = id ? current.components.find((c) => c.id === id) : null;
+    if (component && component.code) {
+      touchHydration(current.sessionId, component.id);
+    }
     set({
       activeComponentId: component ? id : null,
-      previewHtml: component ? buildPreviewMarkup(component) : "",
+      // Leave preview blank when the target is a stub (codeStripped) — the
+      // bridge / gallery must rehydrate full code before the preview can be
+      // recomputed. This prevents the broken preview iframe issue during
+      // large-library browsing.
+      previewHtml: component && component.code ? buildPreviewMarkup(component) : "",
       selectedElement: null,
       selectedElements: [],
     });
@@ -347,22 +520,36 @@ export const useDesignWorkspaceStore = create<DesignWorkspaceState>((set, get) =
       cacheSessionState(current.sessionId, extractSessionState(current));
     }
 
-    // Restore target session from cache, or initialize fresh
+    // Restore target session from cache, or initialize fresh. Cached state
+    // has `code` stripped from inactive components (see
+    // stripSessionCodeForCache) — the bridge / gallery will rehydrate them
+    // on demand.
     const cached = sessionCache.get(sessionId);
     if (cached) {
       // Move to newest position in cache
       sessionCache.delete(sessionId);
       set({ ...cached, sessionId });
+      // Rebuild hydration tracker from the restored component list so
+      // eviction accounting matches the visible state.
+      const order: string[] = [];
+      for (const component of cached.components) {
+        if (component.code && !component.codeStripped) order.push(component.id);
+      }
+      hydrationOrderBySession.set(sessionId, order);
     } else {
       set({
         ...initialSessionState,
         selectedBreakpoint: { ...DESIGN_BREAKPOINTS[0] },
         sessionId,
       });
+      hydrationOrderBySession.set(sessionId, []);
     }
   },
 
   reset: () => {
+    const { sessionId } = get();
+    if (sessionId) hydrationOrderBySession.delete(sessionId);
+    else hydrationOrderBySession.delete(NO_SESSION_HYDRATION_KEY);
     set({ ...initialState, selectedBreakpoint: { ...DESIGN_BREAKPOINTS[0] } });
   },
 }));

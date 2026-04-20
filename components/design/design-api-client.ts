@@ -32,6 +32,31 @@ export interface WorkspaceDesignRecord {
   updatedAt: string;
 }
 
+/**
+ * Metadata-only gallery item returned by the `workspace-list-summary` API
+ * action. Excludes `code` and `prompt` — clients must call `get` to hydrate
+ * the full record when a user opens a component. Keeps the initial gallery
+ * payload small regardless of library size.
+ */
+export interface WorkspaceDesignSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  framework: string;
+  category: string;
+  tags: string[];
+  styleTags: string[];
+  previewUrl: string | null;
+  mode: string;
+  style: string;
+  sessionId: string | null;
+  useCount: number;
+  lastUsedAt: string | null;
+  isFavorite: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type GalleryComponent = WorkspaceDesignRecord;
 
 export async function requestExport(

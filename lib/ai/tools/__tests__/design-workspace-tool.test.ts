@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 
+import { slimResult, SLIM_RESULT_SAFETY_CAP } from "../design-workspace-tool";
+
 // Mock heavy dependencies that would fail in test environment
 vi.mock("@/lib/db/sqlite-client", () => ({
   getDb: vi.fn(() => ({
@@ -125,6 +127,142 @@ describe("Design Workspace Tool — New Action Contracts", () => {
         }
         expect(changed).toBe(2);
       });
+    });
+  });
+
+  describe("slimResult — payload size safety", () => {
+    it("strips full code from generate results and sets truncated flag", () => {
+      const hugeCode = "x".repeat(60_000);
+      const result = slimResult({
+        success: true,
+        action: "generate",
+        data: {
+          componentId: "comp-1",
+          name: "Hero",
+          code: hugeCode,
+          previewHtml: "<html>ok</html>",
+        },
+      });
+
+      expect(result.data?.code).toBeUndefined();
+      expect(result.data?.codeLength).toBe(hugeCode.length);
+      expect(result.data?.codeLines).toBeGreaterThan(0);
+      expect(result.data?.truncated).toBe(true);
+      expect(result.data?.hydrateRef).toEqual({ kind: "gallery", componentId: "comp-1" });
+      expect(result.data?.componentId).toBe("comp-1");
+    });
+
+    it("strips previewHtml when it exceeds the small-inline threshold", () => {
+      const bigPreview = `<html>${"<div></div>".repeat(5_000)}</html>`;
+      const result = slimResult({
+        success: true,
+        action: "edit",
+        data: {
+          componentId: "comp-2",
+          code: "short",
+          previewHtml: bigPreview,
+        },
+      });
+
+      expect(result.data?.previewHtml).toBeUndefined();
+      expect(result.data?.previewHtmlLength).toBe(bigPreview.length);
+      expect(result.data?.truncated).toBe(true);
+    });
+
+    it("keeps small inline previewHtml (placeholder loader)", () => {
+      const tinyPreview = "<html><body>loading</body></html>";
+      const result = slimResult({
+        success: true,
+        action: "generate",
+        data: {
+          componentId: "comp-3",
+          previewHtml: tinyPreview,
+        },
+      });
+      expect(result.data?.previewHtml).toBe(tinyPreview);
+    });
+
+    it("keeps inline code on readSource below threshold", () => {
+      const mediumCode = "const X = 1;\n".repeat(100);
+      const result = slimResult({
+        success: true,
+        action: "readSource",
+        data: {
+          componentId: "comp-4",
+          code: mediumCode,
+        },
+      });
+      expect(result.data?.code).toBe(mediumCode);
+      expect(result.data?.truncated).toBeUndefined();
+    });
+
+    it("strips code on readSource above threshold", () => {
+      const hugeCode = "x".repeat(20_000);
+      const result = slimResult({
+        success: true,
+        action: "readSource",
+        data: {
+          componentId: "comp-5",
+          code: hugeCode,
+        },
+      });
+      expect(result.data?.code).toBeUndefined();
+      expect(result.data?.truncated).toBe(true);
+    });
+
+    it("final serialized payload stays under the safety cap even with huge code+preview", () => {
+      const hugeCode = "x".repeat(200_000);
+      const hugePreview = `<html>${"y".repeat(200_000)}</html>`;
+      const result = slimResult({
+        success: true,
+        action: "generate",
+        data: {
+          componentId: "comp-6",
+          name: "Mega",
+          code: hugeCode,
+          previewHtml: hugePreview,
+          compileReport: {
+            warnings: [],
+            errors: [],
+            diagnostics: Array.from({ length: 50 }, (_, i) => ({
+              text: "z".repeat(5_000),
+              location: { file: "x.tsx", line: i, column: 0 },
+            })),
+            dependencyCheck: {
+              manifestPackages: [],
+              importedPackages: [],
+              checkedPackages: [],
+              missingManifestPackages: [],
+              missingImportedPackages: [],
+              missingPackages: [],
+            },
+            recovered: false,
+            durationMs: 0,
+          },
+        },
+      });
+
+      const serialized = JSON.stringify(result);
+      expect(serialized.length).toBeLessThan(SLIM_RESULT_SAFETY_CAP);
+      expect(result.data?.truncated).toBe(true);
+      expect(result.data?.componentId).toBe("comp-6");
+    });
+
+    it("preserves agentErrorSummary, messages, and compile error structure on failure", () => {
+      const result = slimResult({
+        success: false,
+        action: "generate",
+        error: "Syntax error",
+        data: {
+          componentId: "comp-7",
+          agentErrorSummary: "[syntax] Unexpected token",
+          message: "Failed to compile.",
+          missingPackages: ["three"],
+        },
+      });
+      expect(result.success).toBe(false);
+      expect(result.data?.agentErrorSummary).toBe("[syntax] Unexpected token");
+      expect(result.data?.missingPackages).toEqual(["three"]);
     });
   });
 

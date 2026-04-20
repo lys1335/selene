@@ -42,6 +42,32 @@ export interface DesignComponentRow {
   updatedAt: string;
 }
 
+/**
+ * Metadata-only row for gallery list views. Excludes heavy fields (`code`,
+ * `prompt`) so the initial workspace list payload stays small regardless of
+ * how many components a user has persisted. Use `getDesignComponent` to
+ * hydrate the full row on demand.
+ */
+export interface DesignComponentSummaryRow {
+  id: string;
+  sessionId: string | null;
+  projectId: string | null;
+  name: string;
+  description: string | null;
+  framework: string;
+  category: string;
+  tags: string[];
+  styleTags: string[];
+  previewPath: string | null;
+  mode: string;
+  style: string;
+  useCount: number;
+  lastUsedAt: string | null;
+  isFavorite: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GallerySearchOpts {
   userId: string;
   query?: string;

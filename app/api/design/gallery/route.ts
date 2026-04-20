@@ -3,6 +3,7 @@ import { requireAuth } from "@/lib/auth/local-auth";
 import {
   listGalleryComponents,
   listWorkspaceDesigns,
+  listWorkspaceDesignSummaries,
   getGalleryComponentForUser,
   toggleGalleryFavoriteForUser,
   deleteGalleryComponentForUser,
@@ -125,6 +126,41 @@ export async function POST(req: NextRequest) {
           if (scope === "saved" && sessionId && component.sessionId === sessionId) return false;
           if (query) {
             const haystack = `${component.name} ${component.description || ""} ${component.prompt}`.toLowerCase();
+            if (!haystack.includes(query.toLowerCase())) return false;
+          }
+          return true;
+        });
+
+        return NextResponse.json({
+          success: true,
+          data: { components: filtered, count: filtered.length },
+        });
+      }
+
+      case "workspace-list-summary": {
+        // Metadata-only variant of `workspace-list`. Drops `code` + `prompt`
+        // from each row so the initial payload stays small regardless of the
+        // user's library size. Clients hydrate the full row via `get` when a
+        // component is opened.
+        const query = typeof body.query === "string" ? body.query.trim().slice(0, 200) : "";
+        const limit = typeof body.limit === "number" && Number.isFinite(body.limit)
+          ? Math.min(Math.max(1, Math.floor(body.limit)), 100)
+          : 60;
+        const sessionId = isNonEmptyString(body.sessionId, 255) ? body.sessionId : undefined;
+        const scope = isNonEmptyString(body.scope, 32) ? body.scope : "current";
+        const favoritesOnly = body.favoritesOnly === true;
+        const components = await listWorkspaceDesignSummaries({
+          userId,
+          sessionId,
+          limit,
+        });
+
+        const filtered = components.filter((component) => {
+          if (favoritesOnly && !component.isFavorite) return false;
+          if (scope === "current" && sessionId && component.sessionId !== sessionId) return false;
+          if (scope === "saved" && sessionId && component.sessionId === sessionId) return false;
+          if (query) {
+            const haystack = `${component.name} ${component.description || ""}`.toLowerCase();
             if (!haystack.includes(query.toLowerCase())) return false;
           }
           return true;

@@ -1,6 +1,7 @@
 export {
   listGalleryComponents,
   listWorkspaceDesigns,
+  listWorkspaceDesignSummaries,
   findWorkspaceDesign,
   getGalleryComponentForUser,
   toggleGalleryFavoriteForUser,
@@ -8,7 +9,7 @@ export {
   markGalleryComponentUsed,
   saveDesignComponentRecord,
 } from "./service";
-export type { DesignGalleryItem } from "./service";
+export type { DesignGalleryItem, DesignGallerySummaryItem } from "./service";
 
 export {
   createProject,

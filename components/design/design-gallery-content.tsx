@@ -20,7 +20,11 @@ import {
   Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { fetchWorkspaceDesignApi, type WorkspaceDesignRecord } from "./design-api-client";
+import {
+  fetchWorkspaceDesignApi,
+  type WorkspaceDesignRecord,
+  type WorkspaceDesignSummary,
+} from "./design-api-client";
 
 const FILTERS = [
   { id: "current", label: "Current", icon: Clock3 },
@@ -36,8 +40,10 @@ export function GalleryContent() {
   const workspaceComponents = useDesignWorkspaceStore((s) => s.components);
   const activeComponentId = useDesignWorkspaceStore((s) => s.activeComponentId);
   const setActiveComponent = useDesignWorkspaceStore((s) => s.setActiveComponent);
-  const [components, setComponents] = useState<WorkspaceDesignRecord[]>([]);
+  const openWorkspace = useDesignWorkspaceStore((s) => s.open);
+  const [components, setComponents] = useState<WorkspaceDesignSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [opening, setOpening] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<DesignFilter>("current");
@@ -57,8 +63,10 @@ export function GalleryContent() {
       setError(null);
       try {
         const activeFilter = nextFilter ?? filter;
+        // Use summary action: metadata only. Full code is fetched via "get"
+        // only when the user clicks "Open" on a row.
         const result = await fetchWorkspaceDesignApi(
-          "workspace-list",
+          "workspace-list-summary",
           {
             query: searchQuery || undefined,
             scope: activeFilter === "favorites" ? "all" : activeFilter,
@@ -70,7 +78,7 @@ export function GalleryContent() {
         );
         if (!controller.signal.aborted) {
           if (result.success && result.data?.components) {
-            setComponents(result.data.components as WorkspaceDesignRecord[]);
+            setComponents(result.data.components as WorkspaceDesignSummary[]);
           } else {
             setError(result.error || "Failed to load designs");
           }
@@ -149,17 +157,46 @@ export function GalleryContent() {
     }
   }
 
-  function handleLoad(component: WorkspaceDesignRecord) {
-    addComponent({
-      id: component.id,
-      name: component.name,
-      code: component.code,
-      mode: "tailwind",
-      style: component.style as "apple-glass" | "default",
-      prompt: component.prompt,
-      createdAt: component.createdAt,
-      updatedAt: component.updatedAt,
-    });
+  async function handleLoad(component: WorkspaceDesignSummary) {
+    // Fetch the full record (with `code` + `prompt`) on demand. The list was
+    // loaded via the summary endpoint so those fields aren't present on
+    // `component` — we must hit the `get` action before we can push a
+    // hydrated entry into the Zustand store.
+    setOpening(component.id);
+    try {
+      const result = await fetchWorkspaceDesignApi("get", {
+        componentId: component.id,
+      });
+      if (!result.success || !result.data?.component) {
+        setError(result.error || "Failed to open design");
+        return;
+      }
+      const full = result.data.component as WorkspaceDesignRecord;
+      addComponent({
+        id: full.id,
+        name: full.name,
+        code: full.code,
+        mode: "tailwind",
+        style: full.style as "apple-glass" | "default",
+        prompt: full.prompt,
+        createdAt: full.createdAt,
+        updatedAt: full.updatedAt,
+      });
+      // Defensive: `addComponent` with full code already sets
+      // `activeComponentId` + builds preview, but be explicit so the UI
+      // contract holds even if the store's activation heuristic ever shifts.
+      // Also ensure the panel is visible — the gallery can be reached while
+      // the workspace is minimised (e.g. re-opening a saved design after a
+      // session switch), and without this call the component would load
+      // into state but the user would see nothing change.
+      setActiveComponent(full.id);
+      openWorkspace();
+    } catch (err) {
+      console.warn("[designs] Failed to hydrate:", err);
+      setError("Failed to open design");
+    } finally {
+      setOpening(null);
+    }
   }
 
   const selected = components.find((c) => c.id === selectedId);
@@ -231,7 +268,14 @@ export function GalleryContent() {
                   type="button"
                   role="option"
                   aria-selected={activeComponentId === component.id}
-                  onClick={() => setActiveComponent(component.id)}
+                  onClick={() => {
+                    // Activate AND ensure the panel is visible. Without the
+                    // explicit `openWorkspace()`, clicking an item in the
+                    // "Open" list while the workspace is minimised leaves
+                    // `isOpen: false` and the user sees no UI change.
+                    setActiveComponent(component.id);
+                    openWorkspace();
+                  }}
                   className={cn(
                     "group flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",
                     activeComponentId === component.id
@@ -336,9 +380,14 @@ export function GalleryContent() {
             <Button
               size="sm"
               className="h-6 flex-1 gap-1 text-[11px]"
-              onClick={() => handleLoad(selected)}
+              disabled={opening === selected.id}
+              onClick={() => void handleLoad(selected)}
             >
-              <ArrowDownToLine className="h-3 w-3" />
+              {opening === selected.id ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <ArrowDownToLine className="h-3 w-3" />
+              )}
               Open
             </Button>
             <Button

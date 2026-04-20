@@ -71,6 +71,23 @@ interface DesignWorkspaceResultData {
   postEditValidation?: ValidationSummary;
   history?: HistorySummary;
   config?: ConfigSummary;
+  /**
+   * Set by the tool when heavy fields (code/previewHtml) were stripped to
+   * keep the tool result under the AI runtime's token cap. The bridge uses
+   * `hydrateRef.componentId` to refetch the full record from the DB.
+   */
+  truncated?: boolean;
+  codeLength?: number;
+  codeLines?: number;
+  previewHtmlLength?: number;
+  hydrateRef?: { kind: "gallery"; componentId: string };
+  /**
+   * Server-stamped timestamp (ms since epoch) set by `slimResult` on
+   * mutating actions (generate/edit/patch). Used as a freshness fallback
+   * for `isLive` detection when the tool-UI mounts directly at
+   * `output-available` and the streaming-state transition heuristic misses.
+   */
+  generatedAt?: number;
   /** Project metadata fields (detect/browse/cast/open) */
   framework?: Record<string, unknown>;
   projectStructure?: Record<string, unknown>;
@@ -291,6 +308,15 @@ function toBridgeData(data: DesignWorkspaceResultData | undefined) {
     postEditValidation: data.postEditValidation as DesignWorkspaceValidationResult | undefined,
     history: data.history as DesignWorkspaceHistory | undefined,
     config: data.config as DesignWorkspaceConfig | undefined,
+    // Hydration hints — the bridge uses these to refetch full component data
+    // from the DB when the tool stripped `code`/`previewHtml` to stay under
+    // the token cap.
+    truncated: data.truncated,
+    hydrateRef: data.hydrateRef,
+    // Freshness marker — forwarded so the bridge's event detail carries it
+    // for any downstream subscribers; the tool-UI uses it directly for
+    // isLive detection when the streaming-state heuristic misses.
+    generatedAt: data.generatedAt,
     // Project metadata fields — pass through so the bridge can update the store
     framework: data.framework,
     projectStructure: data.projectStructure,
@@ -334,6 +360,38 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
   const dispatchedRef = useRef<string | null>(null);
   const sessionId = useChatSessionId();
 
+  // `sawLiveStateRef` flips to true when we have direct evidence that this
+  // tool call is executing NOW in the current browser session (vs. replayed
+  // from persisted chat history). We flip on three signals, any of which
+  // alone is sufficient:
+  //
+  //  1. We observed `state === "input-streaming" | "input-available"` — the
+  //     assistant-ui runtime explicitly told us the tool is streaming.
+  //  2. We observed `resolvedResult === undefined` on any render — the
+  //     tool-UI instance existed before the result arrived, so we watched
+  //     the transition. This is the most reliable signal because chat-
+  //     history replays always mount with `resolvedResult` already present.
+  //
+  // Previously we only relied on signal (1), which missed the case where
+  // the SDK delivers the final `output-available` state in a single render
+  // commit (fast backend, batched state updates). In that case the streaming
+  // states are never observed via useEffect, `isLive` stayed false, and the
+  // bridge treated a fresh generation as a replay — leaving the design
+  // workspace inert. Signal (2) closes that gap.
+  const sawLiveStateRef = useRef(false);
+  if (!resolvedResult) {
+    // Ref writes during render are safe (they don't trigger re-render) and
+    // let the dispatch effect — which reads this ref after commit — see
+    // the correct value even if the tool completes between the first render
+    // and the first effect flush.
+    sawLiveStateRef.current = true;
+  }
+  useEffect(() => {
+    if (state === "input-streaming" || state === "input-available") {
+      sawLiveStateRef.current = true;
+    }
+  }, [state]);
+
   useEffect(() => {
     if (!resolvedResult || !action) return;
     const baseKey = toolCallId
@@ -341,11 +399,25 @@ export const DesignWorkspaceToolUI: ToolCallContentPartComponent = memo(({
     const key = sessionId ? `${sessionId}:${baseKey}` : baseKey;
     if (dispatchedRef.current === key) return;
     dispatchedRef.current = key;
+
+    // Freshness fallback: for SSR-hydrated messages or same-render completion
+    // paths where neither streaming state nor pre-result was observed, the
+    // server-stamped `generatedAt` tells us this result was produced within
+    // the last few seconds and should be treated as live. The window is
+    // intentionally generous (2 minutes) to cover slow clients and
+    // F5-right-after-generate flows; beyond that, treat as replay.
+    const rawData = isDesignWorkspaceResultData(resolvedResult.data) ? resolvedResult.data : undefined;
+    const generatedAt = typeof rawData?.generatedAt === "number" ? rawData.generatedAt : undefined;
+    const freshByTimestamp =
+      generatedAt !== undefined && Date.now() - generatedAt < 2 * 60_000;
+    const isLive = sawLiveStateRef.current || freshByTimestamp;
+
     const detail = {
       action,
       success: Boolean(resolvedResult.success),
       sessionId: sessionId ?? undefined,
-      data: toBridgeData(isDesignWorkspaceResultData(resolvedResult.data) ? resolvedResult.data : undefined),
+      isLive,
+      data: toBridgeData(rawData),
       error: resolvedResult.error,
     };
     dispatchDesignToolResult(detail);

@@ -20,13 +20,24 @@
 
 import { useEffect, useRef } from "react";
 import { useDesignWorkspaceStore } from "@/lib/design/workspace";
+import { fetchWorkspaceDesignApi, type WorkspaceDesignRecord } from "./design-api-client";
 
 /** Shape of the event detail dispatched by the tool UI */
-interface DesignToolEvent {
+export interface DesignToolEvent {
   action: string;
   success: boolean;
   /** Session that originated this event — used for cross-chat isolation */
   sessionId?: string;
+  /**
+   * True when the tool UI detected that the originating tool call transitioned
+   * through a live-execution state (`input-streaming` / `input-available`)
+   * during the current browser session — i.e. the user is watching the
+   * generate/edit happen NOW. False (or undefined) means the event is a
+   * replay from chat history: the tool completed in a previous session and
+   * the UI is re-rendering a persisted result. Replays skip eager hydration
+   * (no DB fetch, no store activation) so large histories don't bloat memory.
+   */
+  isLive?: boolean;
   data?: {
     componentId?: string;
     code?: string;
@@ -43,6 +54,19 @@ interface DesignToolEvent {
     postEditValidation?: import("@/lib/design/workspace/config").DesignWorkspaceValidationResult;
     history?: import("@/lib/design/workspace/edit-history").DesignWorkspaceHistory;
     config?: import("@/lib/design/workspace/config").DesignWorkspaceConfig;
+    /**
+     * Flag set by the tool when heavy fields (`code`, `previewHtml`) were
+     * stripped from the payload to stay under the AI runtime's token cap.
+     * When true, the bridge must refetch the full component from the DB.
+     */
+    truncated?: boolean;
+    hydrateRef?: { kind: "gallery"; componentId: string };
+    /**
+     * Server-stamped freshness marker. Consumed by the tool-UI for `isLive`
+     * detection; the bridge doesn't read it directly but it rides along on
+     * the event detail so downstream subscribers have access.
+     */
+    generatedAt?: number;
   };
   error?: string;
 }
@@ -61,9 +85,141 @@ function signalGalleryRefresh(): void {
   window.dispatchEvent(new CustomEvent(GALLERY_REFRESH_EVENT));
 }
 
-function applyDesignToolResultToStore(detail: DesignToolEvent): void {
+/**
+ * Deduplicate in-flight hydrate requests so repeated dispatches for the same
+ * componentId (e.g. live dispatch + queue drain) only trigger one API call.
+ */
+const inflightHydration = new Map<string, Promise<WorkspaceDesignRecord | null>>();
+
+async function fetchComponentFromGallery(
+  componentId: string,
+): Promise<WorkspaceDesignRecord | null> {
+  const existing = inflightHydration.get(componentId);
+  if (existing) return existing;
+
+  const request = (async () => {
+    try {
+      const response = await fetchWorkspaceDesignApi("get", { componentId });
+      if (response.success && response.data && typeof response.data === "object") {
+        const component = (response.data as { component?: WorkspaceDesignRecord }).component;
+        return component ?? null;
+      }
+      return null;
+    } catch (error) {
+      console.warn("[design-bridge] Failed to hydrate component", componentId, error);
+      return null;
+    } finally {
+      // Small delay before clearing so a live dispatch + immediate queue drain
+      // collapse into one request but subsequent (post-commit) refetches work.
+      setTimeout(() => inflightHydration.delete(componentId), 250);
+    }
+  })();
+
+  inflightHydration.set(componentId, request);
+  return request;
+}
+
+function upsertComponentFromData(
+  detail: NonNullable<DesignToolEvent["data"]>,
+  code: string,
+  meta?: Pick<WorkspaceDesignRecord, "createdAt" | "updatedAt"> | null,
+): void {
+  if (!detail.componentId) return;
   const store = useDesignWorkspaceStore.getState();
-  const { action, success, data, error } = detail;
+  const now = new Date().toISOString();
+  store.addComponent({
+    id: detail.componentId,
+    name: detail.name ?? "Untitled",
+    code,
+    mode: "tailwind",
+    style: (detail.style as "apple-glass" | "default") ?? "default",
+    prompt: detail.prompt ?? "",
+    createdAt: meta?.createdAt ?? now,
+    updatedAt: meta?.updatedAt ?? now,
+  });
+  if (code && detail.previewHtml) {
+    store.setPreviewHtml(detail.previewHtml);
+  }
+}
+
+/**
+ * Add a metadata-only stub to the store — no fetch, no code, no preview.
+ * Used for replays of historical tool results so the gallery shows the
+ * component was generated without paying the cost of a full hydration up
+ * front. Clicking into it, or a future live tool call, upgrades it to a
+ * fully-hydrated entry.
+ */
+function upsertComponentSummary(
+  detail: NonNullable<DesignToolEvent["data"]>,
+): void {
+  if (!detail.componentId) return;
+  const store = useDesignWorkspaceStore.getState();
+  const existing = store.components.find((c) => c.id === detail.componentId);
+  // Skip if already tracked — don't clobber a hydrated entry with an empty stub.
+  if (existing) return;
+  const now = new Date().toISOString();
+  store.addComponent({
+    id: detail.componentId,
+    name: detail.name ?? "Untitled",
+    code: "",
+    mode: "tailwind",
+    style: (detail.style as "apple-glass" | "default") ?? "default",
+    prompt: detail.prompt ?? "",
+    createdAt: now,
+    updatedAt: now,
+    codeStripped: true,
+  });
+}
+
+async function hydrateComponent(
+  data: NonNullable<DesignToolEvent["data"]>,
+  action: string,
+): Promise<void> {
+  if (!data.componentId) return;
+
+  // Fast path: the tool payload still has the code inline (small component).
+  if (data.code) {
+    upsertComponentFromData(data, data.code);
+    return;
+  }
+
+  // Slim path: refetch the full record from the DB via componentId.
+  const hydratedId = data.hydrateRef?.componentId ?? data.componentId;
+  const record = await fetchComponentFromGallery(hydratedId);
+  if (!record) {
+    const store = useDesignWorkspaceStore.getState();
+    store.setError(
+      `Unable to load design "${data.name ?? hydratedId}". The component was generated but could not be fetched — try again or refresh.`,
+    );
+    return;
+  }
+
+  upsertComponentFromData(
+    {
+      ...data,
+      name: data.name ?? record.name,
+      prompt: data.prompt ?? record.prompt,
+      style: data.style ?? record.style,
+    },
+    record.code,
+    { createdAt: record.createdAt, updatedAt: record.updatedAt },
+  );
+
+  // If the tool provided server-compiled preview HTML and it's the active
+  // component, prefer it over the placeholder that addComponent builds.
+  // (upsertComponentFromData already applies it when present.)
+  void action;
+}
+
+/**
+ * @internal Exported for unit testing. The test suite drives this directly
+ * to assert the open + activate + hydrate contract without having to mount
+ * the full React tree or simulate window events. Production callers go
+ * through `dispatchDesignToolResult` / the DOM listener.
+ */
+export function applyDesignToolResultToStore(detail: DesignToolEvent): void {
+  const store = useDesignWorkspaceStore.getState();
+  const { action, success, data, error, isLive } = detail;
 
   if (!success) {
     if (error) store.setError(error);
@@ -73,49 +229,64 @@ function applyDesignToolResultToStore(detail: DesignToolEvent): void {
     // the component in the sidebar and preview pane.
   }
 
+  // Replay events (historical tool results rendered during chat scrollback)
+  // never trigger a DB hydration, never open the workspace, and never set
+  // active. They add a lightweight stub so the gallery shows the component
+  // exists — clicking it (or a future live tool call) does the real fetch.
+  // This prevents the N-component eager-hydration memory bloat that made
+  // the workspace sluggish across all sessions.
+  const isReplay = !isLive;
+
   switch (action) {
     case "open":
-      store.open();
+      // Only react to live open events — replaying a historical "open" from
+      // another session's chat history must not force-open the panel here.
+      if (isLive) store.open();
       break;
 
     case "close":
-      store.close();
+      if (isLive) store.close();
       break;
 
     case "generate":
-      if (data?.componentId && data.code) {
-        const now = new Date().toISOString();
-        store.addComponent({
-          id: data.componentId,
-          name: data.name ?? "Untitled",
-          code: data.code,
-          mode: "tailwind",
-          style: (data.style as "apple-glass" | "default") ?? "default",
-          prompt: data.prompt ?? "",
-          createdAt: now,
-          updatedAt: now,
-        });
-        if (data.previewHtml) {
-          store.setPreviewHtml(data.previewHtml);
+      if (data?.componentId) {
+        if (isReplay) {
+          // Cheap: add a stub so the gallery's "Open" list shows the id.
+          upsertComponentSummary(data);
+          break;
         }
+        // Live path: open the workspace, hydrate from DB, refresh gallery.
         if (!store.isOpen) store.open();
+        void hydrateComponent(data, action);
         signalGalleryRefresh();
       }
       break;
 
     case "edit":
     case "patch":
-      if (data?.code) {
-        const targetId = data.componentId ?? store.activeComponentId;
+      if (data?.componentId) {
+        if (isReplay) {
+          upsertComponentSummary(data);
+          break;
+        }
+        void hydrateComponent(data, action);
+        signalGalleryRefresh();
+      } else if (data?.code) {
+        if (isReplay) break;
+        const targetId = store.activeComponentId;
         if (targetId) {
           store.updateComponent(targetId, { code: data.code });
-          if (data.previewHtml) {
-            store.setPreviewHtml(data.previewHtml);
-          }
+          if (data.previewHtml) store.setPreviewHtml(data.previewHtml);
           signalGalleryRefresh();
         } else {
-          store.setError(`${action === "patch" ? "Patch" : "Edit"} could not be applied: no active component.`);
+          store.setError(
+            `${action === "patch" ? "Patch" : "Edit"} could not be applied: no active component.`,
+          );
         }
+      } else if (isLive) {
+        store.setError(
+          `${action === "patch" ? "Patch" : "Edit"} could not be applied: no component reference returned.`,
+        );
       }
       break;
 

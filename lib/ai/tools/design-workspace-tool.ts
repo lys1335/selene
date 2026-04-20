@@ -137,6 +137,24 @@ interface DesignWorkspaceResultData {
   };
   recoveryHint?: string;
   updatedAt?: string;
+  /**
+   * Compact summary fields used when heavy payload fields (`code`, `previewHtml`)
+   * are stripped to keep the tool result under the AI runtime's token cap.
+   * The client bridge hydrates full data from the DB via `componentId`.
+   */
+  truncated?: boolean;
+  codeLength?: number;
+  codeLines?: number;
+  previewHtmlLength?: number;
+  /** Hint for the client bridge on how to refetch the full component. */
+  hydrateRef?: { kind: "gallery"; componentId: string };
+  /**
+   * Server-stamped freshness marker (ms since epoch). Set by `slimResult`
+   * on mutating actions (generate/edit/patch) so the client tool-UI can
+   * distinguish a just-produced result from a replay of persisted chat
+   * history — critical for deciding whether to auto-open the workspace.
+   */
+  generatedAt?: number;
 }
 
 interface DesignWorkspaceResult {
@@ -547,22 +565,161 @@ async function persistExistingDesign(
   };
 }
 
-function stripHeavyFields(result: DesignWorkspaceResult): DesignWorkspaceResult {
+/**
+ * Size cap for the tool-result payload reaching the AI runtime.
+ *
+ * The Anthropic / AI SDK runtime refuses tool results above a token cap
+ * (~66KB observed in production) and spills them to disk — which means the
+ * client bridge never receives the payload and the workspace stays empty.
+ *
+ * We slim the result to ensure the payload stays comfortably under this cap:
+ *   - `code` is the source of truth in the DB; the bridge hydrates it via
+ *     `/api/design/gallery` action "get" using `componentId`.
+ *   - `previewHtml` is compiled server-side, but the client can always
+ *     recompile via `/api/design/compile-preview` — so we only keep it when
+ *     it's small enough to round-trip cheaply.
+ *   - `compileReport` diagnostics are capped so error feedback still reaches
+ *     the agent without blowing the budget.
+ */
+/** @internal Exported for unit testing only. */
+export const SLIM_PREVIEW_HTML_THRESHOLD = 4_000; // ~4KB — keep only for trivial placeholders
+/** @internal Exported for unit testing only. */
+export const SLIM_CODE_THRESHOLD = 8_000; // ~8KB — below this we can inline code for readSource
+/** @internal Exported for unit testing only. */
+export const SLIM_RESULT_SAFETY_CAP = 40_000; // ~40KB — hard cap before we start stripping everything heavy
+
+const MUTATING_ACTIONS: ReadonlySet<DesignWorkspaceInput["action"]> = new Set([
+  "generate",
+  "edit",
+  "patch",
+]);
+
+function estimatePayloadBytes(payload: unknown): number {
+  try {
+    return JSON.stringify(payload).length;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function truncateCompileReport(
+  report: DesignWorkspaceCompileReport | undefined,
+): DesignWorkspaceCompileReport | undefined {
+  if (!report) return report;
+  const capped: DesignWorkspaceCompileReport = {
+    ...report,
+    errors: report.errors?.slice(0, 5),
+    warnings: report.warnings?.slice(0, 5),
+  };
+  if (capped.diagnostics) {
+    capped.diagnostics = capped.diagnostics
+      .slice(0, 5)
+      .map((d) => ({ ...d, text: typeof d.text === "string" ? d.text.slice(0, 2000) : d.text }));
+  }
+  return capped;
+}
+
+/** @internal Exported for unit testing only. */
+export function slimResult(result: DesignWorkspaceResult): DesignWorkspaceResult {
   if (!result.data) {
     return result;
   }
 
-  const HEAVY_THRESHOLD = 5_000;
-  const { previewHtml, renderedHtml: _renderedHtml, ...lightData } = result.data as DesignWorkspaceResultData & {
-    renderedHtml?: string;
-  };
+  const action = result.action as DesignWorkspaceInput["action"];
+  const {
+    previewHtml,
+    renderedHtml: _renderedHtml,
+    code,
+    compileReport,
+    ...rest
+  } = result.data as DesignWorkspaceResultData & { renderedHtml?: string };
 
-  const keep: Record<string, unknown> = {};
-  if (previewHtml && previewHtml.length < HEAVY_THRESHOLD) {
-    keep.previewHtml = previewHtml;
+  const slim: DesignWorkspaceResultData = { ...rest };
+  let truncated = false;
+
+  // --- Code handling -------------------------------------------------------
+  // Mutating tool calls (generate/edit/patch) always drop full code from the
+  // payload: the DB row is the source of truth, and the client bridge refetches
+  // by componentId. This keeps the tool result compact regardless of how
+  // long the generated component is.
+  //
+  // Non-mutating calls (readSource) keep the code inline up to a size cap
+  // because the agent called them specifically to inspect the source.
+  if (code !== undefined) {
+    const isMutating = MUTATING_ACTIONS.has(action);
+    const byteLen = code.length;
+    const lineCount = code.split("\n").length;
+
+    if (isMutating) {
+      slim.codeLength = byteLen;
+      slim.codeLines = lineCount;
+      truncated = true;
+    } else if (byteLen > SLIM_CODE_THRESHOLD) {
+      // readSource on a huge file — still strip to avoid spill-to-disk.
+      slim.codeLength = byteLen;
+      slim.codeLines = lineCount;
+      truncated = true;
+    } else {
+      slim.code = code;
+    }
   }
 
-  return { ...result, data: { ...lightData, ...keep } };
+  // --- Preview HTML --------------------------------------------------------
+  // previewHtml is a fully-formed HTML document (often 20–80KB). The client
+  // can always recompile via /api/design/compile-preview using the DB code,
+  // so we only keep it inline when it's small (placeholder or tiny preview).
+  if (previewHtml !== undefined) {
+    if (previewHtml.length <= SLIM_PREVIEW_HTML_THRESHOLD) {
+      slim.previewHtml = previewHtml;
+    } else {
+      slim.previewHtmlLength = previewHtml.length;
+      truncated = true;
+    }
+  }
+
+  // --- Compile report ------------------------------------------------------
+  // Truncate long diagnostic lists but preserve structure so the agent can
+  // still read the first few actionable errors.
+  const cappedReport = truncateCompileReport(compileReport);
+  if (cappedReport) {
+    slim.compileReport = cappedReport;
+  }
+
+  // --- Hydrate ref & truncated flag ---------------------------------------
+  if (truncated && slim.componentId) {
+    slim.hydrateRef = { kind: "gallery", componentId: slim.componentId };
+    slim.truncated = true;
+  }
+
+  // --- Freshness stamp -----------------------------------------------------
+  // Mutating actions stamp `generatedAt` so the client-side tool-UI can
+  // distinguish a just-generated result from a replay of persisted chat
+  // history. This is a belt-and-suspenders signal for `isLive` detection:
+  // the assistant-ui streaming-state heuristic misses when the SDK delivers
+  // `output-available` in a single render commit. A timestamp comparison at
+  // the tool-UI never misses.
+  if (MUTATING_ACTIONS.has(action)) {
+    slim.generatedAt = Date.now();
+  }
+
+  // --- Final safety cap ---------------------------------------------------
+  // If after all the above we're still too big (unlikely but possible with
+  // huge agentErrorSummary / history blobs), drop compileReport.diagnostics
+  // and long string fields.
+  if (estimatePayloadBytes({ ...result, data: slim }) > SLIM_RESULT_SAFETY_CAP) {
+    if (slim.compileReport?.diagnostics) {
+      slim.compileReport = { ...slim.compileReport, diagnostics: undefined };
+    }
+    if (typeof slim.agentErrorSummary === "string" && slim.agentErrorSummary.length > 2000) {
+      slim.agentErrorSummary = `${slim.agentErrorSummary.slice(0, 2000)}…`;
+    }
+    if (typeof slim.message === "string" && slim.message.length > 2000) {
+      slim.message = `${slim.message.slice(0, 2000)}…`;
+    }
+    slim.truncated = true;
+  }
+
+  return { ...result, data: slim };
 }
 
 async function executeDesignWorkspace(
@@ -603,7 +760,7 @@ async function executeDesignWorkspace(
       result = { success: false, action: String(input.action), error: `Unknown action: ${input.action}` };
   }
 
-  return stripHeavyFields(result);
+  return slimResult(result);
 }
 
 export function createDesignWorkspaceTool(options: DesignWorkspaceToolOptions = {}) {
