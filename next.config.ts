@@ -64,6 +64,11 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   // Enable standalone output for Electron packaging
   output: "standalone",
+  // Next 16.2.4 regression: the config loader fails to apply the default
+  // `generateBuildId: () => null`, which makes the build call `undefined()`
+  // and throws "generate is not a function". Restoring the documented default
+  // here falls through to the nanoid fallback. Remove when Next patches it.
+  generateBuildId: () => null,
   // Set the output file tracing root to this project directory
   // This prevents Next.js from inferring the wrong workspace root
   // and creating nested folder structures in standalone output
