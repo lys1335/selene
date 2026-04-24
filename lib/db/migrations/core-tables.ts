@@ -267,6 +267,32 @@ export function initCoreTablesWith(sqlite: Database.Database): void {
       ON web_browse_entries (expires_at)
   `);
 
+  // Truncated content table (persistent backing for storeFullContent /
+  // retrieveFullContent — was formerly an in-memory Map that lost every
+  // contentId on Electron restart). FK-scoped to sessions for cascade delete.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS truncated_content (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      context TEXT NOT NULL,
+      full_content TEXT NOT NULL,
+      full_length INTEGER NOT NULL,
+      truncated_length INTEGER NOT NULL,
+      stored_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    )
+  `);
+
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_truncated_content_session
+      ON truncated_content (session_id, expires_at)
+  `);
+
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS idx_truncated_content_expires
+      ON truncated_content (expires_at)
+  `);
+
   // Images table
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS images (

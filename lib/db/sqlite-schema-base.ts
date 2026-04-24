@@ -128,6 +128,45 @@ export const webBrowseEntries = sqliteTable("web_browse_entries", {
 });
 
 // ============================================================================
+// TRUNCATED CONTENT TABLE
+// ============================================================================
+//
+// Persistent backing store for `storeFullContent` / `retrieveFullContent`.
+// When a tool result is truncated for the model's context window, the full
+// payload lands here keyed by a `trunc_XXX` id. The row is FK-scoped to the
+// session so it cascades on session delete and survives Electron restart,
+// crash-recovery, etc. — the previous in-memory Map lost every contentId on
+// process exit, breaking mid-task resume.
+//
+// TTL-bounded: a periodic sweep deletes rows past `expires_at`. No per-session
+// cap — TTL (1h default) plus cascade delete already bound growth.
+
+export const truncatedContent = sqliteTable(
+  "truncated_content",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id")
+      .references(() => sessions.id, { onDelete: "cascade" })
+      .notNull(),
+    context: text("context").notNull(),
+    fullContent: text("full_content").notNull(),
+    fullLength: integer("full_length").notNull(),
+    truncatedLength: integer("truncated_length").notNull(),
+    storedAt: integer("stored_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+  },
+  (table) => ({
+    idxTruncatedContentSession: index("idx_truncated_content_session").on(
+      table.sessionId,
+      table.expiresAt,
+    ),
+    idxTruncatedContentExpires: index("idx_truncated_content_expires").on(
+      table.expiresAt,
+    ),
+  }),
+);
+
+// ============================================================================
 // IMAGES TABLE
 // ============================================================================
 
@@ -232,3 +271,5 @@ export type WebBrowseEntry = typeof webBrowseEntries.$inferSelect;
 export type NewWebBrowseEntry = typeof webBrowseEntries.$inferInsert;
 export type Image = typeof images.$inferSelect;
 export type NewImage = typeof images.$inferInsert;
+export type TruncatedContentRow = typeof truncatedContent.$inferSelect;
+export type NewTruncatedContentRow = typeof truncatedContent.$inferInsert;

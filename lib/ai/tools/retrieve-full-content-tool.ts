@@ -1,25 +1,56 @@
 import { tool, jsonSchema } from "ai";
 import { withToolLogging } from "@/lib/ai/tool-registry/logging";
 import { retrieveFullContent as getFullContent, listStoredContent } from "@/lib/ai/truncated-content-store";
+import { sliceLogText } from "@/lib/ai/log-slice";
+import { recordRetrieval } from "@/lib/ai/output-stub-telemetry";
 
 // ==========================================================================
 // Retrieve Full Content Tool
 // ==========================================================================
-// This tool allows the AI to retrieve full untruncated content when text
-// was truncated for token efficiency. The full content is stored in the
-// session and can be retrieved using the reference ID.
+// Allows the model to fetch previously-stored truncated content. Every call
+// is bounded: the model picks a slice (head/tail/range/grep) or the default
+// head preview, and the output is hard-capped to ~8K tokens so a single
+// retrieval can't re-inflate context.
 
-const retrieveFullContentSchema = jsonSchema<{
+interface RetrieveFullContentArgs {
   contentId: string;
-}>({
+  head?: number;
+  tail?: number;
+  range?: [number, number] | number[];
+  grep?: string;
+}
+
+const retrieveFullContentSchema = jsonSchema<RetrieveFullContentArgs>({
   type: "object",
   title: "RetrieveFullContentInput",
-  description: "Input schema for retrieving full untruncated content",
+  description:
+    "Fetch a bounded slice of previously-truncated content by its contentId.",
   properties: {
     contentId: {
       type: "string",
       description:
-        "The reference ID of the truncated content to retrieve (format: trunc_XXXXXXXX). This ID is provided in truncation notices.",
+        "The reference ID of the truncated content to retrieve (format: trunc_XXXXXXXX). This ID appears in the stub returned alongside oversized tool output.",
+    },
+    head: {
+      type: "number",
+      description: "Return the first N lines of the stored content.",
+    },
+    tail: {
+      type: "number",
+      description: "Return the last N lines of the stored content.",
+    },
+    range: {
+      type: "array",
+      items: { type: "number" },
+      minItems: 2,
+      maxItems: 2,
+      description:
+        "1-indexed inclusive [startLine, endLine] line range. Example: [400, 500].",
+    },
+    grep: {
+      type: "string",
+      description:
+        "Regex pattern to search within the stored content. Returns matching lines with 2 lines of context each. Capped at 200 matches.",
     },
   },
   required: ["contentId"],
@@ -31,10 +62,6 @@ interface RetrieveFullContentToolOptions {
   sessionId: string;
 }
 
-interface RetrieveFullContentArgs {
-  contentId: string;
-}
-
 /**
  * Core retrieveFullContent execution logic
  */
@@ -43,42 +70,99 @@ async function executeRetrieveFullContent(
   args: RetrieveFullContentArgs
 ) {
   const { sessionId } = options;
-  const { contentId } = args;
+  const { contentId, head, tail, range, grep } = args;
 
-  // Retrieve the full content
   const entry = getFullContent(sessionId, contentId);
 
   if (!entry) {
-    // Check if there's any stored content for debugging
     const storedContent = listStoredContent(sessionId);
-
+    const available = storedContent.map((c) => ({
+      id: c.id,
+      context: c.context,
+      fullLength: c.fullLength,
+    }));
+    // Build a strongly-worded message so the model immediately latches onto
+    // the real IDs rather than guessing (trunc_1, trunc_2, …). Previously
+    // the model burned 2 retries before reading `availableContentIds`.
+    let message: string;
+    if (available.length === 0) {
+      message =
+        `Content with ID "${contentId}" was not found and there is no other stored content in this session. ` +
+        `It may have expired (TTL: 1 hour) or the server restarted. ` +
+        `Re-run the original tool call that produced this content instead of retrying retrieveFullContent.`;
+    } else {
+      const idList = available
+        .map((c) => `  - ${c.id} (${c.context}, ${c.fullLength.toLocaleString()} chars)`)
+        .join("\n");
+      message =
+        `Content with ID "${contentId}" was not found. ` +
+        `DO NOT guess IDs. Use ONE of the following available contentIds from THIS session:\n${idList}\n` +
+        `If none match the content you need, re-run the original tool call. ` +
+        `The contentId you tried may have expired (TTL: 1 hour) or been evicted.`;
+    }
     return {
       status: "not_found",
       contentId,
-      message: `Content with ID "${contentId}" was not found. It may have expired (TTL: 1 hour) or the ID is incorrect.`,
-      availableContentIds: storedContent.map(c => ({
-        id: c.id,
-        context: c.context,
-        fullLength: c.fullLength,
-      })),
+      message,
+      availableContentIds: available,
     };
   }
+
+  const slice = sliceLogText(entry.fullContent, {
+    head,
+    tail,
+    range: Array.isArray(range) ? (range as [number, number]) : undefined,
+    grep,
+  });
+
+  recordRetrieval({
+    retrievalId: entry.id,
+    retrievalIdType: "contentId",
+    sliceMode: slice.mode,
+    sliceParams: {
+      ...(head !== undefined ? { head } : {}),
+      ...(tail !== undefined ? { tail } : {}),
+      ...(range !== undefined ? { range } : {}),
+      ...(grep !== undefined ? { grep } : {}),
+      ...(slice.meta.matchCount !== undefined
+        ? { matches: slice.meta.matchCount }
+        : {}),
+    },
+    returnedTokens: Math.ceil(slice.content.length / 4),
+    budgetHit: slice.meta.budgetClamped === true,
+  });
+
+  const metaBits: string[] = [];
+  if (slice.meta.fromLine !== undefined && slice.meta.toLine !== undefined) {
+    metaBits.push(`lines ${slice.meta.fromLine}–${slice.meta.toLine} of ${slice.totalLines}`);
+  }
+  if (slice.meta.matchCount !== undefined) {
+    metaBits.push(`${slice.meta.matchCount} match${slice.meta.matchCount === 1 ? "" : "es"}`);
+  }
+  if (slice.meta.budgetClamped) {
+    metaBits.push("budget-clamped");
+  }
+  const metaLabel = metaBits.length > 0 ? ` (${metaBits.join(", ")})` : "";
+  const modeLabel = slice.mode === "default" ? "default head" : slice.mode;
 
   return {
     status: "success",
     contentId: entry.id,
     context: entry.context,
     fullLength: entry.fullLength,
-    truncatedLength: entry.truncatedLength,
-    fullContent: entry.fullContent,
-    message: `Successfully retrieved full content (${entry.fullLength.toLocaleString()} characters). The content was originally truncated to ${entry.truncatedLength.toLocaleString()} characters.`,
+    totalLines: slice.totalLines,
+    mode: slice.mode,
+    content: slice.content,
+    isTruncated: slice.meta.budgetClamped === true,
+    message: `retrieveFullContent '${entry.id}' — mode=${modeLabel}${metaLabel}.${
+      slice.meta.note ? " " + slice.meta.note : ""
+    }`,
   };
 }
 
 export function createRetrieveFullContentTool(options: RetrieveFullContentToolOptions) {
   const { sessionId } = options;
 
-  // Wrap the execute function with logging
   const executeWithLogging = withToolLogging(
     "retrieveFullContent",
     sessionId,
@@ -86,20 +170,27 @@ export function createRetrieveFullContentTool(options: RetrieveFullContentToolOp
   );
 
   return tool({
-    description: `**⚠️ ONLY for truncated content, NOT for file reading!**
-
-This retrieves content that was previously TRUNCATED in a tool response.
+    description: `Retrieve a bounded slice of previously-truncated content.
 
 **When to use:**
-- You see "Content truncated. Reference ID: trunc_XXXXXXXX" in a previous tool result
-- You need the full content that was cut off
+- You see a stub like "[STUB: tool=..., contentId=trunc_XXXXXXXX]" in a prior tool result and need part of the original content.
 
-**When NOT to use (WRONG):**
+**When NOT to use:**
 - ❌ Reading file contents (use readFile instead)
 - ❌ Getting full file paths (use localGrep or vectorSearch)
 - ❌ Any contentId that doesn't start with "trunc_"
 
-**Parameter:** contentId must be exactly like "trunc_ABC123" from a truncation notice.`,
+**Retrieval policy:**
+- Prefer \`grep\`/\`range\`/\`head\` over asking for the full content.
+- Each call is hard-capped at ~8K tokens; use chunked reads for large content.
+- Defaults to the first 200 lines when no slice parameter is given.
+
+**Parameters:**
+- contentId (required) — the trunc_XXXXXXXX id from a stub
+- head: N — first N lines
+- tail: N — last N lines
+- range: [start, end] — 1-indexed inclusive line range
+- grep: "pattern" — regex search with 2 lines of context`,
     inputSchema: retrieveFullContentSchema,
     execute: executeWithLogging,
   });

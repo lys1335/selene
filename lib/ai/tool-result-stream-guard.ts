@@ -1,7 +1,20 @@
-import { estimateTokens, CHARS_PER_TOKEN } from "@/lib/ai/output-limiter";
-import { middleTruncateText } from "@/lib/ai/truncation-utils";
+import { estimateTokens } from "@/lib/ai/output-limiter";
+import { buildOutputStub, deriveOutline } from "@/lib/ai/output-stub";
+import { recordTier, type OutputTier } from "@/lib/ai/output-stub-telemetry";
+import { storeFullContent } from "@/lib/ai/truncated-content-store";
 
-const MIN_STREAM_TOOL_RESULT_TOKENS = 1;
+// ============================================================================
+// Tier thresholds (original output tokens)
+// ============================================================================
+// Outputs ≤ INLINE_PASSTHROUGH_TOKENS: pass through verbatim.
+// INLINE_PASSTHROUGH_TOKENS < output ≤ PREVIEW_TIER_TOKENS: stub + small head preview.
+// Outputs > PREVIEW_TIER_TOKENS: stub only (outline + retrieval, no preview).
+export const INLINE_PASSTHROUGH_TOKENS = 10_000;
+export const PREVIEW_TIER_TOKENS = 25_000;
+/** Tokens of head preview included in the mid-tier stub. */
+export const MID_TIER_PREVIEW_TOKENS = 1_500;
+
+export const MIN_STREAM_TOOL_RESULT_TOKENS = 1;
 export const MAX_STREAM_TOOL_RESULT_TOKENS = 25_000;
 
 interface GuardToolResultForStreamingResult {
@@ -11,8 +24,13 @@ interface GuardToolResultForStreamingResult {
 }
 
 interface GuardToolResultForStreamingOptions {
+  /** Historical option retained for callers; no longer drives tier thresholds. */
   maxTokens?: number;
   metadata?: Record<string, unknown>;
+  /** Session ID used to store full content when the tool didn't already provide one. */
+  sessionId?: string;
+  /** Optional tool-call ID, surfaced in telemetry for correlation. */
+  toolCallId?: string;
 }
 
 function safeStringify(value: unknown): string {
@@ -32,15 +50,6 @@ function estimateTokensSafely(content: unknown): number {
   }
 }
 
-function normalizeTokenLimit(maxTokens?: number): number {
-  if (typeof maxTokens !== "number" || !Number.isFinite(maxTokens)) {
-    return MAX_STREAM_TOOL_RESULT_TOKENS;
-  }
-
-  const normalized = Math.max(MIN_STREAM_TOOL_RESULT_TOKENS, Math.floor(maxTokens));
-  return Math.min(normalized, MAX_STREAM_TOOL_RESULT_TOKENS);
-}
-
 function extractRetrievalIds(result: unknown): {
   logId?: string;
   truncatedContentId?: string;
@@ -54,124 +63,122 @@ function extractRetrievalIds(result: unknown): {
   const truncatedContentId =
     typeof record.truncatedContentId === "string" ? record.truncatedContentId : undefined;
 
-  return {
-    logId,
-    truncatedContentId,
-  };
+  return { logId, truncatedContentId };
 }
 
 /**
- * Build a retrieval notice appended to truncated content so the model
- * knows how to get the full output.
+ * Pull the "primary" text from a tool result for outline / preview purposes.
+ * Mirrors the fields known to carry human-readable output across our tool surface.
  */
-function buildRetrievalNotice(
-  estimatedTokens: number,
-  tokenLimit: number,
-  retrieval: { logId?: string; truncatedContentId?: string }
-): string {
-  let notice = `\n[OUTPUT TRUNCATED: ~${estimatedTokens.toLocaleString()} tokens → ~${tokenLimit.toLocaleString()} tokens (head + tail preserved).`;
-
-  if (retrieval.logId) {
-    notice += ` Full output: executeCommand({ command: "readLog", logId: "${retrieval.logId}" })`;
-  } else if (retrieval.truncatedContentId) {
-    notice += ` Full output: retrieveFullContent({ contentId: "${retrieval.truncatedContentId}" })`;
-  }
-
-  notice += "]";
-  return notice;
-}
-
-/**
- * Truncate the text content of a tool result to fit within a character budget.
- * Preserves the result structure (stdout/stderr, MCP content arrays, generic text fields)
- * while applying head+tail middle-truncation to the text.
- */
-function truncateResultText(
-  result: unknown,
-  maxChars: number
-): { result: unknown; truncated: boolean } {
-  // String results
-  if (typeof result === "string") {
-    const t = middleTruncateText(result, maxChars);
-    return { result: t.content, truncated: t.truncated };
-  }
-
+function extractPrimaryText(result: unknown): { text: string; stderr?: string } {
+  if (typeof result === "string") return { text: result };
   if (!result || typeof result !== "object" || Array.isArray(result)) {
-    return { result, truncated: false };
+    return { text: safeStringify(result) };
+  }
+
+  const obj = result as Record<string, unknown>;
+
+  if (typeof obj.stdout === "string" || typeof obj.stderr === "string") {
+    const stdout = typeof obj.stdout === "string" ? obj.stdout : "";
+    const stderr = typeof obj.stderr === "string" ? obj.stderr : undefined;
+    // Combine for outline/preview purposes — stdout first, then stderr.
+    const combined = stderr ? `${stdout}\n${stderr}` : stdout;
+    return { text: combined, stderr };
+  }
+
+  if (Array.isArray(obj.content)) {
+    const textItems: string[] = [];
+    for (const item of obj.content as unknown[]) {
+      if (item && typeof item === "object" && "type" in (item as object)) {
+        const i = item as Record<string, unknown>;
+        if (i.type === "text" && typeof i.text === "string") textItems.push(i.text);
+      }
+    }
+    if (textItems.length > 0) return { text: textItems.join("\n") };
+  }
+
+  for (const field of ["content", "text", "result", "results", "output", "summary", "markdown"] as const) {
+    const value = obj[field];
+    if (typeof value === "string") return { text: value };
+  }
+
+  return { text: safeStringify(result) };
+}
+
+/**
+ * Replace the primary text of a tool result with the given stub string.
+ * Preserves the surrounding result structure (exit codes, logId, status, …)
+ * so downstream consumers (UI, loop guards) continue to work.
+ */
+function replacePrimaryText(result: unknown, stub: string): unknown {
+  if (typeof result === "string") return stub;
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    return stub;
   }
 
   const obj = { ...(result as Record<string, unknown>) };
-  let truncated = false;
 
-  // stdout/stderr — most common oversized case (executeCommand)
   if (typeof obj.stdout === "string" || typeof obj.stderr === "string") {
-    if (typeof obj.stdout === "string") {
-      // Give 85% of budget to stdout, 15% to stderr (stdout is usually the bulk)
-      const budget = typeof obj.stderr === "string" ? Math.floor(maxChars * 0.85) : maxChars;
-      const t = middleTruncateText(obj.stdout as string, budget);
-      obj.stdout = t.content;
-      truncated = truncated || t.truncated;
+    obj.stdout = stub;
+    // Stderr already summarised in the outline; drop its body to avoid duplication.
+    if (typeof obj.stderr === "string" && obj.stderr.length > 0) {
+      obj.stderr = "";
     }
-    if (typeof obj.stderr === "string") {
-      const budget = typeof obj.stdout === "string" ? Math.floor(maxChars * 0.15) : maxChars;
-      const t = middleTruncateText(obj.stderr as string, budget);
-      obj.stderr = t.content;
-      truncated = truncated || t.truncated;
-    }
-    if (truncated) obj.isTruncated = true;
-    return { result: obj, truncated };
+    obj.isTruncated = true;
+    return obj;
   }
 
-  // MCP content arrays: { content: [{ type: "text", text: "..." }, ...] }
   if (Array.isArray(obj.content)) {
     const items = obj.content as unknown[];
-    const textItems = items.filter(
-      (i: any) => i?.type === "text" && typeof i?.text === "string"
-    );
-    if (textItems.length > 0) {
-      const budgetPerItem = Math.floor(maxChars / textItems.length);
-      obj.content = items.map((item: any) => {
-        if (item?.type === "text" && typeof item?.text === "string") {
-          const t = middleTruncateText(item.text, budgetPerItem);
-          truncated = truncated || t.truncated;
-          return { ...item, text: t.content };
-        }
-        return item;
-      });
-      if (truncated) obj.isTruncated = true;
-      return { result: obj, truncated };
-    }
-  }
-
-  // Generic text fields (content, text, result, output)
-  for (const field of ["content", "text", "result", "results", "output", "summary", "markdown"]) {
-    if (typeof obj[field] === "string" && (obj[field] as string).length > maxChars) {
-      const t = middleTruncateText(obj[field] as string, maxChars);
-      obj[field] = t.content;
-      truncated = truncated || t.truncated;
-      if (truncated) {
-        obj.isTruncated = true;
-        return { result: obj, truncated };
+    let replacedOnce = false;
+    obj.content = items.map((item) => {
+      if (
+        !replacedOnce &&
+        item && typeof item === "object" &&
+        (item as Record<string, unknown>).type === "text"
+      ) {
+        replacedOnce = true;
+        return { ...(item as Record<string, unknown>), text: stub };
       }
+      // Drop further text items so the stub doesn't get duplicated and
+      // subsequent large text chunks don't blow the budget.
+      if (item && typeof item === "object" && (item as Record<string, unknown>).type === "text") {
+        return { ...(item as Record<string, unknown>), text: "" };
+      }
+      return item;
+    });
+    if (!replacedOnce) {
+      obj.content = [{ type: "text", text: stub }, ...(obj.content as unknown[])];
+    }
+    obj.isTruncated = true;
+    return obj;
+  }
+
+  for (const field of ["content", "text", "result", "results", "output", "summary", "markdown"] as const) {
+    if (typeof obj[field] === "string") {
+      obj[field] = stub;
+      obj.isTruncated = true;
+      return obj;
     }
   }
 
-  // Last resort: serialize the whole object and truncate
-  const serialized = safeStringify(result);
-  if (serialized.length > maxChars) {
-    const t = middleTruncateText(serialized, maxChars);
-    return { result: t.content, truncated: true };
-  }
-
-  return { result, truncated: false };
+  // No known text field — attach the stub as `output`.
+  obj.output = stub;
+  obj.isTruncated = true;
+  return obj;
 }
 
 /**
- * Guard tool results for streaming by truncating oversized output.
+ * Guard tool results for streaming by replacing oversized output with a stub.
  *
- * Instead of replacing oversized results with an error, this applies
- * head+tail middle-truncation to preserve the beginning (setup, context)
- * and end (results, errors, exit status) of the output.
+ * Tiering (based on the original estimated tokens):
+ *   - ≤ 10K tokens  → pass through verbatim (no notice, no log reference)
+ *   - 10K–25K       → stub with a ~1.5K-token head preview (no tail)
+ *   - > 25K         → stub only (outline + retrieval, no body)
+ *
+ * The full output is persisted to the session-scoped truncated content store
+ * (or the tool's own logId is reused when present) so the model can retrieve
+ * slices on demand via executeCommand({command:"readLog",…}) or retrieveFullContent(…).
  */
 export function guardToolResultForStreaming(
   toolName: string,
@@ -179,9 +186,24 @@ export function guardToolResultForStreaming(
   options: GuardToolResultForStreamingOptions = {}
 ): GuardToolResultForStreamingResult {
   const estimatedTokens = estimateTokensSafely(result);
-  const tokenLimit = normalizeTokenLimit(options.maxTokens);
 
-  if (estimatedTokens <= tokenLimit) {
+  if (estimatedTokens <= INLINE_PASSTHROUGH_TOKENS) {
+    // Telemetry: still record passthrough so tier distribution is complete.
+    // Derive a cheap outline without JSON parsing for the passthrough path.
+    const passthroughText = typeof result === "string" ? result : safeStringify(result);
+    let lineCount = passthroughText ? 1 : 0;
+    for (let i = 0; i < passthroughText.length; i++) {
+      if (passthroughText.charCodeAt(i) === 10) lineCount++;
+    }
+    recordTier({
+      sessionId: options.sessionId,
+      toolCallId: options.toolCallId,
+      toolName,
+      originalTokens: estimatedTokens,
+      originalChars: passthroughText.length,
+      originalLines: lineCount,
+      tier: "passthrough",
+    });
     return {
       blocked: false,
       estimatedTokens,
@@ -189,53 +211,67 @@ export function guardToolResultForStreaming(
     };
   }
 
-  // Oversized — truncate with head+tail instead of blocking entirely.
-  // Reserve tokens for the retrieval notice and structural metadata.
-  const METADATA_RESERVE_TOKENS = 500;
-  const contentBudgetTokens = Math.max(500, tokenLimit - METADATA_RESERVE_TOKENS);
-  const contentBudgetChars = contentBudgetTokens * CHARS_PER_TOKEN;
+  const { text: primaryText, stderr } = extractPrimaryText(result);
+  const outline = deriveOutline(primaryText, { stderr });
 
-  const { result: truncatedResult, truncated } = truncateResultText(result, contentBudgetChars);
-
-  if (!truncated) {
-    // Edge case: couldn't find text to truncate but token estimate says it's oversized.
-    // This shouldn't normally happen, but fall back gracefully.
-    return {
-      blocked: true,
-      estimatedTokens,
-      result: truncatedResult,
-    };
-  }
-
-  // Add retrieval notice so the model knows how to get full output
   const retrieval = extractRetrievalIds(result);
-  const notice = buildRetrievalNotice(estimatedTokens, tokenLimit, retrieval);
+  let retrievalId = retrieval.logId ?? retrieval.truncatedContentId;
+  let idType: "logId" | "contentId" = retrieval.logId ? "logId" : "contentId";
 
-  // Append notice to the truncated result
-  let finalResult = truncatedResult;
-  if (typeof finalResult === "string") {
-    finalResult = finalResult + notice;
-  } else if (finalResult && typeof finalResult === "object" && !Array.isArray(finalResult)) {
-    const obj = finalResult as Record<string, unknown>;
-    // Append to stdout (executeCommand) or first text field
-    if (typeof obj.stdout === "string") {
-      obj.stdout = (obj.stdout as string) + notice;
-    } else if (typeof obj.content === "string") {
-      obj.content = (obj.content as string) + notice;
-    } else if (typeof obj.text === "string") {
-      obj.text = (obj.text as string) + notice;
-    } else if (typeof obj.results === "string") {
-      obj.results = (obj.results as string) + notice;
-    } else if (typeof obj.summary === "string") {
-      obj.summary = (obj.summary as string) + notice;
-    } else if (typeof obj.markdown === "string") {
-      obj.markdown = (obj.markdown as string) + notice;
+  // If no retrieval ID was supplied by the tool, persist into the truncated
+  // content store so the model still has a way to fetch slices later.
+  // storeFullContent returns null if the backing store is unavailable —
+  // we degrade silently and the stub still carries the preview/outline.
+  if (!retrievalId && options.sessionId && primaryText) {
+    try {
+      const stored = storeFullContent(
+        options.sessionId,
+        `${toolName} output`,
+        primaryText,
+        0
+      );
+      if (stored) {
+        retrievalId = stored;
+        idType = "contentId";
+      }
+    } catch (err) {
+      console.warn(
+        `[StreamGuard] Failed to store full content for ${toolName}:`,
+        err
+      );
     }
-    finalResult = obj;
   }
+
+  const tier: OutputTier =
+    estimatedTokens <= PREVIEW_TIER_TOKENS ? "preview_plus_stub" : "stub_only";
+  const previewTokens = tier === "preview_plus_stub" ? MID_TIER_PREVIEW_TOKENS : 0;
+
+  const stub = buildOutputStub({
+    toolName,
+    originalText: primaryText,
+    outline,
+    retrievalId,
+    idType,
+    previewTokens,
+    stderr,
+  });
+
+  const finalResult = replacePrimaryText(result, stub);
+
+  recordTier({
+    sessionId: options.sessionId,
+    toolCallId: options.toolCallId,
+    toolName,
+    originalTokens: estimatedTokens,
+    originalChars: outline.byteLength,
+    originalLines: outline.lineCount,
+    tier,
+    retrievalId,
+    retrievalIdType: retrievalId ? idType : undefined,
+  });
 
   return {
-    blocked: true, // Still flagged for loop guard tracking
+    blocked: true, // Still flagged so loop guards keep tracking oversize tools.
     estimatedTokens,
     result: finalResult,
   };

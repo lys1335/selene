@@ -226,10 +226,16 @@ export function sanitizeTextContent(text: string, context: string, sessionId?: s
   if (text.length > MAX_TEXT_CONTENT_LENGTH) {
     console.warn(`[CHAT API] Truncating long text in ${context}: ${text.length} chars`);
 
-    // If sessionId is provided, store full content for later retrieval
-    if (sessionId) {
-      const contentId = storeFullContent(sessionId, context, text, MAX_TEXT_CONTENT_LENGTH);
+    // If sessionId is provided, store full content for later retrieval.
+    // `storeFullContent` may return null if the backing store is
+    // unavailable (disk full, locked DB, session FK missing) — in that
+    // case we degrade to the no-sessionId branch so the model still gets
+    // a bounded truncation instead of a dangling contentId.
+    const contentId = sessionId
+      ? storeFullContent(sessionId, context, text, MAX_TEXT_CONTENT_LENGTH)
+      : null;
 
+    if (contentId) {
       const truncatedText = text.slice(0, MAX_TEXT_CONTENT_LENGTH);
       const truncationNotice = `
 
@@ -241,10 +247,16 @@ export function sanitizeTextContent(text: string, context: string, sessionId?: s
 ---`;
 
       return truncatedText + truncationNotice;
-    } else {
-      // No sessionId - simple truncation without storage (fallback behavior)
-      return text.slice(0, MAX_TEXT_CONTENT_LENGTH) + `\n\n[Content truncated at ${formatNumber(MAX_TEXT_CONTENT_LENGTH)} chars - sessionId not available for full content retrieval]`;
     }
+
+    // No sessionId, or storage failed — simple truncation without storage.
+    const storageNote = sessionId
+      ? " (storage unavailable — full content not retrievable)"
+      : " - sessionId not available for full content retrieval";
+    return (
+      text.slice(0, MAX_TEXT_CONTENT_LENGTH) +
+      `\n\n[Content truncated at ${formatNumber(MAX_TEXT_CONTENT_LENGTH)} chars${storageNote}]`
+    );
   }
 
   return text;

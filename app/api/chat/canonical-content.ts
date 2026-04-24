@@ -1,6 +1,8 @@
 import type { DBContentPart, DBToolCallPart, DBToolResultPart } from "@/lib/messages/converter";
 import { normalizeToolResultOutput } from "@/lib/ai/tool-result-utils";
 import { ToolRegistry } from "@/lib/ai/tool-registry/registry";
+import { buildOutputStub, deriveOutline } from "@/lib/ai/output-stub";
+import { storeFullContent } from "@/lib/ai/truncated-content-store";
 import { normalizeToolCallInput } from "./tool-call-utils";
 import { cloneContentParts } from "./streaming-state";
 import { sanitizeAssistantOutputText } from "./content-sanitizer";
@@ -482,23 +484,78 @@ function getString(value: unknown): string | undefined {
 }
 
 /**
+ * Extract the primary text payload of a tool result for stubbing.
+ * Mirrors the field-priority used by `limitToolOutput` so stubs see the
+ * same text the projection sees. Falls back to a stringified object.
+ */
+function extractPrimaryText(original: unknown): string {
+  if (typeof original === "string") return original;
+  if (!original || typeof original !== "object" || Array.isArray(original)) {
+    try {
+      return JSON.stringify(original);
+    } catch {
+      return String(original);
+    }
+  }
+  const obj = original as Record<string, unknown>;
+  const candidates = [
+    "content",
+    "text",
+    "result",
+    "results",
+    "output",
+    "markdown",
+    "stdout",
+    "data",
+    "body",
+  ];
+  for (const key of candidates) {
+    const val = obj[key];
+    if (typeof val === "string" && val.length > 0) return val;
+    if (val && typeof val === "object") {
+      try {
+        return JSON.stringify(val);
+      } catch {
+        /* fall through */
+      }
+    }
+  }
+  try {
+    return JSON.stringify(obj);
+  } catch {
+    return "";
+  }
+}
+
+// A primary text this small isn't worth storing for retrieval — the outline
+// + compact summary already fits everything the model could ask for.
+const EPHEMERAL_STORE_MIN_CHARS = 400;
+
+/**
  * Build the compact stub stored in persistent history for an ephemeral
- * tool-result. The model has already seen the full result in the current
- * streaming turn — on replay it only needs to know the tool ran, the final
- * status, and any media refs (so later tool calls can pass the URL along).
+ * tool-result. Produces a retrieval-friendly shape:
+ *   - `summary`: rich outline string (buildOutputStub) that includes the
+ *     contentId + ready-to-paste retrieveFullContent examples.
+ *   - `truncatedContentId`: the trunc_XXX ID a future turn can retrieve
+ *     within the TruncatedContentStore TTL window (1h, session-scoped,
+ *     in-memory — survives within a live server but NOT across restarts).
+ *   - `truncated: true` so existing truncation-aware code paths recognise it.
+ *   - `mediaRefs`: hosted media URLs preserved so follow-up tool calls can
+ *     still reference them even after the content expires.
  *
- * NOTE on i18n: `summary` is intentionally English. It is fed back to the
- * LLM as replay context only — it is never rendered in the UI (the chat
- * card extracts media from `mediaRefs` directly; see
- * `components/assistant-ui/tool-call-group.tsx#extractMediaFromResult` and
- * `lib/channels/delivery.ts#extractImageUrlsFromToolResult`). Locale
- * resolution would have to happen at the persistence boundary which is
- * request-scope agnostic; keeping English here matches every other
- * server-side log/diagnostic string in this file.
+ * Storing a fresh contentId here (rather than carrying one forward from
+ * projection) is intentional: the projection's contentId is scoped to the
+ * model's live turn and may be gone by the time canonical history is read.
+ * Always minting one at canonical-write time guarantees any surviving
+ * stub in-session has a valid handle.
+ *
+ * NOTE on i18n: `summary` is intentionally English (see original comment
+ * — server-side log/diagnostic convention; never rendered in the UI).
  */
 function makeEphemeralStubResult(
   toolName: string,
   original: unknown,
+  sessionId?: string,
 ): Record<string, unknown> {
   const mediaRefs: MediaRef[] = [];
   collectMediaRefs(
@@ -520,13 +577,56 @@ function makeEphemeralStubResult(
     errorMessage = getString(obj.error);
   }
 
-  const summary =
-    originalSummary ??
-    (errorMessage
+  // Try to store the full primary text so the model can retrieve it
+  // on replay. Fails gracefully if sessionId is missing or the payload
+  // is too small to be worth storing.
+  let contentId: string | undefined;
+  let richSummary: string | undefined;
+  if (!errorMessage) {
+    const primaryText = extractPrimaryText(original);
+    if (primaryText.length >= EPHEMERAL_STORE_MIN_CHARS) {
+      if (sessionId) {
+        try {
+          // storeFullContent returns null when the backing store is
+          // unavailable; treat null the same as an exception.
+          const stored = storeFullContent(
+            sessionId,
+            `${toolName} (ephemeral)`,
+            primaryText,
+            primaryText.length,
+          );
+          if (stored) contentId = stored;
+        } catch (err) {
+          console.warn(
+            `[CanonicalContent] Failed to store ephemeral content for ${toolName}: ${String(err)}`,
+          );
+        }
+      }
+      try {
+        richSummary = buildOutputStub({
+          toolName,
+          originalText: primaryText,
+          outline: deriveOutline(primaryText),
+          retrievalId: contentId,
+          idType: "contentId",
+          previewTokens: 0,
+        });
+      } catch (err) {
+        console.warn(
+          `[CanonicalContent] Failed to build rich stub for ${toolName}: ${String(err)}`,
+        );
+      }
+    }
+  }
+
+  const fallbackSummary =
+    errorMessage
       ? `${toolName} failed (ephemeral — full result omitted from replay history)`
       : mediaRefs.length > 0
         ? `${toolName} returned ${mediaRefs.length} media ref(s) (ephemeral — full result omitted from replay history)`
-        : `${toolName} completed (ephemeral — full result omitted from replay history)`);
+        : `${toolName} completed (ephemeral — full result omitted from replay history)`;
+
+  const summary = richSummary ?? originalSummary ?? fallbackSummary;
 
   const stub: Record<string, unknown> = {
     status,
@@ -534,6 +634,11 @@ function makeEphemeralStubResult(
     [EPHEMERAL_STUB_MARKER]: true,
     toolName,
   };
+  if (contentId) {
+    stub.truncated = true;
+    stub.truncatedContentId = contentId;
+    stub.contentId = contentId;
+  }
   if (mediaRefs.length > 0) stub.mediaRefs = mediaRefs;
   if (errorMessage) stub.error = errorMessage;
   return stub;
@@ -549,10 +654,33 @@ function makeEphemeralStubResult(
  * current turn has streamed (so the model saw the full result once) and
  * BEFORE the row hits the messages table.
  */
+export interface StubEphemeralToolResultsOptions {
+  /**
+   * Current session ID. When provided, the ephemeral stub will persist the
+   * full primary text via the TruncatedContentStore so the model can retrieve
+   * it later via `retrieveFullContent({ contentId: "trunc_..." })`. Without
+   * sessionId the stub still rewrites (reducing replay cost) but no contentId
+   * is attached — callers from scripts/tests may safely omit it.
+   */
+  sessionId?: string;
+  ephemeralLookup?: EphemeralLookup;
+}
+
 export function stubEphemeralToolResults(
   parts: DBContentPart[],
-  ephemeralLookup: EphemeralLookup = defaultEphemeralLookup,
+  optionsOrLookup?: StubEphemeralToolResultsOptions | EphemeralLookup,
 ): DBContentPart[] {
+  // Support both the legacy (parts, lookup) signature used by scripts and
+  // tests, and the new (parts, { sessionId, ephemeralLookup }) shape.
+  let ephemeralLookup: EphemeralLookup = defaultEphemeralLookup;
+  let sessionId: string | undefined;
+  if (typeof optionsOrLookup === "function") {
+    ephemeralLookup = optionsOrLookup;
+  } else if (optionsOrLookup && typeof optionsOrLookup === "object") {
+    if (optionsOrLookup.ephemeralLookup) ephemeralLookup = optionsOrLookup.ephemeralLookup;
+    sessionId = optionsOrLookup.sessionId;
+  }
+
   let anyStubbed = false;
   const rewritten: DBContentPart[] = [];
   for (const part of parts) {
@@ -581,7 +709,7 @@ export function stubEphemeralToolResults(
     }
 
     anyStubbed = true;
-    const stub = makeEphemeralStubResult(toolName, part.result ?? part.output);
+    const stub = makeEphemeralStubResult(toolName, part.result ?? part.output, sessionId);
     rewritten.push({
       ...part,
       result: stub,
@@ -608,6 +736,10 @@ export function countCanonicalTruncationMarkers(parts: DBContentPart[]): number 
     const result = part.result;
     if (!result || typeof result !== "object" || Array.isArray(result)) continue;
     const obj = result as Record<string, unknown>;
+    // Ephemeral stubs legitimately carry truncated + truncatedContentId at the
+    // canonical layer (they replace a large ephemeral result with a retrieval
+    // handle). Skip them — they are NOT projection leakage.
+    if (obj[EPHEMERAL_STUB_MARKER] === true) continue;
     if (obj.truncated === true) {
       count += 1;
       continue;

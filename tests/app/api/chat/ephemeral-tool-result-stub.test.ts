@@ -11,7 +11,9 @@ import { describe, it, expect } from "vitest";
 import {
   stubEphemeralToolResults,
   EPHEMERAL_STUB_MARKER,
+  countCanonicalTruncationMarkers,
 } from "@/app/api/chat/canonical-content";
+import { retrieveFullContent } from "@/lib/ai/truncated-content-store";
 import type { DBContentPart, DBToolResultPart } from "@/lib/messages/converter";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -145,8 +147,11 @@ describe("stubEphemeralToolResults", () => {
     const stubbedBytes = jsonBytes(rewritten[0]);
 
     expect(originalBytes).toBeGreaterThan(150_000);
-    expect(stubbedBytes).toBeLessThan(1_000);
-    expect(stubbedBytes / originalBytes).toBeLessThan(0.01); // >99% reduction
+    // Stub grew slightly when we added the retrieval outline (contentId +
+    // top-level keys + ready-to-paste retrieveFullContent examples), but
+    // we still expect >99% reduction and a hard ceiling well under 2.5KB.
+    expect(stubbedBytes).toBeLessThan(2_500);
+    expect(stubbedBytes / originalBytes).toBeLessThan(0.02);
 
     const stub = (rewritten[0] as DBToolResultPart).result as Record<string, unknown>;
     expect(stub[EPHEMERAL_STUB_MARKER]).toBe(true);
@@ -237,6 +242,169 @@ describe("stubEphemeralToolResults", () => {
     expect(part.output).toBeUndefined();
     // Media ref still captured from the legacy `output` field.
     expect(stub.mediaRefs).toEqual([{ url: "/api/media/session-1/generated/legacy.png" }]);
+  });
+
+  it("mints a retrievable contentId when sessionId is passed and payload is large enough", () => {
+    // This is the bug fix: MCP tool returns a big JSON payload. The stub
+    // must carry a trunc_XXX contentId so replay/retry turns can call
+    // retrieveFullContent instead of guessing IDs like trunc_1.
+    const hugeFigmaJson = JSON.stringify({
+      id: "2001:1322",
+      name: "Vision",
+      type: "FRAME",
+      children: Array.from({ length: 50 }, (_, i) => ({
+        id: `2001:${1323 + i}`,
+        name: `child-${i}`,
+        nativeCSS: "width: 100px; height: 100px;".repeat(20),
+      })),
+    });
+    const figmaResult: DBToolResultPart = {
+      type: "tool-result",
+      toolCallId: "call-figma",
+      toolName: "mcp_sunnyside_figma_download_figma_images",
+      result: {
+        status: "success",
+        source: "mcp",
+        server: "sunnyside-figma",
+        tool: "download_figma_images",
+        text: hugeFigmaJson,
+      },
+      status: "success",
+      state: "output-available",
+    };
+
+    const sessionId = `test-session-${Math.random().toString(36).slice(2)}`;
+    const lookup = ephemeralLookup(["mcp_sunnyside_figma_download_figma_images"]);
+    const rewritten = stubEphemeralToolResults([figmaResult], {
+      sessionId,
+      ephemeralLookup: lookup,
+    });
+
+    const stub = (rewritten[0] as DBToolResultPart).result as Record<string, unknown>;
+    expect(stub[EPHEMERAL_STUB_MARKER]).toBe(true);
+    expect(stub.truncated).toBe(true);
+    expect(typeof stub.contentId).toBe("string");
+    expect((stub.contentId as string).startsWith("trunc_")).toBe(true);
+    expect(stub.truncatedContentId).toBe(stub.contentId);
+
+    // Rich summary must include the contentId + retrieval examples so the
+    // model can act without having to consult another tool.
+    const summary = stub.summary as string;
+    expect(summary).toContain(`contentId=${stub.contentId}`);
+    expect(summary).toContain("retrieveFullContent");
+    expect(summary).toContain("head:");
+    expect(summary).toContain("grep:");
+
+    // And it should actually be retrievable.
+    const retrieved = retrieveFullContent(sessionId, stub.contentId as string);
+    expect(retrieved).toBeTruthy();
+    expect(retrieved!.fullContent).toBe(hugeFigmaJson);
+  });
+
+  it("does NOT mint a contentId when sessionId is omitted (backwards-compat)", () => {
+    // Scripts and tests still call the legacy (parts, lookup) shape. The stub
+    // should still strip large payloads but skip the retrieval handle.
+    const hugeAxTree = "child node\n".repeat(10_000);
+    const big: DBToolResultPart = {
+      type: "tool-result",
+      toolCallId: "call-nosession",
+      toolName: "mcp_ghostos_ghost_read",
+      result: {
+        status: "success",
+        content: hugeAxTree,
+        text: hugeAxTree,
+      },
+      status: "success",
+      state: "output-available",
+    };
+
+    const lookup = ephemeralLookup(["mcp_ghostos_ghost_read"]);
+    const rewritten = stubEphemeralToolResults([big], lookup);
+    const stub = (rewritten[0] as DBToolResultPart).result as Record<string, unknown>;
+    expect(stub[EPHEMERAL_STUB_MARKER]).toBe(true);
+    expect(stub.contentId).toBeUndefined();
+    expect(stub.truncatedContentId).toBeUndefined();
+    // But the rich outline is still produced so the model at least knows the
+    // shape of the content.
+    expect(typeof stub.summary).toBe("string");
+    const summary = stub.summary as string;
+    expect(summary.startsWith("[STUB:")).toBe(true);
+  });
+
+  it("skips content storage for tiny payloads (no retrieval value)", () => {
+    // A 100-char payload doesn't need a retrieval handle — let the compact
+    // summary stand alone.
+    const tiny: DBToolResultPart = {
+      type: "tool-result",
+      toolCallId: "call-tiny",
+      toolName: "mcp_ghostos_ghost_read",
+      result: {
+        status: "success",
+        text: "short content",
+      },
+      status: "success",
+      state: "output-available",
+    };
+
+    const lookup = ephemeralLookup(["mcp_ghostos_ghost_read"]);
+    const rewritten = stubEphemeralToolResults([tiny], {
+      sessionId: "any-session",
+      ephemeralLookup: lookup,
+    });
+    const stub = (rewritten[0] as DBToolResultPart).result as Record<string, unknown>;
+    expect(stub.contentId).toBeUndefined();
+    expect(stub.truncatedContentId).toBeUndefined();
+  });
+
+  it("does not mint a contentId for error results (nothing useful to retrieve)", () => {
+    const failed: DBToolResultPart = {
+      type: "tool-result",
+      toolCallId: "call-err-big",
+      toolName: "mcp_ghostos_ghost_read",
+      result: {
+        status: "error",
+        error: "Big descriptive error " + "x".repeat(2000),
+      },
+      status: "error",
+      state: "output-error",
+    };
+
+    const lookup = ephemeralLookup(["mcp_ghostos_ghost_read"]);
+    const rewritten = stubEphemeralToolResults([failed], {
+      sessionId: "any-session",
+      ephemeralLookup: lookup,
+    });
+    const stub = (rewritten[0] as DBToolResultPart).result as Record<string, unknown>;
+    expect(stub.status).toBe("error");
+    expect(stub.error).toContain("Big descriptive error");
+    expect(stub.contentId).toBeUndefined();
+  });
+
+  it("ephemeral stubs do NOT trigger the canonical-invariant truncation counter", () => {
+    // truncated + truncatedContentId on an ephemeral stub is LEGITIMATE at the
+    // canonical layer — countCanonicalTruncationMarkers must skip them.
+    const big: DBToolResultPart = {
+      type: "tool-result",
+      toolCallId: "call-inv",
+      toolName: "mcp_ghostos_ghost_read",
+      result: {
+        status: "success",
+        text: "big content ".repeat(200),
+      },
+      status: "success",
+      state: "output-available",
+    };
+    const lookup = ephemeralLookup(["mcp_ghostos_ghost_read"]);
+    const rewritten = stubEphemeralToolResults([big], {
+      sessionId: "inv-session",
+      ephemeralLookup: lookup,
+    });
+    // Stub should have both markers:
+    const stub = (rewritten[0] as DBToolResultPart).result as Record<string, unknown>;
+    expect(stub.truncated).toBe(true);
+    expect(typeof stub.truncatedContentId).toBe("string");
+    // But the counter must NOT flag it.
+    expect(countCanonicalTruncationMarkers(rewritten)).toBe(0);
   });
 
   it("ignores random long strings in unrelated fields (no false-positive media refs)", () => {

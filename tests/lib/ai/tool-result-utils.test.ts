@@ -26,11 +26,6 @@ vi.mock("@/lib/ai/truncated-content-store", () => ({
   storeFullContent: vi.fn(() => "trunc_test123"),
 }));
 
-// Mock the truncation utils
-vi.mock("@/lib/ai/truncation-utils", () => ({
-  generateTruncationMarker: vi.fn(() => "\n[TRUNCATED]"),
-}));
-
 describe("normalizeToolResultOutput - readFile exemption", () => {
   beforeEach(() => {
     vi.clearAllMocks();

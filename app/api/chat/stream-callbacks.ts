@@ -239,9 +239,12 @@ export function createOnFinishCallback(ctx: StreamCallbackContext) {
     // Rewrite ephemeral tool-results into compact stubs BEFORE persistence.
     // The model has already seen the full result in the current streaming
     // turn — stubbing the stored copy prevents replay bloat across subsequent
-    // turns (e.g. Ghost OS screenshots, large AX trees). The current turn's
-    // in-memory result is unaffected.
-    const content = stubEphemeralToolResults(mergedContent);
+    // turns (e.g. Ghost OS screenshots, large AX trees). Passing sessionId
+    // lets the stub preserve the full primary text in the TruncatedContentStore
+    // so the next turn can call retrieveFullContent({ contentId }) on replay.
+    const content = stubEphemeralToolResults(mergedContent, {
+      sessionId: ctx.sessionId,
+    });
     const canonicalTruncationCount = countCanonicalTruncationMarkers(content);
     if (canonicalTruncationCount > 0) {
       console.error(
@@ -566,8 +569,11 @@ export function createOnAbortCallback(ctx: StreamCallbackContext) {
         stepContent
       );
       // See note at the normal-completion write site — stubbing ephemeral
-      // tool-results here keeps interrupted-turn DB rows small too.
-      const content = stubEphemeralToolResults(mergedContent);
+      // tool-results here keeps interrupted-turn DB rows small too. Pass
+      // sessionId so the stub can mint a retrievable contentId.
+      const content = stubEphemeralToolResults(mergedContent, {
+        sessionId: ctx.sessionId,
+      });
       const canonicalTruncationCount =
         countCanonicalTruncationMarkers(content);
       if (canonicalTruncationCount > 0) {

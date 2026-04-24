@@ -19,7 +19,9 @@ import {
     listBackgroundProcesses,
     cleanupBackgroundProcesses,
 } from "@/lib/command-execution";
-import { readTerminalLog, truncateOutput } from "@/lib/command-execution/log-manager";
+import { readTerminalLog } from "@/lib/command-execution/log-manager";
+import { sliceLogText } from "@/lib/ai/log-slice";
+import { recordRetrieval } from "@/lib/ai/output-stub-telemetry";
 import { registerBackgroundTask } from "@/app/api/chat/delegation-waiting";
 import type {
     ExecuteCommandToolOptions,
@@ -343,6 +345,27 @@ const executeCommandSchema = jsonSchema<ExecuteCommandInput & { logId?: string }
             type: "string",
             description: "The log ID to read when command is 'readLog'.",
         },
+        head: {
+            type: "number",
+            description: "readLog only: return the first N lines of the log.",
+        },
+        tail: {
+            type: "number",
+            description: "readLog only: return the last N lines of the log.",
+        },
+        range: {
+            type: "array",
+            items: { type: "number" },
+            minItems: 2,
+            maxItems: 2,
+            description:
+                "readLog only: 1-indexed inclusive [startLine, endLine] range. Example: [400, 500].",
+        },
+        grep: {
+            type: "string",
+            description:
+                "readLog only: regex pattern to search within the log. Returns matching lines with 2 lines of context each. Capped at 200 matches.",
+        },
         confirmRemoval: {
             type: "boolean",
             description:
@@ -378,10 +401,19 @@ export function createExecuteCommandTool(options: ExecuteCommandToolOptions) {
 - Run tests: executeCommand({ command: "npm", args: ["test"] })
 - Check git status: executeCommand({ command: "git", args: ["status"] })
 - Install deps: executeCommand({ command: "npm", args: ["install"] })
-- Read full truncated log: executeCommand({ command: "readLog", logId: "..." })
+- Read a stored log (first 200 lines by default): executeCommand({ command: "readLog", logId: "..." })
+- Read specific slices (preferred — keeps context small):
+  · executeCommand({ command: "readLog", logId: "...", head: 100 })
+  · executeCommand({ command: "readLog", logId: "...", tail: 100 })
+  · executeCommand({ command: "readLog", logId: "...", range: [400, 500] })
+  · executeCommand({ command: "readLog", logId: "...", grep: "error" })
 - Check background process: executeCommand({ processId: "bg-123" })
 - Kill background process: executeCommand({ command: "kill", processId: "bg-123" })
 - List background processes: executeCommand({ command: "list" })
+
+**readLog retrieval policy:**
+- Oversized tool outputs are replaced with a stub that contains an outline and a logId. Call readLog ONLY when the preview/outline is insufficient.
+- Prefer grep/range/head over fetching the whole log. Each readLog call is hard-capped to ~8K tokens — chunked reads are expected for large logs.
 
 **Background Mode:**
 Use background: true for commands that take a long time (npm install, npx create-*, builds).
@@ -419,7 +451,7 @@ The tool returns immediately with a processId. Poll with processId to check stat
                 };
             }
 
-            const { command, args = [], stdin, cwd, timeout, background, processId, logId, confirmRemoval = false } = input;
+            const { command, args = [], stdin, cwd, timeout, background, processId, logId, head, tail, range, grep, confirmRemoval = false } = input;
 
             // ── Read Log ────────────────────────────────────────────────
             if (command === "readLog" && logId) {
@@ -431,21 +463,54 @@ The tool returns immediately with a processId. Poll with processId to check stat
                     };
                 }
 
-                // Apply smart middle-truncation to prevent the stream guard
-                // from blocking the readLog result (which would create an
-                // infinite loop: readLog → blocked → suggests readLog → ∞)
-                const truncated = truncateOutput(fullLog, 500);
+                // Apply the requested slice. Each call is hard-capped at ~8K tokens
+                // so a single readLog can't re-inflate context — chunked reads are
+                // expected for large logs.
+                const slice = sliceLogText(fullLog, {
+                    head,
+                    tail,
+                    range: Array.isArray(range) ? (range as [number, number]) : undefined,
+                    grep,
+                });
+
+                recordRetrieval({
+                    retrievalId: logId,
+                    retrievalIdType: "logId",
+                    sliceMode: slice.mode,
+                    sliceParams: {
+                        ...(head !== undefined ? { head } : {}),
+                        ...(tail !== undefined ? { tail } : {}),
+                        ...(range !== undefined ? { range } : {}),
+                        ...(grep !== undefined ? { grep } : {}),
+                        ...(slice.meta.matchCount !== undefined
+                            ? { matches: slice.meta.matchCount }
+                            : {}),
+                    },
+                    returnedTokens: Math.ceil(slice.content.length / 4),
+                    budgetHit: slice.meta.budgetClamped === true,
+                });
+
+                const metaBits: string[] = [];
+                if (slice.meta.fromLine !== undefined && slice.meta.toLine !== undefined) {
+                    metaBits.push(`lines ${slice.meta.fromLine}–${slice.meta.toLine} of ${slice.totalLines}`);
+                }
+                if (slice.meta.matchCount !== undefined) {
+                    metaBits.push(`${slice.meta.matchCount} match${slice.meta.matchCount === 1 ? "" : "es"}`);
+                }
+                if (slice.meta.budgetClamped) {
+                    metaBits.push("budget-clamped");
+                }
+                const metaLabel = metaBits.length > 0 ? ` (${metaBits.join(", ")})` : "";
+                const modeLabel = slice.mode === "default" ? "default head" : slice.mode;
 
                 return {
                     status: "success",
-                    stdout: truncated.content,
-                    message: truncated.isTruncated
-                        ? `Retrieved log '${logId}' (truncated: showing 500 of ${truncated.originalLineCount} lines — head + tail with middle omitted).`
-                        : `Retrieved full log for ID '${logId}'.`,
-                    ...(truncated.isTruncated ? {
-                        isTruncated: true,
-                        originalLineCount: truncated.originalLineCount,
-                    } : {}),
+                    stdout: slice.content,
+                    message: `readLog '${logId}' — mode=${modeLabel}${metaLabel}.${
+                        slice.meta.note ? " " + slice.meta.note : ""
+                    }`,
+                    logId,
+                    isTruncated: slice.meta.budgetClamped === true,
                 };
             }
 

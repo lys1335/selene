@@ -1,16 +1,16 @@
 /**
  * Token-Aware Output Limiter
  *
- * Enforces token limits on tool outputs to prevent context bloat.
+ * Enforces token limits on tool outputs for the persisted chat history.
  * Stores full content for on-demand retrieval.
  *
- * This module provides a universal token limiting mechanism that applies to
- * ALL tool outputs (bash commands, MCP tools, web tools, etc.) to prevent
- * context overflow from massive outputs like `ls -R`, `pip freeze`.
+ * This is the "history-writer" path: it runs when a tool result is being
+ * normalised for the conversation history. For the live streaming path see
+ * `tool-result-stream-guard.ts` (different, larger budget).
  */
 
 import { storeFullContent } from "./truncated-content-store";
-import { generateTruncationMarker, middleTruncateText } from "./truncation-utils";
+import { buildOutputStub, deriveOutline } from "./output-stub";
 
 // ============================================================================
 // Configuration
@@ -21,7 +21,6 @@ import { generateTruncationMarker, middleTruncateText } from "./truncation-utils
 // ~3,000 tokens = ~12,000 characters (4 chars/token estimate)
 const MAX_TOOL_OUTPUT_TOKENS = 3000;
 export const CHARS_PER_TOKEN = 4;
-const MAX_TOOL_OUTPUT_CHARS = MAX_TOOL_OUTPUT_TOKENS * CHARS_PER_TOKEN; // 12,000
 
 // ============================================================================
 // Types
@@ -30,7 +29,7 @@ const MAX_TOOL_OUTPUT_CHARS = MAX_TOOL_OUTPUT_TOKENS * CHARS_PER_TOKEN; // 12,00
 interface LimitResult {
   /** Whether the output was limited/truncated */
   limited: boolean;
-  /** The output (truncated if limited, original if not) */
+  /** The output (stub if limited, original primary text if not) */
   output: string;
   /** Original content length in characters */
   originalLength: number;
@@ -74,27 +73,14 @@ export function estimateTokens(content: unknown): number {
 /**
  * Extract primary text content from tool output
  * Returns the main text that would be sent to context
- *
- * Handles various output formats:
- * - String outputs (return as-is)
- * - Object outputs with common text fields (content, text, stdout, result, output)
- * - MCP tool results with content arrays
- * - Combined stdout/stderr outputs
  */
 function extractPrimaryText(output: unknown): string | null {
-  // Handle string output
-  if (typeof output === "string") {
-    return output;
-  }
-
-  if (!output || typeof output !== "object") {
-    return null;
-  }
+  if (typeof output === "string") return output;
+  if (!output || typeof output !== "object") return null;
 
   const obj = output as Record<string, unknown>;
 
-  // Special case: MCP tool results with content array
-  // Format: { content: [{ type: "text", text: "..." }, ...] }
+  // MCP tool results: { content: [{ type: "text", text: "..." }, ...] }
   if (obj.content && Array.isArray(obj.content)) {
     const textParts: string[] = [];
     for (const item of obj.content) {
@@ -102,13 +88,10 @@ function extractPrimaryText(output: unknown): string | null {
         textParts.push(String(item.text));
       }
     }
-    if (textParts.length > 0) {
-      return textParts.join("\n");
-    }
+    if (textParts.length > 0) return textParts.join("\n");
   }
 
-  // Special case: Concatenate stdout and stderr
-  // Common for executeCommand tool results
+  // executeCommand-style: concatenate stdout + stderr
   if (obj.stdout || obj.stderr) {
     const parts: string[] = [];
     if (typeof obj.stdout === "string") parts.push(obj.stdout);
@@ -116,12 +99,8 @@ function extractPrimaryText(output: unknown): string | null {
     return parts.join("\n");
   }
 
-  // Check common text fields in priority order
-  const textFields = ["content", "text", "result", "results", "output", "summary", "markdown"];
-  for (const field of textFields) {
-    if (typeof obj[field] === "string") {
-      return obj[field] as string;
-    }
+  for (const field of ["content", "text", "result", "results", "output", "summary", "markdown"]) {
+    if (typeof obj[field] === "string") return obj[field] as string;
   }
 
   return null;
@@ -132,20 +111,13 @@ function extractPrimaryText(output: unknown): string | null {
 // ============================================================================
 
 /**
- * Apply token limit to tool output
+ * Apply token limit to tool output for chat-history persistence.
  *
  * If output exceeds limit:
- * - Truncates to maxTokens (default ~3,000 tokens = ~12,000 chars)
- * - Stores full content for retrieval (if sessionId provided)
- * - Adds clear truncation notice with retrieval instructions
+ *   - Stores the full primary text (so the model can retrieve slices later)
+ *   - Returns a stub string with outline + retrieval commands
  *
- * This is the universal safety net that applies to ALL tools.
- *
- * @param output - The tool output to limit (string, object, or unknown)
- * @param toolName - Name of the tool (for logging and context)
- * @param sessionId - Optional session ID for storing full content
- * @param options - Optional configuration overrides
- * @returns LimitResult with limited output and metadata
+ * Below the limit the primary text passes through unchanged.
  */
 export function limitToolOutput(
   output: unknown,
@@ -157,23 +129,17 @@ export function limitToolOutput(
   } = {}
 ): LimitResult {
   const maxTokens = options.maxTokens ?? MAX_TOOL_OUTPUT_TOKENS;
-  const charsPerToken = options.charsPerToken ?? CHARS_PER_TOKEN;
-  const maxChars = maxTokens * charsPerToken;
 
-  // Detect if the tool already provides a logId (common for executeCommand)
-  // We prefer the tool's own logId over generating a new trunc_ ID
-  const obj = (output && typeof output === "object") ? (output as Record<string, any>) : null;
-  const existingLogId = obj?.logId;
+  // Detect an existing logId (executeCommand persists its own log file).
+  const obj = output && typeof output === "object" ? (output as Record<string, any>) : null;
+  const existingLogId = typeof obj?.logId === "string" ? (obj.logId as string) : undefined;
   const alreadyTruncated = obj?.isTruncated || obj?.truncated;
 
-  // Estimate tokens for entire output
   const estimatedTokens = estimateTokens(output);
 
-  // No limiting needed BY THIS TOOL - but check if it was already truncated by the caller
+  // --- Below budget: pass through ---
   if (estimatedTokens <= maxTokens) {
     if (alreadyTruncated && (existingLogId || obj?.truncatedContentId)) {
-      // It was already truncated by lines or something else, but it fits in tokens.
-      // Extract the actual text content to preserve the real tool result
       const text = extractPrimaryText(output) ?? JSON.stringify(output);
       return {
         limited: false,
@@ -184,7 +150,6 @@ export function limitToolOutput(
       };
     }
 
-    // For non-truncated outputs, extract text properly
     const text = extractPrimaryText(output);
     if (text !== null) {
       return {
@@ -196,7 +161,6 @@ export function limitToolOutput(
       };
     }
 
-    // Fallback: serialize object outputs to avoid "[object Object]"
     const serialized =
       typeof output === "string"
         ? output
@@ -222,87 +186,57 @@ export function limitToolOutput(
       `~${estimatedTokens.toLocaleString()} tokens (limit: ${maxTokens.toLocaleString()})`
   );
 
-  // Extract primary text content to truncate
-  const primaryText = extractPrimaryText(output);
+  // --- Over budget: store full + return stub ---
+  const primaryText =
+    extractPrimaryText(output) ??
+    (typeof output === "string"
+      ? output
+      : (() => {
+          try {
+            const s = JSON.stringify(output);
+            return typeof s === "string" ? s : String(output);
+          } catch {
+            return String(output);
+          }
+        })());
 
-  if (!primaryText) {
-    // Can't extract a known text field — serialize the whole object and truncate it.
-    console.warn(`[OutputLimiter] Could not extract text from ${toolName} output, truncating serialized form`);
-    const serialized =
-      typeof output === "string"
-        ? output
-        : (() => {
-            try {
-              const s = JSON.stringify(output);
-              return typeof s === "string" ? s : String(output);
-            } catch {
-              return String(output);
-            }
-          })();
-
-    const middleTruncated = middleTruncateText(serialized, maxChars);
-    const truncatedText = middleTruncated.content;
-
-    let contentId: string | undefined;
-    if (sessionId) {
-      contentId = storeFullContent(sessionId, `${toolName} output`, serialized, truncatedText.length);
-    }
-
-    const truncationNotice = generateTruncationMarker({
-      originalLength: serialized.length,
-      truncatedLength: truncatedText.length,
-      estimatedTokens,
-      maxTokens,
-      id: contentId,
-      idType: "contentId",
-    });
-
-    return {
-      limited: true,
-      output: truncatedText + truncationNotice,
-      originalLength: serialized.length,
-      truncatedLength: truncatedText.length,
-      contentId,
-      estimatedTokens,
-    };
-  }
-
-  // Truncate with head+tail middle-truncation to preserve both
-  // the beginning (setup, context) and end (results, errors, exit status)
-  const middleTruncated = middleTruncateText(primaryText, maxChars);
-  const truncatedText = middleTruncated.content;
-
-  // Store full content if session provided AND no existing logId
-  let contentId: string | undefined = existingLogId;
+  // Prefer an existing logId; otherwise store the full primary text.
+  // storeFullContent may return null when the backing store is
+  // unavailable — normalise to undefined so the stub omits the
+  // retrieval hint rather than printing "contentId=null".
+  let retrievalId: string | undefined = existingLogId;
   let idType: "logId" | "contentId" = existingLogId ? "logId" : "contentId";
-
   if (!existingLogId && sessionId) {
-    contentId = storeFullContent(
+    const stored = storeFullContent(
       sessionId,
       `${toolName} output`,
       primaryText,
-      truncatedText.length
+      0
     );
+    retrievalId = stored ?? undefined;
+    idType = "contentId";
   }
 
-  // Build truncation notice using unified utility
-  const truncationNotice = generateTruncationMarker({
-    originalLength: primaryText.length,
-    truncatedLength: truncatedText.length,
-    estimatedTokens,
-    maxTokens,
-    id: contentId, // Will be undefined if no storage available
-    idType,
-  });
+  const stderr =
+    obj && typeof obj.stderr === "string" ? (obj.stderr as string) : undefined;
+  const outline = deriveOutline(primaryText, { stderr });
 
-  const finalOutput = truncatedText + truncationNotice;
+  const stub = buildOutputStub({
+    toolName,
+    originalText: primaryText,
+    outline,
+    retrievalId,
+    idType,
+    previewTokens: 0, // chat-history path: no preview, the live stream already showed one
+    stderr,
+  });
 
   return {
     limited: true,
-    output: finalOutput,
+    output: stub,
     originalLength: primaryText.length,
-    truncatedLength: truncatedText.length,
-    contentId,
+    truncatedLength: stub.length,
+    contentId: retrievalId,
     estimatedTokens,
   };
 }

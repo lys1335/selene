@@ -72,7 +72,11 @@ describe("formatMCPToolResult", () => {
     expect(typeof formatted.truncatedContentId).toBe("string");
     expect(typeof formatted.content).toBe("string");
     expect((formatted.content as string).length).toBeLessThan(140_000);
-    expect(formatted.content).toContain("OUTPUT TRUNCATED");
+    // Stub emitted by buildOutputStub carries the [STUB: ...] header,
+    // the outline section, and the retrieveFullContent retrieval hints.
+    expect(formatted.content).toContain("[STUB: tool=ghost_read");
+    expect(formatted.content).toContain("contentId=");
+    expect(formatted.content).toContain("retrieveFullContent");
   });
 
   it("truncates oversized MCP error strings", async () => {
@@ -89,6 +93,7 @@ describe("formatMCPToolResult", () => {
     expect(formatted.truncated).toBe(true);
     expect(typeof formatted.error).toBe("string");
     expect((formatted.error as string).length).toBeLessThan(140_000);
-    expect(formatted.error).toContain("OUTPUT TRUNCATED");
+    expect(formatted.error).toContain("[STUB: tool=ghost_read");
+    expect(formatted.error).toContain("retrieveFullContent");
   });
 });

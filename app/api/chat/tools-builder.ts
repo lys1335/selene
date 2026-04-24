@@ -695,8 +695,15 @@ export async function buildToolsForRequest(
 
         try {
           const rawResult = await origExecute(normalizedArgs, options as any);
+          const toolCallId =
+            options && typeof options === "object" && "toolCallId" in options &&
+            typeof (options as { toolCallId?: unknown }).toolCallId === "string"
+              ? (options as { toolCallId: string }).toolCallId
+              : undefined;
           const guardedResult = guardToolResultForStreaming(toolId, rawResult, {
             maxTokens: streamToolResultBudgetTokens,
+            sessionId,
+            toolCallId,
             metadata: {
               sourceFileName: "app/api/chat/tools-builder.ts",
             },

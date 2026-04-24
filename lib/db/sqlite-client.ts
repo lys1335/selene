@@ -34,7 +34,7 @@ const globalForDb = globalThis as unknown as {
   didLogSqliteOpen?: boolean;
 };
 
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 function createConnection(): { sqlite: Database.Database; db: BetterSQLite3Database<typeof schema> } {
   const dbPath = getDbPath();

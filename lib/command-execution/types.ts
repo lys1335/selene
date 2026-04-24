@@ -194,6 +194,14 @@ export interface ExecuteCommandInput {
   processId?: string;
   /** Explicit confirmation required for removal commands (rm/rmdir/del/...) */
   confirmRemoval?: boolean;
+  /** When command==="readLog": first N lines of the log */
+  head?: number;
+  /** When command==="readLog": last N lines of the log */
+  tail?: number;
+  /** When command==="readLog": 1-indexed inclusive [start, end] line range */
+  range?: [number, number];
+  /** When command==="readLog": regex search (matches returned with 2 lines of context) */
+  grep?: string;
 }
 
 /**
