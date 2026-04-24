@@ -239,6 +239,20 @@ export async function createSeleneSdkMcpServer(
   const registry = ToolRegistry.getInstance();
 
   const enabledSet = ctx.enabledTools ? new Set(ctx.enabledTools) : null;
+
+  // Companion-tool enforcement (mirrors app/api/chat/tools-builder.ts:218-227).
+  // bash and executeCommand are coupled by the stub-retrieval protocol: bash
+  // produces logId-bearing stubs that require executeCommand({command:"readLog"})
+  // to retrieve. Exposing bash without executeCommand to the Claude Agent SDK
+  // MCP bridge causes model looping on oversized output. Promote executeCommand
+  // whenever bash is enabled, regardless of the agent's enabledTools selection.
+  if (enabledSet && enabledSet.has("bash") && !enabledSet.has("executeCommand")) {
+    enabledSet.add("executeCommand");
+    console.log(
+      "[SeleneMcpServer] Companion-tool enforcement: promoted executeCommand into enabledSet because bash is enabled"
+    );
+  }
+
   const factoryOpts = {
     sessionId: ctx.sessionId,
     userId: ctx.userId,

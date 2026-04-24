@@ -34,6 +34,7 @@ import { createSendMessageToChannelTool } from "@/lib/ai/tools/channel-tools";
 import { createSkillTool } from "@/lib/ai/tools/skill-tool";
 import { createCompactSessionTool } from "@/lib/ai/tools/compact-session-tool";
 import { createWorkspaceTool } from "@/lib/ai/tools/workspace-tool";
+import { createDesignWorkspaceTool } from "@/lib/ai/tools/design-workspace-tool";
 import {
   ToolRegistry,
   createToolSearchTool,
@@ -97,6 +98,15 @@ interface ToolsBuildContext {
    * request with no vision support would otherwise need to do mid-turn).
    */
   droppedImagesForProvider?: number;
+  /**
+   * Client-forwarded active design workspace preview theme (from the Zustand
+   * `useDesignWorkspaceStore`). Forwarded to `createDesignWorkspaceTool`
+   * as the `defaultPreviewTheme` option so mutating tool calls capture
+   * screenshots that match the theme the user currently sees — closes the
+   * Sprint 1 Rev-A2 Gap 1 reviewer blocker. Undefined when the request
+   * did not include the header (legacy clients / non-design sessions).
+   */
+  designPreviewTheme?: import("@/lib/design/workspace/types").DesignPreviewTheme;
 }
 
 interface ToolsBuildResult {
@@ -137,6 +147,7 @@ export async function buildToolsForRequest(
     pluginRoots,
     allowedPluginNames,
     workflowPromptContextInput,
+    designPreviewTheme,
   } = ctx;
 
   const useDeferredLoading = toolLoadingMode !== "always";
@@ -365,6 +376,20 @@ export async function buildToolsForRequest(
           userId,
         }),
       }),
+    // Override the registry-produced designWorkspace factory with one that
+    // carries the request-scoped `defaultPreviewTheme` forwarded from the
+    // client. The registry factory defaults to dark (compiler default) when
+    // the LLM omits `input.previewTheme`; this override closes the Sprint 1
+    // Rev-A2 Gap 1 blocker so light/system previews capture matching
+    // screenshots even when the model does not populate the schema field.
+    ...(allTools.designWorkspace && {
+      designWorkspace: createDesignWorkspaceTool({
+        sessionId: sessionId || "UNSCOPED",
+        userId: userId || "UNSCOPED",
+        characterId: characterId || undefined,
+        defaultPreviewTheme: designPreviewTheme,
+      }),
+    }),
   };
 
   // Load MCP tools for this character (if configured).

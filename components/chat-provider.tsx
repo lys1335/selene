@@ -40,6 +40,7 @@ import {
 } from "@/lib/chat/transport-errors";
 import { buildRetryMessage, getLastUserMessageId, shouldAutoRetryClientChat } from "@/lib/chat/client-retry";
 import { parseChatPreflightResponse } from "@/lib/chat/preflight";
+import { useDesignWorkspaceStore } from "@/lib/design/workspace/store";
 import {
   CHAT_ATTACHMENT_ACCEPT,
   getDocumentTypeLabel,
@@ -1319,15 +1320,38 @@ export const ChatProvider: FC<ChatProviderProps> = ({
       async (input: RequestInfo | URL, init?: RequestInit) => {
         setTransportError(null);
 
+        // Inject the per-request design workspace preview theme at the
+        // absolute latest moment — the Zustand store holds the theme the
+        // user currently sees, and reading it here (rather than baking it
+        // into `headers` at transport construction time) guarantees a
+        // just-toggled theme is reflected on the very next turn. The
+        // server reads this header in `app/api/chat/route.ts` and forwards
+        // it through `buildToolsForRequest` → `createDesignWorkspaceTool`
+        // as `defaultPreviewTheme` (Sprint 1 Rev-A2 Gap 1).
+        let mergedInit: RequestInit | undefined = init;
+        if (typeof input === "string" && (input === "/api/chat" || input === "/api/chat/preflight")) {
+          try {
+            const previewTheme = useDesignWorkspaceStore.getState().previewTheme;
+            if (previewTheme === "light" || previewTheme === "dark" || previewTheme === "system") {
+              const nextHeaders = new Headers(init?.headers);
+              nextHeaders.set("X-Design-Preview-Theme", previewTheme);
+              mergedInit = { ...(init ?? {}), headers: nextHeaders };
+            }
+          } catch {
+            // Store read must never block the chat request; fall back to the
+            // unmodified init so the server applies the compiler default.
+          }
+        }
+
         if (typeof input === "string" && input === "/api/chat") {
           const preflightResponse = await fetch("/api/chat/preflight", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              ...(init?.headers ? Object.fromEntries(new Headers(init.headers).entries()) : {}),
+              ...(mergedInit?.headers ? Object.fromEntries(new Headers(mergedInit.headers).entries()) : {}),
             },
-            body: init?.body,
-            signal: init?.signal,
+            body: mergedInit?.body,
+            signal: mergedInit?.signal,
           });
           const preflightResult = parseChatPreflightResponse(await preflightResponse.text());
           if (!preflightResult.ok) {
@@ -1353,9 +1377,9 @@ export const ChatProvider: FC<ChatProviderProps> = ({
         }
 
         try {
-          if (DEBUG_CHAT && typeof input === "string" && input === "/api/chat" && init?.body) {
+          if (DEBUG_CHAT && typeof input === "string" && input === "/api/chat" && mergedInit?.body) {
             try {
-              const parsedBody = JSON.parse(String(init.body)) as {
+              const parsedBody = JSON.parse(String(mergedInit.body)) as {
                 messages?: Array<{ role?: string; parts?: unknown[]; metadata?: unknown }>;
               };
               const lastMessage = parsedBody.messages?.[parsedBody.messages.length - 1];
@@ -1367,7 +1391,7 @@ export const ChatProvider: FC<ChatProviderProps> = ({
               console.warn("[ChatProvider] Failed to parse outbound chat payload", parseError);
             }
           }
-          const response = await fetch(input, init);
+          const response = await fetch(input, mergedInit);
           if (!response.ok) {
             setTransportError(await parseTransportErrorResponse(response));
           }

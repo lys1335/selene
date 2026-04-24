@@ -53,7 +53,7 @@ import type { ChatWorkspaceMode } from "@/lib/chat/workspace-mode";
 // stay off the initial chat route JS. ssr: false because the workspace uses DOM-only APIs
 // (iframe refs, browser-only Zustand state) and the route is client-rendered anyway.
 const DesignWorkspace = dynamic(
-    () => import("@/components/design").then((m) => ({ default: m.DesignWorkspace })),
+    () => import("@/components/design/design-workspace").then((m) => ({ default: m.DesignWorkspace })),
     { ssr: false },
 );
 

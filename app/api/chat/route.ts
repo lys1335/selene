@@ -265,6 +265,17 @@ export async function POST(req: Request) {
     const userTimezoneHeader = req.headers.get("X-User-Timezone")?.trim() || null;
     const taskSource = req.headers.get("X-Task-Source")?.toLowerCase();
     const isChannelSource = taskSource === "channel";
+    // Per-request design workspace preview theme — forwarded by the client
+    // from the Zustand `useDesignWorkspaceStore.previewTheme` so the
+    // `designWorkspace` tool can render post-action screenshots / probes
+    // under the theme the user currently sees, not the compiler default.
+    // See Sprint 1 Rev-A2 Gap 1. Constrained to the three valid enum values;
+    // anything else becomes `undefined` (compiler fallback applies).
+    const rawDesignPreviewTheme = req.headers.get("X-Design-Preview-Theme")?.trim().toLowerCase();
+    const designPreviewTheme: "light" | "dark" | "system" | undefined =
+      rawDesignPreviewTheme === "light" || rawDesignPreviewTheme === "dark" || rawDesignPreviewTheme === "system"
+        ? rawDesignPreviewTheme
+        : undefined;
 
     console.debug(`[CHAT API] Session ID: header=${headerSessionId}, body=${bodySessionId}, using=${providedSessionId}, characterId=${characterId}, source=${taskSource || "chat"}`);
 
@@ -720,6 +731,7 @@ export async function POST(req: Request) {
       workflowPromptContextInput,
       provider: currentProvider,
       droppedImagesForProvider,
+      designPreviewTheme,
     });
 
     const {

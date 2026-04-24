@@ -75,8 +75,14 @@ export function registerAllTools(): void {
     () => createToolSearchTool()
   );
 
-  // Retrieve Full Content - allows AI to access full untruncated content
-  // This tool is always loaded because truncation notices reference it directly
+  // Retrieve Full Content - allows AI to access full untruncated content.
+  //
+  // CRITICAL: This tool is alwaysLoad (never user-disableable, never filtered
+  // by per-agent enabledTools). Truncation stubs emitted by any tool reference
+  // `retrieveFullContent({ contentId: "trunc_..." })` directly; if the tool
+  // isn't in the model's active set, the model can't recover truncated output
+  // and loops. The chat API path and the Claude Agent SDK MCP bridge both rely
+  // on this flag to guarantee availability regardless of user tool selection.
   registry.register(
     "retrieveFullContent",
     {
@@ -93,7 +99,7 @@ export function registerAllTools(): void {
       ],
       shortDescription:
         "⚠️ NOT for file reading! Only retrieves truncated content with trunc_XXXXXXXX IDs. Use readFile for actual files.",
-      loading: { deferLoading: true }, // Only visible when truncation occurs in session
+      loading: { alwaysLoad: true }, // Truncation stubs reference it directly — must never be filtered or deferred
       requiresSession: true, // Requires session to retrieve stored content
     } satisfies ToolMetadata,
     // Placeholder factory - real instance with sessionId is created in chat route

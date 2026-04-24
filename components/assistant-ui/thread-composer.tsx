@@ -27,7 +27,7 @@ import { resilientFetch, resilientPost } from "@/lib/utils/resilient-fetch";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useDesignWorkspaceStore } from "@/lib/design/workspace";
+import { useDesignWorkspaceStore } from "@/lib/design/workspace/store";
 import {
   buildInspectMessageContext,
   formatInspectSelectionLabel,
