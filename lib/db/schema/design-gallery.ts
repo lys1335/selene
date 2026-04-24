@@ -72,6 +72,11 @@ export const designComponents = sqliteTable(
     mode: text("mode").notNull().default("tailwind"),
     style: text("style").notNull().default("default"),
 
+    // Structured metadata (JSON-encoded record). Introduced for Sprint 2 W2.1
+    // "import" action to carry `sourcePath` + `importedAt` without an ad-hoc
+    // per-column shim. Nullable so pre-W2.1 rows remain compatible.
+    metadata: text("metadata"),
+
     // Usage tracking
     useCount: integer("use_count").notNull().default(0),
     lastUsedAt: text("last_used_at"),

@@ -16,6 +16,24 @@ export interface NewDesignComponent {
   previewPath?: string;
   mode?: string;
   style?: string;
+  /**
+   * Structured JSON metadata. Sprint 2 W2.1 introduced this for the "import"
+   * action (carries `sourcePath`, `importedAt`). Keep shape open so future
+   * actions can extend it without another migration.
+   */
+  metadata?: DesignComponentMetadata | null;
+}
+
+/**
+ * Open-ended metadata bag persisted per design component. The `sourcePath` +
+ * `importedAt` fields are emitted by the "import" action; additional keys are
+ * allowed via the index signature so downstream actions (Sprint 2+) can attach
+ * their own metadata without churning this type.
+ */
+export interface DesignComponentMetadata {
+  sourcePath?: string;
+  importedAt?: string;
+  [key: string]: unknown;
 }
 
 export interface DesignComponentRow {
@@ -40,6 +58,8 @@ export interface DesignComponentRow {
   isFavorite: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Parsed metadata bag. `null` when no metadata has been persisted. */
+  metadata: DesignComponentMetadata | null;
 }
 
 /**

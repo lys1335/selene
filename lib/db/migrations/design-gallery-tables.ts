@@ -83,8 +83,42 @@ export function initDesignGalleryTablesWith(sqlite: Database.Database): void {
     `);
   }
 
+  // -- Sprint 2 W2.1: Add `metadata` JSON column for import-action metadata
+  // (sourcePath, importedAt, …). Uses the same additive + idempotent pattern
+  // as project_id above. Nullable so existing rows remain untouched.
+  const hasMetadata = cols.some((c) => c.name === "metadata");
+  if (!hasMetadata) {
+    sqlite.exec(`
+      ALTER TABLE design_components
+        ADD COLUMN metadata TEXT
+    `);
+  }
+
   sqlite.exec(`
     CREATE INDEX IF NOT EXISTS idx_design_components_project
       ON design_components (project_id)
+  `);
+
+  // -- Sprint 2 Rev-B (BA-2, BA-warn-6) — import idempotency.
+  //
+  // Enforces at the DB level that a given (user_id, session_id, sourcePath)
+  // triple can only have ONE non-null row. Previously the import action
+  // relied on a TOCTOU find-then-insert that allowed racing duplicates
+  // when the same tool call fired twice concurrently.
+  //
+  // The index is PARTIAL so it only applies to rows that actually carry
+  // `metadata.sourcePath` — generated / patched designs keep
+  // `metadata = NULL` and are unaffected. `CREATE INDEX IF NOT EXISTS`
+  // makes the migration idempotent: the second run is a no-op.
+  //
+  // NOTE: SQLite partial indexes use `WHERE` inline with CREATE. The
+  // `json_extract(metadata, '$.sourcePath')` expression matches the
+  // lookup in `findDesignComponentBySourcePath` (queries.ts) so the
+  // planner uses the index for both the uniqueness check and the read.
+  sqlite.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_design_components_source_path_unique
+      ON design_components (user_id, session_id, json_extract(metadata, '$.sourcePath'))
+      WHERE metadata IS NOT NULL
+        AND json_extract(metadata, '$.sourcePath') IS NOT NULL
   `);
 }

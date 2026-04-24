@@ -6,6 +6,7 @@ import type {
   DesignProjectRow,
   DesignProjectWithComponents,
   DesignComponentRow,
+  DesignComponentMetadata,
   ProjectSearchOpts,
 } from "./types";
 
@@ -21,6 +22,24 @@ function safeParseTags(raw: string): string[] {
       : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Parse the optional `metadata` JSON column introduced by W2.1. Mirrors the
+ * helper in `queries.ts` — kept local to avoid a barrel import, and tolerant
+ * of legacy rows where the column is NULL or non-object JSON.
+ */
+function safeParseMetadata(raw: string | null): DesignComponentMetadata | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as DesignComponentMetadata;
+    }
+    return null;
+  } catch {
+    return null;
   }
 }
 
@@ -46,6 +65,7 @@ function toComponentRow(row: typeof designComponents.$inferSelect): DesignCompon
     tags: safeParseTags(row.tags),
     styleTags: safeParseTags(row.styleTags),
     isFavorite: Boolean(row.isFavorite),
+    metadata: safeParseMetadata(row.metadata ?? null),
   };
 }
 
