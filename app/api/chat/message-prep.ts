@@ -45,6 +45,18 @@ import type { DBContentPart } from "@/lib/messages/converter";
  */
 const PROVIDERS_REQUIRING_REASONING_REPLAY = new Set<string>(["deepseek"]);
 
+/**
+ * Synthetic reasoning text used when an assistant message contains tool calls
+ * but has no recorded chain-of-thought. This happens when the conversation
+ * interleaves foreign-provider turns (e.g. Claude Code, Codex) with DeepSeek
+ * thinking-mode turns: foreign providers emit tool calls without reasoning,
+ * but DeepSeek's API requires `reasoning_content` on every assistant message
+ * that performed a tool call. Emitting this placeholder satisfies the
+ * round-trip contract without misrepresenting what the other model thought.
+ */
+const FOREIGN_TOOL_CALL_REASONING_PLACEHOLDER =
+  "(Tool calls on this turn were produced by a non-thinking-mode assistant; no chain-of-thought was captured. Continuing from the resulting tool outputs.)";
+
 function collectReasoningTextsFromDbContent(content: unknown): string[] {
   if (!Array.isArray(content)) return [];
   const texts: string[] = [];
@@ -60,13 +72,53 @@ function collectReasoningTextsFromDbContent(content: unknown): string[] {
 }
 
 /**
- * Re-inject reasoning parts stored on DB assistant messages into the matching
- * frontend messages before `extractContent` converts them to ModelMessages.
+ * Returns true if the message's UI parts include at least one tool invocation
+ * (any `tool-<name>`, `dynamic-tool`, or legacy `tool-call` part). A
+ * `tool-result` alone does not count — it's the companion to a call, not the
+ * call itself.
+ */
+function frontendPartsHaveToolCall(parts: FrontendMessage["parts"] | undefined): boolean {
+  if (!Array.isArray(parts)) return false;
+  for (const part of parts) {
+    const type = (part as { type?: string } | undefined)?.type;
+    if (typeof type !== "string") continue;
+    if (type === "tool-result") continue;
+    if (type === "tool-call") return true;
+    if (type === "dynamic-tool") return true;
+    if (type.startsWith("tool-")) return true;
+  }
+  return false;
+}
+
+function frontendPartsHaveReasoning(parts: FrontendMessage["parts"] | undefined): boolean {
+  if (!Array.isArray(parts)) return false;
+  for (const part of parts) {
+    const p = part as { type?: string; text?: unknown } | undefined;
+    if (p?.type === "reasoning" && typeof p.text === "string" && p.text.length > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Re-inject reasoning parts into assistant messages before `extractContent`
+ * converts them to ModelMessages. Two cases are handled:
  *
- * The UI pipeline strips reasoning parts in `buildUIPartsFromDBContent`, so
- * reasoning never reaches the client. For providers that require
- * `reasoning_content` on replay we restore it here from the authoritative DB
- * copy, matching by stable message ID.
+ *   1. The DB has stored reasoning for the message — we restore it verbatim.
+ *      The UI pipeline strips reasoning parts in `buildUIPartsFromDBContent`,
+ *      so without this step reasoning never reaches the client (and therefore
+ *      never makes it back into the outbound request).
+ *
+ *   2. The assistant message has tool-call parts but no reasoning anywhere
+ *      (not in frontend parts, not in DB content). This is the foreign-model
+ *      case: e.g. Claude Code or Codex produced tool calls without emitting
+ *      `reasoning_content`. When the user later switches back to DeepSeek
+ *      thinking mode, DeepSeek's API rejects the conversation with
+ *      "The `reasoning_content` in the thinking mode must be passed back to
+ *      the API." We inject a neutral placeholder reasoning block so the
+ *      outbound request is valid. The placeholder describes the actual
+ *      situation rather than fabricating thought.
  */
 async function injectReasoningFromDbForProvider(
   frontendMessages: FrontendMessage[],
@@ -83,74 +135,93 @@ async function injectReasoningFromDbForProvider(
       assistantIdsInRequest.add(msg.id);
     }
   }
-  if (assistantIdsInRequest.size === 0) {
-    return frontendMessages;
-  }
 
-  let dbMessages: Array<{ id: string; role: string; content: unknown }>;
-  try {
-    dbMessages = (await getMessages(sessionId)) as Array<{
-      id: string;
-      role: string;
-      content: unknown;
-    }>;
-  } catch (error) {
-    console.warn(
-      `[CHAT API] Failed to fetch DB messages for reasoning re-injection (provider=${provider}): ${
-        error instanceof Error ? error.message : String(error)
-      }`,
-    );
-    return frontendMessages;
-  }
-
-  const reasoningByMessageId = new Map<string, string[]>();
-  for (const dbMsg of dbMessages) {
-    if (dbMsg.role !== "assistant") continue;
-    if (!assistantIdsInRequest.has(dbMsg.id)) continue;
-    const texts = collectReasoningTextsFromDbContent(dbMsg.content);
-    if (texts.length > 0) {
-      reasoningByMessageId.set(dbMsg.id, texts);
+  // Fetch DB content for all assistant messages in the request. We need this
+  // for case 1 (verbatim replay) AND case 2 (detecting that the DB also has
+  // no reasoning before we synthesize a placeholder).
+  let reasoningByMessageId = new Map<string, string[]>();
+  if (assistantIdsInRequest.size > 0) {
+    try {
+      const dbMessages = (await getMessages(sessionId)) as Array<{
+        id: string;
+        role: string;
+        content: unknown;
+      }>;
+      for (const dbMsg of dbMessages) {
+        if (dbMsg.role !== "assistant") continue;
+        if (!assistantIdsInRequest.has(dbMsg.id)) continue;
+        const texts = collectReasoningTextsFromDbContent(dbMsg.content);
+        if (texts.length > 0) {
+          reasoningByMessageId.set(dbMsg.id, texts);
+        }
+      }
+    } catch (error) {
+      console.warn(
+        `[CHAT API] Failed to fetch DB messages for reasoning re-injection (provider=${provider}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      // Fall through — we may still synthesize placeholders from frontend
+      // parts alone, which is better than letting the request fail.
+      reasoningByMessageId = new Map();
     }
   }
 
-  if (reasoningByMessageId.size === 0) {
-    return frontendMessages;
-  }
+  let injectedFromDbCount = 0;
+  let synthesizedPlaceholderCount = 0;
 
-  let injectedCount = 0;
   const enhanced = frontendMessages.map((msg) => {
-    if (msg.role !== "assistant" || typeof msg.id !== "string") return msg;
-    const dbTexts = reasoningByMessageId.get(msg.id);
-    if (!dbTexts || dbTexts.length === 0) return msg;
+    if (msg.role !== "assistant") return msg;
 
     const existingParts = Array.isArray(msg.parts) ? [...msg.parts] : [];
+    const hasFrontendReasoning = frontendPartsHaveReasoning(existingParts);
+    const dbTexts =
+      typeof msg.id === "string" ? reasoningByMessageId.get(msg.id) : undefined;
 
-    // Dedupe: skip reasoning texts already present on the frontend message
-    // (handles the case where a future refactor teaches the UI converter to
-    // carry reasoning forward — this function then becomes a no-op for those
-    // messages rather than duplicating content).
-    const existingReasoningTexts = new Set<string>();
-    for (const part of existingParts) {
-      if (part && part.type === "reasoning" && typeof part.text === "string") {
-        existingReasoningTexts.add(part.text);
+    // Case 1: DB has reasoning — replay it (unless frontend already has the
+    // same text, e.g. if a future refactor starts carrying reasoning through
+    // the UI converter).
+    if (dbTexts && dbTexts.length > 0) {
+      const existingReasoningTexts = new Set<string>();
+      for (const part of existingParts) {
+        if (part && part.type === "reasoning" && typeof part.text === "string") {
+          existingReasoningTexts.add(part.text);
+        }
       }
+      const reasoningParts = dbTexts
+        .filter((text) => !existingReasoningTexts.has(text))
+        .map((text) => ({ type: "reasoning" as const, text }));
+
+      if (reasoningParts.length > 0) {
+        injectedFromDbCount += reasoningParts.length;
+        return { ...msg, parts: [...reasoningParts, ...existingParts] };
+      }
+      return msg;
     }
 
-    const reasoningParts = dbTexts
-      .filter((text) => !existingReasoningTexts.has(text))
-      .map((text) => ({ type: "reasoning" as const, text }));
+    // Case 2: No reasoning anywhere, but the message performed a tool call.
+    // Synthesize a neutral placeholder so DeepSeek's validator accepts the
+    // request. Without this, a single foreign-provider turn in history
+    // poisons every subsequent DeepSeek request in the session.
+    if (!hasFrontendReasoning && frontendPartsHaveToolCall(existingParts)) {
+      synthesizedPlaceholderCount += 1;
+      return {
+        ...msg,
+        parts: [
+          { type: "reasoning" as const, text: FOREIGN_TOOL_CALL_REASONING_PLACEHOLDER },
+          ...existingParts,
+        ],
+      };
+    }
 
-    if (reasoningParts.length === 0) return msg;
-
-    injectedCount += reasoningParts.length;
-    // Prepend reasoning so the canonical shape is [reasoning..., text/tool-call...].
-    return { ...msg, parts: [...reasoningParts, ...existingParts] };
+    return msg;
   });
 
-  if (injectedCount > 0) {
+  if (injectedFromDbCount > 0 || synthesizedPlaceholderCount > 0) {
     console.log(
-      `[CHAT API] Re-injected ${injectedCount} reasoning part(s) from DB for provider=${provider} ` +
-        `across ${reasoningByMessageId.size} assistant message(s).`,
+      `[CHAT API] Reasoning re-injection for provider=${provider}: ` +
+        `${injectedFromDbCount} part(s) from DB, ` +
+        `${synthesizedPlaceholderCount} placeholder(s) for foreign-provider tool-call turn(s).`,
     );
   }
 
