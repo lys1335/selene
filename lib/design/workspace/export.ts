@@ -14,6 +14,7 @@ import {
   type DesignExportMode,
 } from "./preview";
 import { buildTailwindPreviewAsync } from "./compiler";
+import { DESIGN_CAPTURE_VIEWPORT } from "./viewport";
 import { sanitizeHTML } from "@/lib/design/utils/sanitize";
 
 export type DesignExportFormat = "html" | "react" | "png" | "video";
@@ -46,8 +47,8 @@ interface DesignExportResult {
   fps?: number;
 }
 
-const DEFAULT_WIDTH = 1440;
-const DEFAULT_HEIGHT = 900;
+const DEFAULT_WIDTH = DESIGN_CAPTURE_VIEWPORT.width;
+const DEFAULT_HEIGHT = DESIGN_CAPTURE_VIEWPORT.height;
 const DEFAULT_SCALE = 2;
 const DEFAULT_FPS = 24;
 const DEFAULT_DURATION_MS = 2400;

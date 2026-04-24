@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { useDesignWorkspaceStore, DESIGN_BREAKPOINTS } from "@/lib/design/workspace";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useDesignWorkspaceStore,
+  DESIGN_BREAKPOINTS,
+  computeDesignPreviewFrameLayout,
+} from "@/lib/design/workspace";
 import { Button } from "@/components/ui/button";
 import { Monitor, Tablet, Smartphone, Crosshair, Maximize, Sun, Moon, SunMoon } from "lucide-react";
 import type { DesignPreviewTheme } from "@/lib/design/workspace/types";
@@ -538,25 +542,19 @@ export function DesignPreviewFrame() {
 
   // Apply selected theme to the preview HTML
   const themedPreviewHtml = applyPreviewTheme(previewHtml, previewTheme);
-
-  // Responsive mode: iframe fills the entire container (like a real browser)
-  // Fixed breakpoints: scale to fit the container with padding
-  const isResponsive = selectedBreakpoint.width === 0;
-  const PADDING = 24;
-  const viewportW = isResponsive ? available.width : selectedBreakpoint.width;
-  const viewportH = isResponsive ? available.height : selectedBreakpoint.height;
-
-  // Compute scale so the true-size iframe fits in the available space.
-  // Never upscale (cap at 1). In responsive mode, scale is always 1.
-  const computeScale = useCallback(() => {
-    if (isResponsive) return 1;
-    if (available.width === 0 || available.height === 0) return 1;
-    const usableW = available.width - PADDING * 2;
-    const usableH = available.height - PADDING * 2;
-    return Math.min(usableW / viewportW, usableH / viewportH, 1);
-  }, [isResponsive, available.width, available.height, viewportW, viewportH]);
-
-  const scale = computeScale();
+  const layout = useMemo(
+    () =>
+      computeDesignPreviewFrameLayout({
+        breakpoint: selectedBreakpoint,
+        availableWidth: available.width,
+        availableHeight: available.height,
+      }),
+    [selectedBreakpoint, available.width, available.height],
+  );
+  const previewSrcDoc = useMemo(
+    () => injectInspectorScript(themedPreviewHtml, inspectorEnabled),
+    [themedPreviewHtml, inspectorEnabled],
+  );
 
   if (!activeComponentId) {
     return (
@@ -618,46 +616,33 @@ export function DesignPreviewFrame() {
       {/* Preview area — measured container */}
       <div
         ref={containerRef}
-        className={`flex flex-1 overflow-auto bg-muted/30 ${isResponsive ? "" : "items-center justify-center"}`}
+        className="flex flex-1 items-start justify-center overflow-auto bg-muted/30 p-6"
       >
-        {isResponsive ? (
-          /* Responsive mode: iframe fills container directly — like a real browser */
-          <iframe
-            ref={iframeRef}
-            srcDoc={injectInspectorScript(themedPreviewHtml, inspectorEnabled)}
-            sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
-            className="h-full w-full border-0"
-            style={{ background: "transparent" }}
-            title="Design preview"
-          />
-        ) : (
-          /* Fixed breakpoint: scale to fit with padding */
+        <div
+          style={{
+            width: layout.scaledWidth,
+            height: layout.scaledHeight,
+            flexShrink: 0,
+          }}
+        >
           <div
             style={{
-              width: viewportW * scale,
-              height: viewportH * scale,
-              flexShrink: 0,
+              width: layout.viewportWidth,
+              height: layout.viewportHeight,
+              transform: `scale(${layout.scale})`,
+              transformOrigin: "top left",
             }}
           >
-            <div
-              style={{
-                width: viewportW,
-                height: viewportH,
-                transform: `scale(${scale})`,
-                transformOrigin: "top left",
-              }}
-            >
-              <iframe
-                ref={iframeRef}
-                srcDoc={injectInspectorScript(themedPreviewHtml, inspectorEnabled)}
-                sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
-                className="h-full w-full border-0"
-                style={{ background: "transparent" }}
-                title="Design preview"
-              />
-            </div>
+            <iframe
+              ref={iframeRef}
+              srcDoc={previewSrcDoc}
+              sandbox="allow-scripts allow-same-origin allow-popups allow-modals"
+              className="h-full w-full border-0"
+              style={{ background: "transparent" }}
+              title="Design preview"
+            />
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
