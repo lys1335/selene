@@ -61,7 +61,8 @@ export async function GET(
       sessionId,
       modelId,
       estimatedSystemPromptLength,
-      provider
+      provider,
+      { includeProviderReportedUsageFloor: true }
     );
 
     return NextResponse.json({

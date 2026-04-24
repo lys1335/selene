@@ -58,6 +58,67 @@ function hasDelegatedAnnotations(messages: Message[]): boolean {
   return false;
 }
 
+function toFiniteUsageTokenCount(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function getLatestProviderReportedContextTokens(
+  messages: Message[],
+  provider?: LLMProvider
+): number | null {
+  if (provider !== "kimi") {
+    return null;
+  }
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "assistant" || message.isCompacted) {
+      continue;
+    }
+
+    const metadata =
+      message.metadata && typeof message.metadata === "object" && !Array.isArray(message.metadata)
+        ? (message.metadata as Record<string, unknown>)
+        : null;
+    const usage =
+      metadata?.usage && typeof metadata.usage === "object" && !Array.isArray(metadata.usage)
+        ? (metadata.usage as Record<string, unknown>)
+        : null;
+
+    if (!usage) {
+      continue;
+    }
+
+    const inputTokens = toFiniteUsageTokenCount(usage.inputTokens) ?? 0;
+    const outputTokens = toFiniteUsageTokenCount(usage.outputTokens) ?? 0;
+    if (inputTokens > 0) {
+      return inputTokens;
+    }
+
+    const totalTokens = toFiniteUsageTokenCount(usage.totalTokens);
+    if (totalTokens !== null && totalTokens > 0) {
+      return totalTokens;
+    }
+
+    if (outputTokens > 0) {
+      return outputTokens;
+    }
+  }
+
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -91,6 +152,15 @@ export interface ContextWindowStatus {
     max: string;
     percentage: string;
   };
+}
+
+interface ContextWindowCheckOptions {
+  /**
+   * Use provider-reported request usage as a display floor when available.
+   * This is useful for providers like Kimi whose API reports the full prompt
+   * size more accurately than our persisted per-message estimates.
+   */
+  includeProviderReportedUsageFloor?: boolean;
 }
 
 interface ContextCheckResult {
@@ -139,7 +209,8 @@ export class ContextWindowManager {
     sessionId: string,
     modelId: string,
     systemPromptLength: number,
-    provider?: LLMProvider
+    provider?: LLMProvider,
+    options: ContextWindowCheckOptions = {}
   ): Promise<ContextWindowStatus> {
     const session = await getSession(sessionId);
     if (!session) {
@@ -197,7 +268,13 @@ export class ContextWindowManager {
       }
     }
 
-    const usagePercentage = usageForDecision.totalTokens / config.maxTokens;
+    const providerReportedTokens = options.includeProviderReportedUsageFloor
+      ? getLatestProviderReportedContextTokens(messages, provider)
+      : null;
+    const effectiveTotalTokens = providerReportedTokens !== null
+      ? Math.max(usageForDecision.totalTokens, providerReportedTokens)
+      : usageForDecision.totalTokens;
+    const usagePercentage = effectiveTotalTokens / config.maxTokens;
 
     // Determine status and actions
     let status: ContextStatus;
@@ -205,18 +282,18 @@ export class ContextWindowManager {
     let mustCompact = false;
     let recommendedAction: string;
 
-    if (usageForDecision.totalTokens >= thresholds.hardLimitTokens) {
+    if (effectiveTotalTokens >= thresholds.hardLimitTokens) {
       status = "exceeded";
       mustCompact = true;
       recommendedAction =
         "Context window exceeded. Compaction required before continuing. " +
         "If compaction fails, please start a new conversation.";
-    } else if (usageForDecision.totalTokens >= thresholds.criticalTokens) {
+    } else if (effectiveTotalTokens >= thresholds.criticalTokens) {
       status = "critical";
       mustCompact = true;
       recommendedAction =
         "Context window critical. Forcing compaction before next request.";
-    } else if (usageForDecision.totalTokens >= thresholds.warningTokens) {
+    } else if (effectiveTotalTokens >= thresholds.warningTokens) {
       status = "warning";
       shouldCompact = true;
       recommendedAction =
@@ -229,7 +306,7 @@ export class ContextWindowManager {
     const percentage = usagePercentage * 100;
 
     return {
-      currentTokens: usageForDecision.totalTokens,
+      currentTokens: effectiveTotalTokens,
       maxTokens: config.maxTokens,
       usagePercentage,
       status,
@@ -242,7 +319,7 @@ export class ContextWindowManager {
         hardLimit: thresholds.hardLimitTokens,
       },
       formatted: {
-        current: formatTokenCount(usage.totalTokens),
+        current: formatTokenCount(effectiveTotalTokens),
         max: formatTokenCount(config.maxTokens),
         percentage: `${percentage.toFixed(1)}%`,
       },

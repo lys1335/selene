@@ -278,6 +278,46 @@ describe("Codex model context window limits", () => {
     // 208K / 400K = 52%
     expect(result.status.usagePercentage).toBeCloseTo(0.52, 2);
   });
+
+  it("uses Kimi provider-reported prompt tokens as the UI percentage floor", async () => {
+    const sessionId = "kimi-session";
+    const modelId = "kimi-k2.6";
+
+    dbMocks.getSession.mockResolvedValue({ id: sessionId, summary: null, metadata: { provider: "kimi" } });
+    dbMocks.getNonCompactedMessages.mockResolvedValue([
+      {
+        id: "assistant-kimi-1",
+        sessionId,
+        role: "assistant",
+        content: [{ type: "text", text: "short visible answer" }],
+        tokenCount: 120,
+        isCompacted: false,
+        metadata: {
+          usage: {
+            inputTokens: 30_000,
+            outputTokens: 95,
+            totalTokens: 30_095,
+          },
+        },
+      },
+    ] as any);
+
+    vi.spyOn(TokenTracker, "calculateUsage").mockResolvedValueOnce(makeUsage(5_200));
+
+    const status = await ContextWindowManager.checkContextWindow(
+      sessionId,
+      modelId,
+      0,
+      "kimi",
+      { includeProviderReportedUsageFloor: true }
+    );
+
+    expect(status.currentTokens).toBe(30_000);
+    expect(status.maxTokens).toBe(256_000);
+    expect(status.status).toBe("safe");
+    expect(status.usagePercentage).toBeCloseTo(30_000 / 256_000, 4);
+    expect(status.formatted.percentage).toBe("11.7%");
+  });
 });
 
 

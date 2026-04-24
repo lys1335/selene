@@ -3,14 +3,15 @@ import { getSessionWithMessages, updateSession } from "@/lib/db/queries";
 import { db } from "@/lib/db/sqlite-client";
 import { sessions } from "@/lib/db/sqlite-schema";
 import { desc, eq } from "drizzle-orm";
-import { getSessionProvider } from "@/lib/ai/session-model-resolver";
+import { getSessionModelIdForSession, getSessionProvider } from "@/lib/ai/session-model-resolver";
 import { TokenTracker } from "@/lib/context-window/token-tracker";
+import { getContextWindowConfig } from "@/lib/context-window/provider-limits";
 import { getScopedFallbackMinConfidence, isScopedFallbackEnabled } from "@/lib/context-window/scoped-counting-contract";
 
 type ParsedArgs = {
   dryRun: boolean;
   write: boolean;
-  provider: "claudecode" | "all";
+  provider: "claudecode" | "kimi" | "all";
   sessionId?: string;
   limit: number;
 };
@@ -18,6 +19,8 @@ type ParsedArgs = {
 type SessionDelta = {
   sessionId: string;
   provider?: string;
+  modelId: string;
+  maxTokens: number;
   oldTokens: number;
   newTokens: number;
   delta: number;
@@ -46,7 +49,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
     if (raw.startsWith("--provider=")) {
       const value = raw.split("=", 2)[1];
-      if (value === "claudecode" || value === "all") out.provider = value;
+      if (value === "claudecode" || value === "kimi" || value === "all") out.provider = value;
       continue;
     }
     if (raw.startsWith("--session=")) {
@@ -63,7 +66,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-function classify(tokens: number, maxTokens = 200_000): string {
+function classify(tokens: number, maxTokens: number): string {
   const warning = Math.floor(maxTokens * 0.75);
   const critical = Math.floor(maxTokens * 0.85);
   const hard = Math.floor(maxTokens * 0.95);
@@ -108,7 +111,10 @@ async function main() {
 
     const sessionMetadata = (sessionWithMessages.session.metadata ?? null) as Record<string, unknown> | null;
     const provider = getSessionProvider(sessionMetadata ?? {});
-    if (args.provider !== "all" && provider !== "claudecode") continue;
+    if (args.provider !== "all" && provider !== args.provider) continue;
+
+    const modelId = await getSessionModelIdForSession(sessionMetadata ?? {});
+    const maxTokens = getContextWindowConfig(modelId, provider).maxTokens;
 
     const oldUsage = await TokenTracker.calculateUsage(
       sessionWithMessages.session.id,
@@ -142,17 +148,19 @@ async function main() {
     const row: SessionDelta = {
       sessionId: sessionWithMessages.session.id,
       provider,
+      modelId,
+      maxTokens,
       oldTokens: oldUsage.totalTokens,
       newTokens: newUsage.totalTokens,
       delta,
-      oldStatus: classify(oldUsage.totalTokens),
-      newStatus: classify(newUsage.totalTokens),
+      oldStatus: classify(oldUsage.totalTokens, maxTokens),
+      newStatus: classify(newUsage.totalTokens, maxTokens),
     };
 
     deltas.push(row);
 
     console.log(
-      `${row.sessionId} provider=${row.provider} old=${row.oldTokens} new=${row.newTokens} delta=${row.delta} oldStatus=${row.oldStatus} newStatus=${row.newStatus}`
+      `${row.sessionId} provider=${row.provider} model=${row.modelId} maxTokens=${row.maxTokens} old=${row.oldTokens} new=${row.newTokens} delta=${row.delta} oldStatus=${row.oldStatus} newStatus=${row.newStatus}`
     );
 
     if (args.write) {
@@ -161,6 +169,8 @@ async function main() {
         metadata: {
           ...metadata,
           scopedContextAudit: {
+            modelId: row.modelId,
+            maxTokens: row.maxTokens,
             oldTokens: row.oldTokens,
             newTokens: row.newTokens,
             delta: row.delta,
