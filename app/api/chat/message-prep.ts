@@ -57,6 +57,34 @@ const PROVIDERS_REQUIRING_REASONING_REPLAY = new Set<string>(["deepseek"]);
 const FOREIGN_TOOL_CALL_REASONING_PLACEHOLDER =
   "(Tool calls on this turn were produced by a non-thinking-mode assistant; no chain-of-thought was captured. Continuing from the resulting tool outputs.)";
 
+type StructuredAssistantPart = {
+  type?: string;
+  text?: unknown;
+};
+
+function getStructuredAssistantParts(msg: FrontendMessage): StructuredAssistantPart[] {
+  if (Array.isArray(msg.parts)) {
+    return msg.parts as StructuredAssistantPart[];
+  }
+  if (Array.isArray(msg.content)) {
+    return msg.content as StructuredAssistantPart[];
+  }
+  return [];
+}
+
+function replaceStructuredAssistantParts(
+  msg: FrontendMessage,
+  parts: StructuredAssistantPart[],
+): FrontendMessage {
+  if (Array.isArray(msg.parts)) {
+    return { ...msg, parts: parts as FrontendMessage["parts"] };
+  }
+  if (Array.isArray(msg.content)) {
+    return { ...msg, content: parts };
+  }
+  return { ...msg, parts: parts as FrontendMessage["parts"] };
+}
+
 function collectReasoningTextsFromDbContent(content: unknown): string[] {
   if (!Array.isArray(content)) return [];
   const texts: string[] = [];
@@ -77,10 +105,10 @@ function collectReasoningTextsFromDbContent(content: unknown): string[] {
  * `tool-result` alone does not count — it's the companion to a call, not the
  * call itself.
  */
-function frontendPartsHaveToolCall(parts: FrontendMessage["parts"] | undefined): boolean {
+function structuredAssistantPartsHaveToolCall(parts: StructuredAssistantPart[] | undefined): boolean {
   if (!Array.isArray(parts)) return false;
   for (const part of parts) {
-    const type = (part as { type?: string } | undefined)?.type;
+    const type = part?.type;
     if (typeof type !== "string") continue;
     if (type === "tool-result") continue;
     if (type === "tool-call") return true;
@@ -90,11 +118,10 @@ function frontendPartsHaveToolCall(parts: FrontendMessage["parts"] | undefined):
   return false;
 }
 
-function frontendPartsHaveReasoning(parts: FrontendMessage["parts"] | undefined): boolean {
+function structuredAssistantPartsHaveReasoning(parts: StructuredAssistantPart[] | undefined): boolean {
   if (!Array.isArray(parts)) return false;
   for (const part of parts) {
-    const p = part as { type?: string; text?: unknown } | undefined;
-    if (p?.type === "reasoning" && typeof p.text === "string" && p.text.length > 0) {
+    if (part?.type === "reasoning" && typeof part.text === "string" && part.text.length > 0) {
       return true;
     }
   }
@@ -167,21 +194,33 @@ async function injectReasoningFromDbForProvider(
     }
   }
 
+  let matchedDbMessageCount = 0;
   let injectedFromDbCount = 0;
   let synthesizedPlaceholderCount = 0;
+  let assistantToolCallTurnCount = 0;
+  let assistantTurnsWithoutReasoningCount = 0;
 
   const enhanced = frontendMessages.map((msg) => {
     if (msg.role !== "assistant") return msg;
 
-    const existingParts = Array.isArray(msg.parts) ? [...msg.parts] : [];
-    const hasFrontendReasoning = frontendPartsHaveReasoning(existingParts);
+    const existingParts = [...getStructuredAssistantParts(msg)];
+    const hasFrontendReasoning = structuredAssistantPartsHaveReasoning(existingParts);
     const dbTexts =
       typeof msg.id === "string" ? reasoningByMessageId.get(msg.id) : undefined;
+    const hasToolCall = structuredAssistantPartsHaveToolCall(existingParts);
+
+    if (hasToolCall) {
+      assistantToolCallTurnCount += 1;
+    }
+    if (!hasFrontendReasoning && (!dbTexts || dbTexts.length === 0)) {
+      assistantTurnsWithoutReasoningCount += 1;
+    }
 
     // Case 1: DB has reasoning — replay it (unless frontend already has the
     // same text, e.g. if a future refactor starts carrying reasoning through
     // the UI converter).
     if (dbTexts && dbTexts.length > 0) {
+      matchedDbMessageCount += 1;
       const existingReasoningTexts = new Set<string>();
       for (const part of existingParts) {
         if (part && part.type === "reasoning" && typeof part.text === "string") {
@@ -194,7 +233,7 @@ async function injectReasoningFromDbForProvider(
 
       if (reasoningParts.length > 0) {
         injectedFromDbCount += reasoningParts.length;
-        return { ...msg, parts: [...reasoningParts, ...existingParts] };
+        return replaceStructuredAssistantParts(msg, [...reasoningParts, ...existingParts]);
       }
       return msg;
     }
@@ -203,15 +242,12 @@ async function injectReasoningFromDbForProvider(
     // Synthesize a neutral placeholder so DeepSeek's validator accepts the
     // request. Without this, a single foreign-provider turn in history
     // poisons every subsequent DeepSeek request in the session.
-    if (!hasFrontendReasoning && frontendPartsHaveToolCall(existingParts)) {
+    if (!hasFrontendReasoning && hasToolCall) {
       synthesizedPlaceholderCount += 1;
-      return {
-        ...msg,
-        parts: [
-          { type: "reasoning" as const, text: FOREIGN_TOOL_CALL_REASONING_PLACEHOLDER },
-          ...existingParts,
-        ],
-      };
+      return replaceStructuredAssistantParts(msg, [
+        { type: "reasoning" as const, text: FOREIGN_TOOL_CALL_REASONING_PLACEHOLDER },
+        ...existingParts,
+      ]);
     }
 
     return msg;
@@ -220,8 +256,11 @@ async function injectReasoningFromDbForProvider(
   if (injectedFromDbCount > 0 || synthesizedPlaceholderCount > 0) {
     console.log(
       `[CHAT API] Reasoning re-injection for provider=${provider}: ` +
+        `matched ${matchedDbMessageCount} DB message(s), ` +
         `${injectedFromDbCount} part(s) from DB, ` +
-        `${synthesizedPlaceholderCount} placeholder(s) for foreign-provider tool-call turn(s).`,
+        `${synthesizedPlaceholderCount} placeholder(s) for foreign-provider tool-call turn(s), ` +
+        `${assistantToolCallTurnCount} assistant tool-call turn(s) inspected, ` +
+        `${assistantTurnsWithoutReasoningCount} assistant turn(s) had no reasoning before injection.`,
     );
   }
 

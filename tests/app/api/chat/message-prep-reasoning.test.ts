@@ -329,4 +329,98 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
     expect(assistants).toHaveLength(1);
     expect(reasoningTexts(assistants[0].content)).toEqual([reasoningText]);
   });
+
+  it("falls back to placeholder reasoning when the frontend assistant id does not match the DB row", async () => {
+    dbMessagesMock.messages = [
+      {
+        id: "db-assistant-id",
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Stored under a different id." },
+          { type: "tool-call", toolCallId: "tc-mismatch", toolName: "localGrep", input: {} },
+        ],
+      },
+    ];
+
+    const frontend: FrontendMessage[] = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] } as FrontendMessage,
+      {
+        id: "ui-assistant-id",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-localGrep",
+            toolCallId: "tc-mismatch",
+            toolName: "localGrep",
+            input: {},
+            output: "ok",
+          },
+        ],
+      } as FrontendMessage,
+      { id: "u2", role: "user", parts: [{ type: "text", text: "continue" }] } as FrontendMessage,
+    ];
+
+    const { coreMessages } = await prepareMessagesForRequest({
+      messages: frontend,
+      sessionId: "sess-6",
+      userId: "user-1",
+      characterId: null,
+      sessionMetadata: {},
+      currentModelId: "deepseek-v4-pro",
+      currentProvider: "deepseek",
+    });
+
+    const assistants = assistantMessages(coreMessages);
+    expect(assistants).toHaveLength(1);
+    const texts = reasoningTexts(assistants[0].content);
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toMatch(/non-thinking-mode/i);
+  });
+
+  it("injects reasoning when assistant history arrives in content arrays instead of parts", async () => {
+    const assistantId = "asst-content-array";
+
+    dbMessagesMock.messages = [
+      {
+        id: assistantId,
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Recovered from DB content." },
+          { type: "tool-call", toolCallId: "tc-content", toolName: "searchTools", input: { query: "grep" } },
+        ],
+      },
+    ];
+
+    const frontend = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "continue" }] },
+      {
+        id: assistantId,
+        role: "assistant",
+        content: [
+          {
+            type: "tool-searchTools",
+            toolCallId: "tc-content",
+            toolName: "searchTools",
+            input: { query: "grep" },
+            output: "ok",
+          },
+        ],
+      },
+      { id: "u2", role: "user", parts: [{ type: "text", text: "go on" }] },
+    ] as FrontendMessage[];
+
+    const { coreMessages } = await prepareMessagesForRequest({
+      messages: frontend,
+      sessionId: "sess-7",
+      userId: "user-1",
+      characterId: null,
+      sessionMetadata: {},
+      currentModelId: "deepseek-v4-pro",
+      currentProvider: "deepseek",
+    });
+
+    const assistants = assistantMessages(coreMessages);
+    expect(assistants).toHaveLength(1);
+    expect(reasoningTexts(assistants[0].content)).toEqual(["Recovered from DB content."]);
+  });
 });
