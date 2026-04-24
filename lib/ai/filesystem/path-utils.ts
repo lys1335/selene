@@ -12,7 +12,7 @@ import { getAccessibleSyncFolders } from "@/lib/vectordb/accessible-sync-folders
 import { getSession } from "@/lib/db/queries-sessions";
 import { getWorkspaceInfo } from "@/lib/workspace/types";
 import { db } from "@/lib/db/sqlite-client";
-import { agentSyncFiles } from "@/lib/db/sqlite-character-schema";
+import { agentSyncFiles, agentSyncFolders } from "@/lib/db/sqlite-character-schema";
 import { eq, like, and } from "drizzle-orm";
 
 /**
@@ -38,15 +38,66 @@ function validatePath(filePath: string): void {
 }
 
 /**
+ * Walk up the path tree until we find an ancestor that exists on disk,
+ * realpath() that ancestor, then re-append the non-existent trailing
+ * segments. Returns `null` if no ancestor exists — callers treat that as
+ * a rejection because we cannot prove containment without a real anchor.
+ *
+ * This closes BA-1: when the candidate AND its immediate parent both fail
+ * to realpath (for example because `/synced/foo/symlink-to-outside` is a
+ * symlink and `newfile.tsx` under it does not exist yet), the previous
+ * implementation fell back to comparing the *unresolved* string, which
+ * allowed a symlink-followed-by-new-file to escape the allowed root.
+ *
+ * The walk MUST find an existing ancestor; a path whose entire lineage is
+ * non-existent is genuinely unprovable and must be rejected at the caller.
+ */
+async function realpathFirstExistingAncestor(
+  candidatePath: string
+): Promise<{ resolved: string } | null> {
+  const normalized = normalize(candidatePath);
+  const trailing: string[] = [];
+  let current = normalized;
+
+  // Defensive upper bound — a normalized absolute path has finite depth.
+  for (let i = 0; i < 4096; i += 1) {
+    try {
+      const resolvedAncestor = await realpath(current);
+      // Re-append the non-existent trailing segments (in original order)
+      // AFTER the symlinks in the existing ancestor were resolved.
+      const resolved =
+        trailing.length === 0
+          ? resolvedAncestor
+          : join(resolvedAncestor, ...trailing.slice().reverse());
+      return { resolved };
+    } catch {
+      // Current doesn't exist — pop its tail segment and retry on parent.
+      const parent = dirname(current);
+      if (parent === current) {
+        // Reached the filesystem root without finding anything on disk.
+        return null;
+      }
+      trailing.push(basename(current));
+      current = parent;
+    }
+  }
+  return null;
+}
+
+/**
  * Validate that a file path is within allowed synced folders.
  *
  * Handles both:
  * 1. Absolute paths - checks if within any allowed folder
  * 2. Relative paths - tries resolving relative to each allowed folder
- * 
- * Security:
- * - Resolves symlinks using fs.realpath
- * - Checks containment within allowed folders
+ *
+ * Security (BA-1 hardened):
+ * - Resolves symlinks in every existing ancestor via fs.realpath before
+ *   checking containment, so a symlink that points outside the root
+ *   cannot be used to smuggle a to-be-created file past the check.
+ * - If no ancestor of the candidate path exists on disk (i.e. we cannot
+ *   anchor the realpath walk anywhere), the path is REJECTED — we refuse
+ *   to compare unresolved strings.
  *
  * @returns The resolved absolute path if allowed, or null if rejected
  */
@@ -59,36 +110,25 @@ export async function isPathAllowed(filePath: string, allowedFolderPaths: string
   // Case 1: Path is already absolute
   if (isAbsolute(filePath)) {
     const normalizedPath = normalize(filePath);
-    
+
+    const resolvedCandidate = await realpathFirstExistingAncestor(normalizedPath);
+    if (!resolvedCandidate) {
+      // No existing ancestor on disk — we cannot prove containment via
+      // realpath, so reject. This is the BA-1 fix: previously the code
+      // fell back to a string comparison on the unresolved path.
+      return null;
+    }
+
     for (const allowedPath of allowedFolderPaths) {
       try {
-        // Resolve symlinks for the allowed folder
         const resolvedAllowed = await realpath(allowedPath).catch(() => allowedPath);
-        
-        // Resolve symlinks for the target path (if it exists)
-        // If it doesn't exist, we can't realpath it, so we use the normalized path
-        // and check its parent.
-        let resolvedTarget = normalizedPath;
-        try {
-          resolvedTarget = await realpath(normalizedPath);
-        } catch {
-          // File likely doesn't exist yet (creation mode)
-          // Resolve the parent directory
-          const parentDir = dirname(normalizedPath);
-          try {
-            const resolvedParent = await realpath(parentDir);
-            resolvedTarget = join(resolvedParent, basename(normalizedPath));
-          } catch {
-            // Parent doesn't exist either? 
-            // We'll fall back to string matching on the normalized path
-            // assuming standard containment check is sufficient for non-existent files.
-          }
+        if (
+          resolvedCandidate.resolved.startsWith(resolvedAllowed + sep) ||
+          resolvedCandidate.resolved === resolvedAllowed
+        ) {
+          return resolvedCandidate.resolved;
         }
-
-        if (resolvedTarget.startsWith(resolvedAllowed + sep) || resolvedTarget === resolvedAllowed) {
-          return resolvedTarget;
-        }
-      } catch (e) {
+      } catch {
         // Ignore errors during resolution
       }
     }
@@ -101,24 +141,19 @@ export async function isPathAllowed(filePath: string, allowedFolderPaths: string
       const resolvedAllowed = await realpath(allowedPath).catch(() => allowedPath);
       const candidatePath = normalize(join(resolvedAllowed, filePath));
 
-      // Resolve symlinks for the candidate path
-      let resolvedTarget = candidatePath;
-      try {
-        resolvedTarget = await realpath(candidatePath);
-      } catch {
-        // File doesn't exist
-        const parentDir = dirname(candidatePath);
-        try {
-          const resolvedParent = await realpath(parentDir);
-          resolvedTarget = join(resolvedParent, basename(candidatePath));
-        } catch {
-           // Fallback
-        }
+      const resolvedCandidate = await realpathFirstExistingAncestor(candidatePath);
+      if (!resolvedCandidate) {
+        // Entire lineage missing — cannot anchor containment check.
+        // Skip this root; another root may still anchor.
+        continue;
       }
 
       // Security: Ensure the resolved path is still within the allowed folder
-      if (resolvedTarget.startsWith(resolvedAllowed + sep) || resolvedTarget === resolvedAllowed) {
-        return resolvedTarget;
+      if (
+        resolvedCandidate.resolved.startsWith(resolvedAllowed + sep) ||
+        resolvedCandidate.resolved === resolvedAllowed
+      ) {
+        return resolvedCandidate.resolved;
       }
     } catch {
       // Ignore
@@ -139,6 +174,21 @@ async function resolveSyncedFolderPaths(characterId: string): Promise<string[]> 
 /**
  * Get the active worktree path from session metadata, if any.
  * Returns null if no workspace is active or sessionId is invalid.
+ *
+ * Security (defense-in-depth):
+ *   The session's `workspaceInfo.worktreePath` alone is NOT trusted as a path
+ *   authorization anchor. We additionally require that an `agent_sync_folders`
+ *   row exists with `source='workspace'` for the same character pointing at
+ *   the same path. This closes two gaps:
+ *
+ *     1. Stale session metadata after orphan cleanup. The boot-time
+ *        `cleanupOrphanedWorkspaceFolders` sweep removes the DB row when the
+ *        worktree disappears from disk, but session metadata may still point
+ *        at the now-phantom path. Without the DB cross-check, file tools would
+ *        keep granting access to a path with no auth basis.
+ *     2. Defense in depth against any future code path that mutates session
+ *        metadata without going through the workspace tool. Without the DB
+ *        cross-check, that would silently widen file-tool authorization.
  */
 export async function getActiveWorktreePath(sessionId: string): Promise<string | null> {
   if (!sessionId || sessionId === "UNSCOPED") return null;
@@ -147,6 +197,25 @@ export async function getActiveWorktreePath(sessionId: string): Promise<string |
     if (!session) return null;
     const wsInfo = getWorkspaceInfo(session.metadata as Record<string, unknown> | null);
     if (!wsInfo?.worktreePath || typeof wsInfo.worktreePath !== "string") return null;
+
+    // Cross-check: a workspace-source row must exist for this character at
+    // this exact path. Otherwise treat as no active workspace.
+    const characterId = session.characterId;
+    if (!characterId) return null;
+
+    const row = await db
+      .select({ id: agentSyncFolders.id })
+      .from(agentSyncFolders)
+      .where(
+        and(
+          eq(agentSyncFolders.characterId, characterId),
+          eq(agentSyncFolders.folderPath, wsInfo.worktreePath),
+          eq(agentSyncFolders.source, "workspace")
+        )
+      )
+      .limit(1);
+
+    if (row.length === 0) return null;
     return wsInfo.worktreePath;
   } catch {
     return null;
