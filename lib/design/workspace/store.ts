@@ -50,8 +50,16 @@ const sessionCache = new Map<string, DesignWorkspaceSessionState>();
  * `code` payload. When exceeded, the least recently touched non-active
  * component has its `code` stripped and `codeStripped: true` set. A click
  * or agent action triggers re-hydration via `fetchComponentFromGallery`.
+ *
+ * Sized at 16 so parallel agent workflows that burst-generate 8+ components
+ * in a single turn don't immediately strip the just-authored siblings — the
+ * prior limit of 3 caused 4-of-7 and then 7-of-7 components to evict their
+ * code mid-turn, which surfaced to the user as `Component code is required`
+ * once the preview compile hook re-ran. The eviction path still fires for
+ * library-scale browsing (dozens+ components), but typical single-session
+ * generation bursts now survive unchanged.
  */
-const MAX_HYDRATED_COMPONENTS = 3;
+export const MAX_HYDRATED_COMPONENTS = 16;
 
 /**
  * Tracks the order in which components were most recently hydrated

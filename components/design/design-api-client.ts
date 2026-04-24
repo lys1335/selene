@@ -149,6 +149,76 @@ export async function requestDesignWorkspaceSettings(): Promise<{
   }
 }
 
+/**
+ * Sprint 4 W4.3 — persisted "last active component" pointer.
+ *
+ * `requestActiveComponent` reads the current pointer for a session. Returns
+ * `null` for both "never set" and "stale pointer" so the caller doesn't
+ * need to distinguish — both cases mean "no selection to restore".
+ */
+export async function requestActiveComponent(
+  sessionId: string,
+  signal?: AbortSignal,
+): Promise<{ success: boolean; lastActiveComponentId?: string | null; error?: string }> {
+  try {
+    const response = await fetch(
+      `/api/design/workspace/active?sessionId=${encodeURIComponent(sessionId)}`,
+      { method: "GET", cache: "no-store", signal },
+    );
+    const payload = (await response.json()) as {
+      success: boolean;
+      data?: { lastActiveComponentId?: string | null };
+      error?: string;
+    };
+    if (!payload.success) {
+      return { success: false, error: payload.error };
+    }
+    return {
+      success: true,
+      lastActiveComponentId: payload.data?.lastActiveComponentId ?? null,
+    };
+  } catch (error) {
+    // Network failure — leave the pointer unresolved. Caller falls back to
+    // "no selection" which matches the stale-pointer behavior.
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to read active component.",
+    };
+  }
+}
+
+/**
+ * Persist a new "last active component" pointer. `componentId === null`
+ * clears it (used when the workspace closes or the last component is
+ * removed). Failures are logged + returned but never thrown — a transient
+ * write failure must not block UI interaction.
+ */
+export async function requestSetActiveComponent(
+  sessionId: string,
+  componentId: string | null,
+  signal?: AbortSignal,
+): Promise<{ success: boolean; error?: string; reason?: string }> {
+  try {
+    const response = await fetch("/api/design/workspace/active", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, componentId }),
+      signal,
+    });
+    const payload = (await response.json()) as {
+      success: boolean;
+      error?: string;
+      reason?: string;
+    };
+    return payload;
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to persist active component.",
+    };
+  }
+}
+
 export async function requestUpdateDesignWorkspaceSettings(
   patch: Partial<DesignWorkspaceConfig>,
 ): Promise<{ success: boolean; error?: string }> {

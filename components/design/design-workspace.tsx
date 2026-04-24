@@ -1,6 +1,6 @@
 "use client";
 
-import { useDesignWorkspaceStore } from "@/lib/design/workspace";
+import { useDesignWorkspaceStore } from "@/lib/design/workspace/store";
 import { DesignPreviewFrame } from "./design-preview-frame";
 import { DesignPropertiesPanel } from "./design-properties-panel";
 import { DesignWorkspaceBridge } from "./design-workspace-bridge";

@@ -14,7 +14,10 @@
  *    library.
  */
 import { beforeEach, describe, expect, it } from "vitest";
-import { useDesignWorkspaceStore } from "@/lib/design/workspace/store";
+import {
+  useDesignWorkspaceStore,
+  MAX_HYDRATED_COMPONENTS,
+} from "@/lib/design/workspace/store";
 import type { DesignComponent } from "@/lib/design/workspace/types";
 
 function makeComponent(overrides: Partial<DesignComponent> = {}): DesignComponent {
@@ -96,82 +99,121 @@ describe("useDesignWorkspaceStore — memory eviction", () => {
     expect(stored?.codeStripped).toBe(true);
   });
 
-  it("a 4th full-code insert evicts the oldest non-active component's code", () => {
+  it("the (MAX+1)th full-code insert evicts the oldest non-active component's code", () => {
     const store = useDesignWorkspaceStore.getState();
-    // Insert three full-code components — all stay hydrated (MAX = 3).
-    store.addComponent(makeComponent({ id: "a", code: "<a/>" }));
-    store.addComponent(makeComponent({ id: "b", code: "<b/>" }));
-    store.addComponent(makeComponent({ id: "c", code: "<c/>" }));
-    // After 3 inserts, the active component is "c" (last inserted).
-    expect(useDesignWorkspaceStore.getState().activeComponentId).toBe("c");
+    // Insert MAX full-code components — all stay hydrated.
+    const ids = Array.from({ length: MAX_HYDRATED_COMPONENTS }, (_, i) => `id-${i}`);
+    for (const id of ids) {
+      store.addComponent(makeComponent({ id, code: `<${id}/>` }));
+    }
+    // After MAX inserts, the active component is the last inserted.
+    const lastInserted = ids[ids.length - 1];
+    expect(useDesignWorkspaceStore.getState().activeComponentId).toBe(lastInserted);
+    // All still carry full code.
+    for (const id of ids) {
+      expect(byId(id)?.code).toBe(`<${id}/>`);
+      expect(byId(id)?.codeStripped).toBe(false);
+    }
 
-    // 4th full insert → oldest non-active ("a") is evicted; "c" loses active
-    // status to "d" but kept full-code (new active is never evicted).
-    store.addComponent(makeComponent({ id: "d", code: "<d/>" }));
+    // (MAX+1)th full insert → oldest non-active (id-0) is evicted; the
+    // previously-active component (lastInserted) is still hydrated but no
+    // longer active — the new insert takes over as active. The new active
+    // is never considered for eviction.
+    const overflowId = `id-${MAX_HYDRATED_COMPONENTS}`;
+    store.addComponent(makeComponent({ id: overflowId, code: `<${overflowId}/>` }));
 
     const state = useDesignWorkspaceStore.getState();
-    expect(state.activeComponentId).toBe("d");
-    expect(byId("a")?.code).toBe("");
-    expect(byId("a")?.codeStripped).toBe(true);
-    expect(byId("b")?.code).toBe("<b/>");
-    expect(byId("b")?.codeStripped).toBe(false);
-    expect(byId("c")?.code).toBe("<c/>");
-    expect(byId("c")?.codeStripped).toBe(false);
-    expect(byId("d")?.code).toBe("<d/>");
-    expect(byId("d")?.codeStripped).toBe(false);
+    expect(state.activeComponentId).toBe(overflowId);
+    expect(byId("id-0")?.code).toBe("");
+    expect(byId("id-0")?.codeStripped).toBe(true);
+    // All other previously-hydrated components retain their code.
+    for (let i = 1; i < ids.length; i += 1) {
+      const id = ids[i];
+      expect(byId(id)?.code).toBe(`<${id}/>`);
+      expect(byId(id)?.codeStripped).toBe(false);
+    }
+    expect(byId(overflowId)?.code).toBe(`<${overflowId}/>`);
+    expect(byId(overflowId)?.codeStripped).toBe(false);
+  });
+
+  it("a burst of MAX full-code inserts keeps all components hydrated (parallel-agent workflow)", () => {
+    // Regression test for the Sprint-burst bug: generating MAX sibling
+    // components in a single turn must leave them all with code intact so
+    // the downstream preview compile doesn't fail with `Component code is
+    // required`. Prior limit of 3 caused 4-of-7 siblings to evict mid-burst.
+    const store = useDesignWorkspaceStore.getState();
+    const burstIds = Array.from({ length: MAX_HYDRATED_COMPONENTS }, (_, i) => `burst-${i}`);
+    for (const id of burstIds) {
+      store.addComponent(makeComponent({ id, code: `<${id}/>` }));
+    }
+    for (const id of burstIds) {
+      expect(byId(id)?.code).toBe(`<${id}/>`);
+      expect(byId(id)?.codeStripped).toBe(false);
+    }
   });
 
   it("eviction never strips the active component even when it is oldest", () => {
     const store = useDesignWorkspaceStore.getState();
-    store.addComponent(makeComponent({ id: "a", code: "<a/>" }));
-    // Pin "a" as active and then add more components without flipping active.
-    store.setActiveComponent("a");
+    // Insert MAX components so we're at capacity. Re-pin the first one as
+    // active so it becomes the oldest-in-hydration-that-we-want-protected.
+    const ids = Array.from({ length: MAX_HYDRATED_COMPONENTS }, (_, i) => `p-${i}`);
+    for (const id of ids) {
+      store.addComponent(makeComponent({ id, code: `<${id}/>` }));
+    }
+    // Pin the first one as active. setActiveComponent touches hydration,
+    // moving it to MRU — so to make the "active is oldest" case, we add
+    // one more component AFTER pinning to push the active to LRU.
+    // Simpler: just pin it, then add (MAX) more components — each add
+    // flips active to the new one, eventually evicting one of the middle
+    // components, but never the explicitly-pinned one because addComponent
+    // only flips active with full-code inserts, and applyCodeEviction
+    // reads the active id after the flip. To truly test "active stays
+    // protected" we use updateComponent (which touches hydration without
+    // flipping active), then insert enough to overflow.
+    store.setActiveComponent("p-0"); // touches p-0 to MRU, active = p-0
+    // Now add one overflow — the oldest non-active ("p-1") should evict,
+    // NOT p-0 (active), even though p-0 was technically the first inserted.
+    const overflowId = `p-${MAX_HYDRATED_COMPONENTS}-overflow`;
+    store.addComponent(makeComponent({ id: overflowId, code: `<${overflowId}/>` }));
 
-    // Adding b/c/d with full code flips the active to each new one (see
-    // addComponent logic). So for the "never evict active" assertion, we
-    // need to add NEW components then restore active back to "a" before
-    // the eviction decision. The store only considers eviction at insert
-    // time, so instead test via updateComponent which touches hydration
-    // without activating.
-    store.addComponent(makeComponent({ id: "b", code: "<b/>" }));
-    store.addComponent(makeComponent({ id: "c", code: "<c/>" }));
-    // At this point order (LRU → MRU): a, b, c. Active = c.
-    // Re-pin "a" as active so the eviction logic must protect it.
-    store.setActiveComponent("a");
-    // Touching "a" moved it to the front of the hydration tracker (MRU),
-    // so order is now b, c, a. Add a 4th full-code component "d": oldest is
-    // "b", and it should be evicted. "a" (active) must keep its code.
-    store.addComponent(makeComponent({ id: "d", code: "<d/>" }));
-
-    expect(byId("a")?.code).toBe("<a/>"); // active, protected
-    expect(byId("a")?.codeStripped).toBe(false);
-    expect(byId("b")?.code).toBe(""); // oldest non-active → evicted
-    expect(byId("b")?.codeStripped).toBe(true);
+    // p-0 stays active? Actually addComponent with full code flips active
+    // to the new one. So after overflow insert, active = overflowId.
+    // What matters: p-0 was just touched-to-MRU and then lost active, but
+    // because it was at the front of the hydration order, it should still
+    // be protected in this insert's eviction pass (it's the newest in the
+    // hydration tracker, not the oldest).
+    expect(byId("p-0")?.code).toBe("<p-0/>");
+    expect(byId("p-0")?.codeStripped).toBe(false);
+    // The oldest non-active should be evicted. After pinning p-0 to MRU,
+    // the next-oldest is p-1.
+    expect(byId("p-1")?.code).toBe("");
+    expect(byId("p-1")?.codeStripped).toBe(true);
   });
 
   it("updateComponent with new code re-touches hydration and evicts the oldest stub", () => {
     const store = useDesignWorkspaceStore.getState();
-    store.addComponent(makeComponent({ id: "a", code: "<a/>" }));
-    store.addComponent(makeComponent({ id: "b", code: "<b/>" }));
-    store.addComponent(makeComponent({ id: "c", code: "<c/>" }));
-    // Active = c, order (LRU → MRU): a, b, c
+    // Fill to MAX so one more insert will trigger eviction.
+    const ids = Array.from({ length: MAX_HYDRATED_COMPONENTS }, (_, i) => `u-${i}`);
+    for (const id of ids) {
+      store.addComponent(makeComponent({ id, code: `<${id}/>` }));
+    }
+    // Active = last inserted (u-MAX-1). Hydration order (LRU → MRU) mirrors
+    // insertion order: u-0, u-1, …, u-MAX-1.
 
-    // Re-hydrate "a" by updating its code. That touches hydration → "a"
-    // moves to MRU, which should now push "b" out on the next insert.
-    store.updateComponent("a", { code: "<a-updated/>" });
-    // Order now: b, c, a (a is MRU, c is middle-ish, b oldest)
+    // Re-hydrate "u-0" by updating its code. That touches hydration → "u-0"
+    // moves to MRU, which should now push "u-1" out on the next insert.
+    store.updateComponent("u-0", { code: "<u-0-updated/>" });
 
-    // Add "d" → oldest non-active "b" evicted (since c is not active either
-    // here? Actually active is still "c" from earlier full-code insert).
-    // Wait — re-check: active stays "c". When "d" is inserted with full
-    // code, active flips to "d". So now order is b, c, a, d. "a" is MRU
-    // because of updateComponent. Oldest non-active is "b".
-    store.addComponent(makeComponent({ id: "d", code: "<d/>" }));
+    // Add one overflow insert. "u-1" is now the oldest non-active and
+    // should be evicted. "u-0" retains its updated code thanks to the
+    // touch bump.
+    const overflowId = "u-overflow";
+    store.addComponent(makeComponent({ id: overflowId, code: `<${overflowId}/>` }));
 
-    expect(byId("a")?.code).toBe("<a-updated/>");
-    expect(byId("a")?.codeStripped).toBe(false);
-    expect(byId("b")?.code).toBe("");
-    expect(byId("b")?.codeStripped).toBe(true);
+    expect(byId("u-0")?.code).toBe("<u-0-updated/>");
+    expect(byId("u-0")?.codeStripped).toBe(false);
+    expect(byId("u-1")?.code).toBe("");
+    expect(byId("u-1")?.codeStripped).toBe(true);
   });
 
   it("setActiveComponent to a stub leaves previewHtml empty", () => {

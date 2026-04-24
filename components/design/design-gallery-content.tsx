@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useDesignWorkspaceStore } from "@/lib/design/workspace";
+import { useDesignWorkspaceStore } from "@/lib/design/workspace/store";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import {
   type WorkspaceDesignRecord,
   type WorkspaceDesignSummary,
 } from "./design-api-client";
+import { rehydrateComponentCode } from "./design-workspace-bridge";
 
 const FILTERS = [
   { id: "current", label: "Current", icon: Clock3 },
@@ -275,6 +276,16 @@ export function GalleryContent() {
                     // `isOpen: false` and the user sees no UI change.
                     setActiveComponent(component.id);
                     openWorkspace();
+                    // If this component's code was evicted by the LRU path,
+                    // rehydrate it proactively so the preview iframe can
+                    // compile immediately instead of flashing the "Restoring
+                    // preview..." placeholder while the preview-frame effect
+                    // triggers its own rehydration. `rehydrateComponentCode`
+                    // dedupes, so the concurrent call from the preview
+                    // effect collapses into one API round-trip.
+                    if (component.codeStripped || !component.code) {
+                      void rehydrateComponentCode(component.id);
+                    }
                   }}
                   className={cn(
                     "group flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors",

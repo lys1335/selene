@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  useDesignWorkspaceStore,
-  DESIGN_BREAKPOINTS,
-  computeDesignPreviewFrameLayout,
-} from "@/lib/design/workspace";
+import { useDesignWorkspaceStore } from "@/lib/design/workspace/store";
+import { DESIGN_BREAKPOINTS } from "@/lib/design/workspace/types";
+import { computeDesignPreviewFrameLayout } from "@/lib/design/workspace/viewport";
+import { rehydrateComponentCode } from "@/components/design/design-workspace-bridge";
 import { Button } from "@/components/ui/button";
 import { Monitor, Tablet, Smartphone, Crosshair, Maximize, Sun, Moon, SunMoon } from "lucide-react";
 import type { DesignPreviewTheme } from "@/lib/design/workspace/types";
@@ -399,6 +398,24 @@ function useCompileTailwindPreview() {
 
     const component = components.find((c) => c.id === activeComponentId);
     if (!component) return;
+
+    // Short-circuit: if the component's code was evicted by the LRU hydration
+    // path (`codeStripped: true` or empty `code`), POSTing to the compile API
+    // with an empty body just produces `400 Component code is required`.
+    // Kick off a rehydration instead — the store update from that fetch will
+    // re-trigger this effect with full code and we compile then. During the
+    // rehydration gap we paint a lightweight "Restoring preview…" placeholder
+    // so the iframe isn't flashing a stale or blank state.
+    if (!component.code || component.codeStripped) {
+      const requestComponentId = activeComponentId;
+      setPreviewHtml(
+        `<!DOCTYPE html><html><body style="margin:0;padding:16px;font-family:ui-sans-serif,system-ui,sans-serif;background:#0b1220;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;"><div style="text-align:center;font-size:13px;opacity:0.75;">Restoring preview\u2026</div></body></html>`,
+      );
+      // Fire-and-forget: errors are surfaced by rehydrateComponentCode via
+      // setError. The next effect tick picks up the hydrated code.
+      void rehydrateComponentCode(requestComponentId);
+      return;
+    }
 
     // Build a content-based cache key using component ID + code hash
     const cacheKey = `${activeComponentId}:${hashCode(component.code)}`;

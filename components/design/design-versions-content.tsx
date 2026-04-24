@@ -1,6 +1,6 @@
 "use client";
 
-import { useDesignWorkspaceStore } from "@/lib/design/workspace";
+import { useDesignWorkspaceStore } from "@/lib/design/workspace/store";
 import { useShallow } from "zustand/react/shallow";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
