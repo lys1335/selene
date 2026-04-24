@@ -19,10 +19,23 @@ interface StepToolResultLike {
   toolName?: string;
 }
 
+interface StepReasoningPartLike {
+  type?: string;
+  text?: string;
+}
+
 export interface StepLike {
   toolCalls?: StepToolCallLike[];
   toolResults?: StepToolResultLike[];
   text?: string;
+  /**
+   * Structured reasoning parts emitted by thinking-mode providers. The
+   * ai-sdk `StepResult` exposes `reasoning: ReasoningPart[]`; we only need
+   * the concatenated text for persistence.
+   */
+  reasoning?: StepReasoningPartLike[];
+  /** Convenience field from ai-sdk matching `StepResult.reasoningText`. */
+  reasoningText?: string;
 }
 
 function hasToolCallLikeParts(parts: DBContentPart[]): boolean {
@@ -57,6 +70,22 @@ function sanitizeAssistantTextParts(
   return sanitized;
 }
 
+function extractStepReasoningText(step: StepLike): string {
+  if (typeof step.reasoningText === "string" && step.reasoningText.trim().length > 0) {
+    return step.reasoningText;
+  }
+  if (Array.isArray(step.reasoning) && step.reasoning.length > 0) {
+    return step.reasoning
+      .filter(
+        (part): part is StepReasoningPartLike & { text: string } =>
+          typeof part?.text === "string" && part.text.length > 0
+      )
+      .map((part) => part.text)
+      .join("");
+  }
+  return "";
+}
+
 export function buildCanonicalAssistantContentFromSteps(
   steps: StepLike[] | undefined,
   fallbackText?: string
@@ -66,12 +95,25 @@ export function buildCanonicalAssistantContentFromSteps(
   const seenToolCalls = new Set<string>();
   const seenToolResults = new Set<string>();
   const seenTexts = new Set<string>();
+  const seenReasoning = new Set<string>();
   const hasAnyToolContext = Boolean(
     steps?.some((step) => (step.toolCalls?.length ?? 0) > 0 || (step.toolResults?.length ?? 0) > 0)
   );
 
   if (steps && steps.length > 0) {
     for (const step of steps) {
+      // Reasoning is emitted first so the canonical shape places thinking
+      // before the tool_calls / text that follow from that reasoning block.
+      // The openai-compatible adapter concatenates all `reasoning` parts on
+      // the assistant message into a single `reasoning_content` field —
+      // ordering within the message is effectively cosmetic, but keeping
+      // thinking → action reads naturally when debugging persisted history.
+      const reasoningText = extractStepReasoningText(step);
+      if (reasoningText && !seenReasoning.has(reasoningText)) {
+        seenReasoning.add(reasoningText);
+        content.push({ type: "reasoning", text: reasoningText });
+      }
+
       if (step.toolCalls) {
         for (const call of step.toolCalls) {
           const normalizedInput = normalizeToolCallInput(
@@ -264,6 +306,7 @@ export function mergeCanonicalAssistantContent(
 
   const callIndexById = new Map<string, number>();
   const resultIndexById = new Map<string, number>();
+  const baseReasoningTexts = new Set<string>();
 
   for (let i = 0; i < base.length; i += 1) {
     const part = base[i];
@@ -271,10 +314,22 @@ export function mergeCanonicalAssistantContent(
       callIndexById.set(part.toolCallId, i);
     } else if (part.type === "tool-result") {
       resultIndexById.set(part.toolCallId, i);
+    } else if (part.type === "reasoning" && typeof part.text === "string" && part.text.length > 0) {
+      baseReasoningTexts.add(part.text);
     }
   }
 
   for (const incoming of sanitizedStepParts) {
+    if (incoming.type === "reasoning") {
+      const text = typeof incoming.text === "string" ? incoming.text : "";
+      if (!text.length || baseReasoningTexts.has(text)) {
+        continue;
+      }
+      baseReasoningTexts.add(text);
+      base.push(incoming);
+      continue;
+    }
+
     if (incoming.type === "tool-call") {
       const existingIdx = callIndexById.get(incoming.toolCallId);
       if (existingIdx === undefined) {

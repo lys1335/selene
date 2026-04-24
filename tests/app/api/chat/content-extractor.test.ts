@@ -399,3 +399,43 @@ describe("extractContent attachment persistence", () => {
     // When transcription succeeds, the output also includes the transcript header.
   });
 });
+
+describe("extractContent reasoning parts (DeepSeek thinking mode replay)", () => {
+  it("emits reasoning parts into content when present on an assistant message", async () => {
+    const result = await extractContent({
+      role: "assistant",
+      parts: [
+        { type: "reasoning", text: "I should call the tool next." },
+        {
+          type: "tool-call",
+          toolCallId: "tc1",
+          toolName: "Read",
+          input: { filePath: "/a" },
+        },
+      ],
+    });
+
+    expect(Array.isArray(result)).toBe(true);
+    const parts = result as Array<{ type: string; text?: string; toolCallId?: string }>;
+    // Reasoning preserved, tool-call preserved
+    expect(parts.map((p) => p.type)).toEqual(
+      expect.arrayContaining(["reasoning", "tool-call"])
+    );
+    const reasoning = parts.find((p) => p.type === "reasoning");
+    expect(reasoning).toBeDefined();
+    expect(reasoning?.text).toBe("I should call the tool next.");
+  });
+
+  it("skips reasoning parts with empty text", async () => {
+    const result = await extractContent({
+      role: "assistant",
+      parts: [
+        { type: "reasoning", text: "" },
+        { type: "text", text: "Hello." },
+      ],
+    });
+
+    // Single text part after reconciliation collapses into a string return.
+    expect(result).toBe("Hello.");
+  });
+});

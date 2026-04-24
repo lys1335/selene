@@ -27,6 +27,22 @@ interface DBFileContentPart extends ContextProvenance {
   mediaType?: string;
 }
 
+/**
+ * Reasoning / chain-of-thought emitted by thinking-mode providers
+ * (e.g. DeepSeek V4 Pro, deepseek-reasoner). Persisted on the assistant
+ * message so it can be replayed back to the API on subsequent turns —
+ * DeepSeek's API rejects requests with HTTP 400 when an assistant turn
+ * contained tool_calls in thinking mode but the next turn omits the
+ * `reasoning_content` field.
+ *
+ * The @ai-sdk/openai-compatible adapter natively maps `{ type: "reasoning" }`
+ * content parts → `messages[].reasoning_content` on outbound requests.
+ */
+interface DBReasoningContentPart extends ContextProvenance {
+  type: "reasoning";
+  text: string;
+}
+
 export interface DBToolCallPart extends ContextProvenance {
   type: "tool-call";
   toolCallId: string;
@@ -60,7 +76,8 @@ export type DBContentPart =
   | DBImageContentPart
   | DBFileContentPart
   | DBToolCallPart
-  | DBToolResultPart;
+  | DBToolResultPart
+  | DBReasoningContentPart;
 
 export interface DBMessage {
   id: string;

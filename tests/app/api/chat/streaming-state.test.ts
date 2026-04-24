@@ -17,6 +17,7 @@ vi.mock("@/lib/ai/tools/delegate-to-subagent-types", () => {
 import {
   sealDanglingToolCalls,
   shouldKeepDelegatedToolCallPending,
+  appendReasoningPartToState,
   MAX_ARGS_TEXT_BYTES,
   type StreamingMessageState,
 } from "@/app/api/chat/streaming-state";
@@ -434,5 +435,37 @@ describe("shouldKeepDelegatedToolCallPending", () => {
         args: { action: "observe", delegationId: "del-done" },
       })
     ).toBe(false);
+  });
+});
+
+describe("appendReasoningPartToState", () => {
+  it("creates a new reasoning part when none exists yet", () => {
+    const state = makeState([]);
+    const changed = appendReasoningPartToState(state, "Thinking about X.");
+    expect(changed).toBe(true);
+    expect(state.parts).toEqual([{ type: "reasoning", text: "Thinking about X." }]);
+  });
+
+  it("appends to the trailing reasoning part rather than creating a new one", () => {
+    const state = makeState([{ type: "reasoning", text: "Thinking " }]);
+    appendReasoningPartToState(state, "more.");
+    expect(state.parts).toHaveLength(1);
+    expect(state.parts[0]).toEqual({ type: "reasoning", text: "Thinking more." });
+  });
+
+  it("does not append to a text part (boundaries between modalities are respected)", () => {
+    const state = makeState([{ type: "text", text: "visible answer" }]);
+    appendReasoningPartToState(state, "hidden thought");
+    expect(state.parts).toHaveLength(2);
+    expect(state.parts[0]).toEqual({ type: "text", text: "visible answer" });
+    expect(state.parts[1]).toEqual({ type: "reasoning", text: "hidden thought" });
+  });
+
+  it("returns false and leaves state untouched when delta is empty", () => {
+    const state = makeState([{ type: "text", text: "hi" }]);
+    const beforeLen = state.parts.length;
+    expect(appendReasoningPartToState(state, "")).toBe(false);
+    expect(appendReasoningPartToState(state, undefined)).toBe(false);
+    expect(state.parts).toHaveLength(beforeLen);
   });
 });

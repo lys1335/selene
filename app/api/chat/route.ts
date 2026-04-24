@@ -97,6 +97,7 @@ import { stripPasteDelimitersFromMessage } from "./content-sanitizer";
 import {
   type StreamingMessageState,
   appendTextPartToState,
+  appendReasoningPartToState,
   recordToolInputStart,
   recordToolInputDelta,
   recordStructuredToolCall,
@@ -1510,6 +1511,25 @@ export async function POST(req: Request) {
                 const rawText = chunk.text ?? "";
                 const filteredText = thinkTagFilter ? thinkTagFilter.process(rawText) : rawText;
                 changed = appendTextPartToState(streamingState, filteredText) || changed;
+              } else if (chunk.type === "reasoning-delta") {
+                // Thinking-mode providers (e.g. DeepSeek V4 Pro) stream structured
+                // reasoning via the ai-sdk adapter. Persist it on the assistant
+                // message so subsequent turns can replay `reasoning_content` —
+                // DeepSeek rejects turns that had tool_calls if reasoning is
+                // missing on replay. The ai-sdk v6 stream chunk shape for
+                // reasoning uses `text` (matching TextDelta ergonomics); older
+                // previews used `delta`, so we accept either defensively.
+                const reasoningChunk = chunk as {
+                  text?: unknown;
+                  delta?: unknown;
+                };
+                const delta =
+                  typeof reasoningChunk.text === "string"
+                    ? reasoningChunk.text
+                    : typeof reasoningChunk.delta === "string"
+                      ? reasoningChunk.delta
+                      : "";
+                changed = appendReasoningPartToState(streamingState, delta) || changed;
               } else if (chunk.type === "tool-input-start") {
                 changed = recordToolInputStart(streamingState, chunk.id, chunk.toolName) || changed;
               } else if (chunk.type === "tool-input-delta") {

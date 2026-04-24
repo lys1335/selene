@@ -9,6 +9,7 @@ import {
   countCanonicalTruncationMarkers,
   isAbortLikeTerminationError,
   shouldTreatStreamErrorAsCancellation,
+  stubEphemeralToolResults,
 } from "@/app/api/chat/canonical-content";
 import type { DBContentPart } from "@/lib/messages/converter";
 
@@ -272,6 +273,77 @@ describe("mergeCanonicalAssistantContent", () => {
     const textParts = merged.filter((p) => p.type === "text");
     expect(textParts).toHaveLength(1);
   });
+
+  // ── reasoning preservation (DeepSeek thinking mode replay) ───────────────
+
+  it("preserves reasoning parts from streamed base when step adds none", () => {
+    const streamed: DBContentPart[] = [
+      { type: "reasoning", text: "I should read the file first." },
+      textPart("reading now..."),
+    ];
+    const step: DBContentPart[] = [
+      toolCall("tc1", "Read"),
+      toolResult("tc1", "Read"),
+    ];
+    const merged = mergeCanonicalAssistantContent(streamed, step);
+    const reasoningParts = merged.filter((p) => p.type === "reasoning");
+    expect(reasoningParts).toHaveLength(1);
+    expect((reasoningParts[0] as { text: string }).text).toBe(
+      "I should read the file first."
+    );
+  });
+
+  it("merges reasoning from step when streamed base has none", () => {
+    const streamed: DBContentPart[] = [textPart("Let me do that.")];
+    const step: DBContentPart[] = [
+      { type: "reasoning", text: "User asked for a file. I'll read it." },
+      toolCall("tc1", "Read"),
+    ];
+    const merged = mergeCanonicalAssistantContent(streamed, step);
+    const reasoningParts = merged.filter((p) => p.type === "reasoning");
+    expect(reasoningParts).toHaveLength(1);
+    expect((reasoningParts[0] as { text: string }).text).toBe(
+      "User asked for a file. I'll read it."
+    );
+  });
+
+  it("deduplicates identical reasoning across streamed base and step", () => {
+    const streamed: DBContentPart[] = [
+      { type: "reasoning", text: "Same thought." },
+      textPart("ok"),
+    ];
+    const step: DBContentPart[] = [
+      { type: "reasoning", text: "Same thought." },
+      toolCall("tc1", "Read"),
+    ];
+    const merged = mergeCanonicalAssistantContent(streamed, step);
+    const reasoningParts = merged.filter((p) => p.type === "reasoning");
+    expect(reasoningParts).toHaveLength(1);
+  });
+
+  it("keeps distinct reasoning blocks from multiple steps", () => {
+    const streamed: DBContentPart[] = [
+      { type: "reasoning", text: "First thought." },
+    ];
+    const step: DBContentPart[] = [
+      { type: "reasoning", text: "Second thought." },
+      toolCall("tc1", "Read"),
+    ];
+    const merged = mergeCanonicalAssistantContent(streamed, step);
+    const reasoningParts = merged.filter((p) => p.type === "reasoning");
+    expect(reasoningParts).toHaveLength(2);
+  });
+
+  it("skips empty reasoning text from step", () => {
+    const streamed: DBContentPart[] = [textPart("ok")];
+    const step: DBContentPart[] = [
+      { type: "reasoning", text: "" },
+      toolCall("tc1", "Read"),
+    ];
+    const merged = mergeCanonicalAssistantContent(streamed, step);
+    const reasoningParts = merged.filter((p) => p.type === "reasoning");
+    expect(reasoningParts).toHaveLength(0);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -444,6 +516,66 @@ describe("buildCanonicalAssistantContentFromSteps", () => {
     ]);
     const textParts = parts.filter((p) => p.type === "text");
     expect(textParts).toHaveLength(2);
+  });
+
+  // ── reasoning extraction (DeepSeek thinking mode) ────────────────────────
+
+  it("extracts reasoning from reasoningText and emits before tool-calls", () => {
+    const parts = buildCanonicalAssistantContentFromSteps([
+      {
+        reasoningText: "I need to check the file.",
+        toolCalls: [{ toolCallId: "tc1", toolName: "Read", input: { filePath: "/a" } }],
+      },
+    ]);
+    // Reasoning first, then tool-call
+    expect(parts).toEqual([
+      { type: "reasoning", text: "I need to check the file." },
+      { type: "tool-call", toolCallId: "tc1", toolName: "Read", args: { filePath: "/a" } },
+    ]);
+  });
+
+  it("extracts reasoning from structured reasoning[] parts when reasoningText absent", () => {
+    const parts = buildCanonicalAssistantContentFromSteps([
+      {
+        reasoning: [
+          { type: "reasoning", text: "First chunk. " },
+          { type: "reasoning", text: "Second chunk." },
+        ],
+        text: "Done.",
+      },
+    ]);
+    const reasoning = parts.filter((p) => p.type === "reasoning");
+    expect(reasoning).toHaveLength(1);
+    expect((reasoning[0] as { text: string }).text).toBe("First chunk. Second chunk.");
+  });
+
+  it("dedupes repeated reasoning across steps by exact text", () => {
+    const parts = buildCanonicalAssistantContentFromSteps([
+      { reasoningText: "Same plan", text: "a" },
+      { reasoningText: "Same plan", text: "b" },
+    ]);
+    const reasoning = parts.filter((p) => p.type === "reasoning");
+    expect(reasoning).toHaveLength(1);
+  });
+
+  it("ignores empty/whitespace-only reasoning text", () => {
+    const parts = buildCanonicalAssistantContentFromSteps([
+      { reasoningText: "   ", text: "hi" },
+    ]);
+    expect(parts.filter((p) => p.type === "reasoning")).toHaveLength(0);
+  });
+
+  it("reasoning pass-through: stubEphemeralToolResults and truncation count do not touch reasoning", () => {
+    const parts: DBContentPart[] = [
+      { type: "reasoning", text: "think first" },
+      toolCall("tc1", "someEphemeralTool"),
+      toolResult("tc1", "someEphemeralTool"),
+    ];
+    // Fake ephemeral lookup marks the tool as ephemeral — reasoning should pass
+    // through unchanged and the truncation counter should ignore reasoning.
+    const rewritten = stubEphemeralToolResults(parts, () => true);
+    expect(rewritten[0]).toEqual({ type: "reasoning", text: "think first" });
+    expect(countCanonicalTruncationMarkers(rewritten)).toBe(0);
   });
 });
 

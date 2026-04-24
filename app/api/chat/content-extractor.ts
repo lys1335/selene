@@ -569,6 +569,18 @@ export async function extractContent(
         continue;
       }
 
+      // Reasoning parts are only re-injected server-side for providers that
+      // require `reasoning_content` on round-trip (e.g. DeepSeek thinking mode).
+      // The ai-sdk `AssistantContent` type accepts `{ type: "reasoning", text }`
+      // and the openai-compatible adapter serialises it to `reasoning_content`
+      // on the outbound assistant message. Other providers either drop the
+      // field or require an additional signature (Anthropic), so we only emit
+      // it when upstream message-prep has explicitly injected it.
+      if (part.type === "reasoning" && typeof part.text === "string" && part.text.length > 0) {
+        contentParts.push({ type: "reasoning", text: part.text });
+        continue;
+      }
+
       if (part.type === "image" && (part.image || part.url)) {
         await appendImagePart(
           contentParts,

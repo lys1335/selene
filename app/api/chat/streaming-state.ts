@@ -113,6 +113,32 @@ export function appendTextPartToState(state: StreamingMessageState, delta: strin
   return true;
 }
 
+/**
+ * Append a streaming reasoning delta to the assistant message state.
+ *
+ * Used for thinking-mode providers (e.g. DeepSeek V4 Pro) that emit
+ * `reasoning-delta` chunks via the @ai-sdk/openai-compatible adapter.
+ * Multiple consecutive deltas merge into the trailing reasoning part so
+ * the canonical persisted shape is one part per reasoning block. A new
+ * non-reasoning part (text/tool-call) closes the current block; a fresh
+ * reasoning delta after that opens a new one.
+ */
+export function appendReasoningPartToState(
+  state: StreamingMessageState,
+  delta: string | undefined
+): boolean {
+  if (!delta) {
+    return false;
+  }
+  const lastPart = state.parts[state.parts.length - 1];
+  if (lastPart?.type === "reasoning") {
+    lastPart.text += delta;
+  } else {
+    state.parts.push(applyProvenanceToPart(state, { type: "reasoning", text: delta }));
+  }
+  return true;
+}
+
 function ensureToolCallPart(state: StreamingMessageState, toolCallId: string, toolName?: string): DBToolCallPart {
   let part = state.toolCallParts.get(toolCallId);
   if (!part) {

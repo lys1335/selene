@@ -26,6 +26,136 @@ import {
 import { splitToolResultsFromAssistantMessages } from "./message-splitter";
 import { extractContent } from "./content-extractor";
 import { MAX_TOOL_REFETCH } from "./content-sanitizer";
+import { getMessages } from "@/lib/db/queries-messages";
+import type { DBContentPart } from "@/lib/messages/converter";
+
+// ─── Provider-scoped reasoning re-injection ───────────────────────────────────
+
+/**
+ * Providers that require assistant-side `reasoning_content` to round-trip on
+ * every follow-up request after a thinking-mode turn. DeepSeek's documented
+ * contract: "The `reasoning_content` in the thinking mode must be passed back
+ * to the API" — without it the server returns HTTP 400 on the next turn that
+ * carries tool results from the same thread.
+ *
+ * Anthropic's thinking blocks ALSO need to round-trip, but they additionally
+ * require a provider-issued `signature` that Selene does not currently capture
+ * at the streaming layer — injecting reasoning without a signature breaks
+ * requests to Claude. We therefore gate injection to DeepSeek only.
+ */
+const PROVIDERS_REQUIRING_REASONING_REPLAY = new Set<string>(["deepseek"]);
+
+function collectReasoningTextsFromDbContent(content: unknown): string[] {
+  if (!Array.isArray(content)) return [];
+  const texts: string[] = [];
+  for (const part of content as DBContentPart[]) {
+    if (part && (part as { type?: string }).type === "reasoning") {
+      const text = (part as { text?: unknown }).text;
+      if (typeof text === "string" && text.length > 0) {
+        texts.push(text);
+      }
+    }
+  }
+  return texts;
+}
+
+/**
+ * Re-inject reasoning parts stored on DB assistant messages into the matching
+ * frontend messages before `extractContent` converts them to ModelMessages.
+ *
+ * The UI pipeline strips reasoning parts in `buildUIPartsFromDBContent`, so
+ * reasoning never reaches the client. For providers that require
+ * `reasoning_content` on replay we restore it here from the authoritative DB
+ * copy, matching by stable message ID.
+ */
+async function injectReasoningFromDbForProvider(
+  frontendMessages: FrontendMessage[],
+  sessionId: string,
+  provider: string | undefined,
+): Promise<FrontendMessage[]> {
+  if (!provider || !PROVIDERS_REQUIRING_REASONING_REPLAY.has(provider)) {
+    return frontendMessages;
+  }
+
+  const assistantIdsInRequest = new Set<string>();
+  for (const msg of frontendMessages) {
+    if (msg.role === "assistant" && typeof msg.id === "string" && msg.id.length > 0) {
+      assistantIdsInRequest.add(msg.id);
+    }
+  }
+  if (assistantIdsInRequest.size === 0) {
+    return frontendMessages;
+  }
+
+  let dbMessages: Array<{ id: string; role: string; content: unknown }>;
+  try {
+    dbMessages = (await getMessages(sessionId)) as Array<{
+      id: string;
+      role: string;
+      content: unknown;
+    }>;
+  } catch (error) {
+    console.warn(
+      `[CHAT API] Failed to fetch DB messages for reasoning re-injection (provider=${provider}): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return frontendMessages;
+  }
+
+  const reasoningByMessageId = new Map<string, string[]>();
+  for (const dbMsg of dbMessages) {
+    if (dbMsg.role !== "assistant") continue;
+    if (!assistantIdsInRequest.has(dbMsg.id)) continue;
+    const texts = collectReasoningTextsFromDbContent(dbMsg.content);
+    if (texts.length > 0) {
+      reasoningByMessageId.set(dbMsg.id, texts);
+    }
+  }
+
+  if (reasoningByMessageId.size === 0) {
+    return frontendMessages;
+  }
+
+  let injectedCount = 0;
+  const enhanced = frontendMessages.map((msg) => {
+    if (msg.role !== "assistant" || typeof msg.id !== "string") return msg;
+    const dbTexts = reasoningByMessageId.get(msg.id);
+    if (!dbTexts || dbTexts.length === 0) return msg;
+
+    const existingParts = Array.isArray(msg.parts) ? [...msg.parts] : [];
+
+    // Dedupe: skip reasoning texts already present on the frontend message
+    // (handles the case where a future refactor teaches the UI converter to
+    // carry reasoning forward — this function then becomes a no-op for those
+    // messages rather than duplicating content).
+    const existingReasoningTexts = new Set<string>();
+    for (const part of existingParts) {
+      if (part && part.type === "reasoning" && typeof part.text === "string") {
+        existingReasoningTexts.add(part.text);
+      }
+    }
+
+    const reasoningParts = dbTexts
+      .filter((text) => !existingReasoningTexts.has(text))
+      .map((text) => ({ type: "reasoning" as const, text }));
+
+    if (reasoningParts.length === 0) return msg;
+
+    injectedCount += reasoningParts.length;
+    // Prepend reasoning so the canonical shape is [reasoning..., text/tool-call...].
+    return { ...msg, parts: [...reasoningParts, ...existingParts] };
+  });
+
+  if (injectedCount > 0) {
+    console.log(
+      `[CHAT API] Re-injected ${injectedCount} reasoning part(s) from DB for provider=${provider} ` +
+        `across ${reasoningByMessageId.size} assistant message(s).`,
+    );
+  }
+
+  return enhanced;
+}
 
 // ─── Public interface ─────────────────────────────────────────────────────────
 
@@ -97,7 +227,7 @@ export async function prepareMessagesForRequest(
   };
 
   // Enhance frontend messages with tool results from database
-  const enhancedMessages = await enhanceFrontendMessagesWithToolResults(
+  let enhancedMessages = await enhanceFrontendMessagesWithToolResults(
     messages,
     sessionId,
     {
@@ -108,6 +238,15 @@ export async function prepareMessagesForRequest(
 
   console.log(
     `[CHAT API] Enhanced ${enhancedMessages.length} messages with DB tool results`
+  );
+
+  // Providers with mandatory reasoning replay (DeepSeek thinking mode) require
+  // `reasoning_content` on every follow-up request. The UI pipeline strips
+  // reasoning parts, so we restore them from the DB here before extraction.
+  enhancedMessages = await injectReasoningFromDbForProvider(
+    enhancedMessages,
+    sessionId,
+    currentProvider,
   );
 
   // Convert to core format for the AI SDK
