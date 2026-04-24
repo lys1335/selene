@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PLUGIN_ROOT/hooks/reroll-until-6am.sh\"",
+            "timeout": 15,
+            "statusMessage": "Overnight keep-alive: checking wall-clock deadline..."
+          }
+        ]
+      }
+    ]
+  }
+}

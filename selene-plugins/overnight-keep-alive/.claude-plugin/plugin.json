@@ -1,0 +1,6 @@
+{
+  "name": "overnight-keep-alive",
+  "description": "Blocks the agent from stopping overnight. When a Stop event fires before the configured end-hour (default 06:00 local time), the hook emits a block decision that forces Claude to keep iterating on the current task until morning. Intended for long-running overnight builds (e.g. the cycle-tracker port) where the user wants the agent to grind continuously until a wall-clock deadline.",
+  "version": "1.0.0",
+  "hooks": "hooks/hooks.json"
+}
