@@ -993,7 +993,8 @@
       "textPasted": "Text pasted",
       "inspectLabel": "Inspect",
       "inspectClearAll": "Clear all",
-      "inspectRemoveElement": "Remove {element} from selection"
+      "inspectRemoveElement": "Remove {element} from selection",
+      "imageHostileProviderWarning": "{provider} doesn't accept inline images. Selene will strip the image from the chat request and route it through the `describeImage` tool using your configured vision model. Configure one in Settings → Models → Vision, or switch to a vision-capable provider (Claude, Gemini, OpenRouter) first."
     },
     "queue": {
       "messagesQueued": "{count} message{count, plural, one {} other {s}} queued",

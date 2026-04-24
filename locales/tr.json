@@ -1029,7 +1029,8 @@
       },
       "ariaTranscribing": "Ses yazıya dönüştürülüyor",
       "ariaStopRecording": "Ses kaydını durdur",
-      "ariaStartRecording": "Ses kaydı başlat"
+      "ariaStartRecording": "Ses kaydı başlat",
+      "imageHostileProviderWarning": "{provider} satır içi görseli kabul etmez. Selene görseli sohbet isteğinden çıkarır ve yapılandırılmış görsel modelinizi kullanarak `describeImage` aracına yönlendirir. Ayarlar → Modeller → Görsel altından bir model seçin ya da önce görsel destekli bir sağlayıcıya (Claude, Gemini, OpenRouter) geçin."
     },
     "queue": {
       "messagesQueued": "{count} mesaj sırada",

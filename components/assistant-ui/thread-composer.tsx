@@ -21,6 +21,7 @@ import {
   UndoIcon,
   MicIcon,
   CrosshairIcon,
+  ImageOffIcon,
 } from "lucide-react";
 import { resilientFetch, resilientPost } from "@/lib/utils/resilient-fetch";
 import { toast } from "sonner";
@@ -44,6 +45,8 @@ import { useTheme } from "@/components/theme/theme-provider";
 import { useMCPReloadStatus } from "@/hooks/use-mcp-reload-status";
 import { useSessionComposerDraft } from "@/lib/hooks/use-session-composer-draft";
 import { useSessionComposerEditorState } from "@/lib/hooks/use-session-composer-editor-state";
+import { useSettings } from "@/lib/hooks/use-settings";
+import { providerRejectsInlineImages } from "@/lib/ai/provider-types";
 import { ContextWindowIndicator } from "./context-window-indicator";
 import { ModelSelector } from "./model-selector";
 import { ActiveDelegationsIndicator } from "./active-delegations-indicator";
@@ -323,6 +326,20 @@ export const Composer: FC<{
   const chatLifecycleStatus = useChatLifecycleStatus();
   const threadRuntime = useThreadRuntime();
   const attachmentCount = useThreadComposer((c) => c.attachments.length);
+  // Surface a warning when the user has attached an image but the currently
+  // selected LLM provider can't ingest inline images — Selene will strip the
+  // image server-side and route analysis to `describeImage`, so the user
+  // should know before they hit send.
+  const hasImageAttachment = useThreadComposer((c) =>
+    c.attachments.some((a) => a.contentType?.startsWith("image/") === true),
+  );
+  const { settings: providerSettings } = useSettings();
+  const activeLlmProvider =
+    typeof providerSettings?.llmProvider === "string"
+      ? providerSettings.llmProvider
+      : null;
+  const showImageHostileProviderWarning =
+    hasImageAttachment && providerRejectsInlineImages(activeLlmProvider);
   const t = useTranslations("assistantUi");
   const tChat = useTranslations("chat");
   const { status: mcpStatus } = useMCPReloadStatus();
@@ -1617,6 +1634,31 @@ export const Composer: FC<{
         <div className="flex flex-wrap gap-2 p-2 empty:hidden">
           <ComposerPrimitive.Attachments components={{ Attachment: ComposerAttachment }} />
         </div>
+
+        {/*
+          Image-hostile provider warning: the current LLM provider (e.g. DeepSeek)
+          rejects inline image content parts, so Selene will strip the image
+          server-side before sending and route analysis to the `describeImage`
+          tool using the separately-configured vision model. Show this BEFORE
+          send so the user isn't surprised by the model's silence about their
+          attachment. Source of truth: `providerRejectsInlineImages` in
+          `lib/ai/provider-types.ts`, which the server-side message-prep
+          pipeline reads from as well.
+        */}
+        {showImageHostileProviderWarning && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mx-2 mb-2 flex items-start gap-2 rounded border border-amber-500/60 bg-amber-50/60 dark:bg-amber-900/15 px-3 py-2 font-mono text-[11px] leading-snug text-amber-800 dark:text-amber-200"
+          >
+            <ImageOffIcon className="size-3.5 shrink-0 mt-[1px]" aria-hidden="true" />
+            <span>
+              {t("composer.imageHostileProviderWarning", {
+                provider: activeLlmProvider ?? "This provider",
+              })}
+            </span>
+          </div>
+        )}
 
         {/* Inspect context chips — show selected design elements */}
         {inspectorEnabled && selectedElements.length > 0 && (

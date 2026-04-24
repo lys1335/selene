@@ -28,6 +28,7 @@ import { extractContent } from "./content-extractor";
 import { MAX_TOOL_REFETCH } from "./content-sanitizer";
 import { getMessages } from "@/lib/db/queries-messages";
 import type { DBContentPart } from "@/lib/messages/converter";
+import { providerRejectsInlineImages } from "@/lib/ai/provider-types";
 
 // ─── Provider-scoped reasoning re-injection ───────────────────────────────────
 
@@ -381,21 +382,11 @@ function ensureReasoningOnAllAssistantMessages(
 
 // ─── Image stripping for text-only providers ──────────────────────────────────
 
-/**
- * Providers whose OpenAI-compatible `/chat/completions` endpoint does NOT
- * accept `image_url` content parts. Sending a user message with an image part
- * to one of these providers returns:
- *
- *   "Failed to deserialize the JSON body into the target type:
- *    messages[1]: unknown variant `image_url`"
- *
- * DeepSeek's documented V4 chat endpoint is text/tool-use only — vision is
- * currently served through separate endpoints (Janus family) that Selene does
- * not wire up. Codex (OpenAI's Responses API) and Antigravity also rely on
- * their own ingestion paths and should not receive raw OpenAI-style image
- * parts here.
- */
-const PROVIDERS_REJECTING_IMAGE_PARTS = new Set<string>(["deepseek"]);
+// The set of image-rejecting providers lives in
+// `lib/ai/provider-types.ts` (`PROVIDERS_REJECTING_INLINE_IMAGES` /
+// `providerRejectsInlineImages`) so the chat composer can import the same
+// helper and warn the user BEFORE they send. If you're adding a new
+// image-rejecting provider, update the set in that file, not here.
 
 /**
  * Reference extracted from an image-bearing content part. We preserve the
@@ -527,7 +518,7 @@ function stripImagesForProvider(
   messages: ModelMessage[],
   provider: string | undefined,
 ): StripImagesResult {
-  if (!provider || !PROVIDERS_REJECTING_IMAGE_PARTS.has(provider)) {
+  if (!providerRejectsInlineImages(provider)) {
     return { messages, droppedImageCount: 0, droppedReferenceCount: 0 };
   }
 
