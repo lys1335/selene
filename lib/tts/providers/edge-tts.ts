@@ -34,6 +34,7 @@ export class EdgeTTSProvider implements TTSProvider {
       voice,
       outputFormat: "audio-24khz-48kbitrate-mono-mp3",
       rate: rate || undefined,
+      timeout: 60_000, // default is 10s — too short for long text
     });
 
     // Write to a temporary file, then read into buffer

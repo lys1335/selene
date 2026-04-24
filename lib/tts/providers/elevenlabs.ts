@@ -37,6 +37,7 @@ export class ElevenLabsTTSProvider implements TTSProvider {
             speed: options.speed ?? 1.0,
           },
         }),
+        signal: AbortSignal.timeout(60_000),
       }
     );
 

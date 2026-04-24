@@ -41,6 +41,7 @@ export class OpenAITTSProvider implements TTSProvider {
         speed: options.speed ?? 1.0,
         response_format: responseFormat,
       }),
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!response.ok) {

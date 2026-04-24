@@ -371,6 +371,7 @@ export class StreamingTTSQueue {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
+      signal: AbortSignal.timeout(60_000),
     });
     if (!res.ok) throw new Error(`TTS failed: ${res.status}`);
     return res.blob();
