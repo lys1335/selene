@@ -40,13 +40,13 @@ const DEEPSEEK_THINKING_DISABLED_MODELS = new Set<string>([
   "deepseek-chat",
 ]);
 
-// All V4 models support native vision and tool use
-const DEEPSEEK_VISION_MODELS = new Set<string>([
-  "deepseek-v4-pro",
-  "deepseek-v4-flash",
-  "deepseek-chat",
-  "deepseek-reasoner",
-]);
+// DeepSeek's text/tool-use chat endpoint at /chat/completions rejects
+// `image_url` content parts ("unknown variant `image_url`"). Vision inputs
+// are served through a separate Janus family that Selene does not wire up
+// here. Until that integration lands, mark all DeepSeek chat models as
+// text-only so the outbound request pipeline strips image parts before
+// sending.
+const DEEPSEEK_VISION_MODELS = new Set<string>([]);
 
 // Default models for different roles
 const DEEPSEEK_DEFAULT_MODELS = {

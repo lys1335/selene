@@ -379,6 +379,101 @@ function ensureReasoningOnAllAssistantMessages(
   return guarded;
 }
 
+// ─── Image stripping for text-only providers ──────────────────────────────────
+
+/**
+ * Providers whose OpenAI-compatible `/chat/completions` endpoint does NOT
+ * accept `image_url` content parts. Sending a user message with an image part
+ * to one of these providers returns:
+ *
+ *   "Failed to deserialize the JSON body into the target type:
+ *    messages[1]: unknown variant `image_url`"
+ *
+ * DeepSeek's documented V4 chat endpoint is text/tool-use only — vision is
+ * currently served through separate endpoints (Janus family) that Selene does
+ * not wire up. Codex (OpenAI's Responses API) and Antigravity also rely on
+ * their own ingestion paths and should not receive raw OpenAI-style image
+ * parts here.
+ */
+const PROVIDERS_REJECTING_IMAGE_PARTS = new Set<string>(["deepseek"]);
+
+/**
+ * Human-readable placeholder used when an image attachment is dropped on
+ * behalf of a provider that cannot ingest `image_url` parts.
+ */
+const DROPPED_IMAGE_PLACEHOLDER =
+  "[image attachment omitted — selected provider does not accept inline images; switch to a vision-capable model to view it]";
+
+/**
+ * Strip `image` / `file` (image-mediaType) content parts from all messages
+ * when the outbound provider cannot accept them. Each dropped image is
+ * replaced in-place with a short text marker so the model retains context
+ * that an image was attached to the user's turn.
+ *
+ * Runs AFTER the splitter and reasoning guarantee so we only have to inspect
+ * ModelMessages. Never touches role="tool" messages — tool results may embed
+ * generated image URLs that the receiving provider treats as strings.
+ */
+function stripImagesForProvider(
+  messages: ModelMessage[],
+  provider: string | undefined,
+): ModelMessage[] {
+  if (!provider || !PROVIDERS_REJECTING_IMAGE_PARTS.has(provider)) {
+    return messages;
+  }
+
+  let droppedImageCount = 0;
+  let touchedMessageCount = 0;
+
+  const sanitized = messages.map((msg) => {
+    if (msg.role === "tool") return msg;
+    if (!Array.isArray(msg.content)) return msg;
+
+    const parts = msg.content as Array<{
+      type?: string;
+      image?: unknown;
+      mediaType?: unknown;
+      data?: unknown;
+    }>;
+
+    let changed = false;
+    const rewritten: typeof parts = [];
+    for (const part of parts) {
+      const type = part?.type;
+      const mediaType = typeof part?.mediaType === "string" ? part.mediaType : "";
+      const isImagePart = type === "image";
+      const isFileImage = type === "file" && mediaType.startsWith("image/");
+
+      if (isImagePart || isFileImage) {
+        droppedImageCount += 1;
+        changed = true;
+        rewritten.push({ type: "text", text: DROPPED_IMAGE_PLACEHOLDER } as typeof part);
+        continue;
+      }
+
+      rewritten.push(part);
+    }
+
+    if (!changed) return msg;
+    touchedMessageCount += 1;
+
+    return {
+      ...msg,
+      content: rewritten as ModelMessage["content"],
+    } as ModelMessage;
+  });
+
+  if (droppedImageCount > 0) {
+    console.log(
+      `[CHAT API] Provider=${provider} rejects image parts: ` +
+        `replaced ${droppedImageCount} image part(s) across ${touchedMessageCount} message(s) ` +
+        `with a text placeholder.`,
+    );
+  }
+
+  return sanitized;
+}
+
 // ─── Public interface ─────────────────────────────────────────────────────────
 
 interface MessagePrepArgs {
@@ -537,6 +632,12 @@ export async function prepareMessagesForRequest(
   // so we prepend a placeholder to any assistant ModelMessage still missing
   // reasoning after all prior injections.
   coreMessages = ensureReasoningOnAllAssistantMessages(coreMessages, currentProvider);
+
+  // Strip image parts for providers whose OpenAI-compatible chat endpoint
+  // rejects `image_url` content variants (e.g. DeepSeek V4 text/tool-use
+  // endpoint). Each dropped image becomes a text placeholder so the model
+  // still sees that an attachment was present on the user's turn.
+  coreMessages = stripImagesForProvider(coreMessages, currentProvider);
 
   if (sessionSummary?.trim()) {
     coreMessages = [

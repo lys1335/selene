@@ -497,4 +497,93 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
     expect(assistants).toHaveLength(1);
     expect(reasoningTexts(assistants[0].content)).toEqual(["Recovered from DB content."]);
   });
+
+  it("strips user image parts for DeepSeek and replaces each with a text placeholder", async () => {
+    // DeepSeek's `/chat/completions` rejects `image_url` content variants with
+    // "unknown variant `image_url`". The pipeline must drop image parts before
+    // serialization and replace each with a readable text marker.
+    const frontend: FrontendMessage[] = [
+      {
+        id: "u-image",
+        role: "user",
+        parts: [
+          { type: "text", text: "Here are two screenshots:" },
+          // Data URIs that extractContent will emit as `{type: "image", image}`
+          {
+            type: "file",
+            mediaType: "image/png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
+            filename: "one.png",
+          },
+          {
+            type: "file",
+            mediaType: "image/png",
+            url: "data:image/png;base64,AAAA=",
+            filename: "two.png",
+          },
+          { type: "text", text: "what do you see?" },
+        ],
+      } as FrontendMessage,
+    ];
+
+    const { coreMessages } = await prepareMessagesForRequest({
+      messages: frontend,
+      sessionId: "sess-img",
+      userId: "user-1",
+      characterId: null,
+      sessionMetadata: {},
+      currentModelId: "deepseek-v4-pro",
+      currentProvider: "deepseek",
+    });
+
+    const userMsg = coreMessages.find((m) => m.role === "user");
+    expect(userMsg).toBeDefined();
+    const parts = userMsg!.content;
+    expect(Array.isArray(parts)).toBe(true);
+
+    const partList = parts as Array<{ type: string; image?: unknown; text?: unknown }>;
+    const imageParts = partList.filter((p) => p.type === "image");
+    expect(imageParts).toHaveLength(0);
+
+    // Each dropped image should have been replaced by a text placeholder.
+    const textParts = partList.filter((p) => p.type === "text");
+    const placeholders = textParts.filter((p) =>
+      typeof p.text === "string" && (p.text as string).includes("image attachment omitted"),
+    );
+    expect(placeholders).toHaveLength(2);
+  });
+
+  it("leaves images untouched for non-deepseek providers", async () => {
+    const frontend: FrontendMessage[] = [
+      {
+        id: "u-image",
+        role: "user",
+        parts: [
+          { type: "text", text: "look at this" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
+            filename: "pic.png",
+          },
+        ],
+      } as FrontendMessage,
+    ];
+
+    const { coreMessages } = await prepareMessagesForRequest({
+      messages: frontend,
+      sessionId: "sess-img-claude",
+      userId: "user-1",
+      characterId: null,
+      sessionMetadata: {},
+      currentModelId: "claude-sonnet-4-6",
+      currentProvider: "anthropic",
+    });
+
+    const userMsg = coreMessages.find((m) => m.role === "user");
+    expect(userMsg).toBeDefined();
+    const partList = userMsg!.content as Array<{ type: string }>;
+    const imageParts = partList.filter((p) => p.type === "image");
+    expect(imageParts.length).toBeGreaterThan(0);
+  });
 });
