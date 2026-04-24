@@ -265,27 +265,65 @@ export function resolveScreenshotCaptureOptions(input: {
  * whole declaration: full CSSStyleDeclaration flattening is noisy and
  * inflates payload size; this covers the typical visual-fidelity surface
  * (color, layout box, typography, effects) used by design QA tooling.
+ *
+ * Sprint 1 Group B broadened this list after repeated "probe returned empty
+ * for <property>" agent reports traced to missing entries here — the
+ * envelope was preserving the probe map intact; the requested property
+ * simply wasn't in the curated set. Additions:
+ *   - `colorScheme`     — resolved `color-scheme` on the target (theme QA)
+ *   - `cursor`           — interactive-surface affordance
+ *   - `transition`       — animated-state diffing (T1.x / T4.x)
+ *   - `textShadow`       — depth / layering QA
+ *   - `overflow`         — clipping / scroll boundary checks
+ *   - `gap`, `flexDirection`, `justifyContent`, `alignItems`,
+ *     `gridTemplateColumns`, `gridTemplateRows` — layout-structural probes
+ *     for dashboard / grid components (T1.6).
+ *
+ * Payload impact: 20 → 30 properties. At the 16-selector cap, worst-case
+ * payload is ~30 × 16 × ~60 chars = ~29 KB, well under the 40 KB
+ * `SLIM_RESULT_SAFETY_CAP` and under the 10 K token inline passthrough
+ * budget once other envelope fields are accounted for.
  */
-const PROBE_CSS_PROPERTIES = [
+/** @internal Exported for unit testing only — asserts the curated probe list. */
+export const PROBE_CSS_PROPERTIES = [
+  // Color / fill
   "color",
   "backgroundColor",
+  "colorScheme",
+  // Effects / filters
   "backdropFilter",
   "boxShadow",
+  "textShadow",
+  "filter",
+  "opacity",
+  // Borders / geometry
   "border",
   "borderRadius",
-  "opacity",
   "transform",
-  "filter",
+  // Box model
   "width",
   "height",
   "padding",
   "margin",
+  "overflow",
+  // Typography
   "font",
   "letterSpacing",
   "lineHeight",
+  // Layout / stacking
   "display",
   "position",
   "zIndex",
+  // Flex / grid (dashboard probes — T1.6)
+  "flexDirection",
+  "justifyContent",
+  "alignItems",
+  "gap",
+  "gridTemplateColumns",
+  "gridTemplateRows",
+  // Interaction / animation
+  "cursor",
+  "transition",
 ] as const;
 
 /**
