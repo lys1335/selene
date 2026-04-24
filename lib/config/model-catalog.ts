@@ -114,6 +114,15 @@ const MODEL_METADATA: Record<
     capabilities: { vision: false, contextWindow: "128K", speed: "standard" },
   },
 
+  // Codex (GPT-5.5 — 1M context, released 2026-04-23)
+  "gpt-5.5": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "fast" },
+  },
+  "gpt-5.5-pro": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "standard" },
+  },
   // Codex (GPT-5.4 — 1M context)
   "gpt-5.4": {
     tier: "flagship",
@@ -223,6 +232,14 @@ const MODEL_METADATA: Record<
   "anthropic/claude-sonnet-4.6": {
     tier: "flagship",
     capabilities: { vision: true, thinking: true, contextWindow: "200K", speed: "standard" },
+  },
+  "openai/gpt-5.5": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "fast" },
+  },
+  "openai/gpt-5.5-pro": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "standard" },
   },
   "openai/gpt-5.4": {
     tier: "flagship",

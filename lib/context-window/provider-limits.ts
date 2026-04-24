@@ -171,6 +171,21 @@ const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>> = {
     supportsStreaming: true,
   },
 
+  // Codex (GPT-5.5 — 1M context, released 2026-04-23)
+  "gpt-5.5": {
+    maxTokens: 1000000,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  "gpt-5.5-pro": {
+    maxTokens: 1000000,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
   // Codex (GPT-5.4 — 1M context)
   "gpt-5.4": {
     maxTokens: 1000000,
@@ -323,6 +338,20 @@ const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>> = {
   "anthropic/claude-sonnet-4.6": {
     maxTokens: 200000,
     supportsStreaming: true,
+  },
+  "openai/gpt-5.5": {
+    maxTokens: 1000000,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  "openai/gpt-5.5-pro": {
+    maxTokens: 1000000,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
   },
   "openai/gpt-5.4": {
     maxTokens: 400000,

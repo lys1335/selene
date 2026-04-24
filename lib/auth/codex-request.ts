@@ -29,8 +29,12 @@ function getReasoningConfig(
 ): { effort: "none" | "low" | "medium" | "high" | "xhigh"; summary: ReasoningSummary } {
   const normalizedName = modelName?.toLowerCase() ?? "";
 
+  const isGpt55 =
+    normalizedName.includes("gpt-5.5") || normalizedName.includes("gpt 5.5");
   const isGpt54 =
-    normalizedName.includes("gpt-5.4") || normalizedName.includes("gpt 5.4");
+    isGpt55 ||
+    normalizedName.includes("gpt-5.4") ||
+    normalizedName.includes("gpt 5.4");
   const isGpt52Codex =
     normalizedName.includes("gpt-5.2-codex") || normalizedName.includes("gpt 5.2 codex");
   const isGpt53Codex =
@@ -213,9 +217,11 @@ export async function transformCodexRequest(
     ...reasoningConfig,
   };
 
-  // GPT-5.4 doesn't expose support_verbosity via bundled metadata yet;
+  // GPT-5.4 and GPT-5.5 don't expose support_verbosity via bundled metadata yet;
   // only send text.verbosity for models we know support it.
-  const modelSupportsVerbosity = !normalizedModel.startsWith("gpt-5.4");
+  const modelSupportsVerbosity =
+    !normalizedModel.startsWith("gpt-5.4") &&
+    !normalizedModel.startsWith("gpt-5.5");
   if (modelSupportsVerbosity) {
     body.text = {
       ...body.text,

@@ -13,9 +13,12 @@ type CacheMetadata = {
   url: string;
 };
 
-type CodexModelFamily = "gpt-5.4" | "gpt-5.2-codex" | "codex-max" | "codex" | "gpt-5.2" | "gpt-5.1";
+type CodexModelFamily = "gpt-5.5" | "gpt-5.4" | "gpt-5.2-codex" | "codex-max" | "codex" | "gpt-5.2" | "gpt-5.1";
 
 const PROMPT_FILES: Record<CodexModelFamily, string> = {
+  // GPT-5.5 doesn't have its own prompt file in the openai/codex repo yet;
+  // fall back to the gpt-5.2-codex prompt (same fallback used for 5.4).
+  "gpt-5.5": "gpt-5.2-codex_prompt.md",
   // GPT-5.4 doesn't have its own prompt file yet; fall back to gpt-5.2-codex prompt
   "gpt-5.4": "gpt-5.2-codex_prompt.md",
   "gpt-5.2-codex": "gpt-5.2-codex_prompt.md",
@@ -26,6 +29,7 @@ const PROMPT_FILES: Record<CodexModelFamily, string> = {
 };
 
 const CACHE_FILES: Record<CodexModelFamily, string> = {
+  "gpt-5.5": "gpt-5.5-instructions.md",
   "gpt-5.4": "gpt-5.4-instructions.md",
   "gpt-5.2-codex": "gpt-5.2-codex-instructions.md",
   "codex-max": "codex-max-instructions.md",
@@ -40,6 +44,9 @@ function getCacheDir(): string {
 }
 
 function getModelFamily(normalizedModel: string): CodexModelFamily {
+  if (normalizedModel.includes("gpt-5.5") || normalizedModel.includes("gpt 5.5")) {
+    return "gpt-5.5";
+  }
   if (normalizedModel.includes("gpt-5.4") || normalizedModel.includes("gpt 5.4")) {
     return "gpt-5.4";
   }

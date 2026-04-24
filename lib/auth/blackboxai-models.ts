@@ -74,6 +74,8 @@ export const BLACKBOX_ALL_MODEL_IDS = [
   "gpt-5.2-pro",
   "gpt-5.4",
   "gpt-5.4-pro",
+  "gpt-5.5",
+  "gpt-5.5-pro",
   "gpt-audio",
   "gpt-audio-mini",
   "gpt-oss-120b:exacto",
@@ -601,6 +603,8 @@ export const BLACKBOX_MODEL_IDS = [
   "o1-pro",
   "gpt-5.4",
   "gpt-5.4-pro",
+  "gpt-5.5",
+  "gpt-5.5-pro",
 
   // Google
   "gemini-3-pro-preview",
@@ -780,6 +784,8 @@ const MODEL_LABELS: Record<string, string> = {
   "o1-pro": "OpenAI: o1 Pro",
   "gpt-5.4": "OpenAI: GPT-5.4",
   "gpt-5.4-pro": "OpenAI: GPT-5.4 Pro",
+  "gpt-5.5": "OpenAI: GPT-5.5",
+  "gpt-5.5-pro": "OpenAI: GPT-5.5 Pro",
 
   // Google
   "gemini-3-pro-preview": "Google: Gemini 3 Pro Preview",
@@ -923,6 +929,8 @@ const BLACKBOX_CONTEXT_WINDOWS: Record<string, number> = {
   "gpt-5.1-codex": 400000,
   "gpt-5.4": 400000,
   "gpt-5.4-pro": 400000,
+  "gpt-5.5": 1000000,
+  "gpt-5.5-pro": 1000000,
   "gpt-4.1": 1047576,
   "gpt-4.1-mini": 1047576,
   "gpt-4.1-nano": 1047576,
