@@ -498,10 +498,17 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
     expect(reasoningTexts(assistants[0].content)).toEqual(["Recovered from DB content."]);
   });
 
-  it("strips user image parts for DeepSeek and replaces each with a text placeholder", async () => {
+  it("strips user image parts for DeepSeek and replaces each with a describeImage-prompting placeholder", async () => {
     // DeepSeek's `/chat/completions` rejects `image_url` content variants with
     // "unknown variant `image_url`". The pipeline must drop image parts before
-    // serialization and replace each with a readable text marker.
+    // serialization and replace each with a placeholder that (a) tells the model
+    // the attachment was omitted, (b) names the `describeImage` tool as the
+    // recovery path, and (c) when possible, surfaces the original reference so
+    // the model can pass it straight to `describeImage`.
+    // Use base64 payloads long enough to clear the RAW_BASE64 guard (>32 chars)
+    // so extractImageReference's data-URI reconstruction branch actually fires.
+    const longB64One = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAA";
+    const longB64Two = "AAAABBBBCCCCDDDDEEEEFFFFGGGGHHHHIIIIJJJJKKKKLLLL";
     const frontend: FrontendMessage[] = [
       {
         id: "u-image",
@@ -512,13 +519,13 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
           {
             type: "file",
             mediaType: "image/png",
-            url: "data:image/png;base64,iVBORw0KGgo=",
+            url: `data:image/png;base64,${longB64One}`,
             filename: "one.png",
           },
           {
             type: "file",
             mediaType: "image/png",
-            url: "data:image/png;base64,AAAA=",
+            url: `data:image/png;base64,${longB64Two}`,
             filename: "two.png",
           },
           { type: "text", text: "what do you see?" },
@@ -526,7 +533,7 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
       } as FrontendMessage,
     ];
 
-    const { coreMessages } = await prepareMessagesForRequest({
+    const { coreMessages, droppedImagesForProvider } = await prepareMessagesForRequest({
       messages: frontend,
       sessionId: "sess-img",
       userId: "user-1",
@@ -535,6 +542,9 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
       currentModelId: "deepseek-v4-pro",
       currentProvider: "deepseek",
     });
+
+    // The count must be surfaced so the route can promote describeImage.
+    expect(droppedImagesForProvider).toBe(2);
 
     const userMsg = coreMessages.find((m) => m.role === "user");
     expect(userMsg).toBeDefined();
@@ -545,12 +555,72 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
     const imageParts = partList.filter((p) => p.type === "image");
     expect(imageParts).toHaveLength(0);
 
-    // Each dropped image should have been replaced by a text placeholder.
+    // Each dropped image should have been replaced by a text placeholder that
+    // names describeImage, the Settings path to the vision model, and (for
+    // data URIs) explains why the raw base64 isn't echoed back.
     const textParts = partList.filter((p) => p.type === "text");
     const placeholders = textParts.filter((p) =>
       typeof p.text === "string" && (p.text as string).includes("image attachment omitted"),
     );
     expect(placeholders).toHaveLength(2);
+    for (const p of placeholders) {
+      const text = p.text as string;
+      expect(text).toContain("describeImage");
+      expect(text).toContain("Settings");
+      expect(text).toContain("Vision");
+      // Data URI branch: mentions inline base64 and re-attach path.
+      expect(text.toLowerCase()).toContain("base64");
+      expect(text).toContain("re-attach");
+    }
+  });
+
+  it("surfaces the original URL in the describeImage call example for non-data-URI refs", async () => {
+    // When the frontend attaches an image by URL (e.g. storage ref), the
+    // placeholder must carry that exact URL in a `describeImage({ imageUrl })`
+    // call example so the model has a concrete argument to invoke the tool
+    // with. Use a URL shape that makeImagePart won't rewrite into base64
+    // (absolute http URL) so it survives extractContent as `{type, image}`.
+    const imageUrl = "https://example.com/storage/screenshot-42.png";
+    const frontend: FrontendMessage[] = [
+      {
+        id: "u-image-url",
+        role: "user",
+        parts: [
+          { type: "text", text: "describe this diagram" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            url: imageUrl,
+            filename: "diagram.png",
+          },
+        ],
+      } as FrontendMessage,
+    ];
+
+    const { coreMessages, droppedImagesForProvider } = await prepareMessagesForRequest({
+      messages: frontend,
+      sessionId: "sess-img-url",
+      userId: "user-1",
+      characterId: null,
+      sessionMetadata: {},
+      currentModelId: "deepseek-v4-pro",
+      currentProvider: "deepseek",
+    });
+
+    expect(droppedImagesForProvider).toBe(1);
+
+    const userMsg = coreMessages.find((m) => m.role === "user");
+    expect(userMsg).toBeDefined();
+    const partList = userMsg!.content as Array<{ type: string; text?: unknown }>;
+    const placeholder = partList.find(
+      (p) => p.type === "text" && typeof p.text === "string" && (p.text as string).includes("image attachment omitted"),
+    );
+    expect(placeholder).toBeDefined();
+    const text = placeholder!.text as string;
+    // The exact imageUrl must appear in a describeImage call example so the
+    // model can paste it straight through.
+    expect(text).toContain("describeImage");
+    expect(text).toContain(`imageUrl: "${imageUrl}"`);
   });
 
   it("leaves images untouched for non-deepseek providers", async () => {
@@ -570,7 +640,7 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
       } as FrontendMessage,
     ];
 
-    const { coreMessages } = await prepareMessagesForRequest({
+    const { coreMessages, droppedImagesForProvider } = await prepareMessagesForRequest({
       messages: frontend,
       sessionId: "sess-img-claude",
       userId: "user-1",
@@ -579,6 +649,10 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
       currentModelId: "claude-sonnet-4-6",
       currentProvider: "anthropic",
     });
+
+    // Non-DeepSeek providers receive images unchanged and report no drops,
+    // which guarantees the route does NOT promote describeImage for them.
+    expect(droppedImagesForProvider).toBe(0);
 
     const userMsg = coreMessages.find((m) => m.role === "user");
     expect(userMsg).toBeDefined();
