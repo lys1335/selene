@@ -180,7 +180,7 @@ export interface DeepResearchConfig {
   searchProvider: 'tavily' | 'duckduckgo' | 'serper' | 'mock';
   modelProvider: 'anthropic' | 'openrouter' | 'codex' | 'blackboxai';
   researchModel?: string;
-  sessionProvider?: 'anthropic' | 'openrouter' | 'codex' | 'claudecode' | 'antigravity' | 'kimi' | 'minimax' | 'ollama' | 'blackboxai' | 'vllm';
+  sessionProvider?: 'anthropic' | 'openrouter' | 'codex' | 'claudecode' | 'antigravity' | 'kimi' | 'minimax' | 'ollama' | 'blackboxai' | 'deepseek' | 'vllm';
   abortSignal?: AbortSignal;
 }
 

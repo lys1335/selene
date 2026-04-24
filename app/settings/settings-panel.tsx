@@ -46,6 +46,7 @@ const EMPTY_PROVIDER_AUTH_STATUS: Record<LLMProvider, boolean> = {
   claudecode: false,
   minimax: false,
   blackboxai: false,
+  deepseek: false,
   vllm: false,
 };
 

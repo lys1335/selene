@@ -2365,6 +2365,7 @@
       "openrouter": "OpenRouter",
       "kimi": "Moonshot Kimi",
       "blackboxai": "BlackBox AI",
+      "deepseek": "DeepSeek",
       "ollama": "Ollama (yerel)",
       "vllm": "vLLM (yerel)",
       "keysTitle": "API Anahtarları",
@@ -2435,6 +2436,11 @@
           "label": "BlackBox AI API Anahtarı",
           "placeholder": "sk-...",
           "helper": "Anahtarınızı BlackBox AI platformundan alın."
+        },
+        "deepseek": {
+          "label": "DeepSeek API Anahtarı",
+          "placeholder": "sk-...",
+          "helper": "Anahtarınızı platform.deepseek.com'dan oluşturun. 1M bağlam pencereli DeepSeek V4 ve reasoner modellerini etkinleştirir."
         },
         "webSearchProvider": {
           "label": "Web Arama Sağlayıcısı",

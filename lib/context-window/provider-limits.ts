@@ -91,6 +91,7 @@ export const PROVIDER_DEFAULT_LIMITS: Record<LLMProvider, number> = {
   kimi: 128000, // Kimi K2 models range 128K-256K
   minimax: 80000, // MiniMax M2.1 models with 80K context
   blackboxai: 128000, // BlackBox AI default context
+  deepseek: 1_048_576, // DeepSeek V4 series — 1M context, 384K max output
   ollama: 32000, // Local models typically have smaller context
   vllm: 32000, // vLLM models vary; conservative default, override per model
 };
@@ -209,6 +210,10 @@ const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>> = {
   },
 
   // Kimi models
+  "kimi-k2.6": {
+    maxTokens: 256000,
+    supportsStreaming: true,
+  },
   "kimi-k2.5": {
     maxTokens: 256000,
     supportsStreaming: true,
@@ -246,6 +251,37 @@ const MODEL_CONTEXT_CONFIGS: Record<string, Partial<ContextWindowConfig>> = {
   "MiniMax-M2": {
     maxTokens: 80000,
     supportsStreaming: true,
+  },
+
+  // DeepSeek V4 — 1M context (1,048,576 tokens), 384K max output
+  "deepseek-v4-pro": {
+    maxTokens: 1_048_576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  "deepseek-v4-flash": {
+    maxTokens: 1_048_576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  // Legacy aliases (deprecated 2026/07/24) — map to V4 Flash modes, share 1M context
+  "deepseek-chat": {
+    maxTokens: 1_048_576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
+  },
+  "deepseek-reasoner": {
+    maxTokens: 1_048_576,
+    supportsStreaming: true,
+    warningThreshold: 0.80,
+    criticalThreshold: 0.92,
+    hardLimit: 0.97,
   },
 
   // Ollama local models (smaller context windows)

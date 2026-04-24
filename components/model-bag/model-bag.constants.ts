@@ -74,6 +74,13 @@ export const PROVIDER_THEME: Record<
     iconEmoji: "",
     authType: "api-key",
   },
+  deepseek: {
+    accentColor: "border-sky-500",
+    bgColor: "bg-sky-500/5",
+    badgeColor: "bg-sky-500/20",
+    iconEmoji: "",
+    authType: "api-key",
+  },
   ollama: {
     accentColor: "border-gray-500",
     bgColor: "bg-gray-500/5",
@@ -100,6 +107,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<LLMProvider, string> = {
   kimi: "Moonshot Kimi",
   minimax: "MiniMax",
   blackboxai: "BlackBox AI",
+  deepseek: "DeepSeek",
   ollama: "Ollama",
   vllm: "vLLM",
 };

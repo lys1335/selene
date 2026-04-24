@@ -37,6 +37,7 @@ const MODEL_PREFIXES: Record<LLMProvider, string[]> = {
   kimi: ["kimi-", "moonshot-"],
   minimax: ["minimax-"],
   blackboxai: ["blackbox-", "blackboxai/"], // used by openrouter exclusion check
+  deepseek: ["deepseek-"],
   antigravity: [], // uses exact match
   ollama: [],      // accepts any model name
   vllm: [],        // accepts any model name (serves whatever model is loaded)
@@ -113,6 +114,11 @@ export function isModelCompatibleWithProvider(
     return true;
   }
 
+  // DeepSeek: deepseek-*
+  if (provider === "deepseek") {
+    return MODEL_PREFIXES.deepseek.some((p) => lowerModel.startsWith(p));
+  }
+
   // Ollama: accepts any model name
   if (provider === "ollama") return true;
 
@@ -128,6 +134,7 @@ export function isModelCompatibleWithProvider(
       isModelCompatibleWithProvider(lowerModel, "codex") ||
       isModelCompatibleWithProvider(lowerModel, "kimi") ||
       isModelCompatibleWithProvider(lowerModel, "minimax") ||
+      isModelCompatibleWithProvider(lowerModel, "deepseek") ||
       MODEL_PREFIXES.blackboxai.some((p) => lowerModel.startsWith(p))
     ) {
       return false;

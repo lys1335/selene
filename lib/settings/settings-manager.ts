@@ -45,6 +45,7 @@ export interface AppSettings {
     kimiDeviceId?: string;    // Persistent device ID for Kimi OAuth device flow
     minimaxApiKey?: string;   // For MiniMax models
     blackboxaiApiKey?: string; // For BlackBox AI models
+    deepseekApiKey?: string;   // For DeepSeek V4 models
     openaiApiKey?: string;    // For OpenAI Whisper STT, TTS, and other OpenAI-direct services
     ollamaBaseUrl?: string;
     vllmBaseUrl?: string;     // For vLLM OpenAI-compatible server
@@ -598,6 +599,9 @@ function updateEnvFromSettings(settings: AppSettings): void {
     if (settings.blackboxaiApiKey) {
         process.env.BLACKBOX_API_KEY = settings.blackboxaiApiKey;
     }
+    if (settings.deepseekApiKey) {
+        process.env.DEEPSEEK_API_KEY = settings.deepseekApiKey;
+    }
     if (settings.ollamaBaseUrl !== undefined) {
         process.env.OLLAMA_BASE_URL = settings.ollamaBaseUrl;
     } else {
@@ -810,6 +814,10 @@ export function hasRequiredApiKeys(): boolean {
     }
     // BlackBox AI requires an API key
     if (settings.llmProvider === "blackboxai" && !settings.blackboxaiApiKey) {
+        return false;
+    }
+    // DeepSeek requires an API key
+    if (settings.llmProvider === "deepseek" && !settings.deepseekApiKey) {
         return false;
     }
     // Claude Code requires OAuth authentication (Claude Pro/MAX subscription)

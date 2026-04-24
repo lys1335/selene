@@ -5,7 +5,7 @@ import {
 } from "@/lib/chat/workspace-mode";
 import type { VoiceSettingsFields } from "@/lib/settings/voice-settings-fields";
 
-export type LlmProvider = "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "vllm";
+export type LlmProvider = "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "minimax" | "ollama" | "claudecode" | "blackboxai" | "deepseek" | "vllm";
 
 interface AppSettingsPublic {
   llmProvider: LlmProvider;
@@ -14,6 +14,7 @@ interface AppSettingsPublic {
   kimiApiKey?: string;
   minimaxApiKey?: string;
   blackboxaiApiKey?: string;
+  deepseekApiKey?: string;
   openaiApiKey?: string;
   ollamaBaseUrl?: string;
   vllmBaseUrl?: string;
@@ -113,6 +114,7 @@ export interface FormState {
   kimiApiKey: string;
   minimaxApiKey: string;
   blackboxaiApiKey: string;
+  deepseekApiKey: string;
   openaiApiKey: string;
   ollamaBaseUrl: string;
   vllmBaseUrl: string;
@@ -253,6 +255,7 @@ export const DEFAULT_FORM_STATE: FormState = {
   kimiApiKey: "",
   minimaxApiKey: "",
   blackboxaiApiKey: "",
+  deepseekApiKey: "",
   openaiApiKey: "",
   ollamaBaseUrl: "http://localhost:11434/v1",
   vllmBaseUrl: "http://localhost:8000/v1",
@@ -385,6 +388,7 @@ export function buildFormStateFromData(data: Record<string, any>): FormState {
     kimiApiKey: data.kimiApiKey || "",
     minimaxApiKey: data.minimaxApiKey || "",
     blackboxaiApiKey: data.blackboxaiApiKey || "",
+    deepseekApiKey: data.deepseekApiKey || "",
     openaiApiKey: data.openaiApiKey || "",
     ollamaBaseUrl: data.ollamaBaseUrl || "http://localhost:11434/v1",
     vllmBaseUrl: data.vllmBaseUrl || "http://localhost:8000/v1",

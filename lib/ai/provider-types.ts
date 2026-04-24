@@ -18,4 +18,5 @@ export type LLMProvider =
   | "claudecode"
   | "minimax"
   | "blackboxai"
+  | "deepseek"
   | "vllm";

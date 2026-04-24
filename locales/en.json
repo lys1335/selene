@@ -2335,6 +2335,7 @@
       "kimi": "Moonshot Kimi",
       "minimax": "MiniMax",
       "blackboxai": "BlackBox AI",
+      "deepseek": "DeepSeek",
       "ollama": "Ollama (local)",
       "vllm": "vLLM (local)",
       "keysTitle": "Provider keys",
@@ -2405,6 +2406,11 @@
           "label": "BlackBox AI API Key",
           "placeholder": "sk-...",
           "helper": "Get your key from the BlackBox AI platform."
+        },
+        "deepseek": {
+          "label": "DeepSeek API Key",
+          "placeholder": "sk-...",
+          "helper": "Create a key at platform.deepseek.com. Enables DeepSeek V4 and reasoner models with 1M context."
         },
         "webSearchProvider": {
           "label": "Web search source",

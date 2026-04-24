@@ -17,10 +17,11 @@ const VALID_LLM_PROVIDERS = new Set([
     "claudecode",
     "minimax",
     "blackboxai",
+    "deepseek",
     "vllm",
 ] as const);
 
-function isValidLlmProvider(provider: unknown): provider is "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "ollama" | "claudecode" | "minimax" | "blackboxai" | "vllm" {
+function isValidLlmProvider(provider: unknown): provider is "anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "ollama" | "claudecode" | "minimax" | "blackboxai" | "deepseek" | "vllm" {
     return typeof provider === "string" && VALID_LLM_PROVIDERS.has(provider as never);
 }
 
@@ -31,7 +32,7 @@ function clearProviderBoundModels(settings: ReturnType<typeof loadSettings>) {
     settings.utilityModel = "";
 }
 
-async function detectMissingProvider(settings: ReturnType<typeof loadSettings>): Promise<"anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "claudecode" | null> {
+async function detectMissingProvider(settings: ReturnType<typeof loadSettings>): Promise<"anthropic" | "openrouter" | "antigravity" | "codex" | "kimi" | "claudecode" | "deepseek" | null> {
     if (settings.llmProvider === "claudecode") {
         const cachedState = getClaudeCodeAuthState();
         if (cachedState.isAuthenticated || settings.claudecodeAuth?.isAuthenticated) {
@@ -51,6 +52,7 @@ async function detectMissingProvider(settings: ReturnType<typeof loadSettings>):
         if (settings.llmProvider === "codex") return "codex";
         if (settings.llmProvider === "kimi") return "kimi";
         if (settings.llmProvider === "claudecode") return "claudecode";
+        if (settings.llmProvider === "deepseek") return "deepseek";
     }
 
     return null;

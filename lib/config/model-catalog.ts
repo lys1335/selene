@@ -13,6 +13,7 @@ import { getClaudeCodeModels } from "@/lib/auth/claudecode-models";
 import { getKimiModels } from "@/lib/auth/kimi-models";
 import { getMiniMaxModels } from "@/lib/auth/minimax-models";
 import { getBlackBoxModels } from "@/lib/auth/blackboxai-models";
+import { getDeepSeekModels } from "@/lib/auth/deepseek-models";
 import type { LLMProvider } from "@/lib/ai/providers";
 import type {
   ModelItem,
@@ -149,6 +150,10 @@ const MODEL_METADATA: Record<
   },
 
   // Kimi
+  "kimi-k2.6": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "256K", speed: "standard" },
+  },
   "kimi-k2.5": {
     tier: "flagship",
     capabilities: { vision: true, thinking: true, contextWindow: "256K", speed: "standard" },
@@ -182,6 +187,24 @@ const MODEL_METADATA: Record<
   "MiniMax-M2": {
     tier: "standard",
     capabilities: { vision: false, contextWindow: "80K", speed: "standard" },
+  },
+
+  // DeepSeek (native — 1M context, 384K max output)
+  "deepseek-v4-pro": {
+    tier: "flagship",
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "standard" },
+  },
+  "deepseek-v4-flash": {
+    tier: "standard",
+    capabilities: { vision: true, contextWindow: "1M", speed: "fast" },
+  },
+  "deepseek-chat": {
+    tier: "legacy",
+    capabilities: { vision: true, contextWindow: "1M", speed: "fast" },
+  },
+  "deepseek-reasoner": {
+    tier: "legacy",
+    capabilities: { vision: true, thinking: true, contextWindow: "1M", speed: "standard" },
   },
 
   // BlackBox AI — key models with context/capability metadata
@@ -337,9 +360,10 @@ const DEFAULT_MODELS: Record<LLMProvider, string> = {
   antigravity: "claude-sonnet-4-6",
   codex: "gpt-5.4",
   claudecode: "claude-sonnet-4-6",
-  kimi: "kimi-k2.5",
+  kimi: "kimi-k2.6",
   minimax: "MiniMax-M2.1",
   blackboxai: "anthropic/claude-sonnet-4.5",
+  deepseek: "deepseek-v4-pro",
   ollama: "llama3.1:8b",
   vllm: "",
 };
@@ -438,6 +462,7 @@ export function buildModelCatalog(
     { provider: "kimi", models: getKimiModels() },
     { provider: "minimax", models: getMiniMaxModels() },
     { provider: "blackboxai", models: getBlackBoxModels() },
+    { provider: "deepseek", models: getDeepSeekModels() },
     { provider: "openrouter", models: openrouterModels },
     // ollama and vllm are free-text — handled separately in UI
   ];

@@ -9,6 +9,7 @@ import { getClaudeCodeModels } from "@/lib/auth/claudecode-models";
 import { getKimiModels } from "@/lib/auth/kimi-models";
 import { getMiniMaxModels } from "@/lib/auth/minimax-models";
 import { getBlackBoxModels } from "@/lib/auth/blackboxai-models";
+import { getDeepSeekModels } from "@/lib/auth/deepseek-models";
 import type { FormState } from "./settings-types";
 
 const MODEL_FIELDS = ["chatModel", "researchModel", "visionModel", "utilityModel"] as const;
@@ -75,6 +76,7 @@ const CLAUDECODE_MODELS = getClaudeCodeModels();
 const KIMI_MODELS = getKimiModels();
 const MINIMAX_MODELS = getMiniMaxModels();
 const BLACKBOX_MODELS = getBlackBoxModels();
+const DEEPSEEK_MODELS = getDeepSeekModels();
 
 interface ModelsSectionProps {
   formState: FormState;
@@ -97,6 +99,7 @@ function ModelSelect({
   kimiDefault,
   minimaxDefault,
   blackboxaiDefault,
+  deepseekDefault,
   anthropicPlaceholder,
   ollamaPlaceholder,
   openrouterPlaceholder,
@@ -115,6 +118,7 @@ function ModelSelect({
   kimiDefault: string;
   minimaxDefault: string;
   blackboxaiDefault: string;
+  deepseekDefault: string;
   anthropicPlaceholder: string;
   ollamaPlaceholder: string;
   openrouterPlaceholder: string;
@@ -252,6 +256,14 @@ function ModelSelect({
           )}
 
         </>
+      ) : formState.llmProvider === "deepseek" ? (
+        <select
+          value={formState[fieldKey] || deepseekDefault}
+          onChange={(e) => updateField(fieldKey, e.target.value)}
+          className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+        >
+          {renderModelOptions(DEEPSEEK_MODELS)}
+        </select>
       ) : (
         <input
           type="text"
@@ -282,6 +294,7 @@ const PROVIDER_MODEL_SETS: Partial<Record<FormState["llmProvider"], Set<string>>
   kimi: new Set(KIMI_MODELS.map((m) => m.id)),
   minimax: new Set(MINIMAX_MODELS.map((m) => m.id)),
   blackboxai: new Set(BLACKBOX_MODELS.map((m) => m.id)),
+  deepseek: new Set(DEEPSEEK_MODELS.map((m) => m.id)),
 };
 
 export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
@@ -368,9 +381,10 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           antigravityDefault="claude-sonnet-4-5"
           codexDefault="gpt-5.4"
           claudecodeDefault="claude-sonnet-4-5-20250929"
-          kimiDefault="kimi-k2.5"
+          kimiDefault="kimi-k2.6"
           minimaxDefault="MiniMax-M2.1"
           blackboxaiDefault="qwen-2.5-coder-32b-instruct"
+          deepseekDefault="deepseek-v4-pro"
           anthropicPlaceholder="claude-sonnet-4-5-20250929"
           ollamaPlaceholder="llama3.1:8b"
           openrouterPlaceholder="x-ai/grok-4.1-fast"
@@ -391,6 +405,7 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           kimiDefault="kimi-k2-thinking"
           minimaxDefault="MiniMax-M2.1"
           blackboxaiDefault="claude-sonnet-4.6"
+          deepseekDefault="deepseek-v4-pro"
           anthropicPlaceholder="claude-sonnet-4-5-20250929"
           ollamaPlaceholder="llama3.1:8b"
           openrouterPlaceholder="x-ai/grok-4.1-fast"
@@ -408,9 +423,10 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           antigravityDefault="gemini-3-pro-low"
           codexDefault="gpt-5.4"
           claudecodeDefault="claude-sonnet-4-5-20250929"
-          kimiDefault="kimi-k2.5"
+          kimiDefault="kimi-k2.6"
           minimaxDefault="MiniMax-M2.1"
           blackboxaiDefault="qwen2.5-vl-32b-instruct"
+          deepseekDefault="deepseek-v4-flash"
           anthropicPlaceholder="claude-sonnet-4-5-20250929"
           ollamaPlaceholder="llama3.1:8b"
           openrouterPlaceholder="google/gemini-2.0-flash-001"
@@ -431,6 +447,7 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           kimiDefault="kimi-k2-turbo-preview"
           minimaxDefault="MiniMax-M2.1-lightning"
           blackboxaiDefault="gpt-4o-mini"
+          deepseekDefault="deepseek-v4-flash"
           anthropicPlaceholder="claude-haiku-4-5-20251001"
           ollamaPlaceholder="llama3.1:8b"
           openrouterPlaceholder="google/gemini-2.0-flash-lite-001"

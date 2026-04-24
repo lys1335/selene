@@ -34,6 +34,7 @@ interface SettingsData {
   kimiAuth?: { isAuthenticated?: boolean };
   minimaxApiKey?: string;
   blackboxaiApiKey?: string;
+  deepseekApiKey?: string;
   llmProvider: LLMProvider;
   chatModel?: string;
   researchModel?: string;
@@ -51,6 +52,7 @@ const ALL_PROVIDERS: LLMProvider[] = [
   "kimi",
   "minimax",
   "blackboxai",
+  "deepseek",
   "ollama",
   "vllm",
 ];
@@ -98,6 +100,7 @@ export function useModelBag() {
       kimi: !!data.kimiApiKey || !!data.kimiAuth?.isAuthenticated,
       minimax: !!data.minimaxApiKey,
       blackboxai: !!data.blackboxaiApiKey,
+      deepseek: !!data.deepseekApiKey,
       ollama: true,
       vllm: true,
     };
