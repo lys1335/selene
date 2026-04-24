@@ -34,6 +34,24 @@ const LAUNCH_ARGS = [
   "--disable-default-apps",
 ];
 
+/**
+ * CDP `protocolTimeout` applied at launch. Defaults to 180_000 (3 min) in
+ * Puppeteer 24 — which the `Runtime.callFunctionOn` bug hunt proved is too
+ * tight for our capture paths. Preview HTML blobs routinely reach 1–2 MB, the
+ * esbuild-bundled preview JS compiles + runs Tailwind at module boot, and
+ * `waitForPageReady` polls for `data-preview-ready="true"` via a single
+ * awaited `Runtime.callFunctionOn` promise — under the default ceiling, large
+ * documents timed out at the CDP layer with `Runtime.callFunctionOn timed
+ * out`, which surfaced at the tool boundary as `Waiting failed (cause: …)`
+ * after we added `error.cause` propagation.
+ *
+ * Matching `PUPPETEER_TIMEOUT_MS` (10 min) means every single CDP call in the
+ * capture pipeline gets the same ceiling as the outer `Promise.race` guard —
+ * we can never hit the protocol timeout before the logical timeout, so
+ * failure modes collapse from two competing races into one.
+ */
+const PROTOCOL_TIMEOUT_MS = 10 * 60_000; // 10 min — matches PUPPETEER_TIMEOUT_MS in export.ts
+
 interface SharedBrowserCache {
   browser: Browser | null;
   launching: Promise<Browser> | null;
@@ -57,6 +75,10 @@ async function launchBrowser(): Promise<Browser> {
   return puppeteer.launch({
     headless: true,
     args: LAUNCH_ARGS,
+    // Raise the CDP command ceiling so `Runtime.callFunctionOn` (driving
+    // `waitForFunction` + `evaluate`) does not abort before our 8-minute
+    // preview-ready wait completes on large documents. Default is 180_000.
+    protocolTimeout: PROTOCOL_TIMEOUT_MS,
   });
 }
 

@@ -234,6 +234,32 @@ describe("shared browser singleton", () => {
 
     await disposeBrowser();
   });
+
+  it("passes protocolTimeout: 10min to puppeteer.launch (Runtime.callFunctionOn bug)", async () => {
+    // Regression test for the Sprint 1 Group A CDP timeout bug.
+    //
+    // Puppeteer 24's default `protocolTimeout` is 180_000ms (3 min) — shorter
+    // than our 8-min `waitForPageReady` preview-readiness poll. Under large
+    // documents (1–2 MB preview HTML + esbuild-bundled preview JS), the single
+    // awaited `Runtime.callFunctionOn` call would abort at 3 min with
+    // "Runtime.callFunctionOn timed out", surfacing as "Waiting failed" at
+    // the tool boundary.
+    //
+    // The fix raises the CDP ceiling to match PUPPETEER_TIMEOUT_MS (10 min)
+    // so the protocol timeout can never trigger before the logical timeout —
+    // two competing races collapse into one.
+    const { getSharedBrowser, disposeBrowser } = await import("../browser");
+    const puppeteerMod = await import("puppeteer");
+    const launchSpy = puppeteerMod.default.launch as ReturnType<typeof vi.fn>;
+
+    await getSharedBrowser();
+
+    expect(launchSpy).toHaveBeenCalledTimes(1);
+    const launchArgs = launchSpy.mock.calls[0][0] as { protocolTimeout?: number };
+    expect(launchArgs.protocolTimeout).toBe(10 * 60_000);
+
+    await disposeBrowser();
+  });
 });
 
 // ── Timeout-cleanup smoke test ─────────────────────────────────────────────
