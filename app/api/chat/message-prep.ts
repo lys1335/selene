@@ -291,6 +291,94 @@ async function injectReasoningFromDbForProvider(
   return enhanced;
 }
 
+// ─── Post-split reasoning guarantee ───────────────────────────────────────────
+
+/**
+ * Final safety net for providers that require `reasoning_content` on every
+ * assistant message. `splitToolResultsFromAssistantMessages` can carve a single
+ * assistant turn with trailing text into two assistant `ModelMessage`s (step 1:
+ * text + tool-calls; step 2: post-tool-result text). The step-2 message does
+ * not carry over reasoning from the original turn, so DeepSeek rejects it with:
+ *   "The `reasoning_content` in the thinking mode must be passed back to the API."
+ *
+ * This pass runs AFTER the splitter and prepends a reasoning placeholder to any
+ * assistant `ModelMessage` that has no reasoning part. Because `ModelMessage`
+ * content can be either a string or a structured parts array, we normalize
+ * string content to a `[reasoning, text]` array so the placeholder is always
+ * addressable by the provider adapter.
+ */
+function ensureReasoningOnAllAssistantMessages(
+  messages: ModelMessage[],
+  provider: string | undefined,
+): ModelMessage[] {
+  if (!provider || !PROVIDERS_REQUIRING_REASONING_REPLAY.has(provider)) {
+    return messages;
+  }
+
+  let injectedCount = 0;
+  let inspectedCount = 0;
+
+  const guarded = messages.map((msg) => {
+    if (msg.role !== "assistant") return msg;
+    inspectedCount += 1;
+
+    // String content — no parts array to inspect. Wrap in a structured parts
+    // array so we can prepend a reasoning block.
+    if (typeof msg.content === "string") {
+      const text = msg.content;
+      if (text.length === 0) return msg;
+      injectedCount += 1;
+      return {
+        ...msg,
+        content: [
+          { type: "reasoning", text: FOREIGN_TEXT_REASONING_PLACEHOLDER },
+          { type: "text", text },
+        ],
+      } as ModelMessage;
+    }
+
+    if (!Array.isArray(msg.content)) return msg;
+
+    const parts = msg.content as Array<{ type?: string; text?: unknown }>;
+    const hasReasoning = parts.some(
+      (p) => p?.type === "reasoning" && typeof p.text === "string" && (p.text as string).length > 0,
+    );
+    if (hasReasoning) return msg;
+
+    // Skip empty arrays — nothing to guard.
+    if (parts.length === 0) return msg;
+
+    // Determine which placeholder to use: if the message carries any tool-call
+    // part, use the tool-call placeholder; otherwise the pure-text one.
+    const hasToolCallPart = parts.some((p) => {
+      const type = p?.type;
+      if (typeof type !== "string") return false;
+      if (type === "tool-result") return false;
+      return type === "tool-call" || type === "dynamic-tool" || type.startsWith("tool-");
+    });
+    const placeholderText = hasToolCallPart
+      ? FOREIGN_TOOL_CALL_REASONING_PLACEHOLDER
+      : FOREIGN_TEXT_REASONING_PLACEHOLDER;
+
+    injectedCount += 1;
+    return {
+      ...msg,
+      content: [
+        { type: "reasoning", text: placeholderText },
+        ...parts,
+      ] as ModelMessage["content"],
+    } as ModelMessage;
+  });
+
+  console.log(
+    `[CHAT API] Post-split reasoning guarantee for provider=${provider}: ` +
+      `inspected ${inspectedCount} assistant ModelMessage(s), ` +
+      `injected reasoning placeholder into ${injectedCount} message(s).`,
+  );
+
+  return guarded;
+}
+
 // ─── Public interface ─────────────────────────────────────────────────────────
 
 interface MessagePrepArgs {
@@ -442,6 +530,13 @@ export async function prepareMessagesForRequest(
   // that remain inline in assistant messages, causing "Tool results are missing"
   // errors on follow-up turns.
   coreMessages = splitToolResultsFromAssistantMessages(coreMessages);
+
+  // Final safety net: the splitter may synthesize new assistant messages from
+  // trailing text after tool calls, which inherit no reasoning. DeepSeek
+  // thinking mode rejects any assistant message without `reasoning_content`,
+  // so we prepend a placeholder to any assistant ModelMessage still missing
+  // reasoning after all prior injections.
+  coreMessages = ensureReasoningOnAllAssistantMessages(coreMessages, currentProvider);
 
   if (sessionSummary?.trim()) {
     coreMessages = [

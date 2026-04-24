@@ -381,6 +381,76 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
     expect(texts[0]).toMatch(/non-thinking-mode/i);
   });
 
+  it("guarantees reasoning on every split assistant ModelMessage (tool-call + trailing text)", async () => {
+    // The live failure: an assistant turn shaped like
+    //   [reasoning, tool-call, tool-result, tool-call, tool-result, text, text]
+    // splits into (step 1) assistant[reasoning, text, tool-call, tool-call] →
+    // (tool) [tool-result, tool-result] → (step 2) assistant[text]. The step-2
+    // assistant message has no reasoning and DeepSeek rejects it with:
+    //   "The `reasoning_content` in the thinking mode must be passed back."
+    // The post-split guarantee must prepend a placeholder to step 2.
+    const assistantId = "asst-split-trailing";
+    dbMessagesMock.messages = [
+      {
+        id: assistantId,
+        role: "assistant",
+        content: [
+          { type: "reasoning", text: "Original step-1 reasoning." },
+          { type: "tool-call", toolCallId: "c1", toolName: "readFile", input: { path: "a" } },
+          { type: "tool-result", toolCallId: "c1", toolName: "readFile", output: "A" },
+          { type: "tool-call", toolCallId: "c2", toolName: "readFile", input: { path: "b" } },
+          { type: "tool-result", toolCallId: "c2", toolName: "readFile", output: "B" },
+          { type: "text", text: "Summary of what I read." },
+        ],
+      },
+    ];
+
+    const frontend: FrontendMessage[] = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "do two file reads" }] } as FrontendMessage,
+      {
+        id: assistantId,
+        role: "assistant",
+        parts: [
+          { type: "reasoning", text: "Original step-1 reasoning." },
+          {
+            type: "tool-readFile",
+            toolCallId: "c1",
+            toolName: "readFile",
+            input: { path: "a" },
+            output: "A",
+          },
+          {
+            type: "tool-readFile",
+            toolCallId: "c2",
+            toolName: "readFile",
+            input: { path: "b" },
+            output: "B",
+          },
+          { type: "text", text: "Summary of what I read." },
+        ],
+      } as FrontendMessage,
+      { id: "u2", role: "user", parts: [{ type: "text", text: "ok go on" }] } as FrontendMessage,
+    ];
+
+    const { coreMessages } = await prepareMessagesForRequest({
+      messages: frontend,
+      sessionId: "sess-split-1",
+      userId: "user-1",
+      characterId: null,
+      sessionMetadata: {},
+      currentModelId: "deepseek-v4-pro",
+      currentProvider: "deepseek",
+    });
+
+    const assistants = assistantMessages(coreMessages);
+    // Splitter should produce two assistant messages: step-1 (reasoning +
+    // tool-calls) and step-2 (trailing text). Both must carry reasoning.
+    expect(assistants.length).toBeGreaterThanOrEqual(2);
+    for (const asst of assistants) {
+      expect(reasoningTexts(asst.content).length).toBeGreaterThan(0);
+    }
+  });
+
   it("injects reasoning when assistant history arrives in content arrays instead of parts", async () => {
     const assistantId = "asst-content-array";
 
