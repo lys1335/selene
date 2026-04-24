@@ -88,6 +88,15 @@ interface ToolsBuildContext {
   workflowPromptContextInput: import("@/lib/agents/workflows").WorkflowPromptContextInput | null;
   /** LLM provider name — used to register SDK agent passthrough tools for claudecode */
   provider?: string;
+  /**
+   * Count of image content parts that `prepareMessagesForRequest` replaced
+   * with describeImage-prompting placeholders because the outbound provider
+   * rejects inline images. When > 0 we promote `describeImage` into the
+   * initial active tool set so the model can immediately invoke it instead
+   * of having to rediscover it via `searchTools` (which a thinking-mode
+   * request with no vision support would otherwise need to do mid-turn).
+   */
+  droppedImagesForProvider?: number;
 }
 
 interface ToolsBuildResult {
@@ -190,6 +199,26 @@ export async function buildToolsForRequest(
     initialActiveTools.add("executeCommand");
     console.log(
       "[CHAT API] Companion-tool enforcement: promoted executeCommand to always-loaded because bash is loaded"
+    );
+  }
+
+  // describeImage promotion: when the outbound provider rejected inline
+  // images, message-prep replaced each one with a placeholder that names
+  // `describeImage` as the recovery path.  Promote the tool into the
+  // initial active set so the model can call it on the same turn without
+  // a searchTools round-trip — otherwise DeepSeek-in-thinking-mode would
+  // have to emit a discovery tool call just to invoke the tool the
+  // placeholder already told it to use.
+  const droppedImagesForProvider = ctx.droppedImagesForProvider ?? 0;
+  if (
+    droppedImagesForProvider > 0 &&
+    allTools.describeImage &&
+    !initialActiveTools.has("describeImage")
+  ) {
+    initialActiveTools.add("describeImage");
+    console.log(
+      `[CHAT API] Companion-tool enforcement: promoted describeImage to always-loaded ` +
+        `because provider=${ctx.provider ?? "unknown"} rejected ${droppedImagesForProvider} image part(s)`
     );
   }
 
