@@ -6,6 +6,8 @@ import { initObservabilityTablesWith } from "./migrations/observability-tables";
 import { initSkillsTablesWith, runSkillsMigrations } from "./migrations/skills-tables";
 import { initPluginWorkflowTablesWith } from "./migrations/plugin-workflow-tables";
 import { initDesignGalleryTablesWith } from "./migrations/design-gallery-tables";
+import { initDesignSnapshotsTableWith } from "./migrations/design-snapshots-table";
+import { initSessionLastActiveComponentWith } from "./migrations/session-last-active-component";
 import { runDataMigrations } from "./migrations/data-migrations";
 
 const globalForSqliteMigrations = globalThis as typeof globalThis & {
@@ -24,6 +26,13 @@ export function initializeTables(sqlite: Database.Database): void {
   initSkillsTablesWith(sqlite);
   initPluginWorkflowTablesWith(sqlite);
   initDesignGalleryTablesWith(sqlite);
+  // design_snapshots depends on design_components (FK with ON DELETE CASCADE)
+  // — MUST run after initDesignGalleryTablesWith. Idempotent.
+  initDesignSnapshotsTableWith(sqlite);
+  // sessions.last_active_component_id FKs into design_components(id)
+  // (ON DELETE SET NULL) — MUST run after initDesignGalleryTablesWith.
+  // Idempotent: guarded by PRAGMA table_info on `sessions`.
+  initSessionLastActiveComponentWith(sqlite);
 
   if (!globalForSqliteMigrations.didLogSqliteTableInit) {
     console.log("[SQLite] All tables initialized (including plugin and workflow systems)");

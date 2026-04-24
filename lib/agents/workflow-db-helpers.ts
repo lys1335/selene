@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/sqlite-workflows-schema";
 import { agentSyncFolders, characters } from "@/lib/db/sqlite-character-schema";
 import { agentPlugins, plugins } from "@/lib/db/sqlite-plugins-schema";
+import { excludeWorkspaceSource } from "@/lib/vectordb/source-predicates";
 import {
   toObject,
   mapWorkflowRow,
@@ -48,7 +49,11 @@ export async function buildSharedResourcesSnapshot(input: {
           .where(
             and(
               inArray(agentSyncFolders.characterId, memberIds),
-              isNull(agentSyncFolders.inheritedFromWorkflowId)
+              isNull(agentSyncFolders.inheritedFromWorkflowId),
+              // Workspace-sourced rows are ephemeral worktree path grants,
+              // never user-managed "shared folders". They must not inflate
+              // the workflow's sharedResources snapshot.
+              excludeWorkspaceSource()
             )
           )
       : [];
@@ -60,7 +65,8 @@ export async function buildSharedResourcesSnapshot(input: {
       .where(
         and(
           eq(agentSyncFolders.characterId, input.initiatorId),
-          isNull(agentSyncFolders.inheritedFromWorkflowId)
+          isNull(agentSyncFolders.inheritedFromWorkflowId),
+          excludeWorkspaceSource()
         )
       );
     syncFolderIds = folderRows.map((f) => f.id);

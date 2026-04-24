@@ -87,6 +87,10 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           reindexPolicy: folder.reindexPolicy,
           inheritedFromWorkflowId: null,
           inheritedFromAgentId: null,
+          // Duplicates are always user-owned. filterDuplicableFolders already
+          // excludes workspace rows, but pin the discriminator here so a future
+          // schema change can't accidentally copy source='workspace'.
+          source: "user" as const,
         }));
         tx.insert(agentSyncFolders).values(duplicatedFolders).run();
       }

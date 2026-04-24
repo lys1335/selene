@@ -40,11 +40,15 @@ export interface SyncFolderLike {
   folderPath: string;
   inheritedFromWorkflowId: string | null;
   status: string | null;
+  source?: "user" | "workspace" | null;
 }
 
 /**
  * Filter source folders to only those that should be duplicated:
  * - Exclude inherited workflow folders (re-shared if agent joins a workflow)
+ * - Exclude workspace-sourced folders (ephemeral git worktree path grants
+ *   belonging to the source agent's active sessions; the duplicate has no
+ *   such sessions and the worktree is about to be removed)
  * - Exclude folders pointing to non-existent or non-directory paths (stale worktrees)
  */
 export function filterDuplicableFolders<T extends SyncFolderLike>(
@@ -52,7 +56,10 @@ export function filterDuplicableFolders<T extends SyncFolderLike>(
   pathCheck: (path: string) => boolean = isExistingDirectory,
 ): T[] {
   return folders.filter(
-    (f) => !f.inheritedFromWorkflowId && pathCheck(f.folderPath),
+    (f) =>
+      !f.inheritedFromWorkflowId &&
+      f.source !== "workspace" &&
+      pathCheck(f.folderPath),
   );
 }
 

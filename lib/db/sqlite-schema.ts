@@ -24,3 +24,8 @@ export * from "./sqlite-voice-schema";
 
 // Re-export design gallery schema
 export * from "./schema/design-gallery";
+
+// Re-export design snapshots schema (persisted iteration memory — separate
+// from the transient Zustand DesignSnapshot declared in
+// lib/design/workspace/types.ts)
+export * from "./schema/design-snapshots";

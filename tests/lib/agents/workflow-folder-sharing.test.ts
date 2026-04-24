@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => {
   const state = {
     folders: [] as any[],
+    // Separate DB-level arrays for share-folder tests that query other tables.
+    workflows: [] as any[],
+    workflowMembers: [] as any[],
     workflowByAgentId: new Map<string, any>(),
     membersByWorkflowId: new Map<string, any[]>(),
     workflowById: new Map<string, any>(),
@@ -11,6 +14,8 @@ const mocks = vi.hoisted(() => {
 
   const resetState = () => {
     state.folders = [];
+    state.workflows = [];
+    state.workflowMembers = [];
     state.workflowByAgentId.clear();
     state.membersByWorkflowId.clear();
     state.workflowById.clear();
@@ -29,6 +34,7 @@ const mocks = vi.hoisted(() => {
     recursive: overrides.recursive ?? true,
     includeExtensions: overrides.includeExtensions ?? ["ts"],
     excludePatterns: overrides.excludePatterns ?? ["node_modules"],
+    source: overrides.source ?? "user",
     status: overrides.status ?? "synced",
     lastSyncedAt: overrides.lastSyncedAt ?? null,
     lastError: overrides.lastError ?? null,
@@ -64,6 +70,8 @@ const mocks = vi.hoisted(() => {
         }
         return rowValue === condition.value;
       }
+      case "ne":
+        return row[condition.column.name] !== condition.value;
       case "isNull":
         return row[condition.column.name] == null;
       case "inArray":
@@ -71,12 +79,28 @@ const mocks = vi.hoisted(() => {
       case "and":
         return condition.conditions.every((child: any) => evaluateCondition(child, row));
       default:
-        return true;
+        throw new Error(`Unhandled condition kind in test mock: ${condition.kind}`);
     }
   };
 
-  const makeSelectResult = (getRows: () => any[], project?: (row: any) => any) => ({
-    from() {
+  const tableToState: Record<string, () => any[]> = {
+    folders: () => state.folders,
+    workflows: () => state.workflows,
+    workflowMembers: () => state.workflowMembers,
+  };
+
+  const rowsFor = (table: any): any[] => {
+    if (table && typeof table.__table === "string" && tableToState[table.__table]) {
+      return tableToState[table.__table]();
+    }
+    // Legacy fallback: for existing propagate tests that don't route by table,
+    // keep defaulting to folders.
+    return state.folders;
+  };
+
+  const makeSelectResult = (project?: (row: any) => any) => ({
+    from(table?: any) {
+      const getRows = () => rowsFor(table);
       return {
         where(condition: any) {
           const filtered = getRows().filter((row) => evaluateCondition(condition, row));
@@ -128,16 +152,19 @@ const mocks = vi.hoisted(() => {
 vi.mock("drizzle-orm", () => ({
   and: (...conditions: any[]) => ({ kind: "and", conditions }),
   eq: (column: any, value: any) => ({ kind: "eq", column, value }),
+  ne: (column: any, value: any) => ({ kind: "ne", column, value }),
   inArray: (column: any, values: any[]) => ({ kind: "inArray", column, values }),
   isNull: (column: any) => ({ kind: "isNull", column }),
 }));
 
 vi.mock("@/lib/db/sqlite-character-schema", () => ({
   agentSyncFolders: {
+    __table: "folders",
     id: { name: "id" },
     userId: { name: "userId" },
     characterId: { name: "characterId" },
     folderPath: { name: "folderPath" },
+    source: { name: "source" },
     inheritedFromWorkflowId: { name: "inheritedFromWorkflowId" },
     inheritedFromAgentId: { name: "inheritedFromAgentId" },
     inheritedFromFolderId: { name: "inheritedFromFolderId" },
@@ -146,10 +173,12 @@ vi.mock("@/lib/db/sqlite-character-schema", () => ({
 
 vi.mock("@/lib/db/sqlite-workflows-schema", () => ({
   agentWorkflows: {
+    __table: "workflows",
     id: { name: "id" },
     userId: { name: "userId" },
   },
   agentWorkflowMembers: {
+    __table: "workflowMembers",
     workflowId: { name: "workflowId" },
     agentId: { name: "agentId" },
     role: { name: "role" },
@@ -179,7 +208,6 @@ vi.mock("@/lib/db/sqlite-client", () => ({
   db: {
     select(selection?: any) {
       return mocks.makeSelectResult(
-        () => mocks.state.folders,
         (row) => mocks.projectSelection(selection, row)
       );
     },
@@ -225,6 +253,7 @@ vi.mock("@/lib/db/sqlite-client", () => ({
 
 import {
   propagateWorkflowFolderChange,
+  shareFolderToWorkflowSubagents,
 } from "@/lib/agents/workflow-folder-sharing";
 
 describe("workflow folder propagation", () => {
@@ -301,6 +330,32 @@ describe("workflow folder propagation", () => {
     expect(mocks.refreshWorkflowSharedResources).toHaveBeenCalledWith("wf-1", "agent-a", mocks.getWorkflowById);
   });
 
+  it("skips workspace-sourced own folders during propagation", async () => {
+    const workflow = { id: "wf-1", initiatorId: "agent-a", status: "active" };
+    mocks.state.workflowByAgentId.set("agent-a", { workflow, member: { agentId: "agent-a", role: "initiator" } });
+    mocks.state.workflowById.set("wf-1", workflow);
+    mocks.state.membersByWorkflowId.set("wf-1", [
+      { agentId: "agent-a", role: "initiator" },
+      { agentId: "agent-b", role: "subagent" },
+    ]);
+    // Own folder is workspace-sourced (a git worktree path grant) — should NOT
+    // be propagated, because worktrees belong to the owning agent only.
+    mocks.state.folders.push(
+      mocks.makeFolder({
+        id: "workspace-folder",
+        characterId: "agent-a",
+        folderPath: "/tmp/worktrees/feature-x",
+        source: "workspace",
+      })
+    );
+
+    await propagateWorkflowFolderChange("agent-a", { type: "added", folderId: "workspace-folder" });
+
+    // No inherited copies were created on agent-b.
+    const inherited = mocks.state.folders.filter((row) => row.inheritedFromAgentId === "agent-a");
+    expect(inherited).toHaveLength(0);
+  });
+
   it("updates inherited copies when source folder settings change", async () => {
     const workflow = { id: "wf-1", initiatorId: "agent-a", status: "active" };
     mocks.state.workflowByAgentId.set("agent-a", { workflow, member: { agentId: "agent-a", role: "initiator" } });
@@ -327,4 +382,66 @@ describe("workflow folder propagation", () => {
     expect(mocks.refreshWorkflowSharedResources).toHaveBeenCalledWith("wf-1", "agent-a", mocks.getWorkflowById);
   });
 
+});
+
+describe("shareFolderToWorkflowSubagents", () => {
+  beforeEach(() => {
+    mocks.resetState();
+  });
+
+  it("rejects workspace-sourced folders with a clear error", async () => {
+    mocks.state.workflows.push({ id: "wf-1", userId: "user-1" });
+    mocks.state.workflowMembers.push(
+      { workflowId: "wf-1", agentId: "agent-a", role: "initiator" },
+      { workflowId: "wf-1", agentId: "agent-b", role: "subagent" }
+    );
+    mocks.state.folders.push(
+      mocks.makeFolder({
+        id: "workspace-folder",
+        characterId: "agent-a",
+        folderPath: "/tmp/worktrees/feature-x",
+        source: "workspace",
+      })
+    );
+
+    await expect(
+      shareFolderToWorkflowSubagents({
+        workflowId: "wf-1",
+        folderId: "workspace-folder",
+        userId: "user-1",
+      })
+    ).rejects.toThrow("Workspace folders cannot be shared to workflow members");
+
+    // No clone created on agent-b
+    const inherited = mocks.state.folders.filter((row) => row.inheritedFromAgentId);
+    expect(inherited).toHaveLength(0);
+  });
+
+  it("allows sharing a normal user folder to subagents", async () => {
+    mocks.state.workflows.push({ id: "wf-1", userId: "user-1" });
+    mocks.state.workflowMembers.push(
+      { workflowId: "wf-1", agentId: "agent-a", role: "initiator" },
+      { workflowId: "wf-1", agentId: "agent-b", role: "subagent" }
+    );
+    mocks.state.folders.push(
+      mocks.makeFolder({
+        id: "user-folder",
+        characterId: "agent-a",
+        folderPath: "C:/docs",
+        source: "user",
+      })
+    );
+
+    const result = await shareFolderToWorkflowSubagents({
+      workflowId: "wf-1",
+      folderId: "user-folder",
+      userId: "user-1",
+    });
+
+    expect(result.syncedCount).toBe(1);
+    expect(result.subAgentIds).toEqual(["agent-b"]);
+    const inherited = mocks.state.folders.filter((row) => row.inheritedFromAgentId === "agent-a");
+    expect(inherited).toHaveLength(1);
+    expect(inherited[0].characterId).toBe("agent-b");
+  });
 });

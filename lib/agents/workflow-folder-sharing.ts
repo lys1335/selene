@@ -7,6 +7,7 @@ import {
 } from "@/lib/db/sqlite-workflows-schema";
 import { agentSyncFolders } from "@/lib/db/sqlite-character-schema";
 import { notifyFolderChange, type FolderChangeEvent } from "@/lib/vectordb/folder-events";
+import { excludeWorkspaceSource } from "@/lib/vectordb/source-predicates";
 import {
   refreshWorkflowSharedResources,
   getWorkflowById,
@@ -78,6 +79,11 @@ async function propagateOwnFolderAdded(characterId: string, folderId: string): P
     .limit(1);
 
   if (!folder || folder.inheritedFromWorkflowId) return;
+  // Workspace-sourced rows (ephemeral git worktree path grants) must never
+  // propagate to other workflow members. Defensive check: sync-folder-crud.ts
+  // already skips notifyFolderChange for workspace rows, but this guard keeps
+  // the invariant local in case a future caller notifies directly.
+  if (folder.source === "workspace") return;
 
   const targetAgentIds = context.members.map((member) => member.agentId).filter((agentId) => agentId !== characterId);
   if (targetAgentIds.length === 0) return;
@@ -176,6 +182,7 @@ async function propagateOwnFolderUpdated(characterId: string, folderId: string):
     .limit(1);
 
   if (!folder || folder.inheritedFromWorkflowId) return;
+  if (folder.source === "workspace") return;
 
   // Use stable folderId FK when available, fall back to folderPath for pre-migration rows
   const matchCondition = and(
@@ -257,13 +264,16 @@ interface SyncSharedFoldersInput {
 export async function syncSharedFoldersToSubAgents(
   input: SyncSharedFoldersInput
 ): Promise<{ syncedCount: number; skippedCount: number; syncedByAgent: Record<string, number> }> {
+  // Exclude workspace-sourced folders — those are internal worktree path
+  // registrations for file-tool authorization, not user knowledge to share.
   const initiatorFolders = await db
     .select()
     .from(agentSyncFolders)
     .where(
       and(
         eq(agentSyncFolders.characterId, input.initiatorId),
-        isNull(agentSyncFolders.inheritedFromWorkflowId)
+        isNull(agentSyncFolders.inheritedFromWorkflowId),
+        excludeWorkspaceSource()
       )
     );
 
@@ -334,13 +344,16 @@ export async function syncOwnFoldersToWorkflowMembers(input: {
     return { syncedCount: 0, skippedCount: 0 };
   }
 
+  // Exclude workspace-sourced folders — those are internal worktree path
+  // registrations for file-tool authorization, not user knowledge to share.
   const sourceFolders = await db
     .select()
     .from(agentSyncFolders)
     .where(
       and(
         eq(agentSyncFolders.characterId, input.sourceAgentId),
-        isNull(agentSyncFolders.inheritedFromWorkflowId)
+        isNull(agentSyncFolders.inheritedFromWorkflowId),
+        excludeWorkspaceSource()
       )
     );
 
@@ -472,6 +485,15 @@ export async function shareFolderToWorkflowSubagents(input: {
   }
 
   const folder = folderRow[0];
+
+  // Workspace-sourced folders are ephemeral path grants for git worktrees.
+  // They must never be shared across workflow members — each worktree belongs
+  // to its owning agent only, and propagating them would create durable
+  // user-visible sync rows pointing at transient paths.
+  if (folder.source === "workspace") {
+    throw new Error("Workspace folders cannot be shared to workflow members");
+  }
+
   const subAgentIds = members.filter((member) => member.role === "subagent").map((member) => member.agentId);
   let syncedCount = 0;
   let skippedCount = 0;

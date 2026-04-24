@@ -1,4 +1,27 @@
 import Database from "better-sqlite3";
+import { statSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+/**
+ * Detect whether a directory is a git worktree (vs a regular directory or a
+ * primary repo). Worktrees have a `.git` file (not a directory) whose contents
+ * start with `gitdir: ` pointing into `<repo>/.git/worktrees/<name>`.
+ *
+ * Exported for testability. Pure function apart from fs reads.
+ */
+export function isGitWorktreePath(folderPath: string): boolean {
+  try {
+    const gitMarker = join(folderPath, ".git");
+    const markerStat = statSync(gitMarker);
+    // A regular repo has `.git/` as a directory; a worktree has `.git` as a file.
+    if (!markerStat.isFile()) return false;
+    const contents = readFileSync(gitMarker, "utf-8");
+    return /^gitdir:\s+.*[\\/]\.git[\\/]worktrees[\\/]/.test(contents.trim());
+  } catch {
+    // Path doesn't exist, not readable, or not a worktree marker
+    return false;
+  }
+}
 
 /**
  * Initialize character-related tables: characters, character_images,
@@ -286,7 +309,22 @@ export function initCharacterTablesWith(sqlite: Database.Database): void {
     // Column already exists, ignore error
   }
 
+  // Migration: Add source column to agent_sync_folders.
+  // Distinguishes user-configured sync folders (source='user') from ephemeral
+  // workspace-tool path-authorization records (source='workspace').
+  // Workspace folders must not trigger sync notifications, background syncs,
+  // workflow propagation, or appear in the Vector DB sync status UI.
+  try {
+    sqlite.exec(`ALTER TABLE agent_sync_folders ADD COLUMN source TEXT NOT NULL DEFAULT 'user'`);
+    console.log("[SQLite Migration] Added source column to agent_sync_folders");
+  } catch {
+    // Column already exists, ignore error
+  }
+
   // Ensure legacy rows have safe defaults for the new columns.
+  // IMPORTANT: Must run BEFORE the workspace-source backfill below, so that
+  // legacy rows with NULL sync_mode / indexing_mode / reindex_policy get their
+  // canonical defaults first and the subsequent backfill sees consistent state.
   try {
     sqlite.exec(`
       UPDATE agent_sync_folders
@@ -303,6 +341,54 @@ export function initCharacterTablesWith(sqlite: Database.Database): void {
     `);
   } catch (error) {
     console.warn("[SQLite Migration] Failed to backfill vector sync defaults:", error);
+  }
+
+  // Backfill: tag pre-existing workspace-tool rows as source='workspace'.
+  //
+  // The old heuristic (sync_mode + indexing_mode + reindex_policy + display_name
+  // LIKE 'Workspace: %') produced false positives on any legitimate user folder
+  // that happened to match that settings combo AND had "Workspace: " in its
+  // display name. Instead we use a filesystem-level predicate: a git worktree
+  // has `.git` as a pointer *file* (not a directory) with contents beginning
+  // `gitdir: .../.git/worktrees/...`. That cannot be accidentally matched by
+  // normal user folders.
+  //
+  // We still pre-filter by the workspace-tool settings to avoid stat()-ing every
+  // row on large DBs. Safe to re-run — only flips source='user' → 'workspace'
+  // when the filesystem confirms a worktree.
+  try {
+    const candidateRows = sqlite
+      .prepare(
+        `SELECT id, folder_path FROM agent_sync_folders
+         WHERE source = 'user'
+           AND sync_mode = 'manual'
+           AND indexing_mode = 'files-only'
+           AND reindex_policy = 'never'`
+      )
+      .all() as Array<{ id: string; folder_path: string }>;
+
+    if (candidateRows.length > 0) {
+      const tagStmt = sqlite.prepare(
+        `UPDATE agent_sync_folders SET source = 'workspace' WHERE id = ?`
+      );
+      let tagged = 0;
+      const runTx = sqlite.transaction((rows: Array<{ id: string; folder_path: string }>) => {
+        for (const row of rows) {
+          if (isGitWorktreePath(row.folder_path)) {
+            tagStmt.run(row.id);
+            tagged += 1;
+          }
+        }
+      });
+      runTx(candidateRows);
+      if (tagged > 0) {
+        console.log(
+          `[SQLite Migration] Backfilled source='workspace' on ${tagged} of ${candidateRows.length} candidate rows (filesystem worktree check)`
+        );
+      }
+    }
+  } catch (error) {
+    console.warn("[SQLite Migration] Failed to backfill workspace source tags:", error);
   }
 
   // Migration: Drop deprecated Knowledge Base tables (agent_document_chunks, agent_documents)

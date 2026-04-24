@@ -115,6 +115,38 @@ describe("filterDuplicableFolders", () => {
     );
     expect(result).toHaveLength(0);
   });
+
+  it("excludes workspace-sourced folders (ephemeral worktree path grants)", () => {
+    const folders: SyncFolderLike[] = [
+      { folderPath: "/own/folder", inheritedFromWorkflowId: null, status: "synced", source: "user" },
+      {
+        folderPath: "/worktrees/feat-x",
+        inheritedFromWorkflowId: null,
+        status: "synced",
+        source: "workspace",
+      },
+    ];
+
+    const result = filterDuplicableFolders(
+      folders,
+      stubPathCheck(new Set(["/own/folder", "/worktrees/feat-x"])),
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].folderPath).toBe("/own/folder");
+  });
+
+  it("treats undefined/null source as user (backwards compatible)", () => {
+    const folders: SyncFolderLike[] = [
+      { folderPath: "/legacy", inheritedFromWorkflowId: null, status: "synced" },
+      { folderPath: "/legacy-null", inheritedFromWorkflowId: null, status: "synced", source: null },
+    ];
+
+    const result = filterDuplicableFolders(
+      folders,
+      stubPathCheck(new Set(["/legacy", "/legacy-null"])),
+    );
+    expect(result).toHaveLength(2);
+  });
 });
 
 describe("mapDuplicateFolderStatus", () => {

@@ -120,6 +120,15 @@ export const agentSyncFolders = sqliteTable(
     inheritedFromWorkflowId: text("inherited_from_workflow_id"),
     inheritedFromAgentId: text("inherited_from_agent_id"),
     inheritedFromFolderId: text("inherited_from_folder_id"), // Stable FK to source folder row (survives path renames)
+    // Provenance of the folder record.
+    // - "user":      user-configured sync folder (shown in Vector Search UI, counted in sync status, propagated in workflows).
+    //  - "workspace": ephemeral record registered by the workspace tool purely so file tools
+    //                 (readFile/editFile/writeFile/localGrep) can access the git worktree path.
+    //                 These folders must NEVER trigger sync notifications, background syncs,
+    //                 workflow propagation, or appear in the Vector DB sync status UI.
+    source: text("source", { enum: ["user", "workspace"] })
+      .default("user")
+      .notNull(),
     createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
     updatedAt: text("updated_at").default(sql`(datetime('now'))`).notNull(),
   },

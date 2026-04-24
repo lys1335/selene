@@ -35,6 +35,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     if (error instanceof Error && (error.message === "Workflow not found" || error.message === "Folder not found")) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
+    if (error instanceof Error && error.message === "Workspace folders cannot be shared to workflow members") {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     console.error("[Workflows API] share-folder error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Failed to share folder" },

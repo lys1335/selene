@@ -47,6 +47,12 @@ export const sessions = sqliteTable(
     // NEW: Atomic ordering index counter for bullet-proof message ordering
     lastOrderingIndex: integer("last_ordering_index").default(0).notNull(),
     channelType: text("channel_type", { enum: ["whatsapp", "telegram", "slack", "discord"] }),
+    // Sprint 4 W4.3 — persists the design workspace's "currently focused"
+    // component across session restart. Nullable by design; FK +
+    // ON DELETE SET NULL are declared in SQL by
+    // `initSessionLastActiveComponentWith` (we keep drizzle schema FK-free
+    // here to avoid a circular import with `./schema/design-gallery.ts`).
+    lastActiveComponentId: text("last_active_component_id"),
     createdAt: text("created_at").default(sql`(datetime('now'))`).notNull(),
     updatedAt: text("updated_at").default(sql`(datetime('now'))`).notNull(),
     metadata: text("metadata", { mode: "json" }).default("{}").notNull(),
