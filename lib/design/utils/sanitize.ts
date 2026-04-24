@@ -66,6 +66,24 @@ interface SanitizeOptions {
    */
   allowDataUrls?: boolean;
   /**
+   * Allow inline `<script>` tags in the sanitized output. ONLY use this for
+   * first-party trusted templates that we build ourselves and feed straight
+   * into a sandboxed renderer (Puppeteer with CSP, sandboxed iframe, etc.).
+   *
+   * Rationale: the design workspace compiles user component source through
+   * esbuild and wraps the resulting JS in our own `<script>` block (to fire
+   * `data-preview-ready`). Unconditional `<script>` stripping breaks that
+   * hydration handshake — Puppeteer then times out with `Waiting failed`.
+   *
+   * iframe / object / embed / link / meta remain forbidden regardless; this
+   * flag only narrows the forbidden set to exclude `<script>`. Event-handler
+   * attributes (onclick etc.) and URL attrs are still scrubbed.
+   *
+   * Do NOT set this for any sanitizer call that processes AI-generated or
+   * user-pasted HTML.
+   */
+  allowInlineScripts?: boolean;
+  /**
    * Optional external sanitizer function.  When provided, it replaces the
    * built-in regex sanitizer entirely.  Useful for plugging in DOMPurify.
    */
@@ -88,11 +106,19 @@ function regexSanitize(
   allowedTags: Set<string>,
   stripStyles: boolean,
   allowDataUrls = false,
+  allowInlineScripts = false,
 ): string {
   let result = dirty;
 
-  // Remove forbidden tags and their content
-  for (const tag of FORBIDDEN_TAGS) {
+  // Remove forbidden tags and their content. When `allowInlineScripts` is
+  // true, `<script>` is temporarily removed from the forbidden set — the
+  // caller has asserted the HTML is first-party trusted (e.g. our compiled
+  // design workspace preview where esbuild-bundled JS is needed to fire
+  // `data-preview-ready`). All other forbidden tags remain stripped.
+  const forbiddenForThisCall = allowInlineScripts
+    ? new Set([...FORBIDDEN_TAGS].filter((t) => t !== 'script'))
+    : FORBIDDEN_TAGS;
+  for (const tag of forbiddenForThisCall) {
     const re = new RegExp(`<${tag}[\\s\\S]*?</${tag}>`, 'gi');
     result = result.replace(re, '');
     // Also remove self-closing variants
@@ -104,9 +130,17 @@ function regexSanitize(
   // This prevents bypassing the event handler regex which requires \s+ before on* attributes.
   result = result.replace(/<([a-zA-Z][a-zA-Z0-9]*)\//g, '<$1 ');
 
-  // Remove tags not in the allowlist (keep their content)
+  // Remove tags not in the allowlist (keep their content). When
+  // `allowInlineScripts` is true, `<script>` is implicitly allowed (open +
+  // close tags preserved) alongside the caller's allowlist so the content
+  // between the tags survives verbatim. Event-handler / URL-attr scrubbing
+  // still applies to non-script tags via the normal allowedTags path.
   result = result.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/g, (match, tagName: string) => {
-    if (allowedTags.has(tagName.toLowerCase()) || allowedTags.has(tagName)) {
+    const lowered = tagName.toLowerCase();
+    if (allowInlineScripts && lowered === 'script') {
+      return match;
+    }
+    if (allowedTags.has(lowered) || allowedTags.has(tagName)) {
       // Tag is allowed -- strip event handler attributes (also handles newline-split attrs)
       let cleaned = match.replace(/[\s/]+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
       // Strip style attribute if requested
@@ -174,7 +208,13 @@ export function sanitizeHTML(dirty: string, options?: SanitizeOptions): string {
     stripStyles = false;
   }
 
-  return regexSanitize(dirty, allowedTags, stripStyles, options?.allowDataUrls);
+  return regexSanitize(
+    dirty,
+    allowedTags,
+    stripStyles,
+    options?.allowDataUrls,
+    options?.allowInlineScripts,
+  );
 }
 
 /**

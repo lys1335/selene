@@ -4,7 +4,7 @@ import {
   DESIGN_PREVIEW_PADDING,
   computeDesignPreviewFrameLayout,
   resolveDesignPreviewViewport,
-} from "@/lib/design/workspace";
+} from "@/lib/design/workspace/viewport";
 import type { DesignBreakpoint } from "@/lib/design/workspace/types";
 
 describe("design preview viewport layout", () => {

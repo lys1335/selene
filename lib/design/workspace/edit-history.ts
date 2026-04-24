@@ -3,7 +3,31 @@ import type { DesignWorkspaceValidationResult } from "./config";
 export interface DesignEditRecord {
   seq: number;
   timestamp: string;
-  action: "open" | "generate" | "edit" | "patch" | "readSource" | "list" | "status" | "snapshot" | "restore" | "export" | "close" | "install";
+  action:
+    | "open"
+    | "generate"
+    | "edit"
+    | "patch"
+    | "readSource"
+    | "list"
+    | "status"
+    | "snapshot"
+    | "restore"
+    | "export"
+    | "close"
+    | "install"
+    | "port"
+    | "import"
+    // Sprint 3 W3.1 — persisted design snapshot actions. Distinct from the
+    // legacy transient `"snapshot"` / `"restore"` entries above (those refer
+    // to the Zustand undo-history snapshots).
+    | "snapshot.save"
+    | "snapshot.pin"
+    | "snapshot.rename"
+    | "snapshot.list"
+    | "snapshot.delete"
+    // Sprint 3 W3.2 — side-by-side diff of two persisted snapshots.
+    | "snapshot.diff";
   componentId?: string;
   durationMs: number;
   success: boolean;

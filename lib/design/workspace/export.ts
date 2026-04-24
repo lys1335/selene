@@ -2,7 +2,6 @@ import { execFile } from "child_process";
 import { mkdtempSync, readFileSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import puppeteer from "puppeteer";
 import {
   buildSafeEnvironment,
   getBundledRuntimeInfo,
@@ -16,6 +15,7 @@ import {
 import { buildTailwindPreviewAsync } from "./compiler";
 import { DESIGN_CAPTURE_VIEWPORT } from "./viewport";
 import { sanitizeHTML } from "@/lib/design/utils/sanitize";
+import { acquirePage } from "./browser";
 
 export type DesignExportFormat = "html" | "react" | "png" | "video";
 export type { DesignExportMode } from "./preview";
@@ -64,8 +64,11 @@ const PUPPETEER_CSP = `<meta http-equiv="Content-Security-Policy" content="defau
  * Build export-ready preview HTML for any mode.
  * For HTML mode: synchronous (buildDesignPreviewHtml handles it).
  * For Tailwind mode: async esbuild compilation.
+ *
+ * @internal Exported for reuse by sibling modules (e.g. screenshot.ts);
+ *   not part of the module's stable public API.
  */
-async function buildExportPreviewHtml(opts: {
+export async function buildExportPreviewHtml(opts: {
   code: string;
   mode?: DesignExportMode;
   componentName?: string;
@@ -82,8 +85,10 @@ async function buildExportPreviewHtml(opts: {
 /**
  * Inject a CSP meta tag into the HTML <head> so it applies to page.setContent() calls.
  * setExtraHTTPHeaders CSP is a no-op for setContent since there's no network request.
+ *
+ * @internal Exported for reuse by sibling modules (e.g. screenshot.ts).
  */
-function injectCspMeta(html: string): string {
+export function injectCspMeta(html: string): string {
   const headIdx = html.indexOf("<head>");
   if (headIdx !== -1) {
     return html.slice(0, headIdx + 6) + "\n" + PUPPETEER_CSP + "\n" + html.slice(headIdx + 6);
@@ -92,7 +97,10 @@ function injectCspMeta(html: string): string {
   return `<head>${PUPPETEER_CSP}</head>\n${html}`;
 }
 
-function sanitizeComponentName(name?: string): string {
+/**
+ * @internal Exported for reuse by sibling modules (e.g. screenshot.ts).
+ */
+export function sanitizeComponentName(name?: string): string {
   const normalized = (name || "design-component")
     .trim()
     .toLowerCase()
@@ -102,7 +110,12 @@ function sanitizeComponentName(name?: string): string {
   return normalized || "design-component";
 }
 
-async function waitForPageReady(page: import("puppeteer").Page): Promise<void> {
+/**
+ * @internal Exported for reuse by sibling modules (e.g. screenshot.ts).
+ *   Waits for document ready, fonts, and the `data-preview-ready="true"`
+ *   signal on `#selene-design-preview-root`, plus one animation frame.
+ */
+export async function waitForPageReady(page: import("puppeteer").Page): Promise<void> {
   await page.waitForFunction(() => document.readyState === "complete", { timeout: 10_000 });
   await page.evaluate(async () => {
     if (document.fonts?.ready) {
@@ -126,21 +139,10 @@ async function waitForPageReady(page: import("puppeteer").Page): Promise<void> {
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
 }
 
-const PUPPETEER_TIMEOUT_MS = 10 * 60_000; // 10 minutes — matches extended preview-ready timeout
-
-async function createBrowser() {
-  return puppeteer.launch({
-    headless: true,
-    args: [
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--disable-extensions",
-      "--disable-background-networking",
-      "--disable-default-apps",
-    ],
-  });
-}
+/**
+ * @internal Exported for reuse by sibling modules (e.g. screenshot.ts).
+ */
+export const PUPPETEER_TIMEOUT_MS = 10 * 60_000; // 10 minutes — matches extended preview-ready timeout
 
 function resolveFfmpegCommand(): { command: string; args: string[]; env: NodeJS.ProcessEnv } {
   const runtime = getBundledRuntimeInfo();
@@ -201,13 +203,29 @@ async function renderPngExport(
     animated: true,
     exportProgress: DEFAULT_PNG_EXPORT_PROGRESS,
   });
-  // Sanitize HTML as defense-in-depth before passing to Puppeteer
-  const sanitizedHtml = injectCspMeta(sanitizeHTML(renderedHtml, { allowStyles: true, allowDataUrls: true }));
-  const browser = await createBrowser();
+  // Sanitize HTML as defense-in-depth before passing to Puppeteer.
+  // `allowInlineScripts` keeps our own esbuild-bundled <script> block that
+  // fires `data-preview-ready`; stripping it caused `Waiting failed`. All
+  // other forbidden tags (iframe/object/embed/link/meta) and on* handlers
+  // remain blocked, and this HTML is first-party trusted (built by our
+  // preview builder, not user-pasted) and rendered under Puppeteer CSP.
+  const sanitizedHtml = injectCspMeta(
+    sanitizeHTML(renderedHtml, {
+      allowStyles: true,
+      allowDataUrls: true,
+      allowInlineScripts: true,
+    }),
+  );
+  const page = await acquirePage();
+
+  // Timeout handle is retained so we can clear it on the success path — a
+  // bare `Promise.race` with `setTimeout` leaves the timer alive for the
+  // full PUPPETEER_TIMEOUT_MS after a successful capture resolves, which
+  // accumulates under concurrent exports.
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
   try {
     const renderTask = async () => {
-      const page = await browser.newPage();
       await page.setViewport({ width, height, deviceScaleFactor: scale });
       await page.setContent(sanitizedHtml, { waitUntil: "domcontentloaded", timeout: 30_000 });
       await waitForPageReady(page);
@@ -217,9 +235,12 @@ async function renderPngExport(
       return saveFile(buffer, opts.sessionId, fileName, "generated");
     };
 
-    const timeoutTask = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("PNG export timed out")), PUPPETEER_TIMEOUT_MS)
-    );
+    const timeoutTask = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
+        () => reject(new Error("PNG export timed out")),
+        PUPPETEER_TIMEOUT_MS,
+      );
+    });
 
     const stored = await Promise.race([renderTask(), timeoutTask]);
 
@@ -234,7 +255,13 @@ async function renderPngExport(
       height,
     };
   } finally {
-    await browser.close();
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+    }
+    await page.close().catch(() => {
+      // Swallow: the browser is shared and a failed page-close must not
+      // mask the real error (if any) from the try block.
+    });
   }
 }
 
@@ -258,15 +285,26 @@ async function renderVideoExport(
   const tempDir = mkdtempSync(join(tmpdir(), "selene-design-video-"));
   const framePattern = join(tempDir, "frame-%03d.png");
   const outputPath = join(tempDir, fileName);
-  // Sanitize HTML as defense-in-depth before passing to Puppeteer
-  const sanitizedHtml = injectCspMeta(sanitizeHTML(renderedHtml, { allowStyles: true, allowDataUrls: true }));
+  // Sanitize HTML as defense-in-depth before passing to Puppeteer.
+  // Same rationale as renderPngExport — preserve our own <script> block so
+  // the preview readiness handshake can fire during video frame capture.
+  const sanitizedHtml = injectCspMeta(
+    sanitizeHTML(renderedHtml, {
+      allowStyles: true,
+      allowDataUrls: true,
+      allowInlineScripts: true,
+    }),
+  );
   const ffmpeg = resolveFfmpegCommand();
   await assertFfmpegAvailable(ffmpeg);
-  const browser = await createBrowser();
+  const page = await acquirePage();
+
+  // Timeout handle retained so the success path clears the timer instead
+  // of leaking it for the full VIDEO_EXPORT_TIMEOUT_MS.
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
   try {
     const renderTask = async (): Promise<DesignExportResult> => {
-      const page = await browser.newPage();
       await page.setViewport({ width, height, deviceScaleFactor: scale });
       await page.setContent(sanitizedHtml, { waitUntil: "domcontentloaded", timeout: 30_000 });
       await waitForPageReady(page);
@@ -324,13 +362,22 @@ async function renderVideoExport(
       };
     };
 
-    const timeoutTask = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Video export timed out")), VIDEO_EXPORT_TIMEOUT_MS)
-    );
+    const timeoutTask = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(
+        () => reject(new Error("Video export timed out")),
+        VIDEO_EXPORT_TIMEOUT_MS,
+      );
+    });
 
     return await Promise.race([renderTask(), timeoutTask]);
   } finally {
-    await browser.close();
+    if (timeoutHandle !== undefined) {
+      clearTimeout(timeoutHandle);
+    }
+    await page.close().catch(() => {
+      // Swallow: shared-browser page-close failures must not mask the
+      // real error from the try block.
+    });
     rmSync(tempDir, { recursive: true, force: true });
   }
 }
