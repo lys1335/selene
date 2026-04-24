@@ -46,16 +46,25 @@ import type { DBContentPart } from "@/lib/messages/converter";
 const PROVIDERS_REQUIRING_REASONING_REPLAY = new Set<string>(["deepseek"]);
 
 /**
- * Synthetic reasoning text used when an assistant message contains tool calls
- * but has no recorded chain-of-thought. This happens when the conversation
- * interleaves foreign-provider turns (e.g. Claude Code, Codex) with DeepSeek
- * thinking-mode turns: foreign providers emit tool calls without reasoning,
- * but DeepSeek's API requires `reasoning_content` on every assistant message
- * that performed a tool call. Emitting this placeholder satisfies the
- * round-trip contract without misrepresenting what the other model thought.
+ * Synthetic reasoning text used when an assistant message has no recorded
+ * chain-of-thought. This happens when the conversation interleaves
+ * foreign-provider turns (e.g. Claude Code, Codex, Kimi) with DeepSeek
+ * thinking-mode turns: foreign providers emit responses without
+ * `reasoning_content`, but DeepSeek's API in thinking mode requires
+ * `reasoning_content` on every prior assistant message in the history.
+ * Emitting this placeholder satisfies the round-trip contract without
+ * misrepresenting what the other model thought.
+ *
+ * Historically scoped to tool-call turns only, but DeepSeek v4 rejects ANY
+ * prior assistant turn missing reasoning — pure-text turns included. We
+ * therefore synthesize a placeholder on every foreign turn that lacks
+ * reasoning, not just tool-call turns.
  */
 const FOREIGN_TOOL_CALL_REASONING_PLACEHOLDER =
   "(Tool calls on this turn were produced by a non-thinking-mode assistant; no chain-of-thought was captured. Continuing from the resulting tool outputs.)";
+
+const FOREIGN_TEXT_REASONING_PLACEHOLDER =
+  "(This turn was produced by a non-thinking-mode assistant; no chain-of-thought was captured. Continuing from the resulting text.)";
 
 type StructuredAssistantPart = {
   type?: string;
@@ -152,6 +161,9 @@ async function injectReasoningFromDbForProvider(
   sessionId: string,
   provider: string | undefined,
 ): Promise<FrontendMessage[]> {
+  console.log(
+    `[CHAT API] injectReasoningFromDbForProvider invoked: provider=${provider ?? "undefined"}, sessionId=${sessionId}, messages=${frontendMessages.length}`,
+  );
   if (!provider || !PROVIDERS_REQUIRING_REASONING_REPLAY.has(provider)) {
     return frontendMessages;
   }
@@ -238,14 +250,28 @@ async function injectReasoningFromDbForProvider(
       return msg;
     }
 
-    // Case 2: No reasoning anywhere, but the message performed a tool call.
-    // Synthesize a neutral placeholder so DeepSeek's validator accepts the
-    // request. Without this, a single foreign-provider turn in history
-    // poisons every subsequent DeepSeek request in the session.
-    if (!hasFrontendReasoning && hasToolCall) {
+    // Case 2: No reasoning anywhere. DeepSeek thinking mode rejects any prior
+    // assistant turn that lacks `reasoning_content`, regardless of whether
+    // that turn performed a tool call or only produced text. A single
+    // foreign-provider turn in history (Kimi, Claude Code, Codex, etc.)
+    // otherwise poisons every subsequent DeepSeek request in the session.
+    // Skip empty assistant turns (no text, no tool calls) — those are
+    // placeholder rows that never went on the wire and don't need reasoning.
+    const hasAnyMeaningfulPart = existingParts.some((part) => {
+      const type = part?.type;
+      if (typeof type !== "string") return false;
+      if (type === "text") return typeof part.text === "string" && (part.text as string).length > 0;
+      if (type === "tool-result") return false; // companion part only
+      if (type === "tool-call" || type === "dynamic-tool" || type.startsWith("tool-")) return true;
+      return false;
+    });
+    if (!hasFrontendReasoning && hasAnyMeaningfulPart) {
       synthesizedPlaceholderCount += 1;
+      const placeholderText = hasToolCall
+        ? FOREIGN_TOOL_CALL_REASONING_PLACEHOLDER
+        : FOREIGN_TEXT_REASONING_PLACEHOLDER;
       return replaceStructuredAssistantParts(msg, [
-        { type: "reasoning" as const, text: FOREIGN_TOOL_CALL_REASONING_PLACEHOLDER },
+        { type: "reasoning" as const, text: placeholderText },
         ...existingParts,
       ]);
     }
@@ -253,16 +279,14 @@ async function injectReasoningFromDbForProvider(
     return msg;
   });
 
-  if (injectedFromDbCount > 0 || synthesizedPlaceholderCount > 0) {
-    console.log(
-      `[CHAT API] Reasoning re-injection for provider=${provider}: ` +
-        `matched ${matchedDbMessageCount} DB message(s), ` +
-        `${injectedFromDbCount} part(s) from DB, ` +
-        `${synthesizedPlaceholderCount} placeholder(s) for foreign-provider tool-call turn(s), ` +
-        `${assistantToolCallTurnCount} assistant tool-call turn(s) inspected, ` +
-        `${assistantTurnsWithoutReasoningCount} assistant turn(s) had no reasoning before injection.`,
-    );
-  }
+  console.log(
+    `[CHAT API] Reasoning re-injection for provider=${provider}: ` +
+      `matched ${matchedDbMessageCount} DB message(s), ` +
+      `${injectedFromDbCount} part(s) from DB, ` +
+      `${synthesizedPlaceholderCount} placeholder(s) synthesized for foreign-provider turn(s), ` +
+      `${assistantToolCallTurnCount} assistant tool-call turn(s) inspected, ` +
+      `${assistantTurnsWithoutReasoningCount} assistant turn(s) had no reasoning before injection.`,
+  );
 
   return enhanced;
 }

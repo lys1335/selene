@@ -196,9 +196,11 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
     expect(texts[0]).toMatch(/no chain-of-thought/i);
   });
 
-  it("does not touch assistant messages that have no tool calls and no reasoning", async () => {
-    // Plain-text assistant reply from some prior run — nothing to replay and
-    // no tool calls means DeepSeek does not require reasoning.
+  it("synthesizes a placeholder for pure-text foreign-provider assistant turns under DeepSeek", async () => {
+    // Plain-text assistant reply from a non-thinking-mode provider (e.g. Kimi
+    // or Claude Code). DeepSeek thinking mode rejects ANY prior assistant
+    // turn missing `reasoning_content`, not just tool-call turns — so the
+    // placeholder must also cover text-only turns.
     dbMessagesMock.messages = [
       {
         id: "asst-plain",
@@ -229,7 +231,9 @@ describe("prepareMessagesForRequest — reasoning round-trip", () => {
 
     const assistants = assistantMessages(coreMessages);
     expect(assistants).toHaveLength(1);
-    expect(reasoningTexts(assistants[0].content)).toEqual([]);
+    const texts = reasoningTexts(assistants[0].content);
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toMatch(/non-thinking-mode/i);
   });
 
   it("is a no-op for non-DeepSeek providers (no reasoning injected)", async () => {
