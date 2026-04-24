@@ -257,13 +257,30 @@ function ModelSelect({
 
         </>
       ) : formState.llmProvider === "deepseek" ? (
-        <select
-          value={formState[fieldKey] || deepseekDefault}
-          onChange={(e) => updateField(fieldKey, e.target.value)}
-          className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
-        >
-          {renderModelOptions(DEEPSEEK_MODELS)}
-        </select>
+        fieldKey === "visionModel" ? (
+          // DeepSeek's /chat/completions endpoint rejects image_url content parts,
+          // so none of its chat models can serve as a vision model. Surface that
+          // clearly instead of offering a dropdown whose options all fail when
+          // the user actually attaches an image. See lib/auth/deepseek-models.ts
+          // (DEEPSEEK_DEFAULT_MODELS has no vision entry on purpose) and the
+          // describeImage companion-tool promotion in tools-builder.ts.
+          <div className="w-full rounded border border-dashed border-amber-500/60 bg-amber-50/40 dark:bg-amber-900/10 p-3 space-y-1">
+            <p className="font-mono text-xs font-semibold text-terminal-dark">
+              {t("models.fields.vision.deepseekUnsupportedTitle" as Parameters<typeof t>[0])}
+            </p>
+            <p className="font-mono text-xs text-terminal-muted">
+              {t("models.fields.vision.deepseekUnsupportedBody" as Parameters<typeof t>[0])}
+            </p>
+          </div>
+        ) : (
+          <select
+            value={formState[fieldKey] || deepseekDefault}
+            onChange={(e) => updateField(fieldKey, e.target.value)}
+            className="w-full rounded border border-terminal-border bg-terminal-cream/95 dark:bg-terminal-cream-dark/50 px-3 py-2 font-mono text-sm text-terminal-dark focus:border-terminal-green focus:outline-none focus:ring-1 focus:ring-terminal-green"
+          >
+            {renderModelOptions(DEEPSEEK_MODELS)}
+          </select>
+        )
       ) : (
         <input
           type="text"
@@ -426,7 +443,10 @@ export function ModelsSection({ formState, updateField }: ModelsSectionProps) {
           kimiDefault="kimi-k2.6"
           minimaxDefault="MiniMax-M2.1"
           blackboxaiDefault="qwen2.5-vl-32b-instruct"
-          deepseekDefault="deepseek-v4-flash"
+          // DeepSeek intentionally has no vision default — its chat-completions
+          // endpoint rejects image_url parts. The ModelSelect renders an
+          // informational notice instead of a dropdown for this provider/field.
+          deepseekDefault=""
           anthropicPlaceholder="claude-sonnet-4-5-20250929"
           ollamaPlaceholder="llama3.1:8b"
           openrouterPlaceholder="google/gemini-2.0-flash-001"

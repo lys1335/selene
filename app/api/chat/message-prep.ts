@@ -469,8 +469,10 @@ function extractImageReference(part: {
 function formatDroppedImagePlaceholder(ref: DroppedImageReference | null): string {
   const prefix =
     "[image attachment omitted — selected provider does not accept inline images. " +
-    "Call the `describeImage` tool to analyze it using Selene's vision model " +
-    "(configure Settings → Models → Vision, or Selene falls back to Claude).";
+    "Call the `describeImage` tool to analyze it using the vision model configured " +
+    "in Settings → Models → Vision. If no vision-capable model is configured, ask " +
+    "the user to set one, or switch to a provider with native vision (Claude, " +
+    "OpenRouter, Gemini) before retrying.";
 
   if (!ref) {
     return `${prefix} No URL could be recovered for this attachment; ask the user to re-attach or switch to a vision-capable provider.]`;
@@ -494,7 +496,10 @@ function formatDroppedImagePlaceholder(ref: DroppedImageReference | null): strin
     ref.reference.length > MAX_URL_PLACEHOLDER_LENGTH
       ? `${ref.reference.slice(0, MAX_URL_PLACEHOLDER_LENGTH - 3)}...`
       : ref.reference;
-  return `${prefix} describeImage({ imageUrl: "${displayUrl}" })]`;
+  const safeUrl = displayUrl.replace(/["\\\n\r]/g, (ch) =>
+    ch === "\n" ? "\\n" : ch === "\r" ? "\\r" : `\\${ch}`,
+  );
+  return `${prefix} describeImage({ imageUrl: "${safeUrl}" })]`;
 }
 
 /**

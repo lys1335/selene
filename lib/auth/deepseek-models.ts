@@ -48,11 +48,17 @@ const DEEPSEEK_THINKING_DISABLED_MODELS = new Set<string>([
 // sending.
 const DEEPSEEK_VISION_MODELS = new Set<string>([]);
 
-// Default models for different roles
+// Default models for different roles.
+// NOTE: `vision` is intentionally absent — DeepSeek's /chat/completions endpoint
+// rejects `image_url` content parts ("unknown variant"). See DEEPSEEK_VISION_MODELS
+// above. When DeepSeek is the active provider and a user attaches an image,
+// message-prep strips the image and routes the model to `describeImage`, which
+// requires a vision-capable provider configured elsewhere (or a Claude API key
+// fallback). Re-add a vision default here ONLY if Janus-family vision gets wired
+// into this adapter.
 const DEEPSEEK_DEFAULT_MODELS = {
   chat: "deepseek-v4-pro" as DeepSeekModelId,
   research: "deepseek-v4-pro" as DeepSeekModelId,
-  vision: "deepseek-v4-flash" as DeepSeekModelId,
   utility: "deepseek-v4-flash" as DeepSeekModelId,
 };
 

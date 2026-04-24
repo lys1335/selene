@@ -2724,7 +2724,9 @@
         },
         "vision": {
           "label": "Image understanding model",
-          "helper": "Used for analyzing images and screenshots."
+          "helper": "Used for analyzing images and screenshots.",
+          "deepseekUnsupportedTitle": "DeepSeek chat models don't accept images",
+          "deepseekUnsupportedBody": "DeepSeek's /chat/completions endpoint rejects inline image attachments. When you send an image, Selene strips it and routes analysis to the describeImage tool — which calls whichever model is configured here. Since no DeepSeek chat model supports vision today, configure a vision-capable provider (Claude, Gemini, OpenRouter, OpenAI) via a separate API key, or switch the main provider before attaching images."
         },
         "utility": {
           "label": "Background task model",

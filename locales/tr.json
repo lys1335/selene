@@ -2549,7 +2549,9 @@
         },
         "vision": {
           "label": "Görsel Modeli",
-          "helper": "Görsel analizi için (vizyon destekli) model. Örnekler: claude-sonnet-4-5-20250929, google/gemini-2.0-flash-001"
+          "helper": "Görsel analizi için (vizyon destekli) model. Örnekler: claude-sonnet-4-5-20250929, google/gemini-2.0-flash-001",
+          "deepseekUnsupportedTitle": "DeepSeek sohbet modelleri görsel kabul etmez",
+          "deepseekUnsupportedBody": "DeepSeek'in /chat/completions uç noktası satır içi görsel eklerini reddeder. Bir görsel gönderdiğinizde Selene görseli çıkarır ve analizi describeImage aracına yönlendirir — bu araç burada seçili modeli çağırır. Hiçbir DeepSeek sohbet modeli görsel desteklemediği için, görsel destekli bir sağlayıcıyı (Claude, Gemini, OpenRouter, OpenAI) ayrı bir API anahtarıyla yapılandırın veya görsel eklemeden önce ana sağlayıcıyı değiştirin."
         },
         "embeddingProvider": {
           "label": "Embedding Saglayicisi",
