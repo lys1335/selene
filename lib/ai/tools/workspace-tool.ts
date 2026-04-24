@@ -16,8 +16,10 @@ import * as path from "path";
 import { getSession, updateSession } from "@/lib/db/queries";
 import type { WorkspaceInfo } from "@/lib/workspace/types";
 import { getWorkspaceInfo } from "@/lib/workspace/types";
-import { addSyncFolder, removeSyncFolder, setSyncFolderStatus } from "@/lib/vectordb/sync-service";
+import { addSyncFolder } from "@/lib/vectordb/sync-service";
 import { runGitCommand } from "@/lib/workspace/git-runner";
+import { cleanupWorkspace } from "@/lib/workspace/cleanup";
+import { recordWorkspaceCreate } from "@/lib/workspace/metrics";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -352,10 +354,11 @@ async function handleCreate(
       syncMode: "manual",
       indexingMode: "files-only",
       reindexPolicy: "never",
+      // Mark as internal workspace path registration, not a user-configured
+      // vector-sync source. addSyncFolder inserts with status="synced" directly,
+      // skips UI notifications, and skips cross-agent propagation.
+      source: "workspace",
     });
-    // Mark as "synced" immediately — addSyncFolder creates with "pending",
-    // but we need "synced" so file tools recognize it as ready
-    await setSyncFolderStatus(syncFolderId, "synced");
   } catch (syncErr) {
     console.error("[workspace] Failed to register sync folder (non-fatal):", syncErr);
     // Non-fatal: worktree exists, agent can still use executeCommand
@@ -381,6 +384,8 @@ async function handleCreate(
       workspaceInfo,
     },
   });
+
+  recordWorkspaceCreate();
 
   return {
     status: "success" as const,
@@ -543,30 +548,14 @@ async function handleDelete(sessionId: string) {
 
   const isLocalWorkspace = workspaceInfo.type === "local";
 
-  // Only tool-created workspaces own their sync folder lifecycle.
-  if (!isLocalWorkspace && workspaceInfo.syncFolderId) {
-    try {
-      await removeSyncFolder(workspaceInfo.syncFolderId);
-    } catch (err) {
-      console.error("[workspace] Failed to remove sync folder (continuing):", err);
-    }
-  }
-
-  // Local Git Mode points at the user's real repo, so never remove it as a worktree.
-  if (!isLocalWorkspace && workspaceInfo.worktreePath && isValidPath(workspaceInfo.worktreePath) && fs.existsSync(workspaceInfo.worktreePath)) {
-    try {
-      const commonDir = (
-        await runGitCommand(workspaceInfo.worktreePath, ["rev-parse", "--git-common-dir"])
-      ).trim();
-      const mainRepoDir = fs.realpathSync(
-        commonDir.endsWith("/.git") || commonDir.endsWith("\\.git")
-          ? commonDir.replace(/[/\\]\.git$/, "")
-          : commonDir + "/.."
-      );
-      await runGitCommand(mainRepoDir, ["worktree", "remove", workspaceInfo.worktreePath, "--force"]);
-    } catch (err) {
-      console.error("[workspace] Failed to remove git worktree (continuing):", err);
-    }
+  // Local Git Mode points at the user's real repo — only clear metadata.
+  // Tool-created worktrees own both the sync folder row and the on-disk worktree.
+  if (!isLocalWorkspace) {
+    await cleanupWorkspace({
+      syncFolderId: workspaceInfo.syncFolderId,
+      worktreePath: workspaceInfo.worktreePath,
+      trigger: "workspace-tool-delete",
+    });
   }
 
   // 3. Clear workspace metadata from session

@@ -109,8 +109,16 @@ describe("workspace-tool create action", () => {
     expect(syncServiceMocks.addSyncFolder).toHaveBeenCalledWith(
       expect.objectContaining({
         folderPath: "C:\\repo\\worktrees\\feature-windows-path-fix",
+        // Workspace registrations must flag source: "workspace" so the sync
+        // pipeline skips UI notifications, workflow propagation, and the
+        // pending→synced status race the previous separate setSyncFolderStatus
+        // call introduced.
+        source: "workspace",
       }),
     );
+    // The redundant "set status to synced" call was removed — addSyncFolder
+    // now inserts workspace folders with status="synced" directly.
+    expect(syncServiceMocks.setSyncFolderStatus).not.toHaveBeenCalled();
   });
 
   it("returns a clear error when git rev-parse says repoPath is not a repository", async () => {

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  getSession,
   getSessionWithMessages,
   updateSession,
 } from "@/lib/db/queries";
 import { resolveSessionAuth } from "@/lib/api/shared-handlers";
+import { cleanupWorkspace } from "@/lib/workspace/cleanup";
+import { getWorkspaceInfo } from "@/lib/workspace/types";
 
 export async function GET(
   req: NextRequest,
@@ -82,6 +85,32 @@ export async function DELETE(
     const { id } = await params;
     const authResult = await resolveSessionAuth(req, id);
     if ("errorResponse" in authResult) return authResult.errorResponse;
+
+    // If this session has a tool-created workspace, clean up the git worktree
+    // + sync folder row before soft-deleting the session. Otherwise they leak
+    // until the boot-time orphan sweep catches them.
+    try {
+      const session = await getSession(id);
+      if (session) {
+        const metadata = (session.metadata || {}) as Record<string, unknown>;
+        const workspaceInfo = getWorkspaceInfo(metadata);
+        // Local Git Mode points at the user's real repo — never remove it.
+        if (workspaceInfo && workspaceInfo.type !== "local") {
+          await cleanupWorkspace({
+            syncFolderId: workspaceInfo.syncFolderId,
+            worktreePath: workspaceInfo.worktreePath,
+            trigger: "session-delete",
+          });
+        }
+      }
+    } catch (cleanupErr) {
+      // Never block session deletion on workspace cleanup failure. The boot
+      // sweep is our safety net.
+      console.warn(
+        "[session-delete] Workspace cleanup failed (continuing with session delete):",
+        cleanupErr,
+      );
+    }
 
     // Soft delete by setting status to 'deleted'
     await updateSession(id, { status: "deleted" });

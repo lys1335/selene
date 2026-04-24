@@ -161,6 +161,26 @@ export async function DELETE(req: Request, { params }: RouteParams) {
         }
       }
 
+      // Remove git worktrees for any workspace-sourced folders BEFORE the
+      // character row is deleted (CASCADE will drop the DB rows, but the
+      // worktree directories on disk would otherwise leak).
+      const { cleanupWorkspace } = await import("@/lib/workspace/cleanup");
+      const workspaceFolders = syncFolders.filter((f) => f.source === "workspace");
+      for (const folder of workspaceFolders) {
+        try {
+          await cleanupWorkspace({
+            syncFolderId: folder.id,
+            worktreePath: folder.folderPath,
+            trigger: "character-delete",
+          });
+        } catch (error) {
+          console.warn(
+            `[DeleteCharacter] Failed to clean up workspace folder ${folder.id}:`,
+            error,
+          );
+        }
+      }
+
       // Delete vector database table
       try {
         const { deleteAgentTable } = await import("@/lib/vectordb/collections");
