@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => {
 vi.mock("drizzle-orm", () => ({
   and: (...conditions: any[]) => ({ kind: "and", conditions }),
   eq: (column: any, value: any) => ({ kind: "eq", column, value }),
+  ne: (column: any, value: any) => ({ kind: "ne", column, value }),
   inArray: (column: any, values: any[]) => ({ kind: "inArray", column, values }),
   isNull: (column: any) => ({ kind: "isNull", column }),
 }));
@@ -45,6 +46,7 @@ vi.mock("@/lib/db/sqlite-character-schema", () => ({
   agentSyncFolders: {
     characterId: { name: "characterId" },
     inheritedFromWorkflowId: { name: "inheritedFromWorkflowId" },
+    source: { name: "source" },
   },
   characters: {
     id: { name: "id" },

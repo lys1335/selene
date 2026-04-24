@@ -21,6 +21,8 @@ export const DEFAULT_PARALLEL_CONFIG: ParallelConfig = {
   staggerDelayMs: 100,
 };
 
+export type SyncFolderSource = "user" | "workspace";
+
 export interface SyncFolderConfig {
   id?: string;
   userId: string;
@@ -39,6 +41,14 @@ export interface SyncFolderConfig {
   chunkSizeOverride?: number;
   chunkOverlapOverride?: number;
   reindexPolicy?: ReindexPolicy;
+  /**
+   * Provenance of the folder record.
+   * - "user" (default): user-configured sync folder. Counted in sync status UI,
+   *   propagated to workflow sub-agents, eligible for scheduled/watcher syncs.
+   * - "workspace": ephemeral path-authorization record created by the workspace tool.
+   *   Suppresses sync notifications, workflow propagation, and sync-status UI counters.
+   */
+  source?: SyncFolderSource;
 }
 
 export interface SyncFolderUpdateConfig {

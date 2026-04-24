@@ -5,6 +5,7 @@ import { db } from "@/lib/db/sqlite-client";
 import { agentSyncFolders, characters } from "@/lib/db/sqlite-character-schema";
 import { normalizeFolderPath } from "./path-validation";
 import { getSyncFolders } from "./sync-folder-crud";
+import { excludeWorkspaceSource } from "./source-predicates";
 
 type AccessibleSyncFolder = typeof agentSyncFolders.$inferSelect;
 
@@ -37,13 +38,17 @@ export async function getAccessibleSyncFolders(characterId: string): Promise<Acc
     return ownFolders;
   }
 
+  // Workspace-sourced folders are per-agent worktree path registrations and must
+  // stay private to their owning agent — never expose another agent's worktree
+  // through workflow sharing.
   const sharedFolders = await db
     .select()
     .from(agentSyncFolders)
     .where(
       and(
         inArray(agentSyncFolders.characterId, otherMemberIds),
-        isNull(agentSyncFolders.inheritedFromWorkflowId)
+        isNull(agentSyncFolders.inheritedFromWorkflowId),
+        excludeWorkspaceSource()
       )
     );
 

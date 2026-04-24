@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   cleanupOrphanedVectorTables: vi.fn(),
   cleanupOrphanedSyncFolders: vi.fn(),
   cleanupOrphanedInheritedFolders: vi.fn(),
+  cleanupOrphanedWorkspaceFolders: vi.fn(),
   isDangerousPath: vi.fn(),
   stopAllWatchers: vi.fn(),
   compactAllAgentTables: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("@/lib/vectordb/sync-service", () => ({
   cleanupOrphanedVectorTables: mocks.cleanupOrphanedVectorTables,
   cleanupOrphanedSyncFolders: mocks.cleanupOrphanedSyncFolders,
   cleanupOrphanedInheritedFolders: mocks.cleanupOrphanedInheritedFolders,
+  cleanupOrphanedWorkspaceFolders: mocks.cleanupOrphanedWorkspaceFolders,
 }));
 
 vi.mock("@/lib/vectordb/dangerous-paths", () => ({
@@ -88,6 +90,7 @@ describe("initializeVectorSync integration", () => {
     mocks.cleanupOrphanedVectorTables.mockResolvedValue(undefined);
     mocks.cleanupOrphanedSyncFolders.mockResolvedValue({ removed: [], kept: 0 });
     mocks.cleanupOrphanedInheritedFolders.mockResolvedValue({ removed: [], kept: 0 });
+    mocks.cleanupOrphanedWorkspaceFolders.mockResolvedValue({ removed: [], kept: 0 });
     mocks.isDangerousPath.mockReturnValue(null);
     mocks.stopAllWatchers.mockResolvedValue(undefined);
     mocks.compactAllAgentTables.mockResolvedValue({

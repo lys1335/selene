@@ -76,6 +76,7 @@ export async function addSyncFolder(config: SyncFolderConfig): Promise<string> {
     chunkSizeOverride,
     chunkOverlapOverride,
     reindexPolicy = "smart",
+    source = "user",
   } = config;
 
   const { normalizedPath, error } = await validateSyncFolderPath(folderPath);
@@ -93,8 +94,12 @@ export async function addSyncFolder(config: SyncFolderConfig): Promise<string> {
   const normalizedExtensions = normalizeExtensions(includeExtensions);
   const normalizedFileTypeFilters = normalizeExtensions(fileTypeFilters);
 
-  // Check if this is the first folder for this character
-  const isPrimary = existingFolders.length === 0;
+  // Workspace-tool records are ephemeral path-authorization rows; they are never
+  // synced to the vector DB and must never be treated as the agent's primary
+  // knowledge folder. Keep the primary slot reserved for user-configured folders.
+  const isWorkspaceSource = source === "workspace";
+  const userConfiguredFolderCount = existingFolders.filter((f) => f.source !== "workspace").length;
+  const isPrimary = !isWorkspaceSource && userConfiguredFolderCount === 0;
 
   const [folder] = await db
     .insert(agentSyncFolders)
@@ -120,21 +125,33 @@ export async function addSyncFolder(config: SyncFolderConfig): Promise<string> {
       reindexPolicy: normalizeReindexPolicy(reindexPolicy),
       skipReasons: {},
       lastRunMetadata: {},
-      status: "pending",
+      // Workspace folders skip the sync pipeline entirely; mark them "synced"
+      // at insertion so they never surface as "pending" in the sync-status UI
+      // and so pending-folder sweepers never try to index them.
+      status: isWorkspaceSource ? "synced" : "pending",
+      source,
     })
     .returning();
 
-  console.log(`[SyncService] Added sync folder: ${folderPath} for agent ${characterId} (primary: ${isPrimary})`);
+  console.log(
+    `[SyncService] Added sync folder: ${folderPath} for agent ${characterId} (primary: ${isPrimary}, source: ${source})`
+  );
 
-  notifyFolderChange(characterId, {
-    type: "added",
-    folderId: folder.id,
-  });
-  const propagateWorkflowFolderChange = await loadPropagateWorkflowFolderChange();
-  await propagateWorkflowFolderChange(characterId, {
-    type: "added",
-    folderId: folder.id,
-  });
+  // Workspace folders are invisible to the Vector Search UI and to workflow
+  // sub-agents by design. Suppress folder-change notifications and workflow
+  // propagation so creating a workspace never triggers a "Vektör DB
+  // Senkronizasyonu" toast or cascades rows into every workflow member.
+  if (!isWorkspaceSource) {
+    notifyFolderChange(characterId, {
+      type: "added",
+      folderId: folder.id,
+    });
+    const propagateWorkflowFolderChange = await loadPropagateWorkflowFolderChange();
+    await propagateWorkflowFolderChange(characterId, {
+      type: "added",
+      folderId: folder.id,
+    });
+  }
 
   return folder.id;
 }

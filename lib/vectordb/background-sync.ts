@@ -6,7 +6,7 @@
  */
 
 import { getSetting } from "@/lib/settings/settings-manager";
-import { syncStaleFolders, restartAllWatchers, recoverStuckSyncingFolders, getAllSyncFolders, cleanupOrphanedVectorTables, cleanupOrphanedSyncFolders, cleanupOrphanedInheritedFolders } from "./sync-service";
+import { syncStaleFolders, restartAllWatchers, recoverStuckSyncingFolders, getAllSyncFolders, cleanupOrphanedVectorTables, cleanupOrphanedSyncFolders, cleanupOrphanedInheritedFolders, cleanupOrphanedWorkspaceFolders } from "./sync-service";
 import { isDangerousPath } from "./dangerous-paths";
 import { compactAllAgentTables } from "./collections";
 import { resolveFolderSyncBehavior, shouldRunForTrigger } from "./sync-mode-resolver";
@@ -192,6 +192,11 @@ export async function initializeVectorSync(): Promise<void> {
 
     // 1c. Clean up orphaned sync folder DB rows for characters that no longer exist.
     await cleanupOrphanedSyncFolders();
+
+    // 1c2. Clean up workspace-sourced folders whose git worktree no longer exists on disk.
+    //      Agents often skip the workspace({action:"delete"}) call, so these
+    //      registrations accumulate and bloat the agent_sync_folders table.
+    await cleanupOrphanedWorkspaceFolders();
 
     // 1d. Clean up inherited folders whose source folder was deleted.
     await cleanupOrphanedInheritedFolders();

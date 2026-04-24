@@ -5,6 +5,7 @@ import { eq, or } from "drizzle-orm";
 import { isVectorDBEnabled } from "@/lib/vectordb/client";
 import { isWatching, getDeferredCount, getWatcherHealth } from "@/lib/vectordb/file-watcher";
 import { onFolderChange, type FolderChangeEvent } from "@/lib/vectordb/folder-events";
+import { excludeWorkspaceSource } from "@/lib/vectordb/source-predicates";
 
 // ---------------------------------------------------------------------------
 // In-memory ring buffer for recent file-watcher sync events
@@ -117,7 +118,10 @@ export async function GET() {
     // Ensure file-watcher listener is initialized for event collection
     initFileWatcherListener();
 
-    // Get all folders with their character names
+    // Get all user-configured folders with their character names.
+    // Workspace-sourced folders (agent worktree path registrations) are excluded —
+    // they're internal plumbing for file-tool path authorization, not vector-sync
+    // targets. Counting them would inflate the UI indicator (totalFolders bloat).
     const allFolders = await db
       .select({
         id: agentSyncFolders.id,
@@ -133,7 +137,8 @@ export async function GET() {
         characterName: characters.name,
       })
       .from(agentSyncFolders)
-      .leftJoin(characters, eq(agentSyncFolders.characterId, characters.id));
+      .leftJoin(characters, eq(agentSyncFolders.characterId, characters.id))
+      .where(excludeWorkspaceSource());
 
     // Categorize folders
     const activeSyncs: SyncStatusFolder[] = [];

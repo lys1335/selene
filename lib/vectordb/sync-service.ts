@@ -99,6 +99,7 @@ export async function removeSyncFolder(folderId: string): Promise<void> {
 
   const wasPrimary = folder.isPrimary;
   const characterId = folder.characterId;
+  const isWorkspaceSource = folder.source === "workspace";
 
   if (isSyncing(folderId)) {
     console.log(`[SyncService] Cancelling running sync for folder: ${folderId}`);
@@ -136,15 +137,20 @@ export async function removeSyncFolder(folderId: string): Promise<void> {
     console.log(`[SyncService] Promoted folder ${remainingFolders[0].id} to primary`);
   }
 
-  notifyFolderChange(characterId, { type: "removed", folderId, wasPrimary, folderPath: folder.folderPath });
+  // Workspace-sourced folders are internal path registrations for agent worktrees,
+  // not user-configured vector-sync sources. Skip UI notifications and cross-agent
+  // propagation — they'd spam the sync indicator and cascade to every sub-agent.
+  if (!isWorkspaceSource) {
+    notifyFolderChange(characterId, { type: "removed", folderId, wasPrimary, folderPath: folder.folderPath });
 
-  // Propagate removal to workflow sub-agents so their inherited copies are cleaned up.
-  // Dynamic import avoids circular dependency (workflow-folder-sharing → sync-service).
-  try {
-    const { propagateWorkflowFolderChange } = await import("@/lib/agents/workflow-folder-sharing");
-    await propagateWorkflowFolderChange(characterId, { type: "removed", folderId, folderPath: folder.folderPath });
-  } catch (err) {
-    console.error(`[SyncService] Non-fatal: failed to propagate folder removal to workflow sub-agents:`, err);
+    // Propagate removal to workflow sub-agents so their inherited copies are cleaned up.
+    // Dynamic import avoids circular dependency (workflow-folder-sharing → sync-service).
+    try {
+      const { propagateWorkflowFolderChange } = await import("@/lib/agents/workflow-folder-sharing");
+      await propagateWorkflowFolderChange(characterId, { type: "removed", folderId, folderPath: folder.folderPath });
+    } catch (err) {
+      console.error(`[SyncService] Non-fatal: failed to propagate folder removal to workflow sub-agents:`, err);
+    }
   }
 }
 
@@ -889,6 +895,59 @@ export async function cleanupOrphanedInheritedFolders(): Promise<{ removed: stri
 
   if (removed.length > 0) {
     console.log(`[SyncService] Cleaned up ${removed.length} orphaned inherited folder(s) (source folder deleted)`);
+  }
+  return { removed, kept };
+}
+
+/**
+ * Remove workspace-sourced sync folders whose on-disk worktree no longer exists.
+ *
+ * Workspace folders are created by the workspace tool to register an agent's
+ * git worktree path for file-tool authorization (readFile/editFile/localGrep).
+ * Agents often finish their sessions without calling `workspace({action: "delete"})`,
+ * or external cleanup removes the worktree directory. Either way the sync folder
+ * row lingers and counts against the per-character folder count.
+ *
+ * This function finds workspace-sourced folders where the folderPath does not
+ * exist on disk and removes them via removeSyncFolder (which short-circuits the
+ * UI notifications and workflow propagation for workspace source).
+ */
+export async function cleanupOrphanedWorkspaceFolders(): Promise<{ removed: string[]; kept: number }> {
+  const { existsSync } = await import("node:fs");
+
+  const { onlyWorkspaceSource } = await import("./source-predicates");
+  const workspaceFolders = await db
+    .select({
+      id: agentSyncFolders.id,
+      folderPath: agentSyncFolders.folderPath,
+    })
+    .from(agentSyncFolders)
+    .where(onlyWorkspaceSource());
+
+  if (workspaceFolders.length === 0) return { removed: [], kept: 0 };
+
+  const orphaned = workspaceFolders.filter(f => !existsSync(f.folderPath));
+  const kept = workspaceFolders.length - orphaned.length;
+  const removed: string[] = [];
+
+  // Lazy-load metrics to avoid circular imports.
+  const { recordWorkspaceCleanup, recordWorkspaceCleanupError } = await import(
+    "@/lib/workspace/metrics"
+  );
+
+  for (const folder of orphaned) {
+    try {
+      await removeSyncFolder(folder.id);
+      removed.push(folder.id);
+      recordWorkspaceCleanup("boot-sweep");
+    } catch (err) {
+      recordWorkspaceCleanupError();
+      console.error(`[SyncService] Failed to remove orphaned workspace folder ${folder.id} (${folder.folderPath}):`, err);
+    }
+  }
+
+  if (removed.length > 0) {
+    console.log(`[SyncService] Cleaned up ${removed.length} orphaned workspace sync folder(s) (worktree path missing)`);
   }
   return { removed, kept };
 }
