@@ -34,6 +34,77 @@ import {
 } from "./export";
 import { acquirePage } from "./browser";
 
+type PreviewDiagnosticPage = {
+  on?: (event: string, handler: (...args: any[]) => void) => unknown; // eslint-disable-line @typescript-eslint/no-explicit-any
+};
+
+function previewConsoleText(message: unknown): string {
+  if (
+    message &&
+    typeof message === "object" &&
+    "text" in message &&
+    typeof message.text === "function"
+  ) {
+    try {
+      return message.text();
+    } catch {
+      return String(message);
+    }
+  }
+  return String(message);
+}
+
+function previewConsoleType(message: unknown): string {
+  if (
+    message &&
+    typeof message === "object" &&
+    "type" in message &&
+    typeof message.type === "function"
+  ) {
+    try {
+      return message.type();
+    } catch {
+      return "log";
+    }
+  }
+  return "log";
+}
+
+function requestFailureText(request: unknown): string {
+  if (!request || typeof request !== "object") {
+    return String(request);
+  }
+  const req = request as {
+    url?: () => string;
+    failure?: () => { errorText?: string } | null;
+  };
+  const url = typeof req.url === "function" ? req.url() : "unknown-url";
+  const failure = typeof req.failure === "function" ? req.failure() : null;
+  return `${url}${failure?.errorText ? ` (${failure.errorText})` : ""}`;
+}
+
+/**
+ * Forward page-side failures into Node logs before the preview-ready wait.
+ * Without these hooks a missing bundle, CSP block, or render exception only
+ * appears as a generic Puppeteer timeout.
+ */
+export function attachPreviewDiagnostics(page: PreviewDiagnosticPage): void {
+  if (typeof page.on !== "function") {
+    return;
+  }
+
+  page.on("console", (message: unknown) => {
+    console.error(`[preview-console:${previewConsoleType(message)}] ${previewConsoleText(message)}`);
+  });
+  page.on("pageerror", (error: unknown) => {
+    const message = error instanceof Error ? error.stack || error.message : String(error);
+    console.error(`[preview-pageerror] ${message}`);
+  });
+  page.on("requestfailed", (request: unknown) => {
+    console.error(`[preview-requestfailed] ${requestFailureText(request)}`);
+  });
+}
+
 export interface ScreenshotViewport {
   width: number;
   height: number;
@@ -353,16 +424,80 @@ export const PROBE_CSS_PROPERTIES = [
  * function only reads `page.evaluate`, which every Puppeteer Page + our
  * FakePage mock implement.
  */
+type ProbePage = {
+  evaluate: (...args: any[]) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+};
+
+/**
+ * Sentinel CSS custom property emitted by `PREVIEW_THEME_CSS` (compiler.ts).
+ * `waitForProbeStylesReady` polls `getComputedStyle(<html>).getPropertyValue`
+ * for this name and only resolves once the value is `"1"`, proving the
+ * `<style>` block has been parsed and applied. Without this gate, probes
+ * could capture the pre-CSS DOM (browser-default `font: 16px Times`,
+ * `body { margin: 8px }`, `colorScheme: "normal"`) on the first turn after
+ * `setContent({waitUntil: "domcontentloaded"})`.
+ *
+ * Exported so the regression test in
+ * `lib/design/workspace/__tests__/probe-styles-ready.test.ts` can assert the
+ * sentinel is the same string the compiler emits — a future rename on either
+ * side would otherwise re-introduce the silent race.
+ */
+export const PROBE_STYLES_APPLIED_SENTINEL = "--selene-styles-applied";
+const PROBE_STYLES_READY_TIMEOUT_MS = 5_000;
+const PROBE_STYLES_READY_POLL_MS = 50;
+
+/** @internal Exported for unit testing — settles style/font state before computed-style probes. */
+export async function waitForProbeStylesReady(page: ProbePage): Promise<void> {
+  await page.evaluate(
+    async (sentinelName: string, timeoutMs: number, pollMs: number) => {
+      // 1. Wait for any web fonts the page declared. Tailwind preview itself
+      //    doesn't load fonts, but a globals.css injection or an `@import` in
+      //    a user-emitted style block can pull one in — `document.fonts.ready`
+      //    is the standard one-shot signal that all in-flight font loads have
+      //    settled.
+      if (document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+
+      // 2. Poll for the sentinel CSS custom property. The poll is bounded by
+      //    `timeoutMs` so a missing sentinel surfaces as a fast diagnostic
+      //    instead of blocking until the outer screenshot timeout. We don't
+      //    throw on miss because the OUTER capture flow has already run
+      //    `waitForPageReady` (which gates on `data-preview-ready` + a real
+      //    style flush via the React mount); falling through here only means
+      //    the sentinel happens to be missing for a non-default preview
+      //    pipeline (a regression test, not a real-user breakage).
+      const root = document.documentElement;
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const value = window
+          .getComputedStyle(root)
+          .getPropertyValue(sentinelName)
+          .trim();
+        if (value === "1") {
+          break;
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, pollMs));
+      }
+
+      // 3. Two RAFs after the sentinel poll so any layout/paint scheduled by
+      //    the React mount (which flips data-preview-ready in its OWN RAF) is
+      //    flushed before getComputedStyle reads on the main probe pass.
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+    },
+    PROBE_STYLES_APPLIED_SENTINEL,
+    PROBE_STYLES_READY_TIMEOUT_MS,
+    PROBE_STYLES_READY_POLL_MS,
+  );
+}
+
 async function collectProbes(
-  page: {
-    evaluate: (
-      fn: (selectors: string[], properties: string[]) => Record<string, Record<string, string>>,
-      selectors: string[],
-      properties: string[],
-    ) => Promise<Record<string, Record<string, string>>>;
-  },
+  page: ProbePage,
   selectors: string[],
 ): Promise<ScreenshotProbeResult> {
+  await waitForProbeStylesReady(page);
   return page.evaluate(
     (sel: string[], properties: string[]) => {
       const out: Record<string, Record<string, string>> = {};
@@ -643,6 +778,8 @@ export async function captureScreenshot(options: ScreenshotOptions): Promise<Scr
   // `clearTimeout` in `finally`.
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
 
+  attachPreviewDiagnostics(page);
+
   try {
     const captureTask = async (): Promise<ScreenshotResult> => {
       await page.setViewport({
@@ -691,6 +828,7 @@ export async function captureScreenshot(options: ScreenshotOptions): Promise<Scr
         stateScreenshots = [];
         for (const entry of options.states) {
           const statePage = await acquirePage();
+          attachPreviewDiagnostics(statePage);
           try {
             await statePage.setViewport({
               width: viewport.width,

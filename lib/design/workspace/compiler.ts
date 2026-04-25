@@ -335,6 +335,24 @@ export async function resolveAndReadGlobalsCss(args: {
 }
 const PREVIEW_THEME_CSS = [
   ":root {",
+  "  color-scheme: light;",
+  // Sentinel custom property — present iff this stylesheet is parsed and
+  // applied. The screenshot pipeline polls
+  // `getComputedStyle(document.documentElement).getPropertyValue('--selene-styles-applied')`
+  // before running computed-style probes, so probes can never read the
+  // pre-CSS DOM. See `waitForProbeStylesReady` in screenshot.ts.
+  "  --selene-styles-applied: 1;",
+  // Tailwind preflight (v3) sets `html { font-family: var(--font-inter), ... }`
+  // because `tailwind.preview.config.cjs` has `fontFamily.sans` keyed on
+  // `var(--font-inter)`. The standalone preview HTML doesn't include
+  // `next/font` injection, so without these defaults the var() reference is
+  // invalid (no inner fallback) and the browser falls back to the UA-default
+  // serif font (Times) — which is what surfaced as the bogus
+  // `font: \"16px Times\"` probe reading. Defining the vars keeps the cascade
+  // valid; the fallback list (`ui-sans-serif, system-ui, sans-serif`) does
+  // the actual resolution since neither family is bundled.
+  "  --font-inter: \"Inter\";",
+  "  --font-jetbrains-mono: \"JetBrains Mono\";",
   "  --terminal-cream: 34 63% 89%;",
   "  --terminal-cream-dark: 37 52% 81%;",
   "  --terminal-dark: 0 0% 10%;",
@@ -371,6 +389,7 @@ const PREVIEW_THEME_CSS = [
   "  --chart-5: 0 0% 30%;",
   "}",
   ".dark {",
+  "  color-scheme: dark;",
   "  --terminal-cream: 0 0% 14%;",
   "  --terminal-cream-dark: 0 0% 18%;",
   "  --terminal-dark: 34 63% 90%;",

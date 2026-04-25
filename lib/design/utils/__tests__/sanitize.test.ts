@@ -62,6 +62,22 @@ describe("sanitizeHTML — allowInlineScripts escape hatch", () => {
     expect(clean).toContain("__m.mount()");
   });
 
+  it("does not scrub tag-like string literals inside preserved scripts", () => {
+    const dirty = [
+      `<div id="preview-root"></div>`,
+      `<script>`,
+      `const message = "React expected a <head> tag and a <body> tag.";`,
+      `window.__selenePreviewReady = message.includes("<head>");`,
+      `</script>`,
+    ].join("");
+
+    const clean = sanitizeHTML(dirty, { allowInlineScripts: true });
+
+    expect(clean).toContain(`React expected a <head> tag and a <body> tag.`);
+    expect(clean).toContain(`message.includes("<head>")`);
+    expect(clean.match(/<script/g)?.length ?? 0).toBe(1);
+  });
+
   it("keeps iframe / object / embed / link / meta forbidden even when scripts are allowed", () => {
     const dirty = [
       `<iframe src="https://evil.example.com"></iframe>`,
@@ -107,6 +123,41 @@ describe("sanitizeHTML — allowInlineScripts escape hatch", () => {
   });
 });
 
+describe("sanitizeHTML — structural document tags (gated on allowInlineScripts)", () => {
+  it("preserves <html lang class> on first-party trusted templates", () => {
+    // Regression: previously the sanitizer stripped <html>/<head>/<body>
+    // unconditionally because they aren't in the rich-text allowlist. That
+    // erased `class="dark"` on <html>, leaving Tailwind's `dark:` variants
+    // inert and making `previewTheme: "dark"` indistinguishable from light
+    // in screenshots.
+    const dirty = `<!DOCTYPE html><html lang="en" class="dark"><head><meta charset="utf-8" /></head><body><div>ok</div></body></html>`;
+    const clean = sanitizeHTML(dirty, { allowInlineScripts: true });
+    expect(clean).toContain(`<html lang="en" class="dark">`);
+    expect(clean).toContain("<head>");
+    expect(clean).toContain("<body>");
+    // <meta> stays forbidden even when structural tags are preserved —
+    // the gate is structural shape, not blanket head-content allowlisting.
+    expect(clean).not.toContain("<meta");
+  });
+
+  it("still strips <html>/<head>/<body> in the default (untrusted-input) path", () => {
+    const dirty = `<html class="dark"><head><meta /></head><body>ok</body></html>`;
+    const clean = sanitizeHTML(dirty);
+    expect(clean).not.toContain("<html");
+    expect(clean).not.toContain("<head");
+    expect(clean).not.toContain("<body");
+    expect(clean).toContain("ok");
+  });
+
+  it("still scrubs on* handlers on <body> when structural tags are allowed", () => {
+    const dirty = `<body onload="pwn()"><div>ok</div></body>`;
+    const clean = sanitizeHTML(dirty, { allowInlineScripts: true });
+    expect(clean).toContain("<body");
+    expect(clean).not.toContain("onload");
+    expect(clean).not.toContain("pwn()");
+  });
+});
+
 describe("sanitizeHTML — smoke tests for design-workspace shape", () => {
   it("preserves a data:image src on <img> when allowDataUrls + allowInlineScripts are set", () => {
     const dirty =
@@ -120,15 +171,10 @@ describe("sanitizeHTML — smoke tests for design-workspace shape", () => {
     expect(clean).toContain("hydrate()");
   });
 
-  it("leaves <style> content untouched (design-workspace ships inline tailwind runtime CSS)", () => {
+  it("preserves <style> blocks when inline styles are allowed", () => {
     const dirty = `<style>.preview { color: red }</style><div class="preview">x</div>`;
     const clean = sanitizeHTML(dirty, { allowInlineScripts: true });
-    // style tag itself isn't in the allowlist so it gets removed, but the
-    // inner CSS text survives as body text — the preview pipeline relies on
-    // injected CSS in <head> not on arbitrary <style> blocks in the body,
-    // so this is the intended shape. The key assertion is that nothing here
-    // surfaces a new injection surface.
-    expect(clean).not.toContain("<iframe");
-    expect(clean).toContain("preview");
+    expect(clean).toContain(`<style>.preview { color: red }</style>`);
+    expect(clean).toContain(`<div class="preview">x</div>`);
   });
 });

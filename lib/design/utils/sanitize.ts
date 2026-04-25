@@ -34,6 +34,11 @@ const URL_ATTRIBUTES = new Set([
   'href', 'src', 'action', 'formaction', 'xlink:href', 'data', 'poster', 'background',
 ]);
 
+const PRESERVED_SCRIPT_PREFIX = 'SELENEPRESERVEDSCRIPT';
+const PRESERVED_SCRIPT_SUFFIX = 'ENDSELENE';
+const PRESERVED_STYLE_PREFIX = 'SELENEPRESERVEDSTYLE';
+const PRESERVED_STYLE_SUFFIX = 'ENDSELENE';
+
 /** Tags allowed in AI-generated content (more restrictive -- no form elements) */
 const AI_ALLOWED_TAGS = new Set([...DEFAULT_ALLOWED_TAGS].filter(
   tag => !['form', 'input', 'button', 'select', 'textarea'].includes(tag),
@@ -101,6 +106,19 @@ interface SanitizeOptions {
 /** Navigation attributes where data:/blob: are never allowed (XSS risk) */
 const NAVIGATION_ATTRS = new Set(['href', 'action', 'formaction', 'xlink:href']);
 
+/**
+ * Structural document tags. These are stripped by default because the
+ * default sanitizer use case is rich-text fragments inserted into an
+ * existing document — emitting nested `<html>`/`<head>`/`<body>` would
+ * be invalid. The design workspace preview pipeline emits a FULL HTML
+ * document and feeds it to `puppeteer.setContent`; in that pipeline we
+ * MUST preserve the structural tags so attributes like `<html class="dark">`
+ * (the Tailwind dark-mode hook) survive into the rendered page. Gated on
+ * `allowInlineScripts` because both flags are for first-party trusted
+ * templates only.
+ */
+const STRUCTURAL_DOC_TAGS = new Set(['html', 'head', 'body']);
+
 function regexSanitize(
   dirty: string,
   allowedTags: Set<string>,
@@ -109,12 +127,38 @@ function regexSanitize(
   allowInlineScripts = false,
 ): string {
   let result = dirty;
+  const preservedScripts: string[] = [];
+  const preservedStyles: string[] = [];
+
+  // When the caller is feeding a full HTML document (gated on the same
+  // first-party trust signal as `allowInlineScripts`), expand the allowlist
+  // to keep the structural tags + their attributes intact. Without this,
+  // `<html class="dark">` becomes `…` and Tailwind's `dark:` variants stay
+  // inert — which is why screenshots run with `previewTheme: "dark"`
+  // historically rendered indistinguishable from the light variant.
+  const effectiveAllowedTags = allowInlineScripts
+    ? new Set([...allowedTags, ...STRUCTURAL_DOC_TAGS])
+    : allowedTags;
+
+  if (allowInlineScripts) {
+    result = result.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, (scriptBlock) => {
+      const index = preservedScripts.push(scriptBlock) - 1;
+      return `${PRESERVED_SCRIPT_PREFIX}${index}${PRESERVED_SCRIPT_SUFFIX}`;
+    });
+  }
+  if (!stripStyles) {
+    result = result.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, (styleBlock) => {
+      const index = preservedStyles.push(styleBlock) - 1;
+      return `${PRESERVED_STYLE_PREFIX}${index}${PRESERVED_STYLE_SUFFIX}`;
+    });
+  }
 
   // Remove forbidden tags and their content. When `allowInlineScripts` is
-  // true, `<script>` is temporarily removed from the forbidden set — the
-  // caller has asserted the HTML is first-party trusted (e.g. our compiled
-  // design workspace preview where esbuild-bundled JS is needed to fire
-  // `data-preview-ready`). All other forbidden tags remain stripped.
+  // true, complete `<script>...</script>` blocks are preserved above before
+  // the generic tag scrubber runs. Likewise, when style tags are allowed,
+  // complete `<style>...</style>` blocks are preserved. That keeps literal
+  // tag-like strings inside first-party preview JS/CSS from being mistaken
+  // for HTML tags and corrupting the rendered preview.
   const forbiddenForThisCall = allowInlineScripts
     ? new Set([...FORBIDDEN_TAGS].filter((t) => t !== 'script'))
     : FORBIDDEN_TAGS;
@@ -140,7 +184,7 @@ function regexSanitize(
     if (allowInlineScripts && lowered === 'script') {
       return match;
     }
-    if (allowedTags.has(lowered) || allowedTags.has(tagName)) {
+    if (effectiveAllowedTags.has(lowered) || effectiveAllowedTags.has(tagName)) {
       // Tag is allowed -- strip event handler attributes (also handles newline-split attrs)
       let cleaned = match.replace(/[\s/]+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
       // Strip style attribute if requested
@@ -170,6 +214,25 @@ function regexSanitize(
     // Tag not allowed -- remove the tag but keep inner content
     return '';
   });
+
+  if (allowInlineScripts && preservedScripts.length > 0) {
+    result = result.replace(
+      new RegExp(`${PRESERVED_SCRIPT_PREFIX}(\\d+)${PRESERVED_SCRIPT_SUFFIX}`, 'g'),
+      (_match, rawIndex: string) => {
+        const index = Number(rawIndex);
+        return preservedScripts[index] ?? '';
+      },
+    );
+  }
+  if (!stripStyles && preservedStyles.length > 0) {
+    result = result.replace(
+      new RegExp(`${PRESERVED_STYLE_PREFIX}(\\d+)${PRESERVED_STYLE_SUFFIX}`, 'g'),
+      (_match, rawIndex: string) => {
+        const index = Number(rawIndex);
+        return preservedStyles[index] ?? '';
+      },
+    );
+  }
 
   return result;
 }

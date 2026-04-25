@@ -55,7 +55,7 @@ const DEFAULT_DURATION_MS = 2400;
 const DEFAULT_PNG_EXPORT_PROGRESS = 0.68;
 const MAX_VIDEO_FRAMES = 96;
 const DEFAULT_COMPONENT_NAME = "Design Component";
-const PREVIEW_READY_TIMEOUT_MS = 8 * 60_000; // 8 minutes — complex animated/video components can take 6-7 min to render
+const PREVIEW_READY_TIMEOUT_MS = 30_000; // Fast-fail preview readiness regressions; the outer capture guard remains longer.
 const VIDEO_EXPORT_TIMEOUT_MS = 12 * 60_000; // 12 minutes — covers preview-ready wait + frame capture + ffmpeg encoding
 
 const PUPPETEER_CSP = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; script-src 'unsafe-inline'">`;
@@ -89,12 +89,25 @@ export async function buildExportPreviewHtml(opts: {
  * @internal Exported for reuse by sibling modules (e.g. screenshot.ts).
  */
 export function injectCspMeta(html: string): string {
-  const headIdx = html.indexOf("<head>");
-  if (headIdx !== -1) {
-    return html.slice(0, headIdx + 6) + "\n" + PUPPETEER_CSP + "\n" + html.slice(headIdx + 6);
-  }
-  // No <head> tag — prepend CSP + wrap
-  return `<head>${PUPPETEER_CSP}</head>\n${html}`;
+  const preservedScripts: string[] = [];
+  const htmlOutsideScripts = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, (scriptBlock) => {
+    const index = preservedScripts.push(scriptBlock) - 1;
+    return `SELENEPRESERVEDCSPTARGET${index}ENDSELENE`;
+  });
+
+  const headMatch = /<head\b[^>]*>/i.exec(htmlOutsideScripts);
+  const withCsp = headMatch?.index !== undefined
+    ? htmlOutsideScripts.slice(0, headMatch.index + headMatch[0].length) +
+      "\n" +
+      PUPPETEER_CSP +
+      "\n" +
+      htmlOutsideScripts.slice(headMatch.index + headMatch[0].length)
+    : `<head>${PUPPETEER_CSP}</head>\n${htmlOutsideScripts}`;
+
+  return withCsp.replace(/SELENEPRESERVEDCSPTARGET(\d+)ENDSELENE/g, (_match, rawIndex: string) => {
+    const index = Number(rawIndex);
+    return preservedScripts[index] ?? "";
+  });
 }
 
 /**
@@ -125,16 +138,24 @@ export async function waitForPageReady(page: import("puppeteer").Page): Promise<
   // Both HTML and Tailwind (esbuild-compiled) modes use
   // data-preview-ready="true" on #selene-design-preview-root.
   // Also verify the root has rendered child content.
-  await page.waitForFunction(
-    () => {
-      const root = document.getElementById("selene-design-preview-root");
-      return (
-        root?.getAttribute("data-preview-ready") === "true" &&
-        (root.childElementCount > 0 || root.innerHTML.trim().length > 0)
-      );
-    },
-    { timeout: PREVIEW_READY_TIMEOUT_MS }
-  );
+  try {
+    await page.waitForFunction(
+      () => {
+        const root = document.getElementById("selene-design-preview-root");
+        return (
+          root?.getAttribute("data-preview-ready") === "true" &&
+          (root.childElementCount > 0 || root.innerHTML.trim().length > 0)
+        );
+      },
+      { timeout: PREVIEW_READY_TIMEOUT_MS }
+    );
+  } catch (error) {
+    const readyError = new Error(
+      "Preview never signaled ready within 30000ms — see [preview-console] logs above.",
+    );
+    (readyError as Error & { cause?: unknown }).cause = error;
+    throw readyError;
+  }
   // Allow one animation frame for final paint stabilization
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
 }
