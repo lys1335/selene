@@ -2339,9 +2339,9 @@
       "deepseek": "DeepSeek",
       "ollama": "Ollama (本地)",
       "vllm": "vLLM (本地)",
-      "keysTitle": "keys标题",
+      "keysTitle": "提供商密钥",
       "videoTitle": "视频 生成",
-      "videoDescription": "video说明",
+      "videoDescription": "请配置视频生成提供商的 API 密钥（Runway、Google Vertex AI Veo）。",
       "auth": {
         "pasteInstructions": "已打开浏览器标签页。授权后，复制页面上显示的代码并粘贴到下方。",
         "codePlaceholder": "在此粘贴授权码...",
@@ -2356,12 +2356,12 @@
         "antigravityWarning": "存在封号风险，请自行承担",
         "signInGoogle": "使用 Google 登录",
         "codexTitle": "OpenAI Codex",
-        "codexDesc": "codex说明",
+        "codexDesc": "关联 OpenAI 账号使用 Codex 模型。",
         "signInOpenAI": "使用 OpenAI 登录",
         "claudecodeTitle": "Claude Code",
-        "claudecodeDesc": "claudecode说明",
+        "claudecodeDesc": "关联 Anthropic 账号使用 Claude Code。",
         "claudecodeWarning": "仅限个人使用，不可商用",
-        "claudecodeLoginHint": "claudecode登录Hint",
+        "claudecodeLoginHint": "请确保您的设备已登录 Claude Code，然后再在此处登录。",
         "signInAnthropic": "使用 Anthropic 登录",
         "kimiTitle": "Kimi (Moonshot AI)",
         "kimiDesc": "登录您的 Kimi 账号以使用您的订阅",
@@ -2386,7 +2386,7 @@
         "anthropic": {
           "label": "Anthropic API Key",
           "placeholder": "sk-ant-...",
-          "helper": "提示相关说明。"
+          "helper": "使用 Anthropic 模型时需要。"
         },
         "openrouter": {
           "label": "OpenRouter API Key",
@@ -2396,7 +2396,7 @@
         "kimi": {
           "label": "Moonshot API Key",
           "placeholder": "sk-...",
-          "helper": "提示相关说明。"
+          "helper": "在您的 Moonshot 账号中创建密钥。"
         },
         "minimax": {
           "label": "MiniMax API Key",
@@ -2411,7 +2411,7 @@
         "deepseek": {
           "label": "DeepSeek API Key",
           "placeholder": "sk-...",
-          "helper": "提示相关说明。"
+          "helper": "在 platform.deepseek.com 创建密钥。可启用具备 100 万（1M）上下文的 DeepSeek V4 及 Reasoner 推理模型。"
         },
         "webSearchProvider": {
           "label": "网页搜索 来源",
@@ -2428,7 +2428,7 @@
           "helper": "仅在使用 Tavily 和深度研究 (Deep Research) 高级模式时需要。"
         },
         "webScraperProvider": {
-          "label": "标签",
+          "label": "网页解析器",
           "helper": "使用内置的本地抓取器或 Firecrawl 云端 API。",
           "options": {
             "firecrawl": "Firecrawl 云端",
@@ -2461,7 +2461,7 @@
           "helper": "Vertex AI 的区域。默认为 us-central1。"
         },
         "googleCredentials": {
-          "label": "标签",
+          "label": "Google 服务账号凭据",
           "placeholder": "/path/to/service-account.json",
           "helper": "用于 Vertex AI 身份验证的 Google Cloud 服务账号 JSON 文件路径。"
         },
@@ -2709,28 +2709,28 @@
     },
     "models": {
       "title": "模型选择",
-      "subtitle": "为每项任务选择要使用的模型。留空则使用提供商的默认值。",
+      "subtitle": "请为各任务选择适用的模型。留空则默认使用提供商的初始设置。",
       "defaults": {
-        "label": "标签",
+        "label": "默认设置",
         "value": "如果留空，Selene 将为您的所选提供商选择合理的默认模型。"
       },
       "fields": {
         "chat": {
           "label": "主聊天模型",
-          "helper": "提示相关说明。"
+          "helper": "适用于日常对话。"
         },
         "research": {
           "label": "研究模型",
-          "helper": "提示相关说明。"
+          "helper": "启用“深度研究”时使用。"
         },
         "vision": {
-          "label": "标签",
+          "label": "图像理解模型",
           "helper": "用于分析图像和屏幕截图。",
           "deepseekUnsupportedTitle": "DeepSeek 对话模型不支持图像输入",
           "deepseekUnsupportedBody": "DeepSeek 的 /chat/completions 接口不支持直接添加内联图像附件。当您发送图像时，Selene 会将其剥离并由 describeImage 工具进行 analysis（该工具会调用此处配置的模型）。由于目前 DeepSeek 对话模型均不支持视觉能力，请通过单独的 API Key 配置一个支持视觉的提供商（如 Claude、Gemini、OpenRouter、OpenAI），或在附加图像前切换主提供商。"
         },
         "utility": {
-          "label": "后台 任务 模型",
+          "label": "后台任务模型",
           "helper": "用于后台和轻量级辅助任务的快速响应。"
         },
         "embeddingProvider": {
@@ -2778,7 +2778,7 @@
         "title": "提示：",
         "body": "对后台辅助任务使用较快的模型，对研究繁重的工作使用能力较强的模型。"
       },
-      "jobDescription": "job说明",
+      "jobDescription": "您可以分别指定负责聊天、研究及图片理解等不同工作的模型。",
       "manualModelId": "manual模型Id",
       "blackboxAdvancedLabel": "blackboxAdvanced标签",
       "blackboxAdvancedPlaceholder": "输入任意 BlackBox AI 模型 ID（即使在目录更新前）。",
