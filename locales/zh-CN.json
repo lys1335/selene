@@ -2906,16 +2906,17 @@
       },
       "language": {
         "label": "语言",
-        "en": "英语",
+        "en": "English",
         "tr": "Türkçe",
+        "zh-CN": "简体中文",
         "updateError": "操作失败，请重试。"
       },
       "toolLoading": {
         "label": "Tool 加载方式",
-        "deferred": "项目",
-        "deferredHelper": "项目相关说明。",
-        "always": "项目",
-        "alwaysHelper": "项目相关说明。"
+        "deferred": "仅在需要时加载工具（推荐）",
+        "deferredHelper": "仅在需要时加载工具可以减少 Token 消耗。",
+        "always": "预先加载所有工具",
+        "alwaysHelper": "使每个工具都立即可用，但每次请求会消耗更多 Token。"
       },
       "toolDisplay": {
         "label": "项目",

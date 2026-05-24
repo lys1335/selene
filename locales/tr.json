@@ -2733,6 +2733,7 @@
         "label": "Dil",
         "en": "English",
         "tr": "Türkçe",
+        "zh-CN": "简体中文",
         "updateError": "Dil güncellenemedi. Lütfen tekrar deneyin."
       },
       "toolLoading": {
