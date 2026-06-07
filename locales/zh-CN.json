@@ -1654,7 +1654,7 @@
       "tabBranch": "分支",
       "stageAll": "全部暂存",
       "unstageAll": "全部取消暂存",
-      "noStagedChanges": "没有已暂存的更改,
+      "noStagedChanges": "没有已暂存的更改",
       "noUnstagedChanges": "没有未暂存的更改",
       "selectFileToViewDiff": "选择文件以查看差异",
       "commitMessagePlaceholder": "提交消息...",
